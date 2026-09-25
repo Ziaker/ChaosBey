@@ -75,20 +75,23 @@ async function bootstrap(): Promise<void> {
     onFixedTick: (tickIndex, fixedDeltaSeconds) => {
       telemetry.setCurrentTick(tickIndex);
 
-      const firstActions = playerController.sampleActions({ fixedDeltaSeconds });
-      const secondActions = opponentController.sampleActions({ fixedDeltaSeconds });
+      // Hitstop (Milestone 4): a strong-enough impact freezes gameplay
+      // simulation itself for a brief, magnitude-scaled real-time window —
+      // tickMatch() doesn't run, so physics/resources/round state don't
+      // advance. Computed before sampling so both controllers know this
+      // tick is frozen: a gameplay press made during the freeze is
+      // buffered (not lost) and delivered exactly once on the first
+      // unfrozen sample afterward, and hold-duration/charge clocks don't
+      // advance while frozen — see ActionSampleBuffer. Camera/VFX timers
+      // below still tick every frame regardless, so the freeze actually
+      // ends and shake/FOV-punch/trails keep animating through it.
+      const isFrozenByHitstop = lastCameraOutput?.isHitstopActive ?? false;
+
+      const firstActions = playerController.sampleActions({ fixedDeltaSeconds, simulationFrozen: isFrozenByHitstop });
+      const secondActions = opponentController.sampleActions({ fixedDeltaSeconds, simulationFrozen: isFrozenByHitstop });
       if (firstActions.pressedThisFrame.has(Action.DebugToggle)) {
         debugOverlay.toggle();
       }
-
-      // Hitstop (Milestone 4): a strong-enough impact freezes gameplay
-      // simulation itself for a brief, magnitude-scaled real-time window —
-      // inputs are still sampled (so a press isn't lost) but tickMatch()
-      // doesn't run, so physics/resources/round state don't advance.
-      // Camera/VFX timers below still tick every frame regardless, so the
-      // freeze actually ends and shake/FOV-punch/trails keep animating
-      // through it.
-      const isFrozenByHitstop = lastCameraOutput?.isHitstopActive ?? false;
 
       let result: MatchTickResult;
       if (isFrozenByHitstop && lastMatchResult) {
@@ -215,6 +218,7 @@ async function bootstrap(): Promise<void> {
         cameraShakeOffsetM: lastCameraOutput.shakeOffsetM,
         isHitstopActive: lastCameraOutput.isHitstopActive,
         hitstopRemainingS: lastCameraOutput.hitstopRemainingS,
+        cameraHighSpeedBlend: lastCameraOutput.highSpeedBlend,
       };
     },
     onRenderFrame: (frameDeltaSeconds) => {

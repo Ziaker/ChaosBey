@@ -55,6 +55,7 @@ export interface DebugOverlayState {
   cameraShakeOffsetM: { x: number; y: number; z: number };
   isHitstopActive: boolean;
   hitstopRemainingS: number;
+  cameraHighSpeedBlend: number;
 }
 
 const RAD_TO_DEG = 180 / Math.PI;
@@ -131,7 +132,8 @@ export class DebugOverlay {
       `-- camera (M4) --\n` +
       `fov              ${state.cameraFovDeg.toFixed(1)} deg\n` +
       `shake offset     ${fmtVec3(state.cameraShakeOffsetM)}\n` +
-      `hitstop          ${state.isHitstopActive ? `ACTIVE (${state.hitstopRemainingS.toFixed(3)}s left)` : 'idle'}`;
+      `hitstop          ${state.isHitstopActive ? `ACTIVE (${state.hitstopRemainingS.toFixed(3)}s left)` : 'idle'}\n` +
+      `high-speed blend ${(state.cameraHighSpeedBlend * 100).toFixed(0)}%`;
   }
 
   private applyVisibility(): void {

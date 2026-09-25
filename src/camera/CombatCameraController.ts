@@ -7,6 +7,13 @@
 // only thing that touches the real THREE.PerspectiveCamera with this
 // output.
 //
+// Speed FOV and "high-speed camera" are separate GDD-listed responses:
+// speed FOV widens smoothly with *combined* speed at all times, while
+// high-speed camera (highSpeedBlend) only engages once either Bey's
+// *individual* speed gets genuinely extreme (e.g. a Dash Attack) — a
+// further, conservative pullback/higher-angle/wider-FOV blended on top,
+// negligible the rest of the time (profile C).
+//
 // Every response scales with ImpactEvent.magnitude (0..1, already run
 // through the owner-approved "Hybrid scalable" profile C curve — see
 // ImpactMagnitude.ts) and is capped, so nothing ever locks up (hitstop),
@@ -25,6 +32,12 @@ import {
   CAMERA_FOV_PUNCH_MAX_DEG,
   CAMERA_FOV_SMOOTHING_PER_S,
   CAMERA_FOV_SPEED_REFERENCE_MPS,
+  CAMERA_HIGH_SPEED_BLEND_SMOOTHING_PER_S,
+  CAMERA_HIGH_SPEED_EXTRA_DISTANCE_M,
+  CAMERA_HIGH_SPEED_EXTRA_FOV_DEG,
+  CAMERA_HIGH_SPEED_EXTRA_HEIGHT_M,
+  CAMERA_HIGH_SPEED_FULL_BLEND_MPS,
+  CAMERA_HIGH_SPEED_THRESHOLD_MPS,
   CAMERA_HITSTOP_DURATION_PER_MAGNITUDE_S,
   CAMERA_HITSTOP_MAX_DURATION_S,
   CAMERA_HITSTOP_MIN_MAGNITUDE,
@@ -63,6 +76,8 @@ export interface CombatCameraOutput {
   fovDeg: number;
   isHitstopActive: boolean;
   hitstopRemainingS: number;
+  /** 0..1 — how "high-speed camera" mode is currently blended in (see CameraTuning's CAMERA_HIGH_SPEED_* constants). Negligible at ordinary speed, ramping up only at genuinely extreme individual speed (e.g. a Dash Attack). */
+  highSpeedBlend: number;
 }
 
 function lerpVec3(a: WorldPositionM, b: WorldPositionM, t: number): WorldPositionM {
@@ -79,6 +94,7 @@ export class CombatCameraController {
   private hitstopRemainingS = 0;
   private knockbackFollowBias = 0;
   private knockbackFollowTargetIsFirst = true;
+  private highSpeedBlend = 0;
 
   tick(input: CombatCameraTickInput): CombatCameraOutput {
     const { firstPositionM, secondPositionM, firstSpeedMps, secondSpeedMps, impactEvents, fixedDeltaSeconds } = input;
@@ -120,19 +136,33 @@ export class CombatCameraController {
     const followTarget = this.knockbackFollowTargetIsFirst ? firstPositionM : secondPositionM;
     const desiredFocus = lerpVec3(midpoint, followTarget, this.knockbackFollowBias);
 
+    // High-speed camera (distinct from speed FOV below): negligible at
+    // ordinary speed, blending in only once either Bey's *individual*
+    // speed gets genuinely extreme (e.g. a Dash Attack) — a further,
+    // conservative pullback/higher-angle/wider-FOV on top of everything
+    // else, smoothed so it can't snap in or out.
+    const fastestSpeedMps = Math.max(firstSpeedMps, secondSpeedMps);
+    const highSpeedFraction = Math.max(
+      0,
+      Math.min(1, (fastestSpeedMps - CAMERA_HIGH_SPEED_THRESHOLD_MPS) / (CAMERA_HIGH_SPEED_FULL_BLEND_MPS - CAMERA_HIGH_SPEED_THRESHOLD_MPS)),
+    );
+    const highSpeedSmoothingT = 1 - Math.exp(-CAMERA_HIGH_SPEED_BLEND_SMOOTHING_PER_S * fixedDeltaSeconds);
+    this.highSpeedBlend += (highSpeedFraction - this.highSpeedBlend) * highSpeedSmoothingT;
+
     const separationM = Math.hypot(
       firstPositionM.x - secondPositionM.x,
       firstPositionM.y - secondPositionM.y,
       firstPositionM.z - secondPositionM.z,
     );
     const extraSeparationM = Math.max(0, separationM - CAMERA_SEPARATION_REFERENCE_M);
+    const separationDistanceM = CAMERA_BASE_DISTANCE_M + extraSeparationM * CAMERA_SEPARATION_TO_DISTANCE_FACTOR;
     const desiredDistanceM = Math.min(
       CAMERA_MAX_DISTANCE_M,
-      Math.max(CAMERA_MIN_DISTANCE_M, CAMERA_BASE_DISTANCE_M + extraSeparationM * CAMERA_SEPARATION_TO_DISTANCE_FACTOR),
+      Math.max(CAMERA_MIN_DISTANCE_M, separationDistanceM + this.highSpeedBlend * CAMERA_HIGH_SPEED_EXTRA_DISTANCE_M),
     );
     const desiredCameraPosition: WorldPositionM = {
       x: desiredFocus.x,
-      y: desiredFocus.y + CAMERA_BASE_HEIGHT_M,
+      y: desiredFocus.y + CAMERA_BASE_HEIGHT_M + this.highSpeedBlend * CAMERA_HIGH_SPEED_EXTRA_HEIGHT_M,
       z: desiredFocus.z + desiredDistanceM,
     };
 
@@ -159,9 +189,10 @@ export class CombatCameraController {
       cameraPositionM: { ...this.cameraPositionM },
       focusPositionM: { ...this.focusPositionM },
       shakeOffsetM,
-      fovDeg: this.currentFovDeg + this.fovPunchDeg,
+      fovDeg: this.currentFovDeg + this.fovPunchDeg + this.highSpeedBlend * CAMERA_HIGH_SPEED_EXTRA_FOV_DEG,
       isHitstopActive: this.hitstopRemainingS > 0,
       hitstopRemainingS: this.hitstopRemainingS,
+      highSpeedBlend: this.highSpeedBlend,
     };
   }
 }

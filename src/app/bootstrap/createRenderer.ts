@@ -36,6 +36,14 @@ export function createRenderer(canvas: HTMLCanvasElement): AppRenderer {
   );
   camera.position.set(0, 6, 10);
   camera.lookAt(0, 0, 0);
+  // The camera itself has no visual representation, so adding it to the
+  // scene graph has no effect on what's drawn — but it's required for
+  // anything parented to the camera (e.g. Milestone 4's camera-attached
+  // speed lines) to actually be traversed and rendered: renderer.render()
+  // walks the `scene` graph, and a camera outside of it leaves its
+  // children unreachable even though the camera still works as the
+  // viewpoint.
+  scene.add(camera);
 
   const handleResize = (): void => {
     const width = window.innerWidth;

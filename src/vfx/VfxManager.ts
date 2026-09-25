@@ -14,6 +14,7 @@ import { createSparkBurst, disposeSparkBurst, updateSparkBurst, type ActiveSpark
 import { SpeedLines } from './SpeedLinesVfx';
 import { SpeedTrail } from './SpeedTrailVfx';
 import { LANDING_MIN_MAGNITUDE_TO_SPAWN, SPARK_MIN_MAGNITUDE_TO_SPAWN, TRAIL_COLOR_FIRST_HEX, TRAIL_COLOR_SECOND_HEX } from './VfxTuning';
+import { routeImpactEventToVfx } from './VfxRouting';
 
 export class VfxManager {
   private activeSparkBursts: ActiveSparkBurst[] = [];
@@ -32,20 +33,33 @@ export class VfxManager {
     camera.add(this.speedLines.object3D);
   }
 
-  /** Spawns new one-shot effects for this tick's fresh impact events. Call only on a tick where gameplay actually advanced (never on a tick frozen by hitstop) — those already pass an empty events array from tickMatch not having run. */
+  /**
+   * Spawns new one-shot effects for this tick's fresh impact events. Call
+   * only on a tick where gameplay actually advanced (never on a tick
+   * frozen by hitstop) — those already pass an empty events array from
+   * tickMatch not having run.
+   *
+   * Routing (see VfxRouting.ts) is deliberately narrow: only 'hit' and
+   * 'wallImpact' — genuine physical contact — spawn a spark. An evaded
+   * attack never shows a contact spark, and stabilityBreak/ko/ringOut
+   * (which co-occur with the very hit that caused them, in this same
+   * event list) don't spawn a second, duplicate burst on top of that
+   * hit's own spark.
+   */
   onImpactEvents(events: ImpactEvent[]): void {
     for (const event of events) {
-      if (event.kind === 'landing') {
+      const route = routeImpactEventToVfx(event);
+      if (route === 'landing') {
         if (event.magnitude < LANDING_MIN_MAGNITUDE_TO_SPAWN) continue;
         const burst = createLandingBurst(event.magnitude, event.worldPositionM);
         this.scene.add(burst.mesh);
         this.activeLandingBursts.push(burst);
-        continue;
+      } else if (route === 'spark') {
+        if (event.magnitude < SPARK_MIN_MAGNITUDE_TO_SPAWN) continue;
+        const burst = createSparkBurst(event.magnitude, event.worldPositionM);
+        this.scene.add(burst.points);
+        this.activeSparkBursts.push(burst);
       }
-      if (event.magnitude < SPARK_MIN_MAGNITUDE_TO_SPAWN) continue;
-      const burst = createSparkBurst(event.magnitude, event.worldPositionM);
-      this.scene.add(burst.points);
-      this.activeSparkBursts.push(burst);
     }
   }
 

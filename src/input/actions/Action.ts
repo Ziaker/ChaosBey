@@ -35,6 +35,16 @@ export interface ControllerActions {
 
 export interface ControllerContext {
   readonly fixedDeltaSeconds: number;
+  /**
+   * True while Milestone 4's hitstop has gameplay simulation itself
+   * frozen this tick. A controller must not lose a gameplay press made
+   * during this window (buffer it for the next unfrozen sample instead)
+   * and must not let hold-duration/charge clocks advance — but UI actions
+   * (Pause, DebugToggle) stay responsive regardless, since hitstop freezes
+   * gameplay, not input readability. Optional/undefined means "not
+   * frozen" for controllers that don't need to care (AI, scripted tests).
+   */
+  readonly simulationFrozen?: boolean;
 }
 
 /**

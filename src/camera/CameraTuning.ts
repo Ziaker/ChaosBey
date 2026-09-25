@@ -52,6 +52,18 @@ export const CAMERA_HITSTOP_MIN_MAGNITUDE = 0.35;
 export const CAMERA_HITSTOP_DURATION_PER_MAGNITUDE_S = 0.18;
 export const CAMERA_HITSTOP_MAX_DURATION_S = 0.18;
 
+// --- High-speed camera (GDD: distinct from speed FOV above — a further,
+// conservative reframing that only kicks in at genuinely extreme
+// individual speed, e.g. a Dash Attack, not just "both Beys moving
+// briskly". Profile C: negligible at normal speed, a modest pullback/
+// wider-angle/higher-angle blend at the top end.) ---
+export const CAMERA_HIGH_SPEED_THRESHOLD_MPS = 14; // above ordinary top speed (11 mps) — a Dash Attack (up to 18 mps) is the intended trigger.
+export const CAMERA_HIGH_SPEED_FULL_BLEND_MPS = 18;
+export const CAMERA_HIGH_SPEED_EXTRA_DISTANCE_M = 2;
+export const CAMERA_HIGH_SPEED_EXTRA_HEIGHT_M = 0.6;
+export const CAMERA_HIGH_SPEED_EXTRA_FOV_DEG = 4;
+export const CAMERA_HIGH_SPEED_BLEND_SMOOTHING_PER_S = 5;
+
 // --- Knockback follow (camera focus leans toward a Bey that just got
 // launched, so it doesn't leave frame, per GDD's explicit M3 "air recovery
 // after knockback" + M4 "knockback follow" pairing) ---

@@ -4,9 +4,15 @@
 // Arrow keys = steer/move, Z = attack, X = hop/jump/drift, C = dodge.
 // Pause/DebugToggle keys are ordinary engineering choices (not covered by
 // the design doc) and can be rebound freely without a design decision.
+//
+// Press/hold bookkeeping (including Milestone 4's hitstop-safe buffering)
+// lives in ActionSampleBuffer, a DOM-independent class this controller
+// just feeds raw key events into — kept separate so that logic is
+// unit-testable without a real `window`.
 // ============================================================
 
 import { Action, type CombatController, type ControllerActions, type ControllerContext } from '../actions/Action';
+import { ActionSampleBuffer } from './ActionSampleBuffer';
 
 const KEY_TO_ACTION: Readonly<Record<string, Action>> = {
   ArrowLeft: Action.SteerLeft,
@@ -22,17 +28,14 @@ const KEY_TO_ACTION: Readonly<Record<string, Action>> = {
 
 export class KeyboardController implements CombatController {
   private readonly currentlyDown = new Set<Action>();
-  private readonly pressedSinceLastSample = new Set<Action>();
-  private readonly holdStartedAtSeconds = new Map<Action, number>();
-  private elapsedSeconds = 0;
+  private readonly buffer = new ActionSampleBuffer();
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     const action = KEY_TO_ACTION[event.code];
     if (!action) return;
     event.preventDefault();
     if (!this.currentlyDown.has(action)) {
-      this.pressedSinceLastSample.add(action);
-      this.holdStartedAtSeconds.set(action, this.elapsedSeconds);
+      this.buffer.registerPress(action);
     }
     this.currentlyDown.add(action);
   };
@@ -41,13 +44,13 @@ export class KeyboardController implements CombatController {
     const action = KEY_TO_ACTION[event.code];
     if (!action) return;
     this.currentlyDown.delete(action);
-    this.holdStartedAtSeconds.delete(action);
+    this.buffer.registerRelease(action);
   };
 
   private readonly handleWindowBlur = (): void => {
     // Clears stuck keys on focus loss (GDD section 131).
     this.currentlyDown.clear();
-    this.holdStartedAtSeconds.clear();
+    this.buffer.clearHoldTracking();
   };
 
   attach(): void {
@@ -63,19 +66,10 @@ export class KeyboardController implements CombatController {
   }
 
   sampleActions(context: ControllerContext): ControllerActions {
-    this.elapsedSeconds += context.fixedDeltaSeconds;
-
-    const held: ReadonlySet<Action> = new Set(this.currentlyDown);
-    const pressedThisFrame: ReadonlySet<Action> = new Set(this.pressedSinceLastSample);
-    this.pressedSinceLastSample.clear();
-
-    const holdDuration = (action: Action): number => {
-      const startedAt = this.holdStartedAtSeconds.get(action);
-      return startedAt === undefined ? 0 : this.elapsedSeconds - startedAt;
-    };
+    const { pressedThisFrame, holdDuration } = this.buffer.sample(context.fixedDeltaSeconds, context.simulationFrozen ?? false);
 
     return {
-      held,
+      held: new Set(this.currentlyDown),
       pressedThisFrame,
       attackHoldDurationSeconds: holdDuration(Action.Attack),
       jumpDriftHoldDurationSeconds: holdDuration(Action.JumpDrift),

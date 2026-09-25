@@ -15,6 +15,11 @@ import {
   CAMERA_BASE_HEIGHT_M,
   CAMERA_FOV_BASE_DEG,
   CAMERA_FOV_MAX_SPEED_BONUS_DEG,
+  CAMERA_HIGH_SPEED_EXTRA_DISTANCE_M,
+  CAMERA_HIGH_SPEED_EXTRA_FOV_DEG,
+  CAMERA_HIGH_SPEED_EXTRA_HEIGHT_M,
+  CAMERA_HIGH_SPEED_FULL_BLEND_MPS,
+  CAMERA_HIGH_SPEED_THRESHOLD_MPS,
   CAMERA_HITSTOP_MAX_DURATION_S,
   CAMERA_MAX_DISTANCE_M,
 } from '../../src/camera/CameraTuning';
@@ -70,11 +75,55 @@ describe('separation-based zoom', () => {
 });
 
 describe('speed FOV', () => {
-  it('widens toward the max speed bonus at high combined speed', () => {
+  it('widens toward the max speed bonus at high combined speed, isolated from high-speed camera (each Bey individually below its threshold)', () => {
     const controller = new CombatCameraController();
-    const output = tickMany(controller, 300, { firstSpeedMps: 20, secondSpeedMps: 20 });
+    // Combined (11 + 11 = 22) saturates CAMERA_FOV_SPEED_REFERENCE_MPS,
+    // but each Bey individually (11) stays below CAMERA_HIGH_SPEED_
+    // THRESHOLD_MPS (14) — isolates speed-FOV from the separate
+    // high-speed-camera blend tested below.
+    const output = tickMany(controller, 300, { firstSpeedMps: 11, secondSpeedMps: 11 });
 
     expect(output.fovDeg).toBeCloseTo(CAMERA_FOV_BASE_DEG + CAMERA_FOV_MAX_SPEED_BONUS_DEG, 1);
+    expect(output.highSpeedBlend).toBeCloseTo(0, 2);
+  });
+});
+
+describe('high-speed camera (distinct from speed FOV)', () => {
+  it('stays negligible at ordinary individual speed, even if combined speed is high', () => {
+    const controller = new CombatCameraController();
+    // Same combined speed as the speed-FOV test above — high-speed camera
+    // must not engage from combined speed alone.
+    const output = tickMany(controller, 300, { firstSpeedMps: 11, secondSpeedMps: 11 });
+
+    expect(output.highSpeedBlend).toBeCloseTo(0, 2);
+  });
+
+  it('blends in a pullback/higher-angle/extra-FOV once either Bey is genuinely at extreme individual speed (e.g. a Dash Attack), capped at the full-blend reference', () => {
+    const controller = new CombatCameraController();
+    const output = tickMany(controller, 300, { firstSpeedMps: CAMERA_HIGH_SPEED_FULL_BLEND_MPS, secondSpeedMps: 0 });
+
+    expect(output.highSpeedBlend).toBeCloseTo(1, 1);
+    const distanceM = output.cameraPositionM.z - output.focusPositionM.z;
+    const heightM = output.cameraPositionM.y - output.focusPositionM.y;
+    expect(distanceM).toBeCloseTo(CAMERA_BASE_DISTANCE_M + CAMERA_HIGH_SPEED_EXTRA_DISTANCE_M, 1);
+    expect(heightM).toBeCloseTo(CAMERA_BASE_HEIGHT_M + CAMERA_HIGH_SPEED_EXTRA_HEIGHT_M, 1);
+    expect(output.fovDeg).toBeGreaterThanOrEqual(CAMERA_FOV_BASE_DEG + CAMERA_HIGH_SPEED_EXTRA_FOV_DEG - 0.5);
+  });
+
+  it('never exceeds full blend (capped) far beyond the reference speed, and transitions back to negligible when speed drops again', () => {
+    const controller = new CombatCameraController();
+    const atExtremeSpeed = tickMany(controller, 300, { firstSpeedMps: CAMERA_HIGH_SPEED_FULL_BLEND_MPS * 3, secondSpeedMps: 0 });
+    expect(atExtremeSpeed.highSpeedBlend).toBeLessThanOrEqual(1.001);
+    expect(atExtremeSpeed.highSpeedBlend).toBeCloseTo(1, 1);
+
+    const backToNormal = tickMany(controller, 300, { firstSpeedMps: 0, secondSpeedMps: 0 });
+    expect(backToNormal.highSpeedBlend).toBeCloseTo(0, 1);
+  });
+
+  it('threshold sanity: a speed right at the threshold produces ~0 blend, matching the fraction formula', () => {
+    const controller = new CombatCameraController();
+    const output = tickMany(controller, 300, { firstSpeedMps: CAMERA_HIGH_SPEED_THRESHOLD_MPS, secondSpeedMps: 0 });
+    expect(output.highSpeedBlend).toBeCloseTo(0, 1);
   });
 });
 
