@@ -164,7 +164,6 @@ export class MovementController {
   postStep(body: RAPIER.RigidBody, grounded: boolean): MovementSnapshot {
     const vel = body.linvel();
     const actualVelocityVector: Vec2 = { x: vel.x, z: vel.z };
-    const speedMps = length(actualVelocityVector);
 
     let impactDeltaSpeedMps = 0;
     let impactDirection: Vec2 = { x: 0, z: 0 };
@@ -181,6 +180,29 @@ export class MovementController {
       }
     }
 
+    return this.buildSnapshot(actualVelocityVector, grounded, impactDeltaSpeedMps, impactDirection);
+  }
+
+  /**
+   * Read-only snapshot from current state — no impact detection, no
+   * mutation of postImpactCooldownRemainingS or anything else. For
+   * consumers (e.g. a frozen post-round snapshot) that must never advance
+   * internal state; always reports impactDeltaSpeedMps 0 since no impact
+   * detection is performed here.
+   */
+  getSnapshot(body: RAPIER.RigidBody, grounded: boolean): MovementSnapshot {
+    const vel = body.linvel();
+    const actualVelocityVector: Vec2 = { x: vel.x, z: vel.z };
+    return this.buildSnapshot(actualVelocityVector, grounded, 0, { x: 0, z: 0 });
+  }
+
+  private buildSnapshot(
+    actualVelocityVector: Vec2,
+    grounded: boolean,
+    impactDeltaSpeedMps: number,
+    impactDirection: Vec2,
+  ): MovementSnapshot {
+    const speedMps = length(actualVelocityVector);
     const slipAngleRad = speedMps > 0.05 ? signedAngleBetween(this.lastHeadingForward, actualVelocityVector) : 0;
 
     return {

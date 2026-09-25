@@ -30,8 +30,10 @@ test('production build boots under /ChaosBey/, renders and produces no fatal err
   expect(new URL(page.url()).pathname).toBe('/ChaosBey/');
 
   // Debug overlay is visible on boot by default (RuntimeConfig) and reports
-  // the Sandbox state once bootstrap() has finished wiring physics/render.
-  await expect(page.locator('#debug-overlay-root pre')).toContainText('Sandbox', { timeout: 15_000 });
+  // the Combat state once bootstrap() has finished wiring physics/render and
+  // the Milestone 2 match is running (GDD section 9: Sandbox was only ever
+  // the Milestone 0 placeholder-scene state).
+  await expect(page.locator('#debug-overlay-root pre')).toContainText('Combat', { timeout: 15_000 });
 
   // Let a few fixed ticks and render frames run to catch startup-only failures.
   await page.waitForTimeout(1000);

@@ -55,6 +55,14 @@ function chargedDashController(holdTicks: number): ScriptedController {
   ]);
 }
 
+/** Same as tapController(), but the tap starts at a chosen tick — for timing a Circular Attack to overlap a specific window (e.g. an opponent's Dash Attack). */
+function delayedTapController(pressAtTick: number): ScriptedController {
+  return new ScriptedController([
+    { fromTick: pressAtTick, held: [Action.Attack] },
+    { fromTick: pressAtTick + 2, held: [] },
+  ]);
+}
+
 function repeatedTapFrames(count: number, intervalTicks: number): ScriptedFrame[] {
   const frames: ScriptedFrame[] = [];
   for (let i = 0; i < count; i++) {
@@ -383,5 +391,117 @@ describe('attacking mid-jump', () => {
     // produces in one fixed tick (~0.16 m/s at 60Hz) would mean something
     // other than gravity touched it — i.e. the attack disrupted the jump.
     expect(maxVerticalVelocityDeltaWhileRising).toBeLessThan(0.5);
+  });
+});
+
+describe('Circular Attack catches Dash Attack', () => {
+  it('launches the caught Dash attacker upward instead of applying normal knockback', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+
+    // second charges+releases a Dash Attack (active roughly ticks 20-49);
+    // first's Circular Attack is timed to become active right as second's
+    // Dash starts (roughly ticks 20-34), well inside that window.
+    const dasher = chargedDashController(20);
+    const catcher = delayedTapController(18);
+
+    let sawCaughtDashHit = false;
+    let maxSecondVerticalVelocity = 0;
+
+    for (let i = 0; i < 60; i++) {
+      const result = harness.tick(
+        catcher.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+        dasher.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+      );
+      for (const hit of result.hitEvents) {
+        if (hit.attackerIsFirst && hit.caughtOpponentDashing) sawCaughtDashHit = true;
+      }
+      maxSecondVerticalVelocity = Math.max(maxSecondVerticalVelocity, harness.second.body.linvel().y);
+    }
+
+    expect(sawCaughtDashHit).toBe(true);
+    // A strong upward launch, not the shallow upward component normal
+    // knockback also has — comfortably above what normal knockback alone
+    // could produce here.
+    expect(maxSecondVerticalVelocity).toBeGreaterThan(5);
+    // Second wasn't already Broken, so this single hit shouldn't KO it.
+    expect(harness.roundState.isOver).toBe(false);
+  });
+
+  it('still causes a KO when the caught defender was already Broken (a qualifying hit is a qualifying hit)', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+
+    // Pre-break the defender directly (a pure system-level operation — it
+    // never touches roundState or physics), so the catch below is already
+    // a qualifying KO hit.
+    harness.second.stability.applyDamage(STABILITY_MAX);
+    expect(harness.second.stability.isBroken).toBe(true);
+    expect(harness.roundState.isOver).toBe(false);
+
+    const dasher = chargedDashController(20);
+    const catcher = delayedTapController(18);
+
+    for (let i = 0; i < 60 && !harness.roundState.isOver; i++) {
+      harness.tick(
+        catcher.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+        dasher.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+      );
+    }
+
+    expect(harness.roundState.isOver).toBe(true);
+    expect(harness.roundState.result).toBe(RoundOutcome.FirstWinsByKo);
+  });
+});
+
+describe('RoundEnd freeze is genuinely read-only', () => {
+  it('does not keep re-detecting the same impact once frozen (MovementController internal state must not mutate)', async () => {
+    // Drive the first Bey straight into the wall to produce a real,
+    // unresolved impact right as the round ends — the scenario that
+    // exposed the bug: freezing while movement's own impact-detection
+    // state was "hot".
+    const harness = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, CLOSE_SECOND_SPAWN);
+    settle(harness);
+
+    const driver = new ScriptedController([{ fromTick: 0, held: [Action.MoveForward] }]);
+
+    let sawRealImpact = false;
+    for (let i = 0; i < 400 && !sawRealImpact; i++) {
+      const result = harness.tick(driver.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+      if (result.first.movement.impactDeltaSpeedMps > 0) sawRealImpact = true;
+    }
+    expect(sawRealImpact).toBe(true);
+    expect(harness.roundState.isOver).toBe(false);
+
+    // End the round immediately, on the very next tick, while that impact
+    // is still fresh — this is the moment the old buildFrozenSnapshot()
+    // would have kept re-reporting a "new" impact every subsequent tick.
+    harness.second.body.setTranslation({ x: RINGOUT_RADIUS_M + 1, y: 1, z: 0 }, true);
+    harness.tick(NO_ACTIONS, NO_ACTIONS);
+    expect(harness.roundState.isOver).toBe(true);
+
+    for (let i = 0; i < 20; i++) {
+      const result = harness.tick(NO_ACTIONS, NO_ACTIONS);
+      expect(result.first.movement.impactDeltaSpeedMps).toBe(0);
+    }
+  });
+
+  it('keeps every frozen tick byte-for-byte identical across many repeats (no observable internal drift)', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+
+    harness.second.body.setTranslation({ x: RINGOUT_RADIUS_M + 1, y: 1, z: 0 }, true);
+    harness.tick(NO_ACTIONS, NO_ACTIONS); // ends the round this tick — not yet a frozen tick itself
+    expect(harness.roundState.isOver).toBe(true);
+
+    const attacker = tapController();
+    const firstFrozenResult = harness.tick(attacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+    let previous = JSON.stringify(firstFrozenResult.first.movement);
+    for (let i = 0; i < 30; i++) {
+      const result = harness.tick(attacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+      const current = JSON.stringify(result.first.movement);
+      expect(current).toBe(previous);
+      previous = current;
+    }
   });
 });

@@ -48,10 +48,25 @@ export interface BeySnapshot {
   attackEnergyFraction: number;
 }
 
+/**
+ * Structured combat facts from this tick, for telemetry (GDD section 74:
+ * Hit is already covered by hitEvents above; this adds StabilityDamage,
+ * StabilityBreak, Knockback, RingOut and Ko). Deliberately decoupled from
+ * the telemetry module's own event types — this is just "what happened",
+ * not "how it's recorded".
+ */
+export type CombatEvent =
+  | { kind: 'stabilityDamage'; targetIsFirst: boolean; amount: number }
+  | { kind: 'stabilityBreak'; targetIsFirst: boolean }
+  | { kind: 'knockback'; targetIsFirst: boolean; force: number }
+  | { kind: 'ko'; targetIsFirst: boolean }
+  | { kind: 'ringOut'; targetIsFirst: boolean };
+
 export interface MatchTickResult {
   first: BeySnapshot;
   second: BeySnapshot;
   hitEvents: HitEvent[];
+  combatEvents: CombatEvent[];
   ringOutFirst: boolean;
   ringOutSecond: boolean;
 }
@@ -65,7 +80,7 @@ function positionXZ(body: Bey['body']): Vec2 {
 function buildFrozenSnapshot(physics: PhysicsWorld, bey: Bey): BeySnapshot {
   const grounded = isGrounded(physics, bey.collider);
   return {
-    movement: bey.movement.postStep(bey.body, grounded),
+    movement: bey.movement.getSnapshot(bey.body, grounded),
     spin: bey.spin.getSnapshot(bey.body),
     grounded,
     driftState: bey.drift.getState(),
@@ -92,6 +107,7 @@ export function tickMatch(
       first: buildFrozenSnapshot(physics, first),
       second: buildFrozenSnapshot(physics, second),
       hitEvents: [],
+      combatEvents: [],
       ringOutFirst: false,
       ringOutSecond: false,
     };
@@ -176,10 +192,29 @@ export function tickMatch(
 
   let firstKoed = false;
   let secondKoed = false;
+  const combatEvents: CombatEvent[] = [];
+
+  // Shared by both hit-resolution paths below (normal knockback and
+  // Circular-catches-Dash) so a qualifying KO is detected and telemetered
+  // identically either way — previously only the normal path fed
+  // firstKoed/secondKoed, so a Circular Attack catching a Dash Attack could
+  // deal qualifying Stability damage to an already-Broken defender without
+  // ever actually ending the round.
+  function applyStabilityDamageAndTrackKo(defenderIsFirst: boolean, defender: Bey, amount: number): void {
+    const { causedBreak, isQualifyingKoHit } = defender.stability.applyDamage(amount);
+    combatEvents.push({ kind: 'stabilityDamage', targetIsFirst: defenderIsFirst, amount });
+    if (causedBreak) combatEvents.push({ kind: 'stabilityBreak', targetIsFirst: defenderIsFirst });
+    if (isQualifyingKoHit) {
+      combatEvents.push({ kind: 'ko', targetIsFirst: defenderIsFirst });
+      if (defenderIsFirst) firstKoed = true;
+      else secondKoed = true;
+    }
+  }
 
   for (const hit of hitEvents) {
     const attacker = hit.attackerIsFirst ? first : second;
     const defender = hit.attackerIsFirst ? second : first;
+    const defenderIsFirst = !hit.attackerIsFirst;
     const attackerMovement = hit.attackerIsFirst ? firstMovement : secondMovement;
     const defenderMovement = hit.attackerIsFirst ? secondMovement : firstMovement;
     const attackerPos = hit.attackerIsFirst ? firstPos : secondPos;
@@ -192,7 +227,7 @@ export function tickMatch(
       // launches the attacker's *target* upward instead of normal knockback.
       const vel = defender.body.linvel();
       defender.body.setLinvel({ x: vel.x, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z }, true);
-      defender.stability.applyDamage(computeStabilityDamage(hit.hitbox.stabilityDamage));
+      applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage));
       continue;
     }
 
@@ -206,16 +241,15 @@ export function tickMatch(
       impactDirectionXZ: normalize(subtract(defenderPos, attackerPos)),
     });
     applyKnockback(defender.body, attackerPos, defenderPos, knockback);
+    combatEvents.push({ kind: 'knockback', targetIsFirst: defenderIsFirst, force: knockback.force });
 
-    const { isQualifyingKoHit } = defender.stability.applyDamage(computeStabilityDamage(hit.hitbox.stabilityDamage));
-    if (isQualifyingKoHit) {
-      if (hit.attackerIsFirst) secondKoed = true;
-      else firstKoed = true;
-    }
+    applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage));
   }
 
   const ringOutFirst = isRingOut(firstPos);
   const ringOutSecond = isRingOut(secondPos);
+  if (ringOutFirst) combatEvents.push({ kind: 'ringOut', targetIsFirst: true });
+  if (ringOutSecond) combatEvents.push({ kind: 'ringOut', targetIsFirst: false });
   roundState.resolveTick({ firstKoed, secondKoed, firstRingOut: ringOutFirst, secondRingOut: ringOutSecond });
 
   return {
@@ -244,6 +278,7 @@ export function tickMatch(
       attackEnergyFraction: second.attackEnergy.resource.fraction,
     },
     hitEvents,
+    combatEvents,
     ringOutFirst,
     ringOutSecond,
   };

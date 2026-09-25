@@ -90,9 +90,36 @@ async function bootstrap(): Promise<void> {
       lastFirstVisual = { spin: result.first.spin.visualSpinAngleRad, wobble: result.first.spin.wobbleOffsetRad };
       lastSecondVisual = { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad };
 
-      for (const event of result.hitEvents) {
-        telemetry.record({ kind: TelemetryEventKind.MovementImpact, speedDeltaMps: event.hitbox.knockbackForce });
+      for (const hit of result.hitEvents) {
+        telemetry.record({
+          kind: TelemetryEventKind.Hit,
+          attackerIsFirst: hit.attackerIsFirst,
+          hitboxKind: hit.hitbox.kind,
+          caughtOpponentDashing: hit.caughtOpponentDashing,
+        });
       }
+      for (const combatEvent of result.combatEvents) {
+        switch (combatEvent.kind) {
+          case 'stabilityDamage':
+            telemetry.record({ kind: TelemetryEventKind.StabilityDamage, targetIsFirst: combatEvent.targetIsFirst, amount: combatEvent.amount });
+            break;
+          case 'stabilityBreak':
+            telemetry.record({ kind: TelemetryEventKind.StabilityBreak, targetIsFirst: combatEvent.targetIsFirst });
+            break;
+          case 'knockback':
+            telemetry.record({ kind: TelemetryEventKind.Knockback, targetIsFirst: combatEvent.targetIsFirst, force: combatEvent.force });
+            break;
+          case 'ko':
+            telemetry.record({ kind: TelemetryEventKind.Ko, targetIsFirst: combatEvent.targetIsFirst });
+            break;
+          case 'ringOut':
+            telemetry.record({ kind: TelemetryEventKind.RingOut, targetIsFirst: combatEvent.targetIsFirst });
+            break;
+        }
+      }
+      // A genuine unmodeled physics impact (wall/floor bounce) — distinct
+      // from a combat Hit/Knockback event above, which already carries its
+      // own knockbackForce/force fields rather than borrowing this one.
       if (result.first.movement.impactDeltaSpeedMps > 0 || result.second.movement.impactDeltaSpeedMps > 0) {
         const speedDelta = Math.max(result.first.movement.impactDeltaSpeedMps, result.second.movement.impactDeltaSpeedMps);
         telemetry.record({ kind: TelemetryEventKind.MovementImpact, speedDeltaMps: speedDelta });
@@ -118,6 +145,7 @@ async function bootstrap(): Promise<void> {
       }
 
       if (roundState.isOver && stateMachine.getCurrentState() !== GameState.RoundEnd) {
+        telemetry.record({ kind: TelemetryEventKind.RoundEnd, outcome: roundState.result });
         stateMachine.transitionTo(GameState.RoundEnd);
       }
 
@@ -175,7 +203,10 @@ async function bootstrap(): Promise<void> {
     },
   });
 
-  stateMachine.transitionTo(GameState.Sandbox);
+  // A real two-Bey match is already running by this point (GDD section 9:
+  // Combat and RoundEnd are separate states) — Sandbox was only ever the
+  // Milestone 0 placeholder-scene state.
+  stateMachine.transitionTo(GameState.Combat);
   loop.start();
 
   window.addEventListener('beforeunload', () => {
