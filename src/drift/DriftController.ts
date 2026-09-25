@@ -13,6 +13,12 @@
 // drift intent — height assist stops immediately and the hop stays at its
 // small Milestone 1 liftoff, so a drift-into slide never accidentally
 // becomes a tall jump.
+//
+// Landing is detected generically, independent of DriftState: any
+// grounded<-airborne transition (a hop, a knockback launch, falling off a
+// ledge) reports justLanded plus descent speed/intensity/jump-assist data
+// for Milestone 4's VFX/camera to react to — it never gates on being in
+// the Hopping state, and carries no handling penalty of its own.
 // ============================================================
 
 import type RAPIER from '@dimforge/rapier3d-compat';
@@ -25,7 +31,7 @@ import {
   HOP_MIN_AIRBORNE_DURATION_S,
   JUMP_ASSIST_ACCEL_MPS2,
   JUMP_ASSIST_MAX_DURATION_S,
-  JUMP_BIG_JUMP_ASSIST_THRESHOLD_S,
+  LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS,
 } from './DriftTuning';
 
 export enum DriftState {
@@ -33,19 +39,20 @@ export enum DriftState {
   Hopping = 'Hopping',
   Drifting = 'Drifting',
   Recovering = 'Recovering',
-  /**
-   * Momentary marker (a single tick) for touching down from a big (held)
-   * jump — no gameplay effect (the GDD never approved a landing handling
-   * penalty), purely an inspectable signal for Milestone 4's VFX/camera to
-   * hook a strong-landing reaction onto. Immediately returns to Idle.
-   */
-  Landing = 'Landing',
 }
 
 export interface DriftTickResult {
   /** Passed straight to MovementController.applyPreStep's lateralGripOverridePerS parameter; null means "use normal grip". */
   lateralGripOverridePerS: number | null;
   driftState: DriftState;
+  /** True for exactly one tick: this Bey just transitioned from airborne to grounded — any cause (a hop, a knockback launch, falling off a ledge), independent of DriftState. */
+  justLanded: boolean;
+  /** Descent speed (m/s, >= 0) measured the tick before touchdown was detected. Only meaningful when justLanded is true. */
+  landingDescentSpeedMps: number;
+  /** A tunable 0..1 metric derived from landingDescentSpeedMps, for Milestone 4's VFX/camera (dust/sparks/shockwave/camera shake) to scale by. Only meaningful when justLanded is true. */
+  landingIntensity: number;
+  /** How long (seconds) the variable-jump height assist applied during the airborne period that just ended; 0 if this wasn't a jump (e.g. a knockback fall) or was a bare tap. Only meaningful when justLanded is true. */
+  landingJumpAssistElapsedS: number;
 }
 
 export class DriftController {
@@ -53,6 +60,8 @@ export class DriftController {
   private hopTimerS = 0;
   private recoveryTimerS = 0;
   private jumpAssistElapsedS = 0;
+  private wasGrounded = true;
+  private lastAirborneVerticalVelocityMps = 0;
 
   /** Current state without advancing anything — for read-only consumers (e.g. a frozen post-round snapshot) that must not progress the state machine. */
   getState(): DriftState {
@@ -65,6 +74,31 @@ export class DriftController {
     // The approved control is hop, then hold JumpDrift *while steering* to
     // slide (GDD section 19) — holding JumpDrift straight must not drift.
     const steering = actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight);
+
+    if (!grounded) {
+      // Keep sampling this every tick while airborne so the last value
+      // recorded (read the tick before landing is detected) is the closest
+      // available proxy for actual pre-impact descent speed.
+      this.lastAirborneVerticalVelocityMps = body.linvel().y;
+    }
+
+    let justLanded = false;
+    let landingDescentSpeedMps = 0;
+    let landingIntensity = 0;
+    let landingJumpAssistElapsedS = 0;
+
+    if (this.wasGrounded && !grounded) {
+      // Leaving the ground for any reason starts a fresh airborne period
+      // with no jump-height assist accrued yet — beginHop() below only
+      // adds to it if this period turns out to actually be a jump.
+      this.jumpAssistElapsedS = 0;
+    } else if (!this.wasGrounded && grounded) {
+      justLanded = true;
+      landingDescentSpeedMps = Math.max(0, -this.lastAirborneVerticalVelocityMps);
+      landingIntensity = Math.min(1, landingDescentSpeedMps / LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS);
+      landingJumpAssistElapsedS = this.jumpAssistElapsedS;
+    }
+    this.wasGrounded = grounded;
 
     switch (this.state) {
       case DriftState.Idle:
@@ -90,13 +124,7 @@ export class DriftController {
         }
 
         if (this.hopTimerS >= HOP_MIN_AIRBORNE_DURATION_S && grounded) {
-          if (jumpDriftHeld && steering) {
-            this.state = DriftState.Drifting;
-          } else if (this.jumpAssistElapsedS >= JUMP_BIG_JUMP_ASSIST_THRESHOLD_S) {
-            this.state = DriftState.Landing;
-          } else {
-            this.state = DriftState.Idle;
-          }
+          this.state = jumpDriftHeld && steering ? DriftState.Drifting : DriftState.Idle;
         }
         break;
       }
@@ -117,16 +145,15 @@ export class DriftController {
           this.state = DriftState.Idle;
         }
         break;
-
-      case DriftState.Landing:
-        // No penalty, no timer — resolves on the very next tick.
-        this.state = DriftState.Idle;
-        break;
     }
 
     return {
       lateralGripOverridePerS: this.computeLateralGripOverride(),
       driftState: this.state,
+      justLanded,
+      landingDescentSpeedMps,
+      landingIntensity,
+      landingJumpAssistElapsedS,
     };
   }
 

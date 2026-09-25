@@ -2,11 +2,15 @@
 // DODGE CONTROLLER
 // State machine for Action.Dodge (GDD section 14/22). Grounded: Idle ->
 // Dodging (a momentum-preserving burst + i-frames, with an early
-// "perfect" sub-window) -> Cooldown -> Idle. Airborne: NOT another
-// evasion window — Dodge only does anything if this specific airborne
-// period was caused by a knockback/launch (registerLaunch()), in which
-// case it triggers a one-shot air recovery instead (GDD section 21: a
-// normal jump must never grant air recovery).
+// "perfect" sub-window) -> Cooldown -> Idle. The Dodging/Cooldown timers
+// advance every tick on simulated time regardless of grounded state (an
+// airborne stretch mid-dodge must not pause the cooldown), but i-frames,
+// the grip override, and starting a fresh dodge all require actually being
+// grounded right now. Airborne: NOT another evasion window — pressing
+// Dodge only does anything if this specific airborne period was caused by
+// a knockback/launch (registerLaunch()), in which case it triggers a
+// one-shot air recovery instead (GDD section 21: a normal jump, or a
+// wall/floor bounce that leaves the Bey grounded, must never grant it).
 //
 // Only ever touches the body directly for the dodge's own burst (mirroring
 // how DriftController applies its hop impulse directly) — otherwise talks
@@ -61,10 +65,29 @@ export class DodgeController {
     return this.state;
   }
 
-  /** Call when a knockback/launch impulse (normal knockback or the Circular-catches-Dash upward launch) is applied to this Bey — arms air recovery for the airborne period that follows, if any (GDD section 21). A normal jump must never call this. */
-  registerLaunch(): void {
-    this.launchPending = true;
-    this.launchPendingRemainingS = LAUNCH_PENDING_WINDOW_S;
+  /**
+   * Call when a knockback/launch impulse (normal knockback or the
+   * Circular-catches-Dash upward launch) is applied to this Bey — arms Air
+   * Recovery for the airborne period the launch causes (GDD section 21). A
+   * normal jump, or a wall/floor bounce that leaves the Bey grounded, must
+   * never call this.
+   *
+   * @param currentlyAirborne Whether this Bey is airborne right now, at the
+   * moment of the launch (e.g. it was already mid-jump when the knockback
+   * landed). If true, Air Recovery is armed immediately for this same
+   * airborne period — there will be no further grounded->airborne
+   * transition to catch it on. If false (still grounded when launched),
+   * arms a short pending window instead, consumed the next time this Bey
+   * actually leaves the ground.
+   */
+  registerLaunch(currentlyAirborne: boolean): void {
+    if (currentlyAirborne) {
+      this.airRecoveryAvailable = true;
+      this.launchPending = false;
+    } else {
+      this.launchPending = true;
+      this.launchPendingRemainingS = LAUNCH_PENDING_WINDOW_S;
+    }
   }
 
   tick(
@@ -92,27 +115,22 @@ export class DodgeController {
     this.wasGrounded = grounded;
 
     let triggeredAirRecovery = false;
-
-    if (!grounded) {
-      if (dodgePressed && this.airRecoveryAvailable) {
-        this.airRecoveryAvailable = false;
-        triggeredAirRecovery = true;
-      }
-      return {
-        state: this.state,
-        lateralGripOverridePerS: null,
-        hasIFrames: false,
-        isPerfectWindow: false,
-        triggeredAirRecovery,
-        staminaCostThisTick: 0,
-      };
+    if (!grounded && dodgePressed && this.airRecoveryAvailable) {
+      this.airRecoveryAvailable = false;
+      triggeredAirRecovery = true;
     }
 
+    // The ground dodge/cooldown state machine keeps advancing on the fixed
+    // timestep regardless of grounded state — an airborne Bey (e.g. a
+    // dodge that carried it off a ledge, or a knockback mid-dodge) must not
+    // get a free pause on its own cooldown, nor an i-frame window that
+    // silently outlives its intended duration. Only *starting* a fresh
+    // ground dodge, and the i-frames/grip override a Dodging state grants,
+    // require actually being grounded right now.
     let staminaCostThisTick = 0;
-
     switch (this.state) {
       case DodgeState.Idle:
-        if (dodgePressed && staminaValue >= DODGE_STAMINA_COST) {
+        if (grounded && dodgePressed && staminaValue >= DODGE_STAMINA_COST) {
           this.state = DodgeState.Dodging;
           this.activeTimerS = 0;
           staminaCostThisTick = DODGE_STAMINA_COST;
@@ -136,11 +154,13 @@ export class DodgeController {
         break;
     }
 
+    const grantsGroundIFrames = grounded && this.state === DodgeState.Dodging;
+
     return {
       state: this.state,
-      lateralGripOverridePerS: this.state === DodgeState.Dodging ? DODGE_GRIP_OVERRIDE_PER_S : null,
-      hasIFrames: this.state === DodgeState.Dodging,
-      isPerfectWindow: this.state === DodgeState.Dodging && this.activeTimerS <= DODGE_PERFECT_WINDOW_S,
+      lateralGripOverridePerS: grantsGroundIFrames ? DODGE_GRIP_OVERRIDE_PER_S : null,
+      hasIFrames: grantsGroundIFrames,
+      isPerfectWindow: grantsGroundIFrames && this.activeTimerS <= DODGE_PERFECT_WINDOW_S,
       triggeredAirRecovery,
       staminaCostThisTick,
     };

@@ -48,6 +48,14 @@ export interface BeySnapshot {
   stabilityFraction: number;
   isBroken: boolean;
   attackEnergyFraction: number;
+  /** True for exactly one tick: this Bey just landed (any cause) — see DriftController. Milestone 4 data, no gameplay effect. */
+  justLanded: boolean;
+  /** Only meaningful when justLanded is true. */
+  landingDescentSpeedMps: number;
+  /** Only meaningful when justLanded is true. */
+  landingIntensity: number;
+  /** Only meaningful when justLanded is true. */
+  landingJumpAssistElapsedS: number;
 }
 
 /**
@@ -97,6 +105,10 @@ function buildFrozenSnapshot(physics: PhysicsWorld, bey: Bey): BeySnapshot {
     stabilityFraction: bey.stability.resource.fraction,
     isBroken: bey.stability.isBroken,
     attackEnergyFraction: bey.attackEnergy.resource.fraction,
+    justLanded: false,
+    landingDescentSpeedMps: 0,
+    landingIntensity: 0,
+    landingJumpAssistElapsedS: 0,
   };
 }
 
@@ -195,15 +207,17 @@ export function tickMatch(
   const firstMovement = first.movement.postStep(first.body, firstGrounded);
   const secondMovement = second.movement.postStep(second.body, secondGrounded);
 
+  // Note: a wall/floor bounce does NOT call dodge.registerLaunch() — GDD
+  // section 21 grants Air Recovery only for being launched/knocked
+  // airborne, not merely "some impact occurred" (a wall clip while still
+  // grounded must never arm it for a later, unrelated normal jump).
   if (firstMovement.impactDeltaSpeedMps > 0) {
     first.spin.registerImpact(first.body, firstMovement.impactDeltaSpeedMps, firstMovement.impactDirection);
     first.stability.applyDamage(firstMovement.impactDeltaSpeedMps * WALL_IMPACT_STABILITY_DAMAGE_PER_MPS);
-    first.dodge.registerLaunch();
   }
   if (secondMovement.impactDeltaSpeedMps > 0) {
     second.spin.registerImpact(second.body, secondMovement.impactDeltaSpeedMps, secondMovement.impactDirection);
     second.stability.applyDamage(secondMovement.impactDeltaSpeedMps * WALL_IMPACT_STABILITY_DAMAGE_PER_MPS);
-    second.dodge.registerLaunch();
   }
 
   first.stamina.tick(firstMovement.speedMps, fixedDeltaSeconds);
@@ -275,7 +289,11 @@ export function tickMatch(
       // launches the attacker's *target* upward instead of normal knockback.
       const vel = defender.body.linvel();
       defender.body.setLinvel({ x: vel.x, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z }, true);
-      defender.dodge.registerLaunch();
+      // A genuine launch: arm Air Recovery immediately if the defender was
+      // already airborne (no further grounded->airborne transition would
+      // ever come this period), otherwise arm the short pending window
+      // until it actually leaves the ground.
+      defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
       applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage));
       continue;
     }
@@ -290,7 +308,8 @@ export function tickMatch(
       impactDirectionXZ: normalize(subtract(defenderPos, attackerPos)),
     });
     applyKnockback(defender.body, attackerPos, defenderPos, knockback);
-    defender.dodge.registerLaunch();
+    // Same immediate-vs-pending arming as the catch-launch path above.
+    defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
     combatEvents.push({ kind: 'knockback', targetIsFirst: defenderIsFirst, force: knockback.force });
 
     applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage));
@@ -315,6 +334,10 @@ export function tickMatch(
       stabilityFraction: first.stability.resource.fraction,
       isBroken: first.stability.isBroken,
       attackEnergyFraction: first.attackEnergy.resource.fraction,
+      justLanded: firstDrift.justLanded,
+      landingDescentSpeedMps: firstDrift.landingDescentSpeedMps,
+      landingIntensity: firstDrift.landingIntensity,
+      landingJumpAssistElapsedS: firstDrift.landingJumpAssistElapsedS,
     },
     second: {
       movement: secondMovement,
@@ -328,6 +351,10 @@ export function tickMatch(
       stabilityFraction: second.stability.resource.fraction,
       isBroken: second.stability.isBroken,
       attackEnergyFraction: second.attackEnergy.resource.fraction,
+      justLanded: secondDrift.justLanded,
+      landingDescentSpeedMps: secondDrift.landingDescentSpeedMps,
+      landingIntensity: secondDrift.landingIntensity,
+      landingJumpAssistElapsedS: secondDrift.landingJumpAssistElapsedS,
     },
     hitEvents,
     combatEvents,

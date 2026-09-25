@@ -12,8 +12,12 @@
 // old small hop while a held-without-steering press reaches higher.
 // Steering signals drift intent instead and stops the height assist
 // immediately, so entering a drift never accidentally becomes a tall jump.
-// A big jump's landing is a momentary inspectable marker only (see
-// DriftState.Landing) — the GDD does not approve a handling penalty for it.
+//
+// Landing is detected generically (any airborne->grounded transition, not
+// just from a jump) and reported as data only — descent speed, a derived
+// intensity metric, and how long jump-height assist applied — with no
+// handling penalty of its own. Milestone 4's VFX/camera work consumes that
+// data; it isn't produced here.
 // ============================================================
 
 // Vertical velocity added the instant JumpDrift is pressed while grounded
@@ -39,8 +43,10 @@ export const JUMP_ASSIST_ACCEL_MPS2 = 16;
 // Caps how long the assist can apply — holding forever must not give
 // unbounded height.
 export const JUMP_ASSIST_MAX_DURATION_S = 0.3;
-// If the assist applied for at least this long before landing, the jump
-// counts as "big" and its touchdown reports DriftState.Landing for one
-// tick (no handling penalty) — a bare tap hop (~0 assist time) never does,
-// preserving Milestone 1's drift-initiation feel exactly.
-export const JUMP_BIG_JUMP_ASSIST_THRESHOLD_S = 0.15;
+
+// --- Landing data (Milestone 3 detects/reports; Milestone 4 consumes) ---
+// Descent speed (m/s) that maps to a landing intensity of 1.0 (clamped
+// above). An engineering placeholder per GDD section 167 — not a
+// GDD-approved exact number, just enough range for a bare hop to read as
+// weak and a big jump (or a hard knockback fall) to read as strong.
+export const LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS = 10;

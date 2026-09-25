@@ -10,7 +10,13 @@ import { AttackState } from '../../src/combat/attacks/AttackController';
 import { CIRCULAR_ACTIVE_DURATION_S } from '../../src/combat/attacks/AttackTuning';
 import { DriftState } from '../../src/drift/DriftController';
 import { DodgeState } from '../../src/dodge/DodgeController';
-import { DODGE_ACTIVE_DURATION_S, DODGE_BURST_SPEED_MPS, DODGE_COOLDOWN_S, DODGE_PERFECT_WINDOW_S } from '../../src/dodge/DodgeTuning';
+import {
+  DODGE_ACTIVE_DURATION_S,
+  DODGE_BURST_SPEED_MPS,
+  DODGE_COOLDOWN_S,
+  DODGE_PERFECT_WINDOW_S,
+  DODGE_STAMINA_COST,
+} from '../../src/dodge/DodgeTuning';
 import { JUMP_ASSIST_MAX_DURATION_S } from '../../src/drift/DriftTuning';
 import { LATERAL_GRIP_PER_S } from '../../src/bey/movement/MovementTuning';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
@@ -107,46 +113,102 @@ describe('variable jump height', () => {
 
     expect(heldApex).toBeGreaterThan(tapApex);
   });
+});
 
-  it('a bare tap never enters Landing recovery (Milestone 1 hop feel is unchanged)', async () => {
+describe('landing data (Milestone 4 prep)', () => {
+  it('a bare tap hop reports a weak landing with no grip penalty', async () => {
     const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(harness);
     const controller = tapJumpController();
-    const visitedStates = new Set<DriftState>();
+
+    let sawAirborne = false;
+    let landed = false;
+    let descentSpeedMps = -1;
+    let intensity = -1;
+    let jumpAssistElapsedS = -1;
+    let gripAtLanding = -1;
     for (let i = 0; i < 60; i++) {
       const result = harness.tick(controller.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
-      visitedStates.add(result.first.driftState);
+      if (!result.first.grounded) sawAirborne = true;
+      if (result.first.justLanded && !landed) {
+        landed = true;
+        descentSpeedMps = result.first.landingDescentSpeedMps;
+        intensity = result.first.landingIntensity;
+        jumpAssistElapsedS = result.first.landingJumpAssistElapsedS;
+        gripAtLanding = result.first.movement.lateralGripPerS;
+      }
     }
-    expect(visitedStates.has(DriftState.Hopping)).toBe(true);
-    expect(visitedStates.has(DriftState.Landing)).toBe(false);
+
+    expect(sawAirborne).toBe(true);
+    expect(landed).toBe(true);
+    expect(descentSpeedMps).toBeGreaterThan(0);
+    expect(intensity).toBeGreaterThan(0);
+    // A bare tap barely holds JumpDrift (released after 2 ticks) — nowhere
+    // near the assist cap.
+    expect(jumpAssistElapsedS).toBeLessThan(JUMP_ASSIST_MAX_DURATION_S * 0.2);
+    // No handling penalty: grip is exactly normal the moment landing is reported.
+    expect(gripAtLanding).toBeCloseTo(LATERAL_GRIP_PER_S, 2);
   });
 
-  it('landing from a big (held) jump enters a Landing recovery state that eases grip back to normal', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
-    settle(harness);
-    const holdTicks = Math.ceil(JUMP_ASSIST_MAX_DURATION_S / FIXED_DELTA_SECONDS) + 5;
-    const controller = heldJumpController(holdTicks);
+  it('a big held jump reports a stronger landing than a bare tap, still with no grip penalty', async () => {
+    const tapHarness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(tapHarness);
+    const tapController = tapJumpController();
+    let tapIntensity = -1;
+    for (let i = 0; i < 60; i++) {
+      const result = tapHarness.tick(tapController.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+      if (result.first.justLanded) tapIntensity = result.first.landingIntensity;
+    }
+    expect(tapIntensity).toBeGreaterThanOrEqual(0);
 
-    let sawLanding = false;
-    let landedBackToIdle = false;
-    let finalGripPerS = 0;
+    const heldHarness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(heldHarness);
+    const holdTicks = Math.ceil(JUMP_ASSIST_MAX_DURATION_S / FIXED_DELTA_SECONDS) + 5;
+    const heldController = heldJumpController(holdTicks);
+    let heldIntensity = -1;
+    let heldJumpAssistElapsedS = -1;
+    let gripAtLanding = -1;
     for (let i = 0; i < 200; i++) {
-      const result = harness.tick(controller.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
-      if (result.first.driftState === DriftState.Landing) {
-        sawLanding = true;
-        expect(result.first.movement.lateralGripPerS).toBeGreaterThan(0);
-        expect(result.first.movement.lateralGripPerS).toBeLessThanOrEqual(LATERAL_GRIP_PER_S);
-      }
-      if (sawLanding && result.first.driftState === DriftState.Idle) {
-        landedBackToIdle = true;
-        finalGripPerS = result.first.movement.lateralGripPerS;
+      const result = heldHarness.tick(heldController.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+      if (result.first.justLanded) {
+        heldIntensity = result.first.landingIntensity;
+        heldJumpAssistElapsedS = result.first.landingJumpAssistElapsedS;
+        gripAtLanding = result.first.movement.lateralGripPerS;
         break;
       }
     }
 
-    expect(sawLanding).toBe(true);
-    expect(landedBackToIdle).toBe(true);
-    expect(finalGripPerS).toBeCloseTo(LATERAL_GRIP_PER_S, 2);
+    expect(heldIntensity).toBeGreaterThan(tapIntensity);
+    expect(heldJumpAssistElapsedS).toBeGreaterThan(JUMP_ASSIST_MAX_DURATION_S * 0.5);
+    expect(gripAtLanding).toBeCloseTo(LATERAL_GRIP_PER_S, 2);
+  });
+
+  it('landing is detected generically, even when this airborne period was not a jump (e.g. a knockback fall)', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+
+    // Launch upward directly, with no JumpDrift press at all — DriftState
+    // never leaves Idle — to simulate a knockback/catch-launch fall.
+    const vel = harness.first.body.linvel();
+    harness.first.body.setLinvel({ x: vel.x, y: 6, z: vel.z }, true);
+
+    let visitedNonIdleDriftState = false;
+    let landedGenerically = false;
+    // vel.y=6 against gravity takes ~2*6/9.81 =~ 1.2s (~73 ticks at 60Hz)
+    // to come back down — give it enough room.
+    for (let i = 0; i < 100; i++) {
+      const result = harness.tick(NO_ACTIONS, NO_ACTIONS);
+      if (result.first.driftState !== DriftState.Idle) visitedNonIdleDriftState = true;
+      if (result.first.justLanded) {
+        landedGenerically = true;
+        expect(result.first.landingDescentSpeedMps).toBeGreaterThan(0);
+        expect(result.first.landingJumpAssistElapsedS).toBe(0);
+        break;
+      }
+    }
+
+    expect(visitedNonIdleDriftState).toBe(false);
+    expect(landedGenerically).toBe(true);
   });
 });
 
@@ -260,6 +322,88 @@ describe('dodge i-frames', () => {
   });
 });
 
+describe('dodge timers keep advancing while airborne', () => {
+  it('active and cooldown timers advance on simulated time even while airborne, without granting airborne i-frames', async () => {
+    // Drives the real DodgeController directly (bypassing tickMatch) with
+    // hand-picked `grounded` values instead of letting physics decide them
+    // — the specific bug this guards is state-machine/lifecycle timing,
+    // not physics, so this isolates it precisely: the controller must
+    // never pause its own active/cooldown timers just because the Bey
+    // happens to be airborne.
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+    const dodge = harness.second.dodge;
+    const body = harness.second.body;
+
+    const dodgePress: ControllerActions = {
+      held: new Set([Action.Dodge]),
+      pressedThisFrame: new Set([Action.Dodge]),
+      attackHoldDurationSeconds: 0,
+      jumpDriftHoldDurationSeconds: 0,
+    };
+    const noPress: ControllerActions = {
+      held: new Set(),
+      pressedThisFrame: new Set(),
+      attackHoldDurationSeconds: 0,
+      jumpDriftHoldDurationSeconds: 0,
+    };
+
+    const first = dodge.tick(body, dodgePress, 0, true, 999, FIXED_DELTA_SECONDS);
+    expect(first.state).toBe(DodgeState.Dodging);
+    expect(first.hasIFrames).toBe(true);
+
+    const activeTicks = Math.ceil(DODGE_ACTIVE_DURATION_S / FIXED_DELTA_SECONDS);
+    const cooldownTicks = Math.ceil(DODGE_COOLDOWN_S / FIXED_DELTA_SECONDS);
+
+    let sawAirborneIFrames = false;
+    let result = first;
+    for (let i = 1; i < activeTicks + cooldownTicks + 5; i++) {
+      result = dodge.tick(body, noPress, 0, false, 999, FIXED_DELTA_SECONDS);
+      if (result.hasIFrames) sawAirborneIFrames = true;
+    }
+
+    expect(sawAirborneIFrames).toBe(false);
+    // The cooldown fully elapsed purely from simulated ticks despite being
+    // airborne the entire time — a frozen timer would still show Dodging
+    // or Cooldown here.
+    expect(result.state).toBe(DodgeState.Idle);
+  });
+});
+
+describe('dodge stamina cost', () => {
+  it('a valid dodge consumes exactly the configured Stamina cost', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+    const staminaBefore = harness.second.stamina.resource.value;
+
+    const dodger = new ScriptedController(pressFrames([0]));
+    harness.tick(NO_ACTIONS, dodger.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }));
+
+    // StaminaSystem.tick() also applies its own small baseline drain every
+    // tick regardless of the dodge, so the observed drop is the dodge cost
+    // plus at most one tick of that passive drain — bound it loosely rather
+    // than asserting an exact match against DODGE_STAMINA_COST alone.
+    const drained = staminaBefore - harness.second.stamina.resource.value;
+    expect(drained).toBeGreaterThanOrEqual(DODGE_STAMINA_COST);
+    expect(drained).toBeLessThan(DODGE_STAMINA_COST + 1);
+  });
+
+  it('insufficient Stamina prevents the dodge from starting at all', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+    harness.second.stamina.resource.set(DODGE_STAMINA_COST - 1);
+    const staminaBefore = harness.second.stamina.resource.value;
+
+    const dodger = new ScriptedController(pressFrames([0]));
+    const result = harness.tick(NO_ACTIONS, dodger.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }));
+
+    expect(result.second.dodgeState).toBe(DodgeState.Idle);
+    // Only the passive per-tick drain applies here — nowhere close to the
+    // full dodge cost, since the dodge never actually started.
+    expect(staminaBefore - harness.second.stamina.resource.value).toBeLessThan(DODGE_STAMINA_COST * 0.5);
+  });
+});
+
 describe('air recovery', () => {
   // A drop this large can only be the fixed AIR_RECOVERY_WOBBLE_REDUCTION
   // (0.6) applying — ordinary passive decay over one or two ticks
@@ -294,16 +438,59 @@ describe('air recovery', () => {
     expect(wobbleBeforePress - wobbleAfterPress).toBeLessThan(AIR_RECOVERY_SIZED_DROP);
   });
 
-  it('being launched airborne (knockback/catch-launch) enables air recovery', async () => {
+  it('a wall/floor impact that leaves the Bey grounded does not arm air recovery for a later normal jump', async () => {
+    // Same spawn-at-center-and-drive-forward setup as the proven M1 wall
+    // collision self-test (wallImpactAndSpin.test.ts) — a genuine
+    // impactDeltaSpeedMps bounce through tickMatch's real wall-impact path,
+    // not a hand-constructed one. Heading 0 => +Z is "forward".
+    const harness = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, { x: 0, y: BEY_SPAWN_HEIGHT_M, z: -6 });
+    settle(harness);
+
+    const driver = new ScriptedController([{ fromTick: 0, held: [Action.MoveForward] }]);
+    let sawWallImpact = false;
+    let stayedGroundedThroughImpact = true;
+    for (let i = 0; i < 400; i++) {
+      const result = harness.tick(driver.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+      if (result.first.movement.impactDeltaSpeedMps > 0) {
+        sawWallImpact = true;
+        if (!result.first.grounded) stayedGroundedThroughImpact = false;
+        break;
+      }
+    }
+    expect(sawWallImpact).toBe(true);
+    expect(stayedGroundedThroughImpact).toBe(true);
+
+    // A normal jump right after the bounce must not have inherited air
+    // recovery from it.
+    harness.first.spin.registerImpact(harness.first.body, 8, { x: 0, z: 1 });
+    const jumpController = new ScriptedController([
+      { fromTick: 0, held: [Action.JumpDrift] },
+      { fromTick: 2, held: [] },
+      { fromTick: 3, held: [Action.Dodge] },
+      { fromTick: 4, held: [] },
+    ]);
+    let wobbleBeforePress = 0;
+    let wobbleAfterPress = 0;
+    for (let i = 0; i < 20; i++) {
+      const result = harness.tick(jumpController.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+      if (i === 2) wobbleBeforePress = result.first.spin.wobbleEnergy;
+      if (i === 3) wobbleAfterPress = result.first.spin.wobbleEnergy;
+    }
+
+    expect(wobbleBeforePress - wobbleAfterPress).toBeLessThan(AIR_RECOVERY_SIZED_DROP);
+  });
+
+  it('being launched airborne (knockback/catch-launch) while grounded enables air recovery once it leaves the ground', async () => {
     const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(harness);
     harness.first.spin.registerImpact(harness.first.body, 8, { x: 0, z: 1 });
 
     // Reproduces exactly what tickMatch does on a real knockback: it calls
-    // dodge.registerLaunch() the same tick applyKnockback()/the
-    // catch-launch setLinvel() fires, then the Bey actually leaves the
-    // ground a tick or two later once physics resolves it.
-    harness.first.dodge.registerLaunch();
+    // dodge.registerLaunch(false) (still grounded at the moment of the
+    // launch) the same tick applyKnockback()/the catch-launch setLinvel()
+    // fires, then the Bey actually leaves the ground a tick or two later
+    // once physics resolves it.
+    harness.first.dodge.registerLaunch(false);
     const vel = harness.first.body.linvel();
     harness.first.body.setLinvel({ x: vel.x, y: 6, z: vel.z }, true);
 
@@ -326,12 +513,45 @@ describe('air recovery', () => {
     expect(wobbleBeforePress - wobbleAfterPress).toBeGreaterThanOrEqual(AIR_RECOVERY_SIZED_DROP);
   });
 
+  it('receiving a launch while already airborne from a normal jump enables air recovery immediately', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+    harness.first.spin.registerImpact(harness.first.body, 8, { x: 0, z: 1 });
+
+    // Jump, then wait however many ticks it actually takes to read as
+    // airborne (physics timing, not assumed) before a knockback lands on
+    // the Bey mid-air (registerLaunch(true) — already airborne right now)
+    // instead of nothing happening. It must arm air recovery for the
+    // *current* airborne period immediately — there won't be another
+    // grounded->airborne transition this period to catch it on.
+    const jumpController = tapJumpController();
+    let result = harness.tick(jumpController.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+    for (let i = 1; result.first.grounded && i < 30; i++) {
+      result = harness.tick(jumpController.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+    }
+    expect(result.first.grounded).toBe(false); // confirmed airborne from the jump.
+
+    harness.first.dodge.registerLaunch(true);
+    const wobbleBeforePress = result.first.spin.wobbleEnergy;
+
+    const dodgePress: ControllerActions = {
+      held: new Set([Action.Dodge]),
+      pressedThisFrame: new Set([Action.Dodge]),
+      attackHoldDurationSeconds: 0,
+      jumpDriftHoldDurationSeconds: 0,
+    };
+    result = harness.tick(dodgePress, NO_ACTIONS);
+    const wobbleAfterPress = result.first.spin.wobbleEnergy;
+
+    expect(wobbleBeforePress - wobbleAfterPress).toBeGreaterThanOrEqual(AIR_RECOVERY_SIZED_DROP);
+  });
+
   it('is usable only once per airborne period', async () => {
     const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(harness);
     harness.first.spin.registerImpact(harness.first.body, 8, { x: 0, z: 1 });
 
-    harness.first.dodge.registerLaunch();
+    harness.first.dodge.registerLaunch(false);
     const vel = harness.first.body.linvel();
     harness.first.body.setLinvel({ x: vel.x, y: 6, z: vel.z }, true);
 
