@@ -126,8 +126,24 @@ export function tickMatch(
   const firstDrift = first.drift.tick(first.body, firstActions, firstGrounded, fixedDeltaSeconds);
   const secondDrift = second.drift.tick(second.body, secondActions, secondGrounded, fixedDeltaSeconds);
 
-  const firstDodge = first.dodge.tick(first.body, firstActions, first.movement.getHeadingRad(), firstGrounded, fixedDeltaSeconds);
-  const secondDodge = second.dodge.tick(second.body, secondActions, second.movement.getHeadingRad(), secondGrounded, fixedDeltaSeconds);
+  const firstDodge = first.dodge.tick(
+    first.body,
+    firstActions,
+    first.movement.getHeadingRad(),
+    firstGrounded,
+    first.stamina.resource.value,
+    fixedDeltaSeconds,
+  );
+  const secondDodge = second.dodge.tick(
+    second.body,
+    secondActions,
+    second.movement.getHeadingRad(),
+    secondGrounded,
+    second.stamina.resource.value,
+    fixedDeltaSeconds,
+  );
+  if (firstDodge.staminaCostThisTick > 0) first.stamina.resource.subtract(firstDodge.staminaCostThisTick);
+  if (secondDodge.staminaCostThisTick > 0) second.stamina.resource.subtract(secondDodge.staminaCostThisTick);
   if (firstDodge.triggeredAirRecovery) first.spin.applyAirRecovery(first.body);
   if (secondDodge.triggeredAirRecovery) second.spin.applyAirRecovery(second.body);
 
@@ -182,10 +198,12 @@ export function tickMatch(
   if (firstMovement.impactDeltaSpeedMps > 0) {
     first.spin.registerImpact(first.body, firstMovement.impactDeltaSpeedMps, firstMovement.impactDirection);
     first.stability.applyDamage(firstMovement.impactDeltaSpeedMps * WALL_IMPACT_STABILITY_DAMAGE_PER_MPS);
+    first.dodge.registerLaunch();
   }
   if (secondMovement.impactDeltaSpeedMps > 0) {
     second.spin.registerImpact(second.body, secondMovement.impactDeltaSpeedMps, secondMovement.impactDirection);
     second.stability.applyDamage(secondMovement.impactDeltaSpeedMps * WALL_IMPACT_STABILITY_DAMAGE_PER_MPS);
+    second.dodge.registerLaunch();
   }
 
   first.stamina.tick(firstMovement.speedMps, fixedDeltaSeconds);
@@ -257,6 +275,7 @@ export function tickMatch(
       // launches the attacker's *target* upward instead of normal knockback.
       const vel = defender.body.linvel();
       defender.body.setLinvel({ x: vel.x, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z }, true);
+      defender.dodge.registerLaunch();
       applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage));
       continue;
     }
@@ -271,6 +290,7 @@ export function tickMatch(
       impactDirectionXZ: normalize(subtract(defenderPos, attackerPos)),
     });
     applyKnockback(defender.body, attackerPos, defenderPos, knockback);
+    defender.dodge.registerLaunch();
     combatEvents.push({ kind: 'knockback', targetIsFirst: defenderIsFirst, force: knockback.force });
 
     applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage));

@@ -6,12 +6,14 @@
 // approved (GDD section 19: "Do not automatically add Mario-Kart-style
 // mini-turbo unless the user asks for/approves it").
 //
-// Milestone 3 layers a variable-height jump onto the same hop: continuing
-// to hold JumpDrift through the ascent adds extra lift (classic "hold to
-// jump higher"), so a quick tap still gives exactly the old small hop
-// (holdDuration ~0 => ~no extra lift) while a held press reaches higher.
-// A landing after a big enough jump gets its own brief recovery window,
-// distinct from (but mechanically identical to) drift's own recovery.
+// Milestone 3 layers a variable-height jump onto the same hop: holding
+// JumpDrift *without* steering through the ascent adds extra lift
+// (classic "hold to jump higher"), so a quick tap still gives exactly the
+// old small hop while a held-without-steering press reaches higher.
+// Steering signals drift intent instead and stops the height assist
+// immediately, so entering a drift never accidentally becomes a tall jump.
+// A big jump's landing is a momentary inspectable marker only (see
+// DriftState.Landing) — the GDD does not approve a handling penalty for it.
 // ============================================================
 
 // Vertical velocity added the instant JumpDrift is pressed while grounded
@@ -38,13 +40,7 @@ export const JUMP_ASSIST_ACCEL_MPS2 = 16;
 // unbounded height.
 export const JUMP_ASSIST_MAX_DURATION_S = 0.3;
 // If the assist applied for at least this long before landing, the jump
-// counts as "big" and triggers a landing-recovery window on touchdown
-// (see LANDING_RECOVERY_DURATION_S) — a bare tap hop (~0 assist time)
-// never does, preserving Milestone 1's drift-initiation feel exactly.
+// counts as "big" and its touchdown reports DriftState.Landing for one
+// tick (no handling penalty) — a bare tap hop (~0 assist time) never does,
+// preserving Milestone 1's drift-initiation feel exactly.
 export const JUMP_BIG_JUMP_ASSIST_THRESHOLD_S = 0.15;
-
-// --- Landing recovery (Milestone 3) ---
-// How long, after touching down from a big jump, it takes lateral grip to
-// ease back to normal — mechanically the same easing curve as drift's own
-// recovery, just triggered by a hard landing instead of releasing a slide.
-export const LANDING_RECOVERY_DURATION_S = 0.4;

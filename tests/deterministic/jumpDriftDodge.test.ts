@@ -10,7 +10,7 @@ import { AttackState } from '../../src/combat/attacks/AttackController';
 import { CIRCULAR_ACTIVE_DURATION_S } from '../../src/combat/attacks/AttackTuning';
 import { DriftState } from '../../src/drift/DriftController';
 import { DodgeState } from '../../src/dodge/DodgeController';
-import { DODGE_ACTIVE_DURATION_S, DODGE_COOLDOWN_S, DODGE_PERFECT_WINDOW_S } from '../../src/dodge/DodgeTuning';
+import { DODGE_ACTIVE_DURATION_S, DODGE_BURST_SPEED_MPS, DODGE_COOLDOWN_S, DODGE_PERFECT_WINDOW_S } from '../../src/dodge/DodgeTuning';
 import { JUMP_ASSIST_MAX_DURATION_S } from '../../src/drift/DriftTuning';
 import { LATERAL_GRIP_PER_S } from '../../src/bey/movement/MovementTuning';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
@@ -53,6 +53,24 @@ function pressFrames(ticks: number[]): ScriptedFrame[] {
   const frames: ScriptedFrame[] = [];
   for (const t of ticks) {
     frames.push({ fromTick: t, held: [Action.Dodge] });
+    frames.push({ fromTick: t + 1, held: [] });
+  }
+  return frames;
+}
+
+/**
+ * Dodge presses that also hold a lateral steer, so the burst goes sideways
+ * (perpendicular to heading) instead of defaulting to forward — with these
+ * two Beys facing their spawn-default heading (0), "forward" happens to
+ * point directly away from the opponent, which would carry the dodger out
+ * of the attack's reach almost immediately regardless of i-frames. Holding
+ * a steer direction keeps the scenario about i-frame timing, not a
+ * coincidence of default heading vs. spawn layout.
+ */
+function sidewaysDodgePressFrames(ticks: number[]): ScriptedFrame[] {
+  const frames: ScriptedFrame[] = [];
+  for (const t of ticks) {
+    frames.push({ fromTick: t, held: [Action.Dodge, Action.SteerRight] });
     frames.push({ fromTick: t + 1, held: [] });
   }
   return frames;
@@ -137,10 +155,11 @@ describe('dodge i-frames', () => {
     const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(harness);
 
-    // second dodges starting tick2 (i-frames roughly ticks 2-17); first's
-    // Circular Attack becomes active at tick4 — well inside that window.
+    // second dodges starting tick2 (i-frames roughly ticks 2-32, per the
+    // GDD-approved 0.5s window); first's Circular Attack becomes active at
+    // tick4 — well inside that window.
     const attacker = delayedTapController(2);
-    const dodger = new ScriptedController(pressFrames([2]));
+    const dodger = new ScriptedController(sidewaysDodgePressFrames([2]));
 
     let sawConnectedHit = false;
     let sawDodgedEvent = false;
@@ -159,11 +178,11 @@ describe('dodge i-frames', () => {
   });
 
   it('a hit inside the early sub-window counts as a Perfect Dodge; the same dodge later in its window does not', async () => {
-    // Perfect: dodge at tick2 (perfect window ~2..6.8), attack active at tick4.
+    // Perfect: dodge at tick2 (perfect window ~2..11), attack active at tick4.
     const perfectHarness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(perfectHarness);
     const perfectAttacker = delayedTapController(2);
-    const perfectDodger = new ScriptedController(pressFrames([2]));
+    const perfectDodger = new ScriptedController(sidewaysDodgePressFrames([2]));
     let sawPerfect = false;
     for (let i = 0; i < 60; i++) {
       const result = perfectHarness.tick(
@@ -175,7 +194,7 @@ describe('dodge i-frames', () => {
     expect(sawPerfect).toBe(true);
 
     // Not perfect: dodge at tick0, hit checked past the perfect window
-    // (~4.8 ticks) but still inside the full i-frame window (~15 ticks).
+    // (~9 ticks) but still inside the full i-frame window (~30 ticks).
     // The dodge's own burst would otherwise carry the target sideways far
     // enough to leave Circular Attack's tight reach margin before the hit
     // is even checked, which would falsely read as "no dodge needed" —
@@ -189,7 +208,7 @@ describe('dodge i-frames', () => {
     // Bey permanently just above the floor, never actually touching it.
     const restingY = lateHarness.second.body.translation().y;
     const lateDodger = new ScriptedController(pressFrames([0]));
-    const pinTicks = 6; // > DODGE_PERFECT_WINDOW_S (~4.8 ticks), < DODGE_ACTIVE_DURATION_S (~15 ticks)
+    const pinTicks = 15; // > DODGE_PERFECT_WINDOW_S (~9 ticks), < DODGE_ACTIVE_DURATION_S (~30 ticks)
     for (let i = 0; i < pinTicks; i++) {
       lateHarness.tick(NO_ACTIONS, lateDodger.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }));
       lateHarness.second.body.setTranslation({ x: CLOSE_SECOND_SPAWN.x, y: restingY, z: CLOSE_SECOND_SPAWN.z }, true);
@@ -242,15 +261,18 @@ describe('dodge i-frames', () => {
 });
 
 describe('air recovery', () => {
-  it('pressing Dodge while airborne reduces wobble energy without entering the grounded Dodging state', async () => {
+  // A drop this large can only be the fixed AIR_RECOVERY_WOBBLE_REDUCTION
+  // (0.6) applying — ordinary passive decay over one or two ticks
+  // (WOBBLE_DECAY_FRACTION_PER_S) is nowhere close.
+  const AIR_RECOVERY_SIZED_DROP = 0.1;
+
+  it('a normal jump does NOT enable air recovery (GDD section 21: only being launched/knocked airborne does)', async () => {
     const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(harness);
-
-    // A real impact (through the production impact path) to give the Bey
-    // actual wobble/tilt to recover from.
     harness.first.spin.registerImpact(harness.first.body, 8, { x: 0, z: 1 });
 
-    // Hop to get airborne, then dodge mid-air.
+    // Hop to get airborne (no registerLaunch() involved anywhere here),
+    // then try to dodge mid-air.
     const controller = new ScriptedController([
       { fromTick: 0, held: [Action.JumpDrift] },
       { fromTick: 2, held: [] },
@@ -258,18 +280,50 @@ describe('air recovery', () => {
       { fromTick: 4, held: [] },
     ]);
 
-    let wobbleBeforeRecovery = 0;
-    let wobbleAfterRecovery = 0;
-    let sawDodgingStateWhileAirborne = false;
+    let wobbleBeforePress = 0;
+    let wobbleAfterPress = 0;
+    let sawAirborne = false;
     for (let i = 0; i < 20; i++) {
       const result = harness.tick(controller.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
-      if (i === 2) wobbleBeforeRecovery = result.first.spin.wobbleEnergy;
-      if (i === 3) wobbleAfterRecovery = result.first.spin.wobbleEnergy;
-      if (!result.first.grounded && result.first.dodgeState === DodgeState.Dodging) sawDodgingStateWhileAirborne = true;
+      if (!result.first.grounded) sawAirborne = true;
+      if (i === 2) wobbleBeforePress = result.first.spin.wobbleEnergy;
+      if (i === 3) wobbleAfterPress = result.first.spin.wobbleEnergy;
     }
 
-    expect(wobbleAfterRecovery).toBeLessThan(wobbleBeforeRecovery);
-    expect(sawDodgingStateWhileAirborne).toBe(false);
+    expect(sawAirborne).toBe(true);
+    expect(wobbleBeforePress - wobbleAfterPress).toBeLessThan(AIR_RECOVERY_SIZED_DROP);
+  });
+
+  it('being launched airborne (knockback/catch-launch) enables air recovery', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+    harness.first.spin.registerImpact(harness.first.body, 8, { x: 0, z: 1 });
+
+    // Reproduces exactly what tickMatch does on a real knockback: it calls
+    // dodge.registerLaunch() the same tick applyKnockback()/the
+    // catch-launch setLinvel() fires, then the Bey actually leaves the
+    // ground a tick or two later once physics resolves it.
+    harness.first.dodge.registerLaunch();
+    const vel = harness.first.body.linvel();
+    harness.first.body.setLinvel({ x: vel.x, y: 6, z: vel.z }, true);
+
+    const controller = new ScriptedController([
+      { fromTick: 2, held: [Action.Dodge] },
+      { fromTick: 3, held: [] },
+    ]);
+
+    let wobbleBeforePress = 0;
+    let wobbleAfterPress = 0;
+    let sawAirborne = false;
+    for (let i = 0; i < 20; i++) {
+      const result = harness.tick(controller.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+      if (!result.first.grounded) sawAirborne = true;
+      if (i === 1) wobbleBeforePress = result.first.spin.wobbleEnergy;
+      if (i === 2) wobbleAfterPress = result.first.spin.wobbleEnergy;
+    }
+
+    expect(sawAirborne).toBe(true);
+    expect(wobbleBeforePress - wobbleAfterPress).toBeGreaterThanOrEqual(AIR_RECOVERY_SIZED_DROP);
   });
 
   it('is usable only once per airborne period', async () => {
@@ -277,27 +331,29 @@ describe('air recovery', () => {
     settle(harness);
     harness.first.spin.registerImpact(harness.first.body, 8, { x: 0, z: 1 });
 
+    harness.first.dodge.registerLaunch();
+    const vel = harness.first.body.linvel();
+    harness.first.body.setLinvel({ x: vel.x, y: 6, z: vel.z }, true);
+
     const controller = new ScriptedController([
-      { fromTick: 0, held: [Action.JumpDrift] },
-      { fromTick: 2, held: [] },
-      { fromTick: 3, held: [Action.Dodge] },
-      { fromTick: 4, held: [] },
-      { fromTick: 5, held: [Action.Dodge] },
-      { fromTick: 6, held: [] },
+      { fromTick: 2, held: [Action.Dodge] },
+      { fromTick: 3, held: [] },
+      { fromTick: 4, held: [Action.Dodge] },
+      { fromTick: 5, held: [] },
     ]);
 
     let wobbleAfterFirstRecovery = -1;
     let wobbleAfterSecondAttempt = -1;
     for (let i = 0; i < 20; i++) {
       const result = harness.tick(controller.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
-      if (i === 3) wobbleAfterFirstRecovery = result.first.spin.wobbleEnergy;
-      if (i === 5) wobbleAfterSecondAttempt = result.first.spin.wobbleEnergy;
+      if (i === 2) wobbleAfterFirstRecovery = result.first.spin.wobbleEnergy;
+      if (i === 4) wobbleAfterSecondAttempt = result.first.spin.wobbleEnergy;
     }
 
     // The second mid-air press this same airborne period must not have
     // applied another reduction — wobble only decays passively between the
     // two samples, it doesn't drop by another full recovery step.
-    expect(wobbleAfterSecondAttempt).toBeLessThanOrEqual(wobbleAfterFirstRecovery);
+    expect(wobbleAfterFirstRecovery - wobbleAfterSecondAttempt).toBeLessThan(AIR_RECOVERY_SIZED_DROP);
   });
 });
 
@@ -312,7 +368,7 @@ describe('attack whiff-recovery timing after a dodge', () => {
     // a single tick. If the dodge is working, none of that happens — the
     // attack simply runs its whole course, exactly like a clean whiff.
     const attacker = delayedTapController(2);
-    const dodger = new ScriptedController(pressFrames([2]));
+    const dodger = new ScriptedController(sidewaysDodgePressFrames([2]));
 
     let circularActiveTickCount = 0;
     for (let i = 0; i < 30; i++) {
@@ -330,5 +386,73 @@ describe('attack whiff-recovery timing after a dodge', () => {
     const expectedTicks = Math.round(CIRCULAR_ACTIVE_DURATION_S / FIXED_DELTA_SECONDS);
     expect(circularActiveTickCount).toBeGreaterThanOrEqual(expectedTicks - 1);
     expect(circularActiveTickCount).toBeLessThanOrEqual(expectedTicks + 1);
+  });
+});
+
+describe('dodge preserves existing momentum', () => {
+  it('adds the burst on top of existing velocity instead of replacing it (GDD section 15/88)', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+
+    // Build up real forward speed first (no steering — heading stays 0).
+    const mover = new ScriptedController([{ fromTick: 0, held: [Action.MoveForward] }]);
+    let forwardVelBeforeDodge = 0;
+    for (let i = 0; i < 40; i++) {
+      const result = harness.tick(mover.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+      forwardVelBeforeDodge = result.first.movement.actualVelocityVector.z; // heading 0 => forward is +Z.
+    }
+    expect(forwardVelBeforeDodge).toBeGreaterThan(1); // sanity: it's actually moving at a real speed.
+
+    // Dodge sideways (steer right) on the very next tick, without
+    // continuing to hold forward.
+    const dodger = new ScriptedController([
+      { fromTick: 0, held: [Action.Dodge, Action.SteerRight] },
+      { fromTick: 1, held: [] },
+    ]);
+    harness.tick(dodger.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+    const velAfterDodge = harness.first.body.linvel();
+
+    // Forward (Z) momentum from before the dodge is still present — not
+    // zeroed out by the burst.
+    expect(velAfterDodge.z).toBeGreaterThan(forwardVelBeforeDodge * 0.5);
+    // And a real lateral (X) burst was added on top of it.
+    expect(Math.abs(velAfterDodge.x)).toBeGreaterThan(DODGE_BURST_SPEED_MPS * 0.5);
+  });
+});
+
+describe('low air control (GDD section 12/20)', () => {
+  it('steering while airborne only nudges trajectory — velocity does not snap to the new heading', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+
+    // Slip angle is only meaningful with real horizontal speed (Movement-
+    // Controller forces it to 0 below a small speed threshold) — build
+    // forward speed first, then a big held jump on top of it (no steering
+    // yet, so height assist keeps applying and it stays airborne for a
+    // good while), then release everything but steer hard while airborne.
+    const airborneSteer = new ScriptedController([
+      { fromTick: 0, held: [Action.MoveForward] },
+      { fromTick: 40, held: [Action.MoveForward, Action.JumpDrift] },
+      { fromTick: 60, held: [Action.SteerRight] },
+    ]);
+
+    let sawAirborne = false;
+    let maxSlipAngleWhileAirborne = 0;
+    for (let i = 0; i < 110; i++) {
+      const result = harness.tick(airborneSteer.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+      if (!result.first.grounded && i >= 60) {
+        sawAirborne = true;
+        maxSlipAngleWhileAirborne = Math.max(maxSlipAngleWhileAirborne, Math.abs(result.first.movement.slipAngleRad));
+      }
+    }
+
+    expect(sawAirborne).toBe(true);
+    // Heading turns at STEERING_MAX_TURN_RATE_RAD_S regardless of ground
+    // state, but low air control (AIRBORNE_LATERAL_GRIP_PER_S, far below
+    // the grounded LATERAL_GRIP_PER_S) means velocity barely follows it —
+    // producing a large, sustained slip angle instead of the tight
+    // realignment grounded steering achieves. A "free aerial steering" bug
+    // would keep this near zero.
+    expect(maxSlipAngleWhileAirborne).toBeGreaterThan(0.3);
   });
 });

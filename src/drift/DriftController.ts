@@ -1,12 +1,18 @@
 // ============================================================
 // DRIFT / JUMP CONTROLLER
 // State machine for the hop -> hold -> drift -> recover flow (GDD section
-// 19), plus the Milestone 3 variable-height jump and landing-recovery that
-// sit on top of the same hop (see DriftTuning.ts). Talks to
-// MovementController only through the lateralGripOverridePerS value it
-// hands back each tick — it never touches heading/thrust itself, keeping
-// drift/jump and movement independently diagnosable (GDD section 17.4
-// component separation).
+// 19), plus the Milestone 3 variable-height jump that sits on top of the
+// same hop (see DriftTuning.ts). Talks to MovementController only through
+// the lateralGripOverridePerS value it hands back each tick — it never
+// touches heading/thrust itself, keeping drift/jump and movement
+// independently diagnosable (GDD section 17.4 component separation).
+//
+// Jump vs. drift share the same liftoff (JumpDrift/X) but are told apart
+// by steering (GDD section 19 vs. 20): holding X *without* steering keeps
+// adding height (variable jump); the moment steering is held, that signals
+// drift intent — height assist stops immediately and the hop stays at its
+// small Milestone 1 liftoff, so a drift-into slide never accidentally
+// becomes a tall jump.
 // ============================================================
 
 import type RAPIER from '@dimforge/rapier3d-compat';
@@ -20,7 +26,6 @@ import {
   JUMP_ASSIST_ACCEL_MPS2,
   JUMP_ASSIST_MAX_DURATION_S,
   JUMP_BIG_JUMP_ASSIST_THRESHOLD_S,
-  LANDING_RECOVERY_DURATION_S,
 } from './DriftTuning';
 
 export enum DriftState {
@@ -28,7 +33,12 @@ export enum DriftState {
   Hopping = 'Hopping',
   Drifting = 'Drifting',
   Recovering = 'Recovering',
-  /** Grip easing back after landing from a big (held) jump — mechanically identical to Recovering, reported distinctly since no drift actually happened. */
+  /**
+   * Momentary marker (a single tick) for touching down from a big (held)
+   * jump — no gameplay effect (the GDD never approved a landing handling
+   * penalty), purely an inspectable signal for Milestone 4's VFX/camera to
+   * hook a strong-landing reaction onto. Immediately returns to Idle.
+   */
   Landing = 'Landing',
 }
 
@@ -66,10 +76,12 @@ export class DriftController {
       case DriftState.Hopping: {
         this.hopTimerS += fixedDeltaSeconds;
 
-        // Variable jump height (Milestone 3): still holding while ascending
-        // adds extra lift, up to a cap. Never applies once falling (vel.y
-        // <= 0) — this is height assist, not a hover.
-        if (jumpDriftHeld && this.jumpAssistElapsedS < JUMP_ASSIST_MAX_DURATION_S) {
+        // Variable jump height (Milestone 3): held *without* steering keeps
+        // adding lift, up to a cap. Steering signals drift intent instead —
+        // stop adding height so the drift hop stays small and consistent.
+        // Never applies once falling (vel.y <= 0) — this is height assist,
+        // not a hover.
+        if (jumpDriftHeld && !steering && this.jumpAssistElapsedS < JUMP_ASSIST_MAX_DURATION_S) {
           const vel = body.linvel();
           if (vel.y > 0) {
             body.setLinvel({ x: vel.x, y: vel.y + JUMP_ASSIST_ACCEL_MPS2 * fixedDeltaSeconds, z: vel.z }, true);
@@ -82,7 +94,6 @@ export class DriftController {
             this.state = DriftState.Drifting;
           } else if (this.jumpAssistElapsedS >= JUMP_BIG_JUMP_ASSIST_THRESHOLD_S) {
             this.state = DriftState.Landing;
-            this.recoveryTimerS = 0;
           } else {
             this.state = DriftState.Idle;
           }
@@ -108,12 +119,8 @@ export class DriftController {
         break;
 
       case DriftState.Landing:
-        this.recoveryTimerS += fixedDeltaSeconds;
-        if (jumpDriftPressed && grounded) {
-          this.beginHop(body);
-        } else if (this.recoveryTimerS >= LANDING_RECOVERY_DURATION_S) {
-          this.state = DriftState.Idle;
-        }
+        // No penalty, no timer — resolves on the very next tick.
+        this.state = DriftState.Idle;
         break;
     }
 
@@ -137,10 +144,6 @@ export class DriftController {
     }
     if (this.state === DriftState.Recovering) {
       const t = Math.min(1, this.recoveryTimerS / DRIFT_GRIP_RECOVERY_DURATION_S);
-      return DRIFT_LATERAL_GRIP_PER_S + (LATERAL_GRIP_PER_S - DRIFT_LATERAL_GRIP_PER_S) * t;
-    }
-    if (this.state === DriftState.Landing) {
-      const t = Math.min(1, this.recoveryTimerS / LANDING_RECOVERY_DURATION_S);
       return DRIFT_LATERAL_GRIP_PER_S + (LATERAL_GRIP_PER_S - DRIFT_LATERAL_GRIP_PER_S) * t;
     }
     return null;
