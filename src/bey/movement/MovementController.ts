@@ -31,6 +31,26 @@ import {
   STEERING_RESPONSE_PER_S,
 } from './MovementTuning';
 
+export interface MovementPreStepInput {
+  actions: ControllerActions;
+  fixedDeltaSeconds: number;
+  grounded: boolean;
+  /** From DriftController; null means "use normal grip". */
+  lateralGripOverridePerS: number | null;
+  /** From StaminaSystem's PhysicalCondition; 1 = no penalty. */
+  staminaAccelFactor: number;
+  /**
+   * From AttackController during an active Dash Attack: forces heading and
+   * longitudinal speed directly instead of reading steer/throttle input,
+   * while still going through the same grip/physics pipeline (so wall
+   * bounces etc. still work naturally). MovementController stays the sole
+   * writer of horizontal velocity — AttackController never touches the
+   * body directly, matching how DriftController only ever hands back a
+   * grip override rather than writing velocity itself.
+   */
+  dashOverride: { headingRad: number; longitudinalSpeedMps: number } | null;
+}
+
 export interface MovementSnapshot {
   headingRad: number;
   /** Unit vector the Bey is currently steering/facing toward — the "intended" direction, independent of where it's actually sliding. */
@@ -59,19 +79,27 @@ export class MovementController {
   private lastLateralGripPerS = LATERAL_GRIP_PER_S;
   private intendedVelocityThisTick: Vec2 | null = null;
 
+  /** Current heading, live (not lagged behind a snapshot) — for consumers like AttackController's lock-on that need it mid-tick, before this tick's postStep(). */
+  getHeadingRad(): number {
+    return this.headingRad;
+  }
+
   /** Call before physics.step(). Reads/writes the body's linear velocity directly (the "hybrid" model GDD section 16 permits). */
-  applyPreStep(
-    body: RAPIER.RigidBody,
-    actions: ControllerActions,
-    fixedDeltaSeconds: number,
-    grounded: boolean,
-    lateralGripOverridePerS: number | null,
-  ): void {
-    const steerInput = (actions.held.has(Action.SteerRight) ? 1 : 0) - (actions.held.has(Action.SteerLeft) ? 1 : 0);
-    const targetTurnRate = steerInput * STEERING_MAX_TURN_RATE_RAD_S;
-    this.turnRateRadPerS += (targetTurnRate - this.turnRateRadPerS) * Math.min(1, STEERING_RESPONSE_PER_S * fixedDeltaSeconds);
-    this.headingRad += this.turnRateRadPerS * fixedDeltaSeconds;
-    const headingForward = fromYaw(this.headingRad);
+  applyPreStep(body: RAPIER.RigidBody, input: MovementPreStepInput): void {
+    const { actions, fixedDeltaSeconds, grounded, lateralGripOverridePerS, staminaAccelFactor, dashOverride } = input;
+
+    let headingForward: Vec2;
+    if (dashOverride) {
+      this.headingRad = dashOverride.headingRad;
+      this.turnRateRadPerS = 0;
+      headingForward = fromYaw(this.headingRad);
+    } else {
+      const steerInput = (actions.held.has(Action.SteerRight) ? 1 : 0) - (actions.held.has(Action.SteerLeft) ? 1 : 0);
+      const targetTurnRate = steerInput * STEERING_MAX_TURN_RATE_RAD_S;
+      this.turnRateRadPerS += (targetTurnRate - this.turnRateRadPerS) * Math.min(1, STEERING_RESPONSE_PER_S * fixedDeltaSeconds);
+      this.headingRad += this.turnRateRadPerS * fixedDeltaSeconds;
+      headingForward = fromYaw(this.headingRad);
+    }
 
     const throttleInput = (actions.held.has(Action.MoveForward) ? 1 : 0) - (actions.held.has(Action.MoveBackward) ? 1 : 0);
 
@@ -81,22 +109,31 @@ export class MovementController {
     const longitudinalVec = scale(headingForward, longitudinalSpeed);
     const lateralVec: Vec2 = { x: velHoriz.x - longitudinalVec.x, z: velHoriz.z - longitudinalVec.z };
 
-    const accelFactor = grounded ? 1 : AIRBORNE_ACCELERATION_FACTOR;
-    let newLongitudinalSpeed = longitudinalSpeed;
-    if (throttleInput > 0) {
-      newLongitudinalSpeed += ACCELERATION_MPS2 * accelFactor * fixedDeltaSeconds;
-    } else if (throttleInput < 0) {
-      newLongitudinalSpeed -= REVERSE_ACCELERATION_MPS2 * accelFactor * fixedDeltaSeconds;
+    let newLongitudinalSpeed: number;
+    if (dashOverride) {
+      newLongitudinalSpeed = dashOverride.longitudinalSpeedMps;
+    } else {
+      // Stamina degrades acceleration physically (GDD section 30) — never
+      // by making input feel unresponsive, just genuinely weaker thrust.
+      const accelFactor = (grounded ? 1 : AIRBORNE_ACCELERATION_FACTOR) * staminaAccelFactor;
+      newLongitudinalSpeed = longitudinalSpeed;
+      if (throttleInput > 0) {
+        newLongitudinalSpeed += ACCELERATION_MPS2 * accelFactor * fixedDeltaSeconds;
+      } else if (throttleInput < 0) {
+        newLongitudinalSpeed -= REVERSE_ACCELERATION_MPS2 * accelFactor * fixedDeltaSeconds;
+      }
+
+      const speedAbs = Math.abs(newLongitudinalSpeed);
+      if (speedAbs > INTENDED_MAX_SPEED_MPS) {
+        const over = speedAbs - INTENDED_MAX_SPEED_MPS;
+        newLongitudinalSpeed -= Math.sign(newLongitudinalSpeed) * over * OVERSPEED_DRAG_PER_MPS_OVER * fixedDeltaSeconds;
+      }
+      newLongitudinalSpeed *= Math.max(0, 1 - LONGITUDINAL_DRAG_PER_S * fixedDeltaSeconds);
     }
 
-    const speedAbs = Math.abs(newLongitudinalSpeed);
-    if (speedAbs > INTENDED_MAX_SPEED_MPS) {
-      const over = speedAbs - INTENDED_MAX_SPEED_MPS;
-      newLongitudinalSpeed -= Math.sign(newLongitudinalSpeed) * over * OVERSPEED_DRAG_PER_MPS_OVER * fixedDeltaSeconds;
-    }
-    newLongitudinalSpeed *= Math.max(0, 1 - LONGITUDINAL_DRAG_PER_S * fixedDeltaSeconds);
-
-    const lateralGripPerS = lateralGripOverridePerS ?? (grounded ? LATERAL_GRIP_PER_S : AIRBORNE_LATERAL_GRIP_PER_S);
+    // A Dash Attack commits fully to its locked-on line — no independent
+    // lateral slide fighting the dash direction while it's active.
+    const lateralGripPerS = dashOverride ? LATERAL_GRIP_PER_S * 4 : (lateralGripOverridePerS ?? (grounded ? LATERAL_GRIP_PER_S : AIRBORNE_LATERAL_GRIP_PER_S));
     const newLateral = scale(lateralVec, Math.max(0, 1 - lateralGripPerS * fixedDeltaSeconds));
 
     const newVelHoriz = add(scale(headingForward, newLongitudinalSpeed), newLateral);
@@ -127,7 +164,6 @@ export class MovementController {
   postStep(body: RAPIER.RigidBody, grounded: boolean): MovementSnapshot {
     const vel = body.linvel();
     const actualVelocityVector: Vec2 = { x: vel.x, z: vel.z };
-    const speedMps = length(actualVelocityVector);
 
     let impactDeltaSpeedMps = 0;
     let impactDirection: Vec2 = { x: 0, z: 0 };
@@ -144,6 +180,29 @@ export class MovementController {
       }
     }
 
+    return this.buildSnapshot(actualVelocityVector, grounded, impactDeltaSpeedMps, impactDirection);
+  }
+
+  /**
+   * Read-only snapshot from current state — no impact detection, no
+   * mutation of postImpactCooldownRemainingS or anything else. For
+   * consumers (e.g. a frozen post-round snapshot) that must never advance
+   * internal state; always reports impactDeltaSpeedMps 0 since no impact
+   * detection is performed here.
+   */
+  getSnapshot(body: RAPIER.RigidBody, grounded: boolean): MovementSnapshot {
+    const vel = body.linvel();
+    const actualVelocityVector: Vec2 = { x: vel.x, z: vel.z };
+    return this.buildSnapshot(actualVelocityVector, grounded, 0, { x: 0, z: 0 });
+  }
+
+  private buildSnapshot(
+    actualVelocityVector: Vec2,
+    grounded: boolean,
+    impactDeltaSpeedMps: number,
+    impactDirection: Vec2,
+  ): MovementSnapshot {
+    const speedMps = length(actualVelocityVector);
     const slipAngleRad = speedMps > 0.05 ? signedAngleBetween(this.lastHeadingForward, actualVelocityVector) : 0;
 
     return {

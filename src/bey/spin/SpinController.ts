@@ -8,6 +8,7 @@
 
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Vec2 } from '../../physics/Vec2';
+import type { PhysicalCondition } from '../stamina/StaminaSystem';
 import {
   BASE_SPIN_RATE_RAD_S,
   IMPACT_ANGULAR_IMPULSE_PER_MPS,
@@ -49,8 +50,16 @@ export class SpinController {
   private wobbleEnergy = 0;
   private wobbleTimeAccumulatorS = 0;
 
-  /** Call once per fixed tick, before physics.step(). Applies the upright recovery torque and advances the visual spin/wobble accumulators. */
-  tick(body: RAPIER.RigidBody, fixedDeltaSeconds: number): void {
+  /**
+   * Call once per fixed tick, before physics.step(). Applies the upright
+   * recovery torque and advances the visual spin/wobble accumulators.
+   *
+   * `staminaCondition` degrades this physically as Stamina drops (GDD
+   * section 30/123): weaker recovery torque, faster spin decay, and an
+   * ambient wobble floor — a tired Bey visibly loses physical confidence,
+   * it doesn't get a config flag flipped.
+   */
+  tick(body: RAPIER.RigidBody, fixedDeltaSeconds: number, staminaCondition: PhysicalCondition): void {
     const up = quatUpVector(body.rotation());
 
     // torqueAxisRaw = cross(up, worldUp); its magnitude is already sin(tilt),
@@ -58,20 +67,25 @@ export class SpinController {
     // stronger correction) without needing to normalize.
     const torqueAxisRaw = { x: -up.z, y: 0, z: up.x };
     const angvel = body.angvel();
+    const recoveryGain = UPRIGHT_RECOVERY_TORQUE_GAIN * staminaCondition.recoveryTorqueFactor;
+    const dampingGain = RECOVERY_DAMPING_PER_S * staminaCondition.recoveryTorqueFactor;
 
     body.addTorque(
       {
-        x: torqueAxisRaw.x * UPRIGHT_RECOVERY_TORQUE_GAIN - angvel.x * RECOVERY_DAMPING_PER_S,
-        y: -angvel.y * RECOVERY_DAMPING_PER_S * 0.25, // light yaw damping only — this is not what drives visible spin, see class doc.
-        z: torqueAxisRaw.z * UPRIGHT_RECOVERY_TORQUE_GAIN - angvel.z * RECOVERY_DAMPING_PER_S,
+        x: torqueAxisRaw.x * recoveryGain - angvel.x * dampingGain,
+        y: -angvel.y * dampingGain * 0.25, // light yaw damping only — this is not what drives visible spin, see class doc.
+        z: torqueAxisRaw.z * recoveryGain - angvel.z * dampingGain,
       },
       true,
     );
 
-    this.spinRateRadPerSec *= Math.max(0, 1 - SPIN_DECAY_FRACTION_PER_S * fixedDeltaSeconds);
+    this.spinRateRadPerSec *= Math.max(0, 1 - SPIN_DECAY_FRACTION_PER_S * staminaCondition.spinDecayMultiplier * fixedDeltaSeconds);
     this.visualSpinAngleRad += this.spinRateRadPerSec * fixedDeltaSeconds;
 
-    this.wobbleEnergy *= Math.max(0, 1 - WOBBLE_DECAY_FRACTION_PER_S * fixedDeltaSeconds);
+    this.wobbleEnergy = Math.max(
+      this.wobbleEnergy * Math.max(0, 1 - WOBBLE_DECAY_FRACTION_PER_S * fixedDeltaSeconds),
+      staminaCondition.ambientWobbleFloor,
+    );
     this.wobbleTimeAccumulatorS += fixedDeltaSeconds;
   }
 

@@ -34,6 +34,20 @@ export interface DebugOverlayState {
   spinRateRadPerSec: number;
   tiltRad: number;
   wobbleEnergy: number;
+
+  // Combat (GDD section 69/122) — first Bey (player) in full, second
+  // (opponent) summarized. Milestone 2 foundation only.
+  firstAttackState: string;
+  firstDashChargeFraction: number;
+  firstStaminaFraction: number;
+  firstStabilityFraction: number;
+  firstIsBroken: boolean;
+  firstAttackEnergyFraction: number;
+  secondAttackState: string;
+  secondStaminaFraction: number;
+  secondStabilityFraction: number;
+  secondIsBroken: boolean;
+  roundResult: string;
 }
 
 const RAD_TO_DEG = 180 / Math.PI;
@@ -94,7 +108,18 @@ export class DebugOverlay {
       `angular velocity ${fmtVec3(state.angularVelocity)}\n` +
       `spin rate        ${state.spinRateRadPerSec.toFixed(2)} rad/s\n` +
       `tilt             ${(state.tiltRad * RAD_TO_DEG).toFixed(1)} deg\n` +
-      `wobble energy    ${state.wobbleEnergy.toFixed(2)}`;
+      `wobble energy    ${state.wobbleEnergy.toFixed(2)}\n` +
+      `-- combat: first (player) --\n` +
+      `attack state     ${state.firstAttackState}\n` +
+      `dash charge      ${(state.firstDashChargeFraction * 100).toFixed(0)}%\n` +
+      `stamina          ${(state.firstStaminaFraction * 100).toFixed(0)}%\n` +
+      `stability        ${(state.firstStabilityFraction * 100).toFixed(0)}%${state.firstIsBroken ? ' BROKEN' : ''}\n` +
+      `attack energy    ${(state.firstAttackEnergyFraction * 100).toFixed(0)}%\n` +
+      `-- combat: second (opponent) --\n` +
+      `attack state     ${state.secondAttackState}\n` +
+      `stamina          ${(state.secondStaminaFraction * 100).toFixed(0)}%\n` +
+      `stability        ${(state.secondStabilityFraction * 100).toFixed(0)}%${state.secondIsBroken ? ' BROKEN' : ''}\n` +
+      `round            ${state.roundResult}`;
   }
 
   private applyVisibility(): void {

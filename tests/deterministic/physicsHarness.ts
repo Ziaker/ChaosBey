@@ -14,6 +14,7 @@ import { createBeyRigidBody } from '../../src/bey/core/BeyRigidBody';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { MovementController, type MovementSnapshot } from '../../src/bey/movement/MovementController';
 import { SpinController, type SpinSnapshot } from '../../src/bey/spin/SpinController';
+import { FULL_PHYSICAL_CONDITION } from '../../src/bey/stamina/StaminaSystem';
 import { DriftController, type DriftState } from '../../src/drift/DriftController';
 import type { ControllerActions } from '../../src/input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
@@ -49,8 +50,15 @@ export class TestBeyHarness {
     const grounded = isGrounded(this.physics, this.beyCollider);
 
     const driftResult = this.drift.tick(this.beyBody, actions, grounded, FIXED_DELTA_SECONDS);
-    this.movement.applyPreStep(this.beyBody, actions, FIXED_DELTA_SECONDS, grounded, driftResult.lateralGripOverridePerS);
-    this.spin.tick(this.beyBody, FIXED_DELTA_SECONDS);
+    this.movement.applyPreStep(this.beyBody, {
+      actions,
+      fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+      grounded,
+      lateralGripOverridePerS: driftResult.lateralGripOverridePerS,
+      staminaAccelFactor: FULL_PHYSICAL_CONDITION.accelFactor,
+      dashOverride: null,
+    });
+    this.spin.tick(this.beyBody, FIXED_DELTA_SECONDS, FULL_PHYSICAL_CONDITION);
 
     this.physics.step();
 

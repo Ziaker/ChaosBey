@@ -1,15 +1,26 @@
 // ============================================================
 // TELEMETRY EVENT TYPES
 // Full gameplay event catalog (GDD section 74) grows with each milestone.
-// Only the foundational events exist yet; combat/AI/replay events are added
-// alongside the systems that produce them.
+// Milestone 2 adds the minimal combat event set the GDD calls out by name:
+// Hit, StabilityDamage, StabilityBreak, Knockback, RingOut, Ko, RoundEnd.
+// AI/replay events are added alongside the systems that produce them.
 // ============================================================
+
+import type { ActiveHitbox } from '../../combat/attacks/AttackController';
+import type { RoundOutcome } from '../../combat/round-rules/RoundState';
 
 export enum TelemetryEventKind {
   AppBoot = 'AppBoot',
   Error = 'Error',
   PhysicsAnomaly = 'PhysicsAnomaly',
   MovementImpact = 'MovementImpact',
+  Hit = 'Hit',
+  StabilityDamage = 'StabilityDamage',
+  StabilityBreak = 'StabilityBreak',
+  Knockback = 'Knockback',
+  RingOut = 'RingOut',
+  Ko = 'Ko',
+  RoundEnd = 'RoundEnd',
 }
 
 export interface TelemetryEventBase {
@@ -48,4 +59,56 @@ export interface MovementImpactEvent extends TelemetryEventBase {
   speedDeltaMps: number;
 }
 
-export type TelemetryEvent = AppBootEvent | ErrorEvent | PhysicsAnomalyEvent | MovementImpactEvent;
+/** An attack hitbox landed on the opponent. Circular-catches-Dash (GDD section 23/107) is marked distinctly via caughtOpponentDashing rather than folded into a generic hit. */
+export interface HitTelemetryEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.Hit;
+  attackerIsFirst: boolean;
+  hitboxKind: ActiveHitbox['kind'];
+  caughtOpponentDashing: boolean;
+}
+
+export interface StabilityDamageEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.StabilityDamage;
+  targetIsFirst: boolean;
+  amount: number;
+}
+
+export interface StabilityBreakEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.StabilityBreak;
+  targetIsFirst: boolean;
+}
+
+export interface KnockbackTelemetryEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.Knockback;
+  targetIsFirst: boolean;
+  force: number;
+}
+
+export interface RingOutTelemetryEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.RingOut;
+  targetIsFirst: boolean;
+}
+
+/** The Bey that was knocked out (a qualifying hit while already Broken — GDD section 29). */
+export interface KoEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.Ko;
+  targetIsFirst: boolean;
+}
+
+export interface RoundEndEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.RoundEnd;
+  outcome: RoundOutcome;
+}
+
+export type TelemetryEvent =
+  | AppBootEvent
+  | ErrorEvent
+  | PhysicsAnomalyEvent
+  | MovementImpactEvent
+  | HitTelemetryEvent
+  | StabilityDamageEvent
+  | StabilityBreakEvent
+  | KnockbackTelemetryEvent
+  | RingOutTelemetryEvent
+  | KoEvent
+  | RoundEndEvent;

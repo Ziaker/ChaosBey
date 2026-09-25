@@ -35,6 +35,11 @@ export class DriftController {
   private hopTimerS = 0;
   private recoveryTimerS = 0;
 
+  /** Current state without advancing anything — for read-only consumers (e.g. a frozen post-round snapshot) that must not progress the state machine. */
+  getState(): DriftState {
+    return this.state;
+  }
+
   tick(body: RAPIER.RigidBody, actions: ControllerActions, grounded: boolean, fixedDeltaSeconds: number): DriftTickResult {
     const jumpDriftHeld = actions.held.has(Action.JumpDrift);
     const jumpDriftPressed = actions.pressedThisFrame.has(Action.JumpDrift);

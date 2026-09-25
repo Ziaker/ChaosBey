@@ -27,8 +27,18 @@ export function dot(a: Vec2, b: Vec2): number {
   return a.x * b.x + a.z * b.z;
 }
 
+export function subtract(a: Vec2, b: Vec2): Vec2 {
+  return { x: a.x - b.x, z: a.z - b.z };
+}
+
 export function length(a: Vec2): number {
   return Math.sqrt(a.x * a.x + a.z * a.z);
+}
+
+/** Unit vector in the same direction as `a`; returns the zero vector unchanged (never divides by ~0). */
+export function normalize(a: Vec2): Vec2 {
+  const len = length(a);
+  return len > 1e-6 ? scale(a, 1 / len) : { x: 0, z: 0 };
 }
 
 /** Direction (unit vector) from a yaw angle, using the convention x = sin(yaw), z = cos(yaw) — yaw 0 faces +Z. */
