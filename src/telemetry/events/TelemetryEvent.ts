@@ -9,6 +9,7 @@ export enum TelemetryEventKind {
   AppBoot = 'AppBoot',
   Error = 'Error',
   PhysicsAnomaly = 'PhysicsAnomaly',
+  MovementImpact = 'MovementImpact',
 }
 
 export interface TelemetryEventBase {
@@ -37,4 +38,14 @@ export interface PhysicsAnomalyEvent extends TelemetryEventBase {
   detail: string;
 }
 
-export type TelemetryEvent = AppBootEvent | ErrorEvent | PhysicsAnomalyEvent;
+/**
+ * A significant, unmodeled velocity change detected on the Bey body — a
+ * wall/floor bounce today. Provisional/generic until combat exists to
+ * distinguish WallImpact from BeyCollision etc. (GDD section 74).
+ */
+export interface MovementImpactEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.MovementImpact;
+  speedDeltaMps: number;
+}
+
+export type TelemetryEvent = AppBootEvent | ErrorEvent | PhysicsAnomalyEvent | MovementImpactEvent;
