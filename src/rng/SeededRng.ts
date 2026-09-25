@@ -68,6 +68,15 @@ export class SeededRng {
  * change gameplay-relevant outcomes just because visuals changed.
  */
 export interface RngStreams {
+  /**
+   * The canonical match seed text — what the UI shows, what gets copied,
+   * and what must be re-entered to reproduce this exact match (GDD section
+   * 73: "visible, copyable, manually enterable, reusable"). This is NOT any
+   * individual stream's internal seed: each stream below is salted before
+   * being turned into a SeededRng, so its own getCanonicalSeedText() would
+   * return a different, non-reusable value.
+   */
+  readonly rootSeedText: string;
   readonly gameplay: SeededRng;
   readonly ai: SeededRng;
   readonly cosmetic: SeededRng;
@@ -79,8 +88,9 @@ export interface RngStreams {
  * section 73) as the sole source of truth for the whole match.
  */
 export function createRngStreams(seedText: string): RngStreams {
-  const { seedUint32 } = normalizeSeedText(seedText);
+  const { seedUint32, canonicalText } = normalizeSeedText(seedText);
   return {
+    rootSeedText: canonicalText,
     gameplay: SeededRng.fromSeedUint32((seedUint32 ^ 0x9e3779b9) >>> 0),
     ai: SeededRng.fromSeedUint32((seedUint32 ^ 0x85ebca6b) >>> 0),
     cosmetic: SeededRng.fromSeedUint32((seedUint32 ^ 0xc2b2ae35) >>> 0),

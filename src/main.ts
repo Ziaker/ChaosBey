@@ -53,10 +53,10 @@ async function bootstrap(): Promise<void> {
   let lastFps = 0;
 
   const loop = new FixedTimestepLoop({
-    onFixedTick: (tickIndex) => {
+    onFixedTick: (tickIndex, fixedDeltaSeconds) => {
       telemetry.setCurrentTick(tickIndex);
 
-      const actions = controller.sampleActions({ fixedDeltaSeconds: 1 / 60 });
+      const actions = controller.sampleActions({ fixedDeltaSeconds });
       if (actions.pressedThisFrame.has(Action.DebugToggle)) {
         debugOverlay.toggle();
       }
@@ -85,7 +85,7 @@ async function bootstrap(): Promise<void> {
         frameTimeMs: frameDeltaSeconds * 1000,
         physicsStepTimeMs: lastPhysicsStepTimeMs,
         tickIndex: loop.getTickIndex(),
-        seedText: rngStreams.gameplay.getCanonicalSeedText(),
+        seedText: rngStreams.rootSeedText,
         gameState: stateMachine.getCurrentState(),
       });
     },

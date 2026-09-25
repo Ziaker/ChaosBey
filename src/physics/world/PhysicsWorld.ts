@@ -5,6 +5,7 @@
 // ============================================================
 
 import RAPIER from '@dimforge/rapier3d-compat';
+import { FIXED_DELTA_SECONDS } from '../fixed-step/FixedTimestepLoop';
 
 // Downward acceleration applied to all dynamic bodies, in m/s^2.
 // Standard Earth gravity is used as the engineering starting point; final
@@ -19,6 +20,13 @@ export class PhysicsWorld {
   static async create(): Promise<PhysicsWorld> {
     await RAPIER.init();
     const world = new RAPIER.World({ x: 0, y: GRAVITY_Y, z: 0 });
+    // Rapier defaults its internal timestep to 1/60s on its own, which
+    // happens to match FIXED_DELTA_SECONDS today — but that would silently
+    // drift out of sync if the fixed-step loop's tick rate ever changes.
+    // Bind it explicitly to the same source of truth instead of relying on
+    // the coincidence (GDD section 80: simulation must not have two
+    // competing definitions of its own timestep).
+    world.timestep = FIXED_DELTA_SECONDS;
     return new PhysicsWorld(world);
   }
 

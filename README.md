@@ -13,7 +13,7 @@ Implemented so far:
 - Rapier 3D physics world with a fixed 60 Hz timestep loop, decoupled from render FPS.
 - Seeded, deterministic RNG with named streams (gameplay/AI/cosmetic) and human-friendly seed text normalization.
 - Top-level game state machine skeleton.
-- Controller abstraction (`CombatController`) with a keyboard implementation (arrows / Z / X / C, per the approved control scheme).
+- Controller abstraction (`CombatController`) with a keyboard implementation that samples the approved control scheme (arrows / Z / X / C) into actions — not yet wired to any gameplay effect (see Controls below).
 - Runtime quality-preset config skeleton.
 - Telemetry event bus + in-memory recorder skeleton.
 - Debug overlay skeleton (toggle with `F3`).
@@ -35,11 +35,13 @@ npm run preview    # serve the production build locally, under /ChaosBey/
 npm run test:smoke # Playwright smoke test against the production build
 ```
 
-## Controls (keyboard)
+## Reserved/approved keyboard bindings
 
-- Arrow keys — steer / move
-- `Z` — attack
-- `X` — hop / jump / drift
-- `C` — dodge
-- `F3` — toggle debug overlay
-- `Esc` — pause
+These are the approved bindings the `KeyboardController` samples into actions. In this milestone there is no combat/movement system yet for most of them to drive — pressing arrows / Z / X / C / Esc is captured but has no visible effect. Only `F3` is actually wired to something right now (toggling the debug overlay).
+
+- Arrow keys — steer / move (reserved — not yet connected to any movement system)
+- `Z` — attack (reserved — not yet connected to any combat system)
+- `X` — hop / jump / drift (reserved — not yet connected to any jump/drift system)
+- `C` — dodge (reserved — not yet connected to any dodge system)
+- `Esc` — pause (reserved — not yet connected to a pause state)
+- `F3` — toggle debug overlay (connected)

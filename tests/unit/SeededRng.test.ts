@@ -73,4 +73,26 @@ describe('createRngStreams', () => {
 
     expect(new Set([gameplayFirst, aiFirst, cosmeticFirst]).size).toBe(3);
   });
+
+  it('rootSeedText is the reusable match seed, not any individual stream\'s own (salted) canonical seed', () => {
+    // Regression test: the debug overlay/UI must display and persist
+    // rootSeedText, never `streams.gameplay.getCanonicalSeedText()` (that
+    // getter reports the *derived*, salted seed for that one stream, which
+    // is not the value that reproduces the match when re-entered).
+    const streams = createRngStreams('1234');
+
+    expect(streams.rootSeedText).toBe('1234');
+    expect(streams.gameplay.getCanonicalSeedText()).not.toBe(streams.rootSeedText);
+    expect(streams.ai.getCanonicalSeedText()).not.toBe(streams.rootSeedText);
+    expect(streams.cosmetic.getCanonicalSeedText()).not.toBe(streams.rootSeedText);
+  });
+
+  it('re-deriving streams from the persisted rootSeedText reproduces the exact same streams', () => {
+    const original = createRngStreams('some-uuid-like-1234');
+    const reproduced = createRngStreams(original.rootSeedText);
+
+    expect(reproduced.gameplay.nextFloat()).toEqual(original.gameplay.nextFloat());
+    expect(reproduced.ai.nextFloat()).toEqual(original.ai.nextFloat());
+    expect(reproduced.cosmetic.nextFloat()).toEqual(original.cosmetic.nextFloat());
+  });
 });
