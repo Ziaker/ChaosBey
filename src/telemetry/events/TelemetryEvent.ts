@@ -1,9 +1,10 @@
 // ============================================================
 // TELEMETRY EVENT TYPES
 // Full gameplay event catalog (GDD section 74) grows with each milestone.
-// Milestone 2 adds the minimal combat event set the GDD calls out by name:
-// Hit, StabilityDamage, StabilityBreak, Knockback, RingOut, Ko, RoundEnd.
-// AI/replay events are added alongside the systems that produce them.
+// Milestone 2 added the minimal combat event set the GDD calls out by
+// name: Hit, StabilityDamage, StabilityBreak, Knockback, RingOut, Ko,
+// RoundEnd. Milestone 3 adds Dodged/PerfectDodge. AI/replay events are
+// added alongside the systems that produce them.
 // ============================================================
 
 import type { ActiveHitbox } from '../../combat/attacks/AttackController';
@@ -21,6 +22,8 @@ export enum TelemetryEventKind {
   RingOut = 'RingOut',
   Ko = 'Ko',
   RoundEnd = 'RoundEnd',
+  Dodged = 'Dodged',
+  PerfectDodge = 'PerfectDodge',
 }
 
 export interface TelemetryEventBase {
@@ -100,6 +103,23 @@ export interface RoundEndEvent extends TelemetryEventBase {
   outcome: RoundOutcome;
 }
 
+/** An attack that would have connected was nullified by the target's dodge i-frames (Milestone 3). */
+export interface DodgedEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.Dodged;
+  targetIsFirst: boolean;
+}
+
+/**
+ * A dodged hit whose i-frames were within the tighter "perfect" sub-window.
+ * Detection/telemetry only — the GDD requires Perfect Dodge's actual
+ * gameplay reward to be approved separately before it exists, so this
+ * event carries no bonus effect (see DodgeTuning.ts).
+ */
+export interface PerfectDodgeEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.PerfectDodge;
+  targetIsFirst: boolean;
+}
+
 export type TelemetryEvent =
   | AppBootEvent
   | ErrorEvent
@@ -111,4 +131,6 @@ export type TelemetryEvent =
   | KnockbackTelemetryEvent
   | RingOutTelemetryEvent
   | KoEvent
-  | RoundEndEvent;
+  | RoundEndEvent
+  | DodgedEvent
+  | PerfectDodgeEvent;

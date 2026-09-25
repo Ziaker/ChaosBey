@@ -115,6 +115,12 @@ async function bootstrap(): Promise<void> {
           case 'ringOut':
             telemetry.record({ kind: TelemetryEventKind.RingOut, targetIsFirst: combatEvent.targetIsFirst });
             break;
+          case 'dodged':
+            telemetry.record({ kind: TelemetryEventKind.Dodged, targetIsFirst: combatEvent.targetIsFirst });
+            break;
+          case 'perfectDodge':
+            telemetry.record({ kind: TelemetryEventKind.PerfectDodge, targetIsFirst: combatEvent.targetIsFirst });
+            break;
         }
       }
       // A genuine unmodeled physics impact (wall/floor bounce) — distinct
@@ -159,6 +165,7 @@ async function bootstrap(): Promise<void> {
         longitudinalDragPerS: result.first.movement.longitudinalDragPerS,
         grounded: result.first.grounded,
         driftState: result.first.driftState,
+        dodgeState: result.first.dodgeState,
         angularVelocity: result.first.spin.angularVelocity,
         spinRateRadPerSec: result.first.spin.spinRateRadPerSec,
         tiltRad: result.first.spin.tiltRad,

@@ -31,6 +31,7 @@ import { WALL_IMPACT_STABILITY_DAMAGE_PER_MPS } from '../../bey/stability/Stabil
 import type { MovementSnapshot } from '../../bey/movement/MovementController';
 import type { SpinSnapshot } from '../../bey/spin/SpinController';
 import type { DriftState } from '../../drift/DriftController';
+import type { DodgeState } from '../../dodge/DodgeController';
 import { isGrounded } from '../../physics/collision/GroundCheck';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { normalize, subtract, type Vec2 } from '../../physics/Vec2';
@@ -40,6 +41,7 @@ export interface BeySnapshot {
   spin: SpinSnapshot;
   grounded: boolean;
   driftState: DriftState;
+  dodgeState: DodgeState;
   attackState: AttackState;
   dashChargeFraction: number;
   staminaFraction: number;
@@ -60,7 +62,11 @@ export type CombatEvent =
   | { kind: 'stabilityBreak'; targetIsFirst: boolean }
   | { kind: 'knockback'; targetIsFirst: boolean; force: number }
   | { kind: 'ko'; targetIsFirst: boolean }
-  | { kind: 'ringOut'; targetIsFirst: boolean };
+  | { kind: 'ringOut'; targetIsFirst: boolean }
+  /** An attack that would have connected was nullified by the target's dodge i-frames (Milestone 3). */
+  | { kind: 'dodged'; targetIsFirst: boolean }
+  /** A dodged hit whose i-frames were within the tighter "perfect" sub-window. Detection only — no gameplay reward is implemented yet, per the GDD's explicit approval gate on Perfect Dodge's reward. */
+  | { kind: 'perfectDodge'; targetIsFirst: boolean };
 
 export interface MatchTickResult {
   first: BeySnapshot;
@@ -84,6 +90,7 @@ function buildFrozenSnapshot(physics: PhysicsWorld, bey: Bey): BeySnapshot {
     spin: bey.spin.getSnapshot(bey.body),
     grounded,
     driftState: bey.drift.getState(),
+    dodgeState: bey.dodge.getState(),
     attackState: bey.attack.getState(),
     dashChargeFraction: bey.attack.getChargeFraction(),
     staminaFraction: bey.stamina.resource.fraction,
@@ -119,6 +126,11 @@ export function tickMatch(
   const firstDrift = first.drift.tick(first.body, firstActions, firstGrounded, fixedDeltaSeconds);
   const secondDrift = second.drift.tick(second.body, secondActions, secondGrounded, fixedDeltaSeconds);
 
+  const firstDodge = first.dodge.tick(first.body, firstActions, first.movement.getHeadingRad(), firstGrounded, fixedDeltaSeconds);
+  const secondDodge = second.dodge.tick(second.body, secondActions, second.movement.getHeadingRad(), secondGrounded, fixedDeltaSeconds);
+  if (firstDodge.triggeredAirRecovery) first.spin.applyAirRecovery(first.body);
+  if (secondDodge.triggeredAirRecovery) second.spin.applyAirRecovery(second.body);
+
   const firstAttack = first.attack.tick(
     firstActions,
     first.movement.getHeadingRad(),
@@ -143,7 +155,7 @@ export function tickMatch(
     actions: firstActions,
     fixedDeltaSeconds,
     grounded: firstGrounded,
-    lateralGripOverridePerS: firstDrift.lateralGripOverridePerS,
+    lateralGripOverridePerS: firstDodge.lateralGripOverridePerS ?? firstDrift.lateralGripOverridePerS,
     staminaAccelFactor: firstCondition.accelFactor,
     dashOverride: firstAttack.dashOverride,
   });
@@ -151,7 +163,7 @@ export function tickMatch(
     actions: secondActions,
     fixedDeltaSeconds,
     grounded: secondGrounded,
-    lateralGripOverridePerS: secondDrift.lateralGripOverridePerS,
+    lateralGripOverridePerS: secondDodge.lateralGripOverridePerS ?? secondDrift.lateralGripOverridePerS,
     staminaAccelFactor: secondCondition.accelFactor,
     dashOverride: secondAttack.dashOverride,
   });
@@ -185,7 +197,7 @@ export function tickMatch(
   const secondPos = positionXZ(second.body);
   const firstYM = first.body.translation().y;
   const secondYM = second.body.translation().y;
-  const hitEvents = detectHits(
+  const rawHitEvents = detectHits(
     { positionXZ: firstPos, positionYM: firstYM, hitbox: firstAttack.activeHitbox, state: firstAttack.state },
     { positionXZ: secondPos, positionYM: secondYM, hitbox: secondAttack.activeHitbox, state: secondAttack.state },
   );
@@ -193,6 +205,24 @@ export function tickMatch(
   let firstKoed = false;
   let secondKoed = false;
   const combatEvents: CombatEvent[] = [];
+
+  // I-frames (Milestone 3): a hit that would otherwise connect is nullified
+  // entirely — no knockback, no Stability damage, no registerHitConfirmed
+  // (the attack stays a whiff from the attacker's own recovery-timing
+  // perspective). Filtered out before the resolution loop below, not
+  // inside it, so a dodged hit is indistinguishable from one that never
+  // overlapped at all except for the dodged/perfectDodge telemetry.
+  const hitEvents: HitEvent[] = [];
+  for (const hit of rawHitEvents) {
+    const defenderIsFirst = !hit.attackerIsFirst;
+    const defenderDodge = defenderIsFirst ? firstDodge : secondDodge;
+    if (defenderDodge.hasIFrames) {
+      combatEvents.push({ kind: 'dodged', targetIsFirst: defenderIsFirst });
+      if (defenderDodge.isPerfectWindow) combatEvents.push({ kind: 'perfectDodge', targetIsFirst: defenderIsFirst });
+      continue;
+    }
+    hitEvents.push(hit);
+  }
 
   // Shared by both hit-resolution paths below (normal knockback and
   // Circular-catches-Dash) so a qualifying KO is detected and telemetered
@@ -258,6 +288,7 @@ export function tickMatch(
       spin: first.spin.getSnapshot(first.body),
       grounded: firstGrounded,
       driftState: firstDrift.driftState,
+      dodgeState: firstDodge.state,
       attackState: firstAttack.state,
       dashChargeFraction: firstAttack.chargeFraction,
       staminaFraction: first.stamina.resource.fraction,
@@ -270,6 +301,7 @@ export function tickMatch(
       spin: second.spin.getSnapshot(second.body),
       grounded: secondGrounded,
       driftState: secondDrift.driftState,
+      dodgeState: secondDodge.state,
       attackState: secondAttack.state,
       dashChargeFraction: secondAttack.chargeFraction,
       staminaFraction: second.stamina.resource.fraction,

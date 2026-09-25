@@ -46,6 +46,11 @@ export function fromYaw(yawRad: number): Vec2 {
   return { x: Math.sin(yawRad), z: Math.cos(yawRad) };
 }
 
+/** Rotates `a` -90° (its "right-hand" perpendicular, matching fromYaw's convention: perpendicular(fromYaw(0)) points +X). */
+export function perpendicular(a: Vec2): Vec2 {
+  return { x: a.z, z: -a.x };
+}
+
 /** Signed angle (radians) from `a` to `b`, positive = clockwise looking down the Y axis, matching fromYaw's convention. */
 export function signedAngleBetween(a: Vec2, b: Vec2): number {
   const cross = a.x * b.z - a.z * b.x;
