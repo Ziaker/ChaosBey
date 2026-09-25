@@ -14,6 +14,13 @@
 // ============================================================
 
 // --- Base framing ---
+// GDD-approved camera identity: opponent-focused, semi-over-the-shoulder
+// (not a fixed-world-axis "elevated tripod") — the camera sits behind the
+// player, offset to one shoulder, oriented along the live player->opponent
+// axis rather than always along world +Z. CAMERA_ORBIT_SMOOTHING_PER_S
+// controls how quickly that orientation "orbits" to follow the fight as
+// the two Beys move around the arena — a slow, deliberate blend, not a
+// snap, per the GDD's "automatic orbit/contextual placement" note.
 export const CAMERA_BASE_DISTANCE_M = 9;
 export const CAMERA_BASE_HEIGHT_M = 6;
 // Extra distance added per meter the two Beys are separated beyond this —
@@ -26,6 +33,14 @@ export const CAMERA_MAX_DISTANCE_M = 16;
 // its desired value — higher is snappier. Applied as
 // `1 - exp(-RATE * dt)` so it's frame-rate independent.
 export const CAMERA_POSITION_SMOOTHING_PER_S = 6;
+// How far, in radians, the camera sits off dead-center-behind-the-player —
+// the "semi" in semi-over-the-shoulder (a positive offset consistently
+// biased to one side, not perfectly centered on the fight axis).
+export const CAMERA_SHOULDER_OFFSET_RAD = 0.35; // ~20 degrees.
+// Angular smoothing rate for the camera's orbit around the fight axis —
+// deliberately slower than position smoothing so re-orienting as the
+// fighters turn around the arena reads as an orbit, never a snap.
+export const CAMERA_ORBIT_SMOOTHING_PER_S = 3;
 
 // --- Speed FOV (GDD: FOV widens with speed for a sense of velocity) ---
 export const CAMERA_FOV_BASE_DEG = 55;

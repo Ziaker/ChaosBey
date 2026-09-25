@@ -184,6 +184,7 @@ async function bootstrap(): Promise<void> {
         secondPositionM,
         firstSpeedMps: result.first.movement.speedMps,
         secondSpeedMps: result.second.movement.speedMps,
+        firstVelocityXZ: result.first.movement.actualVelocityVector,
         impactEvents,
         fixedDeltaSeconds,
       });
@@ -241,6 +242,7 @@ async function bootstrap(): Promise<void> {
         lastMatchResult?.first.movement.speedMps ?? 0,
         match.second.body.translation(),
         lastMatchResult?.second.movement.speedMps ?? 0,
+        lastCameraOutput?.speedLinesScreenDirection ?? { x: 0, y: 0 },
       );
 
       appRenderer.render();

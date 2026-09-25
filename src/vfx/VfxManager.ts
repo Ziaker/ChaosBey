@@ -63,13 +63,22 @@ export class VfxManager {
     }
   }
 
-  /** Runs every render frame regardless of hitstop: ages/removes finished one-shot effects and updates the persistent per-Bey trails + camera speed lines. */
+  /**
+   * Runs every render frame regardless of hitstop: ages/removes finished
+   * one-shot effects and updates the persistent per-Bey trails + camera
+   * speed lines. `speedLinesScreenDirection` is the player's movement
+   * direction already projected onto the camera's own axes (see
+   * CombatCameraController) — camera-relative, not world space — so the
+   * streaks track real travel direction (GDD requirement) instead of
+   * sitting as a fixed radial overlay.
+   */
   onRenderFrame(
     frameDeltaSeconds: number,
     firstPositionM: WorldPositionM,
     firstSpeedMps: number,
     secondPositionM: WorldPositionM,
     secondSpeedMps: number,
+    speedLinesScreenDirection: { x: number; y: number },
   ): void {
     this.activeSparkBursts = this.activeSparkBursts.filter((burst) => {
       const alive = updateSparkBurst(burst, frameDeltaSeconds);
@@ -91,6 +100,6 @@ export class VfxManager {
 
     this.firstTrail.update(firstPositionM, firstSpeedMps);
     this.secondTrail.update(secondPositionM, secondSpeedMps);
-    this.speedLines.update(firstSpeedMps);
+    this.speedLines.update(firstSpeedMps, { x: speedLinesScreenDirection.x, z: speedLinesScreenDirection.y });
   }
 }
