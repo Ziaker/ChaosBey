@@ -49,6 +49,12 @@ export interface DebugOverlayState {
   secondStabilityFraction: number;
   secondIsBroken: boolean;
   roundResult: string;
+
+  // Camera/game-feel (Milestone 4, GDD section 50+).
+  cameraFovDeg: number;
+  cameraShakeOffsetM: { x: number; y: number; z: number };
+  isHitstopActive: boolean;
+  hitstopRemainingS: number;
 }
 
 const RAD_TO_DEG = 180 / Math.PI;
@@ -121,7 +127,11 @@ export class DebugOverlay {
       `attack state     ${state.secondAttackState}\n` +
       `stamina          ${(state.secondStaminaFraction * 100).toFixed(0)}%\n` +
       `stability        ${(state.secondStabilityFraction * 100).toFixed(0)}%${state.secondIsBroken ? ' BROKEN' : ''}\n` +
-      `round            ${state.roundResult}`;
+      `round            ${state.roundResult}\n` +
+      `-- camera (M4) --\n` +
+      `fov              ${state.cameraFovDeg.toFixed(1)} deg\n` +
+      `shake offset     ${fmtVec3(state.cameraShakeOffsetM)}\n` +
+      `hitstop          ${state.isHitstopActive ? `ACTIVE (${state.hitstopRemainingS.toFixed(3)}s left)` : 'idle'}`;
   }
 
   private applyVisibility(): void {
