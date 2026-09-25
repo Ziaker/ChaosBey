@@ -31,6 +31,7 @@ import { WALL_IMPACT_STABILITY_DAMAGE_PER_MPS } from '../../bey/stability/Stabil
 import type { MovementSnapshot } from '../../bey/movement/MovementController';
 import type { SpinSnapshot } from '../../bey/spin/SpinController';
 import type { DriftState } from '../../drift/DriftController';
+import type { DodgeState } from '../../dodge/DodgeController';
 import { isGrounded } from '../../physics/collision/GroundCheck';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { normalize, subtract, type Vec2 } from '../../physics/Vec2';
@@ -40,12 +41,21 @@ export interface BeySnapshot {
   spin: SpinSnapshot;
   grounded: boolean;
   driftState: DriftState;
+  dodgeState: DodgeState;
   attackState: AttackState;
   dashChargeFraction: number;
   staminaFraction: number;
   stabilityFraction: number;
   isBroken: boolean;
   attackEnergyFraction: number;
+  /** True for exactly one tick: this Bey just landed (any cause) — see DriftController. Milestone 4 data, no gameplay effect. */
+  justLanded: boolean;
+  /** Only meaningful when justLanded is true. */
+  landingDescentSpeedMps: number;
+  /** Only meaningful when justLanded is true. */
+  landingIntensity: number;
+  /** Only meaningful when justLanded is true. */
+  landingJumpAssistElapsedS: number;
 }
 
 /**
@@ -60,7 +70,11 @@ export type CombatEvent =
   | { kind: 'stabilityBreak'; targetIsFirst: boolean }
   | { kind: 'knockback'; targetIsFirst: boolean; force: number }
   | { kind: 'ko'; targetIsFirst: boolean }
-  | { kind: 'ringOut'; targetIsFirst: boolean };
+  | { kind: 'ringOut'; targetIsFirst: boolean }
+  /** An attack that would have connected was nullified by the target's dodge i-frames (Milestone 3). */
+  | { kind: 'dodged'; targetIsFirst: boolean }
+  /** A dodged hit whose i-frames were within the tighter "perfect" sub-window. Detection only — no gameplay reward is implemented yet, per the GDD's explicit approval gate on Perfect Dodge's reward. */
+  | { kind: 'perfectDodge'; targetIsFirst: boolean };
 
 export interface MatchTickResult {
   first: BeySnapshot;
@@ -84,12 +98,17 @@ function buildFrozenSnapshot(physics: PhysicsWorld, bey: Bey): BeySnapshot {
     spin: bey.spin.getSnapshot(bey.body),
     grounded,
     driftState: bey.drift.getState(),
+    dodgeState: bey.dodge.getState(),
     attackState: bey.attack.getState(),
     dashChargeFraction: bey.attack.getChargeFraction(),
     staminaFraction: bey.stamina.resource.fraction,
     stabilityFraction: bey.stability.resource.fraction,
     isBroken: bey.stability.isBroken,
     attackEnergyFraction: bey.attackEnergy.resource.fraction,
+    justLanded: false,
+    landingDescentSpeedMps: 0,
+    landingIntensity: 0,
+    landingJumpAssistElapsedS: 0,
   };
 }
 
@@ -119,6 +138,27 @@ export function tickMatch(
   const firstDrift = first.drift.tick(first.body, firstActions, firstGrounded, fixedDeltaSeconds);
   const secondDrift = second.drift.tick(second.body, secondActions, secondGrounded, fixedDeltaSeconds);
 
+  const firstDodge = first.dodge.tick(
+    first.body,
+    firstActions,
+    first.movement.getHeadingRad(),
+    firstGrounded,
+    first.stamina.resource.value,
+    fixedDeltaSeconds,
+  );
+  const secondDodge = second.dodge.tick(
+    second.body,
+    secondActions,
+    second.movement.getHeadingRad(),
+    secondGrounded,
+    second.stamina.resource.value,
+    fixedDeltaSeconds,
+  );
+  if (firstDodge.staminaCostThisTick > 0) first.stamina.resource.subtract(firstDodge.staminaCostThisTick);
+  if (secondDodge.staminaCostThisTick > 0) second.stamina.resource.subtract(secondDodge.staminaCostThisTick);
+  if (firstDodge.triggeredAirRecovery) first.spin.applyAirRecovery(first.body);
+  if (secondDodge.triggeredAirRecovery) second.spin.applyAirRecovery(second.body);
+
   const firstAttack = first.attack.tick(
     firstActions,
     first.movement.getHeadingRad(),
@@ -143,7 +183,7 @@ export function tickMatch(
     actions: firstActions,
     fixedDeltaSeconds,
     grounded: firstGrounded,
-    lateralGripOverridePerS: firstDrift.lateralGripOverridePerS,
+    lateralGripOverridePerS: firstDodge.lateralGripOverridePerS ?? firstDrift.lateralGripOverridePerS,
     staminaAccelFactor: firstCondition.accelFactor,
     dashOverride: firstAttack.dashOverride,
   });
@@ -151,7 +191,7 @@ export function tickMatch(
     actions: secondActions,
     fixedDeltaSeconds,
     grounded: secondGrounded,
-    lateralGripOverridePerS: secondDrift.lateralGripOverridePerS,
+    lateralGripOverridePerS: secondDodge.lateralGripOverridePerS ?? secondDrift.lateralGripOverridePerS,
     staminaAccelFactor: secondCondition.accelFactor,
     dashOverride: secondAttack.dashOverride,
   });
@@ -167,6 +207,10 @@ export function tickMatch(
   const firstMovement = first.movement.postStep(first.body, firstGrounded);
   const secondMovement = second.movement.postStep(second.body, secondGrounded);
 
+  // Note: a wall/floor bounce does NOT call dodge.registerLaunch() — GDD
+  // section 21 grants Air Recovery only for being launched/knocked
+  // airborne, not merely "some impact occurred" (a wall clip while still
+  // grounded must never arm it for a later, unrelated normal jump).
   if (firstMovement.impactDeltaSpeedMps > 0) {
     first.spin.registerImpact(first.body, firstMovement.impactDeltaSpeedMps, firstMovement.impactDirection);
     first.stability.applyDamage(firstMovement.impactDeltaSpeedMps * WALL_IMPACT_STABILITY_DAMAGE_PER_MPS);
@@ -185,7 +229,7 @@ export function tickMatch(
   const secondPos = positionXZ(second.body);
   const firstYM = first.body.translation().y;
   const secondYM = second.body.translation().y;
-  const hitEvents = detectHits(
+  const rawHitEvents = detectHits(
     { positionXZ: firstPos, positionYM: firstYM, hitbox: firstAttack.activeHitbox, state: firstAttack.state },
     { positionXZ: secondPos, positionYM: secondYM, hitbox: secondAttack.activeHitbox, state: secondAttack.state },
   );
@@ -193,6 +237,24 @@ export function tickMatch(
   let firstKoed = false;
   let secondKoed = false;
   const combatEvents: CombatEvent[] = [];
+
+  // I-frames (Milestone 3): a hit that would otherwise connect is nullified
+  // entirely — no knockback, no Stability damage, no registerHitConfirmed
+  // (the attack stays a whiff from the attacker's own recovery-timing
+  // perspective). Filtered out before the resolution loop below, not
+  // inside it, so a dodged hit is indistinguishable from one that never
+  // overlapped at all except for the dodged/perfectDodge telemetry.
+  const hitEvents: HitEvent[] = [];
+  for (const hit of rawHitEvents) {
+    const defenderIsFirst = !hit.attackerIsFirst;
+    const defenderDodge = defenderIsFirst ? firstDodge : secondDodge;
+    if (defenderDodge.hasIFrames) {
+      combatEvents.push({ kind: 'dodged', targetIsFirst: defenderIsFirst });
+      if (defenderDodge.isPerfectWindow) combatEvents.push({ kind: 'perfectDodge', targetIsFirst: defenderIsFirst });
+      continue;
+    }
+    hitEvents.push(hit);
+  }
 
   // Shared by both hit-resolution paths below (normal knockback and
   // Circular-catches-Dash) so a qualifying KO is detected and telemetered
@@ -227,6 +289,11 @@ export function tickMatch(
       // launches the attacker's *target* upward instead of normal knockback.
       const vel = defender.body.linvel();
       defender.body.setLinvel({ x: vel.x, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z }, true);
+      // A genuine launch: arm Air Recovery immediately if the defender was
+      // already airborne (no further grounded->airborne transition would
+      // ever come this period), otherwise arm the short pending window
+      // until it actually leaves the ground.
+      defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
       applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage));
       continue;
     }
@@ -241,6 +308,8 @@ export function tickMatch(
       impactDirectionXZ: normalize(subtract(defenderPos, attackerPos)),
     });
     applyKnockback(defender.body, attackerPos, defenderPos, knockback);
+    // Same immediate-vs-pending arming as the catch-launch path above.
+    defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
     combatEvents.push({ kind: 'knockback', targetIsFirst: defenderIsFirst, force: knockback.force });
 
     applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage));
@@ -258,24 +327,34 @@ export function tickMatch(
       spin: first.spin.getSnapshot(first.body),
       grounded: firstGrounded,
       driftState: firstDrift.driftState,
+      dodgeState: firstDodge.state,
       attackState: firstAttack.state,
       dashChargeFraction: firstAttack.chargeFraction,
       staminaFraction: first.stamina.resource.fraction,
       stabilityFraction: first.stability.resource.fraction,
       isBroken: first.stability.isBroken,
       attackEnergyFraction: first.attackEnergy.resource.fraction,
+      justLanded: firstDrift.justLanded,
+      landingDescentSpeedMps: firstDrift.landingDescentSpeedMps,
+      landingIntensity: firstDrift.landingIntensity,
+      landingJumpAssistElapsedS: firstDrift.landingJumpAssistElapsedS,
     },
     second: {
       movement: secondMovement,
       spin: second.spin.getSnapshot(second.body),
       grounded: secondGrounded,
       driftState: secondDrift.driftState,
+      dodgeState: secondDodge.state,
       attackState: secondAttack.state,
       dashChargeFraction: secondAttack.chargeFraction,
       staminaFraction: second.stamina.resource.fraction,
       stabilityFraction: second.stability.resource.fraction,
       isBroken: second.stability.isBroken,
       attackEnergyFraction: second.attackEnergy.resource.fraction,
+      justLanded: secondDrift.justLanded,
+      landingDescentSpeedMps: secondDrift.landingDescentSpeedMps,
+      landingIntensity: secondDrift.landingIntensity,
+      landingJumpAssistElapsedS: secondDrift.landingJumpAssistElapsedS,
     },
     hitEvents,
     combatEvents,

@@ -10,6 +10,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { AttackController } from '../../combat/attacks/AttackController';
 import { AttackEnergySystem } from '../attack-energy/AttackEnergySystem';
+import { DodgeController } from '../../dodge/DodgeController';
 import { DriftController } from '../../drift/DriftController';
 import { MovementController } from '../movement/MovementController';
 import { SpinController } from '../spin/SpinController';
@@ -23,6 +24,7 @@ export interface Bey {
   readonly movement: MovementController;
   readonly spin: SpinController;
   readonly drift: DriftController;
+  readonly dodge: DodgeController;
   readonly stamina: StaminaSystem;
   readonly stability: StabilitySystem;
   readonly attackEnergy: AttackEnergySystem;
@@ -37,6 +39,7 @@ export function createBey(physics: PhysicsWorld, spawnPosition: { x: number; y: 
     movement: new MovementController(),
     spin: new SpinController(),
     drift: new DriftController(),
+    dodge: new DodgeController(),
     stamina: new StaminaSystem(),
     stability: new StabilitySystem(),
     attackEnergy: new AttackEnergySystem(),

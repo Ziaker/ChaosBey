@@ -28,6 +28,7 @@ export interface DebugOverlayState {
   longitudinalDragPerS: number;
   grounded: boolean;
   driftState: string;
+  dodgeState: string;
 
   // Rotational (GDD section 17/122).
   angularVelocity: { x: number; y: number; z: number };
@@ -104,6 +105,7 @@ export class DebugOverlay {
       `longitudinal drag ${state.longitudinalDragPerS.toFixed(2)} /s\n` +
       `grounded         ${state.grounded}\n` +
       `drift state      ${state.driftState}\n` +
+      `dodge state      ${state.dodgeState}\n` +
       `-- rotational --\n` +
       `angular velocity ${fmtVec3(state.angularVelocity)}\n` +
       `spin rate        ${state.spinRateRadPerSec.toFixed(2)} rad/s\n` +

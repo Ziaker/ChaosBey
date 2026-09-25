@@ -52,3 +52,12 @@ export const WOBBLE_ENERGY_MAX = 1;
 export const WOBBLE_DECAY_FRACTION_PER_S = 1.2;
 export const WOBBLE_AMPLITUDE_RAD = (6 * Math.PI) / 180;
 export const WOBBLE_FREQUENCY_HZ = 7;
+
+// Air recovery (Milestone 3): a player-triggered stabilization while
+// airborne (via Dodge — see DodgeController), distinct from the always-on
+// passive recovery torque above. Instantly cuts wobble and gives one
+// strong corrective torque impulse toward upright, so a Bey that got
+// knocked off-axis can visibly recover faster than passive correction
+// alone before landing.
+export const AIR_RECOVERY_WOBBLE_REDUCTION = 0.6;
+export const AIR_RECOVERY_TORQUE_IMPULSE = 1.4;

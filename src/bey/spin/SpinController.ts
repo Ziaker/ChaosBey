@@ -10,6 +10,8 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Vec2 } from '../../physics/Vec2';
 import type { PhysicalCondition } from '../stamina/StaminaSystem';
 import {
+  AIR_RECOVERY_TORQUE_IMPULSE,
+  AIR_RECOVERY_WOBBLE_REDUCTION,
   BASE_SPIN_RATE_RAD_S,
   IMPACT_ANGULAR_IMPULSE_PER_MPS,
   RECOVERY_DAMPING_PER_S,
@@ -105,6 +107,24 @@ export class SpinController {
     );
 
     this.wobbleEnergy = Math.min(WOBBLE_ENERGY_MAX, this.wobbleEnergy + impactDeltaSpeedMps * WOBBLE_IMPACT_ENERGY_GAIN_PER_MPS);
+  }
+
+  /**
+   * Milestone 3 — player-triggered air recovery (see DodgeController):
+   * instantly cuts wobble and gives one strong corrective torque impulse
+   * toward upright, on top of (not instead of) the passive recovery torque
+   * in tick(). Self-contained — callers never need to know how tilt/wobble
+   * are represented internally.
+   */
+  applyAirRecovery(body: RAPIER.RigidBody): void {
+    this.wobbleEnergy = Math.max(0, this.wobbleEnergy - AIR_RECOVERY_WOBBLE_REDUCTION);
+
+    const up = quatUpVector(body.rotation());
+    const torqueAxisRaw = { x: -up.z, y: 0, z: up.x };
+    body.applyTorqueImpulse(
+      { x: torqueAxisRaw.x * AIR_RECOVERY_TORQUE_IMPULSE, y: 0, z: torqueAxisRaw.z * AIR_RECOVERY_TORQUE_IMPULSE },
+      true,
+    );
   }
 
   getWobbleOffsetRad(): number {
