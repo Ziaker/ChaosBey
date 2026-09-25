@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChaosBey</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      #app-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #debug-overlay-root {
+        position: fixed;
+        top: 0;
+        left: 0;
+        pointer-events: none;
+        z-index: 1000;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="app-canvas"></canvas>
+    <div id="debug-overlay-root"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
