@@ -23,11 +23,19 @@ describe('nextMashEventCount', () => {
     expect(nextMashEventCount(5, new Set(), false)).toBe(5);
   });
 
-  it('AI mash contributes independently of real presses', () => {
+  it('AI mash alone contributes exactly one event, same as a real press', () => {
     expect(nextMashEventCount(0, new Set(), true)).toBe(1);
-    // A real press and an AI contribution the same tick are two distinct
-    // sources — both count.
-    expect(nextMashEventCount(0, new Set(['Attack']), true)).toBe(2);
+  });
+
+  it('a real press and an AI contribution for the same combatant on the same tick still count as exactly one event — the AI feeds the same per-combatant input, not a second scoring channel', () => {
+    expect(nextMashEventCount(0, new Set(['Attack']), true)).toBe(1);
+  });
+
+  it('a real press and an AI contribution on the same tick, followed by another tick with only one source, accumulate at most one event per tick', () => {
+    let count = 0;
+    count = nextMashEventCount(count, new Set(['Attack']), true); // both sources, same tick -> +1.
+    count = nextMashEventCount(count, new Set(), true); // AI only, next tick -> +1.
+    expect(count).toBe(2);
   });
 });
 

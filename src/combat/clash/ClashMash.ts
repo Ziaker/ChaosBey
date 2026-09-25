@@ -1,31 +1,32 @@
 // ============================================================
 // CLASH MASH COUNTING
-// Discrete mash-event counting for the Clash mini-contest (GDD): any
-// number of qualifying actions (Z/X/C in the eventual real integration —
+// Discrete mash-event counting for the Clash mini-contest (GDD): a
+// combatant contributes at most one mash event per tick, regardless of
+// how many qualifying actions (Z/X/C in the eventual real integration —
 // this package only sees opaque action identifiers, never the real
-// Action enum) pressed together in the *same* tick count as exactly one
-// mash event; the same actions pressed across separate ticks count once
-// each. Kept as plain functions/types with no dependency on the real
-// input system, so Milestone 5's core logic doesn't couple to Milestone
-// 4's in-flight input work.
+// Action enum) it comes from. Simultaneous Z+X+C is one event; a real
+// press and an AI contribution landing on the *same* tick for the *same*
+// combatant is still one event (the AI feeds the same per-combatant input
+// abstraction, not a second scoring channel); the same combatant mashing
+// across separate ticks counts once per tick. Kept as plain
+// functions/types with no dependency on the real input system, so
+// Milestone 5's core logic doesn't couple to Milestone 4's input work.
 // ============================================================
 
 /**
- * Advances a mash-event counter by one fixed tick's worth of input.
- * `pressedActionIds` is whatever qualifying action identifiers transitioned
- * to pressed *this tick* (e.g. a future adapter would pass
- * ControllerActions.pressedThisFrame filtered to Z/X/C) — any non-empty
- * set counts as exactly one event, however many distinct actions it
- * contains, so pressing all three simultaneously never counts as three.
- * `aiMashEventThisTick` is a separate, independent contribution (see
- * ClashAiMashSource below) — a real press and an AI contribution in the
- * same tick count as two events, since they come from different sources.
+ * Advances one combatant's mash-event counter by one fixed tick's worth of
+ * input. `pressedActionIds` is whatever qualifying action identifiers
+ * transitioned to pressed *this tick* (e.g. a future adapter would pass
+ * ControllerActions.pressedThisFrame filtered to Z/X/C); `aiMashEventThisTick`
+ * is that same combatant's AI-driven contribution for this tick (see
+ * ClashAiMashSource below) when AI is the one mashing on its behalf. Either
+ * source alone counts as one event; both present on the same tick for the
+ * same combatant still count as exactly one — the AI feeds the same
+ * per-combatant input, it isn't a second, additive scoring channel.
  */
 export function nextMashEventCount(currentCount: number, pressedActionIds: ReadonlySet<string>, aiMashEventThisTick: boolean): number {
-  let next = currentCount;
-  if (pressedActionIds.size > 0) next += 1;
-  if (aiMashEventThisTick) next += 1;
-  return next;
+  const mashedThisTick = pressedActionIds.size > 0 || aiMashEventThisTick;
+  return mashedThisTick ? currentCount + 1 : currentCount;
 }
 
 /**
