@@ -89,6 +89,11 @@ export class AttackController {
     return this.state;
   }
 
+  /** Current Dash charge fraction without advancing anything — for read-only consumers (e.g. a frozen post-round snapshot). */
+  getChargeFraction(): number {
+    return this.dashChargeFraction();
+  }
+
   tick(
     actions: ControllerActions,
     ownHeadingRad: number,

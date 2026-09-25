@@ -8,6 +8,8 @@
 
 import { Resource } from '../core/Resource';
 import {
+  STABILITY_BROKEN_RECOVERY_DELAY_AFTER_HIT_S,
+  STABILITY_BROKEN_RECOVERY_FLOOR,
   STABILITY_MAX,
   STABILITY_QUALIFYING_HIT_MIN_DAMAGE,
   STABILITY_RECOVERY_DELAY_AFTER_HIT_S,
@@ -23,9 +25,21 @@ export class StabilitySystem {
     return this.broken;
   }
 
+  /** Owner decision (2026-09-25): Broken is recoverable — avoiding hits for long enough (a longer delay than normal in-fight recovery) climbs Stability back to a small floor and exits Broken, rather than staying broken forever until KO/next round. */
   tick(fixedDeltaSeconds: number): void {
     this.timeSinceLastDamageS += fixedDeltaSeconds;
-    if (this.timeSinceLastDamageS >= STABILITY_RECOVERY_DELAY_AFTER_HIT_S && !this.broken) {
+
+    if (this.broken) {
+      if (this.timeSinceLastDamageS >= STABILITY_BROKEN_RECOVERY_DELAY_AFTER_HIT_S) {
+        this.resource.add(STABILITY_RECOVERY_PER_S * fixedDeltaSeconds);
+        if (this.resource.value >= STABILITY_BROKEN_RECOVERY_FLOOR) {
+          this.broken = false;
+        }
+      }
+      return;
+    }
+
+    if (this.timeSinceLastDamageS >= STABILITY_RECOVERY_DELAY_AFTER_HIT_S) {
       this.resource.add(STABILITY_RECOVERY_PER_S * fixedDeltaSeconds);
     }
   }

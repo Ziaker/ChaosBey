@@ -9,7 +9,14 @@
 // Order: drift -> attack (may set dashOverride) -> movement pre-step ->
 // spin pre-step -> physics.step() [once, for the whole world] -> movement
 // post-step -> spin impact -> stamina/stability tick -> hit detection ->
-// knockback/stability-damage -> ring-out check.
+// knockback/stability-damage -> ring-out check -> resolve this tick's
+// round outcome (all at once, never per-event — see RoundState).
+//
+// Combat vs. RoundEnd are separate global states (GDD): once the round is
+// over, this function stops advancing the simulation entirely (no more
+// input, movement, attacks, resource changes, physics stepping) and just
+// returns a frozen snapshot of however things stood at the moment it
+// ended, rather than letting the fight silently continue in the background.
 // ============================================================
 
 import type { Bey } from '../../bey/core/Bey';
@@ -26,7 +33,7 @@ import type { SpinSnapshot } from '../../bey/spin/SpinController';
 import type { DriftState } from '../../drift/DriftController';
 import { isGrounded } from '../../physics/collision/GroundCheck';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
-import { type Vec2 } from '../../physics/Vec2';
+import { normalize, subtract, type Vec2 } from '../../physics/Vec2';
 
 export interface BeySnapshot {
   movement: MovementSnapshot;
@@ -54,6 +61,23 @@ function positionXZ(body: Bey['body']): Vec2 {
   return { x: t.x, z: t.z };
 }
 
+/** Builds a BeySnapshot purely from current, already-settled state — no physics stepping, no advancing any system's internal timers. Used once the round is over so a frozen post-round snapshot can still be reported without the simulation silently continuing underneath it. */
+function buildFrozenSnapshot(physics: PhysicsWorld, bey: Bey): BeySnapshot {
+  const grounded = isGrounded(physics, bey.collider);
+  return {
+    movement: bey.movement.postStep(bey.body, grounded),
+    spin: bey.spin.getSnapshot(bey.body),
+    grounded,
+    driftState: bey.drift.getState(),
+    attackState: bey.attack.getState(),
+    dashChargeFraction: bey.attack.getChargeFraction(),
+    staminaFraction: bey.stamina.resource.fraction,
+    stabilityFraction: bey.stability.resource.fraction,
+    isBroken: bey.stability.isBroken,
+    attackEnergyFraction: bey.attackEnergy.resource.fraction,
+  };
+}
+
 export function tickMatch(
   physics: PhysicsWorld,
   first: Bey,
@@ -63,6 +87,16 @@ export function tickMatch(
   fixedDeltaSeconds: number,
   roundState: RoundState,
 ): MatchTickResult {
+  if (roundState.isOver) {
+    return {
+      first: buildFrozenSnapshot(physics, first),
+      second: buildFrozenSnapshot(physics, second),
+      hitEvents: [],
+      ringOutFirst: false,
+      ringOutSecond: false,
+    };
+  }
+
   const firstGrounded = isGrounded(physics, first.collider);
   const secondGrounded = isGrounded(physics, second.collider);
 
@@ -133,7 +167,15 @@ export function tickMatch(
 
   const firstPos = positionXZ(first.body);
   const secondPos = positionXZ(second.body);
-  const hitEvents = detectHits(firstPos, firstAttack.activeHitbox, firstAttack.state, secondPos, secondAttack.activeHitbox, secondAttack.state);
+  const firstYM = first.body.translation().y;
+  const secondYM = second.body.translation().y;
+  const hitEvents = detectHits(
+    { positionXZ: firstPos, positionYM: firstYM, hitbox: firstAttack.activeHitbox, state: firstAttack.state },
+    { positionXZ: secondPos, positionYM: secondYM, hitbox: secondAttack.activeHitbox, state: secondAttack.state },
+  );
+
+  let firstKoed = false;
+  let secondKoed = false;
 
   for (const hit of hitEvents) {
     const attacker = hit.attackerIsFirst ? first : second;
@@ -160,19 +202,21 @@ export function tickMatch(
       defenderSpeedMps: defenderMovement.speedMps,
       defenderStabilityFraction: defender.stability.resource.fraction,
       defenderStaminaPenaltyFraction: 1 - defender.stamina.resource.fraction,
+      attackerVelocityXZ: attackerMovement.actualVelocityVector,
+      impactDirectionXZ: normalize(subtract(defenderPos, attackerPos)),
     });
     applyKnockback(defender.body, attackerPos, defenderPos, knockback);
 
     const { isQualifyingKoHit } = defender.stability.applyDamage(computeStabilityDamage(hit.hitbox.stabilityDamage));
     if (isQualifyingKoHit) {
-      roundState.registerKo(hit.attackerIsFirst);
+      if (hit.attackerIsFirst) secondKoed = true;
+      else firstKoed = true;
     }
   }
 
   const ringOutFirst = isRingOut(firstPos);
   const ringOutSecond = isRingOut(secondPos);
-  if (ringOutFirst) roundState.registerRingOut(true);
-  if (ringOutSecond) roundState.registerRingOut(false);
+  roundState.resolveTick({ firstKoed, secondKoed, firstRingOut: ringOutFirst, secondRingOut: ringOutSecond });
 
   return {
     first: {

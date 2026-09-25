@@ -7,15 +7,15 @@
 
 import { Resource } from '../core/Resource';
 import {
-  STAMINA_DRAIN_PER_S_AT_FULL_SPEED,
+  STAMINA_BASE_DRAIN_PER_S,
   STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION,
+  STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED,
   STAMINA_MAX,
   STAMINA_MAX_SPIN_DECAY_MULTIPLIER,
   STAMINA_MAX_WOBBLE_ENERGY_FLOOR,
   STAMINA_MIN_ACCEL_FACTOR,
   STAMINA_MIN_RECOVERY_TORQUE_FACTOR,
   STAMINA_PENALTY_START_FRACTION,
-  STAMINA_REGEN_PER_S,
 } from './StaminaTuning';
 import { INTENDED_MAX_SPEED_MPS } from '../movement/MovementTuning';
 
@@ -38,14 +38,12 @@ export const FULL_PHYSICAL_CONDITION: PhysicalCondition = {
 export class StaminaSystem {
   readonly resource = new Resource(STAMINA_MAX);
 
+  /** Stamina only ever drains during a round (owner decision 2026-09-25: no passive in-round regen) — a small baseline drain from continuous spin/combat, plus extra drain the faster the Bey moves. */
   tick(currentSpeedMps: number, fixedDeltaSeconds: number): void {
     const speedFraction = currentSpeedMps / INTENDED_MAX_SPEED_MPS;
-    if (speedFraction > STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION) {
-      const drainFraction = (speedFraction - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION) / (1 - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION);
-      this.resource.subtract(STAMINA_DRAIN_PER_S_AT_FULL_SPEED * Math.min(1, drainFraction) * fixedDeltaSeconds);
-    } else {
-      this.resource.add(STAMINA_REGEN_PER_S * fixedDeltaSeconds);
-    }
+    const extraEffortFraction = Math.max(0, speedFraction - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION) / (1 - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION);
+    const drainPerS = STAMINA_BASE_DRAIN_PER_S + STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED * Math.min(1, extraEffortFraction);
+    this.resource.subtract(drainPerS * fixedDeltaSeconds);
   }
 
   getPhysicalCondition(): PhysicalCondition {

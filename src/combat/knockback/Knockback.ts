@@ -6,11 +6,13 @@
 // ============================================================
 
 import type RAPIER from '@dimforge/rapier3d-compat';
-import { normalize, scale, subtract, type Vec2 } from '../../physics/Vec2';
+import { dot, normalize, scale, subtract, type Vec2 } from '../../physics/Vec2';
 import { INTENDED_MAX_SPEED_MPS } from '../../bey/movement/MovementTuning';
 import {
   ATTACKER_SPEED_KNOCKBACK_WEIGHT,
   ATTACK_STAT_MULTIPLIER_PLACEHOLDER,
+  COLLISION_ANGLE_MAX_FACTOR,
+  COLLISION_ANGLE_MIN_FACTOR,
   DEFENDER_MAX_VULNERABILITY_AT_ZERO_SPEED,
   DEFENDER_MIN_VULNERABILITY_AT_REFERENCE_SPEED,
   DEFENDER_VULNERABILITY_REFERENCE_SPEED_MPS,
@@ -27,6 +29,10 @@ export interface KnockbackInput {
   defenderSpeedMps: number;
   defenderStabilityFraction: number; // 0..1
   defenderStaminaPenaltyFraction: number; // 0 = full stamina, 1 = fully depleted
+  /** Attacker's horizontal velocity at the moment of the hit — used only for the collision-angle factor below; a zero/near-zero vector (stationary attacker) is handled safely. */
+  attackerVelocityXZ: Vec2;
+  /** Unit-ish vector from attacker to defender at the moment of the hit (need not be pre-normalized). */
+  impactDirectionXZ: Vec2;
 }
 
 export interface KnockbackResult {
@@ -52,6 +58,15 @@ export function computeKnockback(input: KnockbackInput): KnockbackResult {
   const stabilityReduction = 1 - input.defenderStabilityFraction * STABILITY_KNOCKBACK_REDUCTION_AT_FULL;
   const staminaVulnerability = 1 + input.defenderStaminaPenaltyFraction * STAMINA_MAX_KNOCKBACK_VULNERABILITY_BONUS;
 
+  // -1 (attacker moving straight away from/across the hit) .. 1 (attacker
+  // moving straight into it); 0 (the lerp midpoint) for a stationary
+  // attacker, since normalize() safely returns the zero vector rather than
+  // dividing by ~0.
+  const attackerDirection = normalize(input.attackerVelocityXZ);
+  const impactDirection = normalize(input.impactDirectionXZ);
+  const alignment = dot(attackerDirection, impactDirection);
+  const angleFactor = lerp(COLLISION_ANGLE_MIN_FACTOR, COLLISION_ANGLE_MAX_FACTOR, (alignment + 1) / 2);
+
   const force =
     input.baseForce *
     ATTACK_STAT_MULTIPLIER_PLACEHOLDER *
@@ -59,7 +74,8 @@ export function computeKnockback(input: KnockbackInput): KnockbackResult {
     attackerSpeedFactor *
     defenderVulnerability *
     stabilityReduction *
-    staminaVulnerability;
+    staminaVulnerability *
+    angleFactor;
 
   const impulseMagnitude = force * KNOCKBACK_IMPULSE_PER_FORCE_UNIT;
   return {

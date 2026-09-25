@@ -38,3 +38,15 @@ export const KNOCKBACK_IMPULSE_PER_FORCE_UNIT = 0.6;
 export const KNOCKBACK_UPWARD_LAUNCH_FRACTION = 0.35; // GDD section 27: "upward launch component".
 
 export const STABILITY_DAMAGE_DEFENSE_REDUCTION_AT_FULL = 0.3; // Defense also reduces Stability damage taken (GDD section 31 Defense responsibilities).
+
+// Collision angle (GDD section 27 explicitly lists this as a knockback
+// factor): how aligned the attacker's own motion was with the direction
+// of the hit. A hit that lines up with the attacker's charge (e.g. a Dash
+// Attack connecting head-on) transfers more force than one where the
+// attacker was moving across or away from the defender at the moment of
+// contact. A bounded lerp, not a sharp cutoff or a raw dot-product
+// multiplier, so there's no discontinuity or singularity as alignment
+// crosses zero, and a stationary attacker (no defined direction) lands
+// exactly on the midpoint.
+export const COLLISION_ANGLE_MIN_FACTOR = 0.85; // attacker moving away from/across the hit direction
+export const COLLISION_ANGLE_MAX_FACTOR = 1.2; // attacker moving straight into the hit direction

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ARENA_FLOOR_RADIUS, ARENA_WALL_THICKNESS } from '../../src/arena/colliders/ArenaTuning';
 import { isRingOut } from '../../src/arena/ringout/RingOut';
-import { RINGOUT_MARGIN_BEYOND_WALL_M } from '../../src/arena/ringout/RingOutTuning';
+import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { RoundOutcome, RoundState } from '../../src/combat/round-rules/RoundState';
 
 describe('isRingOut', () => {
@@ -9,26 +8,21 @@ describe('isRingOut', () => {
     expect(isRingOut({ x: 0, z: 0 })).toBe(false);
   });
 
-  it('is false at the inner floor radius (still on the platform)', () => {
-    expect(isRingOut({ x: ARENA_FLOOR_RADIUS - 0.1, z: 0 })).toBe(false);
+  it('is false just inside the ring-out radius', () => {
+    expect(isRingOut({ x: RINGOUT_RADIUS_M - 0.1, z: 0 })).toBe(false);
   });
 
-  it('is false just past the wall face, within the ring-out margin (GDD 130: no spurious trigger from a normal wall bounce)', () => {
-    const justPastWall = ARENA_FLOOR_RADIUS + ARENA_WALL_THICKNESS + RINGOUT_MARGIN_BEYOND_WALL_M - 0.05;
-    expect(isRingOut({ x: justPastWall, z: 0 })).toBe(false);
-  });
-
-  it('is true once clearly beyond the wall face plus margin', () => {
-    const clearlyOut = ARENA_FLOOR_RADIUS + ARENA_WALL_THICKNESS + RINGOUT_MARGIN_BEYOND_WALL_M + 0.05;
-    expect(isRingOut({ x: clearlyOut, z: 0 })).toBe(true);
+  it('is true once clearly beyond the ring-out radius', () => {
+    expect(isRingOut({ x: RINGOUT_RADIUS_M + 0.1, z: 0 })).toBe(true);
   });
 
   it('checks radial distance regardless of direction', () => {
-    const clearlyOut = ARENA_FLOOR_RADIUS + ARENA_WALL_THICKNESS + RINGOUT_MARGIN_BEYOND_WALL_M + 0.05;
-    const diagonal = clearlyOut / Math.SQRT2;
+    const diagonal = (RINGOUT_RADIUS_M + 0.5) / Math.SQRT2;
     expect(isRingOut({ x: diagonal, z: diagonal })).toBe(true);
   });
 });
+
+const NONE = { firstKoed: false, secondKoed: false, firstRingOut: false, secondRingOut: false };
 
 describe('RoundState', () => {
   it('starts Ongoing and not over', () => {
@@ -37,35 +31,53 @@ describe('RoundState', () => {
     expect(round.result).toBe(RoundOutcome.Ongoing);
   });
 
-  it('registerKo(true) ends the round with FirstWinsByKo', () => {
+  it('a solo KO on second ends the round with FirstWinsByKo', () => {
     const round = new RoundState();
-    round.registerKo(true);
+    round.resolveTick({ ...NONE, secondKoed: true });
     expect(round.isOver).toBe(true);
     expect(round.result).toBe(RoundOutcome.FirstWinsByKo);
   });
 
-  it('registerKo(false) ends the round with SecondWinsByKo', () => {
+  it('a solo KO on first ends the round with SecondWinsByKo', () => {
     const round = new RoundState();
-    round.registerKo(false);
+    round.resolveTick({ ...NONE, firstKoed: true });
     expect(round.result).toBe(RoundOutcome.SecondWinsByKo);
   });
 
-  it('registerRingOut(loserIsFirst=true) means the second combatant wins', () => {
+  it('a solo ring-out by second ends the round with FirstWinsByRingOut', () => {
     const round = new RoundState();
-    round.registerRingOut(true);
-    expect(round.result).toBe(RoundOutcome.SecondWinsByRingOut);
-  });
-
-  it('registerRingOut(loserIsFirst=false) means the first combatant wins', () => {
-    const round = new RoundState();
-    round.registerRingOut(false);
+    round.resolveTick({ ...NONE, secondRingOut: true });
     expect(round.result).toBe(RoundOutcome.FirstWinsByRingOut);
   });
 
-  it('ignores further outcome changes once the round is already over', () => {
+  it('a solo ring-out by first ends the round with SecondWinsByRingOut', () => {
     const round = new RoundState();
-    round.registerKo(true);
-    round.registerRingOut(false);
+    round.resolveTick({ ...NONE, firstRingOut: true });
+    expect(round.result).toBe(RoundOutcome.SecondWinsByRingOut);
+  });
+
+  it('a genuinely simultaneous double-KO resolves to Draw, not tiebroken by field order', () => {
+    const round = new RoundState();
+    round.resolveTick({ ...NONE, firstKoed: true, secondKoed: true });
+    expect(round.result).toBe(RoundOutcome.Draw);
+  });
+
+  it('a genuinely simultaneous double-ring-out resolves to Draw, not tiebroken by field order', () => {
+    const round = new RoundState();
+    round.resolveTick({ ...NONE, firstRingOut: true, secondRingOut: true });
+    expect(round.result).toBe(RoundOutcome.Draw);
+  });
+
+  it('a simultaneous mixed double-loss (one KO, one ring-out) is also a Draw', () => {
+    const round = new RoundState();
+    round.resolveTick({ ...NONE, firstKoed: true, secondRingOut: true });
+    expect(round.result).toBe(RoundOutcome.Draw);
+  });
+
+  it('ignores further resolveTick calls once the round is already over', () => {
+    const round = new RoundState();
+    round.resolveTick({ ...NONE, secondKoed: true });
+    round.resolveTick({ ...NONE, firstKoed: true });
     expect(round.result).toBe(RoundOutcome.FirstWinsByKo);
   });
 });

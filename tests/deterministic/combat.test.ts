@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { ARENA_FLOOR_RADIUS, ARENA_WALL_THICKNESS } from '../../src/arena/colliders/ArenaTuning';
+import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { AttackState } from '../../src/combat/attacks/AttackController';
 import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
@@ -223,16 +224,164 @@ describe('ring-out', () => {
 
     expect(harness.roundState.isOver).toBe(false);
 
-    // Directly place the second Bey beyond the wall + ring-out margin,
-    // exactly like a strong knockback launch would end up (GDD section
-    // 130: ring-out is a pure position check, independent of how the Bey
-    // got there) — isolates the round-ending rule from knockback tuning.
-    harness.second.body.setTranslation({ x: ARENA_FLOOR_RADIUS + ARENA_WALL_THICKNESS + 1, y: 1, z: 0 }, true);
+    // Directly place the second Bey beyond the ring-out radius, exactly
+    // like a strong knockback launch would end up (GDD section 130:
+    // ring-out is a pure position check, independent of how the Bey got
+    // there, and deliberately not derived from the arena wall collider —
+    // this expectation must not move if the physical arena's size ever
+    // does).
+    harness.second.body.setTranslation({ x: RINGOUT_RADIUS_M + 1, y: 1, z: 0 }, true);
 
     const result = harness.tick(NO_ACTIONS, NO_ACTIONS);
 
     expect(result.ringOutSecond).toBe(true);
     expect(harness.roundState.isOver).toBe(true);
     expect(harness.roundState.result).toBe(RoundOutcome.FirstWinsByRingOut);
+  });
+
+  it('resolves a genuinely simultaneous double-ring-out as a Draw, not tiebroken by check order', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+
+    harness.first.body.setTranslation({ x: RINGOUT_RADIUS_M + 1, y: 1, z: 0 }, true);
+    harness.second.body.setTranslation({ x: -(RINGOUT_RADIUS_M + 1), y: 1, z: 0 }, true);
+
+    const result = harness.tick(NO_ACTIONS, NO_ACTIONS);
+
+    expect(result.ringOutFirst).toBe(true);
+    expect(result.ringOutSecond).toBe(true);
+    expect(harness.roundState.isOver).toBe(true);
+    expect(harness.roundState.result).toBe(RoundOutcome.Draw);
+  });
+});
+
+describe('simultaneous double-KO', () => {
+  it('resolves a genuinely simultaneous double-KO as a Draw, not tiebroken by hit-loop order', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+
+    // Pre-break both fighters directly (a pure system-level operation —
+    // it never touches roundState) so a single further qualifying hit on
+    // each is enough to KO both, without needing a long combat sequence
+    // to reach Broken on both sides first.
+    harness.first.stability.applyDamage(STABILITY_MAX);
+    harness.second.stability.applyDamage(STABILITY_MAX);
+    expect(harness.first.stability.isBroken).toBe(true);
+    expect(harness.second.stability.isBroken).toBe(true);
+    expect(harness.roundState.isOver).toBe(false);
+
+    // Reset position/velocity so the pre-break impulse doesn't leave
+    // anything mid-flight, then have both tap Circular Attack in lockstep
+    // so both qualifying hits land on the exact same tick.
+    harness.first.body.setTranslation(CLOSE_FIRST_SPAWN, true);
+    harness.second.body.setTranslation(CLOSE_SECOND_SPAWN, true);
+    harness.first.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    harness.second.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+
+    const firstAttacker = tapController();
+    const secondAttacker = tapController();
+
+    for (let i = 0; i < 60 && !harness.roundState.isOver; i++) {
+      harness.tick(
+        firstAttacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+        secondAttacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+      );
+    }
+
+    expect(harness.roundState.isOver).toBe(true);
+    expect(harness.roundState.result).toBe(RoundOutcome.Draw);
+  });
+});
+
+describe('RoundEnd freezes the simulation', () => {
+  it('stops advancing movement, attacks and resources once the round is over (Combat and RoundEnd are separate states)', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+
+    // End the round via ring-out, then keep feeding aggressive input.
+    harness.second.body.setTranslation({ x: RINGOUT_RADIUS_M + 1, y: 1, z: 0 }, true);
+    harness.tick(NO_ACTIONS, NO_ACTIONS);
+    expect(harness.roundState.isOver).toBe(true);
+
+    const frozenFirstPos = harness.first.body.translation();
+    const frozenFirstPosSnapshot = { x: frozenFirstPos.x, y: frozenFirstPos.y, z: frozenFirstPos.z };
+    const frozenSecondPos = harness.second.body.translation();
+    const frozenSecondPosSnapshot = { x: frozenSecondPos.x, y: frozenSecondPos.y, z: frozenSecondPos.z };
+    const frozenFirstStamina = harness.first.stamina.resource.fraction;
+    const frozenSecondStability = harness.second.stability.resource.fraction;
+
+    const attacker = tapController();
+    let sawAnyHitAfterRoundEnd = false;
+
+    for (let i = 0; i < 60; i++) {
+      const result = harness.tick(
+        attacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+        { held: new Set([Action.MoveForward]), pressedThisFrame: new Set(), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0 },
+      );
+      if (result.hitEvents.length > 0) sawAnyHitAfterRoundEnd = true;
+    }
+
+    expect(sawAnyHitAfterRoundEnd).toBe(false);
+    const finalFirstPos = harness.first.body.translation();
+    expect({ x: finalFirstPos.x, y: finalFirstPos.y, z: finalFirstPos.z }).toEqual(frozenFirstPosSnapshot);
+    const finalSecondPos = harness.second.body.translation();
+    expect({ x: finalSecondPos.x, y: finalSecondPos.y, z: finalSecondPos.z }).toEqual(frozenSecondPosSnapshot);
+    expect(harness.first.stamina.resource.fraction).toBe(frozenFirstStamina);
+    expect(harness.second.stability.resource.fraction).toBe(frozenSecondStability);
+    expect(harness.first.attack.getState()).toBe(AttackState.Neutral);
+    expect(harness.roundState.result).toBe(RoundOutcome.FirstWinsByRingOut);
+  });
+});
+
+describe('attacking mid-jump', () => {
+  it('still hits within vertical reach and does not disrupt the jump trajectory', async () => {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    // A longer settle than the other tests need: the hop only triggers
+    // once actually grounded, and the default settle() window still has
+    // the Bey mid-fall (not yet in contact) at this spawn height.
+    settle(harness, 40);
+
+    // Hop first (a couple of ticks of pure JumpDrift, no steering — GDD
+    // section 19 needs steering too to actually drift, we just want the
+    // vertical hop here), then tap Circular Attack while still airborne.
+    const attacker = new ScriptedController([
+      { fromTick: 0, held: [Action.JumpDrift] },
+      { fromTick: 2, held: [Action.Attack] },
+      { fromTick: 4, held: [] },
+    ]);
+
+    let sawAirborne = false;
+    let sawHitWhileAirborne = false;
+    let previousVerticalVelocity: number | null = null;
+    let maxVerticalVelocityDeltaWhileRising = 0;
+
+    // Only the ascent/early-fall matters here — stop comfortably before
+    // this particular hop's ground bounce (confirmed by tracing this exact
+    // scenario), whose own legitimate velocity discontinuity would
+    // otherwise be indistinguishable from "something disrupted the jump".
+    for (let i = 0; i < 30; i++) {
+      const result = harness.tick(attacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+      const verticalVelocity = harness.first.body.linvel().y;
+
+      if (!result.first.grounded) {
+        sawAirborne = true;
+        if (result.hitEvents.some((hit) => hit.attackerIsFirst)) sawHitWhileAirborne = true;
+
+        // Gravity alone should govern vertical velocity while airborne —
+        // the attack/dash pipeline must never touch it.
+        if (previousVerticalVelocity !== null) {
+          const delta = Math.abs(verticalVelocity - previousVerticalVelocity);
+          maxVerticalVelocityDeltaWhileRising = Math.max(maxVerticalVelocityDeltaWhileRising, delta);
+        }
+      }
+      previousVerticalVelocity = verticalVelocity;
+    }
+
+    expect(sawAirborne).toBe(true);
+    expect(sawHitWhileAirborne).toBe(true);
+    // A per-tick vertical velocity change well beyond what gravity alone
+    // produces in one fixed tick (~0.16 m/s at 60Hz) would mean something
+    // other than gravity touched it — i.e. the attack disrupted the jump.
+    expect(maxVerticalVelocityDeltaWhileRising).toBeLessThan(0.5);
   });
 });

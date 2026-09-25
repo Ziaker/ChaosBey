@@ -11,6 +11,14 @@
 // this fires Circular retroactively at release; see AttackController.
 export const TAP_MAX_HOLD_S = 0.12;
 
+// How far apart two Beys can be vertically and still have a hitbox
+// connect (GDD section 20/109: attacking mid-air must preserve the jump
+// trajectory, and a Bey well above/below the other shouldn't be hit just
+// because their X/Z happen to coincide). Generous enough to cover a normal
+// drift-hop's apex — Milestone 3's real jump system may need to revisit
+// this once jump height becomes variable/significant.
+export const HITBOX_VERTICAL_REACH_M = 1;
+
 // --- Circular Attack ---
 export const CIRCULAR_ACTIVE_DURATION_S = 0.25;
 export const CIRCULAR_RECOVERY_S = 0.3;

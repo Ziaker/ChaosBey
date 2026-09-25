@@ -20,6 +20,14 @@ export const STABILITY_RECOVERY_PER_S = 8;
 // there whiff shouldn't decisively end a match. Tuning placeholder.
 export const STABILITY_QUALIFYING_HIT_MIN_DAMAGE = 5;
 
+// Owner decision (2026-09-25): Broken is recoverable, not permanent — the
+// GDD requires the system to expose broken-state recovery rules. Avoiding
+// hits for this much longer than the normal in-fight recovery delay lets
+// a Broken Bey climb back to a small Stability floor and leave Broken,
+// giving the opponent a real (but not indefinite) window to finish it.
+export const STABILITY_BROKEN_RECOVERY_DELAY_AFTER_HIT_S = 6;
+export const STABILITY_BROKEN_RECOVERY_FLOOR = 20;
+
 // Wall/floor impacts also cost Stability (GDD section 37), scaled by how
 // hard the hit was (MovementController's detected impact speed delta).
 export const WALL_IMPACT_STABILITY_DAMAGE_PER_MPS = 0.8;

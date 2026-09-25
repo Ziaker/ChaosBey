@@ -9,12 +9,18 @@
 
 export const STAMINA_MAX = 100;
 
-// Passive drain tied to aggressive movement (GDD section 12): draining
-// while moving fast, not merely for existing.
-export const STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION = 0.5; // fraction of INTENDED_MAX_SPEED_MPS above which stamina drains
-export const STAMINA_DRAIN_PER_S_AT_FULL_SPEED = 3;
-// Slow passive recovery while under the drain threshold (not while attacking/charging).
-export const STAMINA_REGEN_PER_S = 1.5;
+// Owner decision (2026-09-25): Stamina never passively regenerates during
+// a round — it is the long-term wear-down resource (Attack Energy is the
+// fast-recovering offensive one; see AttackEnergyTuning.ts). A Bey always
+// loses a little Stamina just from continuous spin/combat, on top of
+// extra drain from aggressive movement — structured so additional costs
+// (e.g. per-impact) can be added later without a redesign.
+export const STAMINA_BASE_DRAIN_PER_S = 0.4;
+
+// Extra drain tied to aggressive movement (GDD section 12): draining
+// faster while moving fast, on top of the baseline above.
+export const STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION = 0.5; // fraction of INTENDED_MAX_SPEED_MPS above which the extra drain kicks in
+export const STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED = 3;
 
 // Degradation curve: below this fraction, physical penalties start
 // ramping in linearly down to zero stamina. Above it, no penalty at all —

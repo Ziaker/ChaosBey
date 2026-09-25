@@ -3,6 +3,11 @@
 // Win-condition detection and round-end state only. Best-of-3 match
 // structure, presentation and rule configuration are Milestone 10
 // (pregame/presentation) — this just answers "is the round over, and how".
+//
+// Draws are allowed and there is no hidden tiebreaker: resolveTick()
+// takes every KO/ring-out that happened during a single tick at once, so a
+// genuinely simultaneous double-KO or double-ring-out is never decided by
+// which side's event happened to be checked first — it resolves to Draw.
 // ============================================================
 
 export enum RoundOutcome {
@@ -11,6 +16,15 @@ export enum RoundOutcome {
   SecondWinsByKo = 'SecondWinsByKo',
   FirstWinsByRingOut = 'FirstWinsByRingOut',
   SecondWinsByRingOut = 'SecondWinsByRingOut',
+  Draw = 'Draw',
+}
+
+export interface TickRoundEvents {
+  /** A qualifying hit landed on first/second while already Broken (GDD section 29 Stability Break model), this tick. */
+  firstKoed: boolean;
+  secondKoed: boolean;
+  firstRingOut: boolean;
+  secondRingOut: boolean;
 }
 
 export class RoundState {
@@ -24,14 +38,19 @@ export class RoundState {
     return this.outcome;
   }
 
-  /** A qualifying hit landed on an already-Broken defender (GDD section 29 Stability Break model). */
-  registerKo(winnerIsFirst: boolean): void {
+  /** Resolves every KO/ring-out from a single tick together — call this once per tick with everything that happened, never per-event. */
+  resolveTick(events: TickRoundEvents): void {
     if (this.isOver) return;
-    this.outcome = winnerIsFirst ? RoundOutcome.FirstWinsByKo : RoundOutcome.SecondWinsByKo;
-  }
 
-  registerRingOut(loserIsFirst: boolean): void {
-    if (this.isOver) return;
-    this.outcome = loserIsFirst ? RoundOutcome.SecondWinsByRingOut : RoundOutcome.FirstWinsByRingOut;
+    const firstLost = events.firstKoed || events.firstRingOut;
+    const secondLost = events.secondKoed || events.secondRingOut;
+
+    if (firstLost && secondLost) {
+      this.outcome = RoundOutcome.Draw;
+    } else if (secondLost) {
+      this.outcome = events.secondKoed ? RoundOutcome.FirstWinsByKo : RoundOutcome.FirstWinsByRingOut;
+    } else if (firstLost) {
+      this.outcome = events.firstKoed ? RoundOutcome.SecondWinsByKo : RoundOutcome.SecondWinsByRingOut;
+    }
   }
 }
