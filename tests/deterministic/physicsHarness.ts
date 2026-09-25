@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { createArenaColliders } from '../../src/arena/colliders/createArenaColliders';
 import { createBeyRigidBody } from '../../src/bey/core/BeyRigidBody';
-import { BEY_COLLIDER_HALF_HEIGHT_M, BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
+import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { MovementController, type MovementSnapshot } from '../../src/bey/movement/MovementController';
 import { SpinController, type SpinSnapshot } from '../../src/bey/spin/SpinController';
 import { DriftController, type DriftState } from '../../src/drift/DriftController';
@@ -46,7 +46,7 @@ export class TestBeyHarness {
   }
 
   tick(actions: ControllerActions): TickResult {
-    const grounded = isGrounded(this.physics, this.beyBody, BEY_COLLIDER_HALF_HEIGHT_M, this.beyCollider);
+    const grounded = isGrounded(this.physics, this.beyCollider);
 
     const driftResult = this.drift.tick(this.beyBody, actions, grounded, FIXED_DELTA_SECONDS);
     this.movement.applyPreStep(this.beyBody, actions, FIXED_DELTA_SECONDS, grounded, driftResult.lateralGripOverridePerS);

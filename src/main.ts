@@ -10,7 +10,6 @@ import * as THREE from 'three';
 import { createBeyPrototypeScene } from './app/bootstrap/createBeyPrototypeScene';
 import { createRenderer } from './app/bootstrap/createRenderer';
 import { GameState, GameStateMachine } from './app/lifecycle/GameState';
-import { BEY_COLLIDER_HALF_HEIGHT_M } from './bey/core/BeyTuning';
 import { createDefaultRuntimeConfig } from './config/runtime/RuntimeConfig';
 import { DebugOverlay, type DebugOverlayState } from './debug/overlay/DebugOverlay';
 import { Action } from './input/actions/Action';
@@ -78,7 +77,7 @@ async function bootstrap(): Promise<void> {
         debugOverlay.toggle();
       }
 
-      const grounded = isGrounded(physics, prototype.beyBody, BEY_COLLIDER_HALF_HEIGHT_M, prototype.beyCollider);
+      const grounded = isGrounded(physics, prototype.beyCollider);
 
       const driftResult = prototype.drift.tick(prototype.beyBody, actions, grounded, fixedDeltaSeconds);
       prototype.movement.applyPreStep(prototype.beyBody, actions, fixedDeltaSeconds, grounded, driftResult.lateralGripOverridePerS);

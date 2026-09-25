@@ -114,7 +114,16 @@ export class MovementController {
     }
   }
 
-  /** Call after physics.step(). Reads the resulting velocity, detects collisions, and reports a full diagnostics snapshot. */
+  /**
+   * Call after physics.step(). Reads the resulting velocity, detects collisions, and reports a full diagnostics snapshot.
+   *
+   * Known limitation: impact detection only compares horizontal (X/Z)
+   * velocity, so a purely vertical impact (a hard floor landing with no
+   * horizontal motion) never triggers impactDeltaSpeedMps here — floor
+   * bounce is still handled by physics/restitution itself, this just means
+   * SpinController.registerImpact()/telemetry won't fire for it. Revisit
+   * once strong landings/vertical knockback matter (GDD section 20/109).
+   */
   postStep(body: RAPIER.RigidBody, grounded: boolean): MovementSnapshot {
     const vel = body.linvel();
     const actualVelocityVector: Vec2 = { x: vel.x, z: vel.z };

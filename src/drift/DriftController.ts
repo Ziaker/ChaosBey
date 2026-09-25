@@ -38,6 +38,9 @@ export class DriftController {
   tick(body: RAPIER.RigidBody, actions: ControllerActions, grounded: boolean, fixedDeltaSeconds: number): DriftTickResult {
     const jumpDriftHeld = actions.held.has(Action.JumpDrift);
     const jumpDriftPressed = actions.pressedThisFrame.has(Action.JumpDrift);
+    // The approved control is hop, then hold JumpDrift *while steering* to
+    // slide (GDD section 19) — holding JumpDrift straight must not drift.
+    const steering = actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight);
 
     switch (this.state) {
       case DriftState.Idle:
@@ -52,12 +55,12 @@ export class DriftController {
       case DriftState.Hopping:
         this.hopTimerS += fixedDeltaSeconds;
         if (this.hopTimerS >= HOP_MIN_AIRBORNE_DURATION_S && grounded) {
-          this.state = jumpDriftHeld ? DriftState.Drifting : DriftState.Idle;
+          this.state = jumpDriftHeld && steering ? DriftState.Drifting : DriftState.Idle;
         }
         break;
 
       case DriftState.Drifting:
-        if (!jumpDriftHeld || !grounded) {
+        if (!jumpDriftHeld || !grounded || !steering) {
           this.state = DriftState.Recovering;
           this.recoveryTimerS = 0;
         }

@@ -40,7 +40,13 @@ export function createArenaColliders(scene: THREE.Scene, physics: PhysicsWorld):
   floorMesh.position.y = -ARENA_FLOOR_THICKNESS / 2;
   group.add(floorMesh);
 
-  const floorBody = physics.rapierWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+  // Match the visual mesh exactly: its top surface is at y=0 (mesh center
+  // at -THICKNESS/2, half-height THICKNESS/2). The collider must be
+  // positioned the same way, not left at the body's default origin — the
+  // Bey should never appear to float or sink relative to what's rendered.
+  const floorBody = physics.rapierWorld.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed().setTranslation(0, -ARENA_FLOOR_THICKNESS / 2, 0),
+  );
   physics.rapierWorld.createCollider(
     RAPIER.ColliderDesc.cylinder(ARENA_FLOOR_THICKNESS / 2, ARENA_FLOOR_RADIUS)
       .setRestitution(FLOOR_MATERIAL.restitution)
