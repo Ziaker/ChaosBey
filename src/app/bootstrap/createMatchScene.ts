@@ -11,6 +11,7 @@ import { createBey, type Bey } from '../../bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../bey/core/BeyTuning';
 import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
+import { applyAttackProfileSettings, createDefaultAttackProfileSettings, type BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 
 // Opposite starting positions, facing each other — arbitrary, generous
@@ -49,11 +50,15 @@ function createSyncFn(body: Bey['body'], visual: BeyVisual) {
 // BeyArchetypes.ts) exists too and can be swapped in just as easily, since
 // all three are equally unapproved prototypes pending the owner's visual
 // approval gate (GDD section 96/97).
-export function createMatchScene(scene: THREE.Scene, physics: PhysicsWorld): MatchScene {
+export function createMatchScene(
+  scene: THREE.Scene,
+  physics: PhysicsWorld,
+  attackProfileSettings: BeyAttackProfileSettings = createDefaultAttackProfileSettings(),
+): MatchScene {
   createArenaColliders(scene, physics);
 
-  const first = createBey(physics, FIRST_SPAWN, ATTACK_ARCHETYPE);
-  const second = createBey(physics, SECOND_SPAWN, DEFENSE_ARCHETYPE);
+  const first = createBey(physics, FIRST_SPAWN, applyAttackProfileSettings(ATTACK_ARCHETYPE, attackProfileSettings));
+  const second = createBey(physics, SECOND_SPAWN, applyAttackProfileSettings(DEFENSE_ARCHETYPE, attackProfileSettings));
 
   const firstVisual = first.definition.appearance.createVisual();
   const secondVisual = second.definition.appearance.createVisual();

@@ -24,6 +24,7 @@ const KEY_TO_ACTION: Readonly<Record<string, Action>> = {
   KeyC: Action.Dodge,
   Escape: Action.Pause,
   F3: Action.DebugToggle,
+  F4: Action.SettingsToggle,
 };
 
 export class KeyboardController implements CombatController {

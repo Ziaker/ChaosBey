@@ -15,6 +15,7 @@ export enum Action {
   Dodge = 'Dodge',
   Pause = 'Pause',
   DebugToggle = 'DebugToggle',
+  SettingsToggle = 'SettingsToggle',
 }
 
 /**

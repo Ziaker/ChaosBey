@@ -33,7 +33,7 @@ import { createBeyMesh } from '../procedural-model/createBeyMesh';
  * from the raw knockback/Stability power already carried by its Ratings
  * (see BeyAttackProfile.ts). Engineering placeholder (GDD section 167).
  */
-const ATTACK_ATTACK_PROFILE: BeyAttackProfile = {
+export const ATTACK_ATTACK_PROFILE: BeyAttackProfile = {
   circularHitboxRadiusM: DEFAULT_ATTACK_PROFILE.circularHitboxRadiusM * 1.15,
   dashHitboxRadiusM: DEFAULT_ATTACK_PROFILE.dashHitboxRadiusM * 1.15,
   dashMinSpeedMps: DEFAULT_ATTACK_PROFILE.dashMinSpeedMps * 1.1,
@@ -45,7 +45,7 @@ const ATTACK_ATTACK_PROFILE: BeyAttackProfile = {
  * established "less aggressive, slower" identity. Engineering placeholder
  * (GDD section 167).
  */
-const DEFENSE_ATTACK_PROFILE: BeyAttackProfile = {
+export const DEFENSE_ATTACK_PROFILE: BeyAttackProfile = {
   circularHitboxRadiusM: DEFAULT_ATTACK_PROFILE.circularHitboxRadiusM * 0.9,
   dashHitboxRadiusM: DEFAULT_ATTACK_PROFILE.dashHitboxRadiusM * 0.9,
   dashMinSpeedMps: DEFAULT_ATTACK_PROFILE.dashMinSpeedMps * 0.85,
