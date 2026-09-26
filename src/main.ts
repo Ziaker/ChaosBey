@@ -183,7 +183,14 @@ async function bootstrap(): Promise<void> {
       // safe to check every tick, including a hitstop-frozen one where
       // nothing changed and this is a no-op: the pure ClashController's
       // state only actually advances inside a real tickMatch() call.
+      //
+      // clashResolvedThisTick must NOT be read directly off a reused,
+      // hitstop-frozen `result` — that's the exact same cached object the
+      // resolution tick itself returned, so its clashResolvedThisTick
+      // would otherwise still read non-null on every later frozen tick,
+      // re-triggering the resolution beat (and thus hitstop) forever.
       const currentClashState = clash.controller.getState();
+      const clashResolvedThisTick = isFrozenByHitstop ? null : result.clashResolvedThisTick;
       if (previousClashState === ClashState.Idle && currentClashState === ClashState.Active) {
         telemetry.record({
           kind: TelemetryEventKind.ClashStart,
@@ -195,8 +202,8 @@ async function bootstrap(): Promise<void> {
         stateMachine.transitionTo(GameState.Clash);
         clashCameraDirector.reset();
       }
-      if (result.clashResolvedThisTick) {
-        const clashResult = result.clashResolvedThisTick;
+      if (clashResolvedThisTick) {
+        const clashResult = clashResolvedThisTick;
         telemetry.record({
           kind: TelemetryEventKind.ClashResult,
           outcome: clashResult.outcome,
@@ -239,7 +246,7 @@ async function bootstrap(): Promise<void> {
         z: (firstPositionM.z + secondPositionM.z) / 2,
       };
 
-      if (result.clashResolvedThisTick) {
+      if (clashResolvedThisTick) {
         // Resolution beat (owner decision): a strong, dedicated impact
         // event at the clash point drives Milestone 4's existing
         // hitstop/shake/FOV-punch pipeline exactly like any other big
@@ -249,12 +256,14 @@ async function bootstrap(): Promise<void> {
         // CombatCameraController resumes driving the camera from here
         // (its knockback-follow bias will naturally settle on the loser,
         // or hold center for a Tie — see 'clashResolved' in
-        // KNOCKBACK_FOLLOW_EVENT_KINDS).
+        // KNOCKBACK_FOLLOW_EVENT_KINDS). Only fires once, the instant
+        // resolution happens — see clashResolvedThisTick's own definition
+        // above for why it must not be read off a hitstop-reused `result`.
         const resolutionEvent: ImpactEvent = {
           kind: 'clashResolved',
           magnitude: CLASH_RESOLVED_MAGNITUDE,
           worldPositionM: midpointM,
-          isFirst: result.clashResolvedThisTick.outcome !== ClashOutcome.SecondWins,
+          isFirst: clashResolvedThisTick.outcome !== ClashOutcome.SecondWins,
         };
         vfxManager.onImpactEvents([resolutionEvent]);
         lastCameraOutput = cameraDirector.tick({

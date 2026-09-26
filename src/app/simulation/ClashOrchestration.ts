@@ -158,6 +158,12 @@ export class ClashOrchestration {
     return { toResolveNormally: [...passthrough, { ...firstAttackerHit, forceMultiplier: 1 }, { ...secondAttackerHit, forceMultiplier: 1 }] };
   }
 
+  /** Advances the Clash by one tick while it is Idle (a no-op) or Cooldown (decrements the countdown, returning to Idle at 0) — call this once per normal (non-Active) tickMatch() tick so Cooldown actually elapses; ClashController.tick() ignores its input parameters entirely outside of Active, so an empty input is exactly equivalent to a real one here. */
+  tickIdleOrCooldown(fixedDeltaSeconds: number): void {
+    const noInput: ClashCombatantInputTick = { pressedActionIds: new Set(), aiMashEventThisTick: false };
+    this.controller.tick(fixedDeltaSeconds, noInput, noInput);
+  }
+
   /** Advances an Active Clash by one tick: samples real Z/X/C mash input for both sides (the AI contributing through the exact same per-combatant abstraction, per ClashMash.ts), and reports the resolution the instant it happens (Active -> Cooldown transition), if any. */
   tickActive(fixedDeltaSeconds: number, firstActions: ControllerActions, secondActions: ControllerActions): { resolution: ActiveClashResolution | null } {
     const firstInput: ClashCombatantInputTick = { pressedActionIds: buildMashActionSet(firstActions), aiMashEventThisTick: false };

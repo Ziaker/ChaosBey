@@ -181,6 +181,11 @@ export function tickMatch(
     };
   }
 
+  // Advances Cooldown's countdown (a no-op while Idle) — the Active branch
+  // above already advances the Clash via its own tickActive() call, so
+  // this only needs to run on the normal (non-Active) path.
+  clash.tickIdleOrCooldown(fixedDeltaSeconds);
+
   const firstGrounded = isGrounded(physics, first.collider);
   const secondGrounded = isGrounded(physics, second.collider);
 
