@@ -21,8 +21,10 @@
 // ============================================================
 
 import { DEFAULT_ATTACK_PROFILE, type BeyAttackProfile } from './BeyAttackProfile';
+import { DEFAULT_AUDIO_PROFILE, type BeyAudioProfile } from './BeyAudioProfile';
 import type { BeyDefinition } from './BeyDefinition';
 import { DEFAULT_HANDLING_PROFILE } from './BeyHandlingProfile';
+import type { BeyParticleProfile } from './BeyParticleProfile';
 import type { BeyPhysicalProfile } from './BeyPhysicalProfile';
 import { BEY_MASS_KG } from '../core/BeyTuning';
 import { createBeyMesh } from '../procedural-model/createBeyMesh';
@@ -63,12 +65,23 @@ export const DEFENSE_ATTACK_PROFILE: BeyAttackProfile = {
  */
 const ATTACK_PHYSICAL: BeyPhysicalProfile = { colliderRadiusM: 0.65, colliderHalfHeightM: 0.18, massKg: BEY_MASS_KG * 0.85 };
 
+// Placeholder red — same prototype colors as the mesh's colorOverride
+// below, reused (not reinvented) as this archetype's spark/landing VFX
+// tint, so Attack's particle identity doesn't introduce a second color
+// decision (GDD section 96/97's approval gate is still pending either way).
+const ATTACK_BODY_COLOR_HEX = 0xff5c5c;
+const ATTACK_EMISSIVE_COLOR_HEX = 0x4a0b0b;
+const ATTACK_PARTICLE_PROFILE: BeyParticleProfile = { sparkTintHex: ATTACK_BODY_COLOR_HEX, landingTintHex: ATTACK_EMISSIVE_COLOR_HEX };
+const ATTACK_AUDIO_PROFILE: BeyAudioProfile = { hitCueId: 'attack-prototype-hit', dashCueId: 'attack-prototype-dash' };
+
 export const ATTACK_ARCHETYPE: BeyDefinition = {
   id: 'attack-prototype',
   name: 'Attack (Prototype)',
   physical: ATTACK_PHYSICAL,
   ratings: { attack: 8, defense: 3, stamina: 4 },
   attack: ATTACK_ATTACK_PROFILE,
+  particle: ATTACK_PARTICLE_PROFILE,
+  audio: ATTACK_AUDIO_PROFILE,
   handling: {
     ...DEFAULT_HANDLING_PROFILE,
     accelerationMps2: DEFAULT_HANDLING_PROFILE.accelerationMps2 * 1.2,
@@ -80,7 +93,7 @@ export const ATTACK_ARCHETYPE: BeyDefinition = {
     // PROTOTYPE ONLY — silhouette/proportion + placeholder red, not an approved visual design.
     createVisual: () =>
       createBeyMesh({
-        colorOverride: { bodyColorHex: 0xff5c5c, emissiveColorHex: 0x4a0b0b },
+        colorOverride: { bodyColorHex: ATTACK_BODY_COLOR_HEX, emissiveColorHex: ATTACK_EMISSIVE_COLOR_HEX },
         colliderHalfHeightM: ATTACK_PHYSICAL.colliderHalfHeightM,
         proportions: {
           ring: { topRadiusM: 0.75, bottomRadiusM: 0.55, heightM: 0.14 },
@@ -103,12 +116,21 @@ export const ATTACK_ARCHETYPE: BeyDefinition = {
  */
 const DEFENSE_PHYSICAL: BeyPhysicalProfile = { colliderRadiusM: 0.62, colliderHalfHeightM: 0.27, massKg: BEY_MASS_KG * 1.25 };
 
+// Placeholder blue — reused (not reinvented) from the mesh's colorOverride
+// below, same reasoning as Attack's particle profile.
+const DEFENSE_BODY_COLOR_HEX = 0x4f8cff;
+const DEFENSE_EMISSIVE_COLOR_HEX = 0x0b1e4a;
+const DEFENSE_PARTICLE_PROFILE: BeyParticleProfile = { sparkTintHex: DEFENSE_BODY_COLOR_HEX, landingTintHex: DEFENSE_EMISSIVE_COLOR_HEX };
+const DEFENSE_AUDIO_PROFILE: BeyAudioProfile = { hitCueId: 'defense-prototype-hit', dashCueId: 'defense-prototype-dash' };
+
 export const DEFENSE_ARCHETYPE: BeyDefinition = {
   id: 'defense-prototype',
   name: 'Defense (Prototype)',
   physical: DEFENSE_PHYSICAL,
   ratings: { attack: 3, defense: 8, stamina: 4 },
   attack: DEFENSE_ATTACK_PROFILE,
+  particle: DEFENSE_PARTICLE_PROFILE,
+  audio: DEFENSE_AUDIO_PROFILE,
   handling: {
     ...DEFAULT_HANDLING_PROFILE,
     accelerationMps2: DEFAULT_HANDLING_PROFILE.accelerationMps2 * 0.85,
@@ -120,7 +142,7 @@ export const DEFENSE_ARCHETYPE: BeyDefinition = {
     // PROTOTYPE ONLY — silhouette/proportion + placeholder blue, not an approved visual design.
     createVisual: () =>
       createBeyMesh({
-        colorOverride: { bodyColorHex: 0x4f8cff, emissiveColorHex: 0x0b1e4a },
+        colorOverride: { bodyColorHex: DEFENSE_BODY_COLOR_HEX, emissiveColorHex: DEFENSE_EMISSIVE_COLOR_HEX },
         colliderHalfHeightM: DEFENSE_PHYSICAL.colliderHalfHeightM,
         proportions: {
           ring: { topRadiusM: 0.62, bottomRadiusM: 0.56, heightM: 0.1 },
@@ -143,18 +165,27 @@ export const DEFENSE_ARCHETYPE: BeyDefinition = {
  */
 const STAMINA_PHYSICAL: BeyPhysicalProfile = { colliderRadiusM: 0.58, colliderHalfHeightM: 0.24, massKg: BEY_MASS_KG };
 
+// Placeholder green — reused (not reinvented) from the mesh's
+// colorOverride below, same reasoning as Attack's particle profile.
+const STAMINA_BODY_COLOR_HEX = 0x4fffb0;
+const STAMINA_EMISSIVE_COLOR_HEX = 0x0b4a2e;
+const STAMINA_PARTICLE_PROFILE: BeyParticleProfile = { sparkTintHex: STAMINA_BODY_COLOR_HEX, landingTintHex: STAMINA_EMISSIVE_COLOR_HEX };
+const STAMINA_AUDIO_PROFILE: BeyAudioProfile = { hitCueId: 'stamina-prototype-hit', dashCueId: 'stamina-prototype-dash' };
+
 export const STAMINA_ARCHETYPE: BeyDefinition = {
   id: 'stamina-prototype',
   name: 'Stamina (Prototype)',
   physical: STAMINA_PHYSICAL,
   ratings: { attack: 4, defense: 4, stamina: 8 },
   attack: DEFAULT_ATTACK_PROFILE,
+  particle: STAMINA_PARTICLE_PROFILE,
+  audio: STAMINA_AUDIO_PROFILE,
   handling: { ...DEFAULT_HANDLING_PROFILE },
   appearance: {
     // PROTOTYPE ONLY — silhouette/proportion + placeholder green, not an approved visual design.
     createVisual: () =>
       createBeyMesh({
-        colorOverride: { bodyColorHex: 0x4fffb0, emissiveColorHex: 0x0b4a2e },
+        colorOverride: { bodyColorHex: STAMINA_BODY_COLOR_HEX, emissiveColorHex: STAMINA_EMISSIVE_COLOR_HEX },
         colliderHalfHeightM: STAMINA_PHYSICAL.colliderHalfHeightM,
         proportions: {
           ring: { topRadiusM: 0.6, bottomRadiusM: 0.48, heightM: 0.1 },

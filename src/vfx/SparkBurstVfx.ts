@@ -5,6 +5,10 @@
 // same "engineering placeholder visual" precedent as Milestone 1's
 // procedural Bey mesh (GDD section 167); the trigger/scaling logic is the
 // approved part, not this exact look.
+//
+// `tintHex` (Milestone 6) lets a caller color this burst with a specific
+// Bey's own BeyParticleProfile.sparkTintHex instead of the fixed default —
+// see VfxManager, which is the real per-archetype-identity consumer.
 // ============================================================
 
 import * as THREE from 'three';
@@ -32,7 +36,7 @@ export interface ActiveSparkBurst {
   lifetimeS: number;
 }
 
-export function createSparkBurst(magnitude: number, positionM: WorldPositionM): ActiveSparkBurst {
+export function createSparkBurst(magnitude: number, positionM: WorldPositionM, tintHex: number = SPARK_COLOR_HEX): ActiveSparkBurst {
   const particleCount = Math.max(1, Math.round(SPARK_BASE_PARTICLE_COUNT + magnitude * SPARK_MAX_EXTRA_PARTICLE_COUNT));
   const speedMps = SPARK_BASE_SPEED_MPS + magnitude * SPARK_MAX_EXTRA_SPEED_MPS;
   const positions = new Float32Array(particleCount * 3);
@@ -51,7 +55,7 @@ export function createSparkBurst(magnitude: number, positionM: WorldPositionM): 
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const material = new THREE.PointsMaterial({ color: SPARK_COLOR_HEX, size: SPARK_SIZE_M, transparent: true, opacity: 1, depthWrite: false });
+  const material = new THREE.PointsMaterial({ color: tintHex, size: SPARK_SIZE_M, transparent: true, opacity: 1, depthWrite: false });
   const points = new THREE.Points(geometry, material);
   points.position.set(positionM.x, positionM.y, positionM.z);
   points.frustumCulled = false;
