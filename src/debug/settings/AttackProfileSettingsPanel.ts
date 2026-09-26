@@ -1,17 +1,20 @@
 // ============================================================
-// ATTACK PROFILE SETTINGS PANEL (MILESTONE 6, DebugLab-style tooling)
+// ATTACK PROFILE SETTINGS PANEL (MILESTONE 6, DebugLab-style/dev tuning overlay)
 // Owner requirement (PR #8 review, [OWNER REQUIRED — RESOLVED] /
 // [CHATGPT REVIEW]): the per-archetype BeyAttackProfile values (hitbox
 // reach / Dash speed) must be editable from the game's settings rather
 // than locked in implementation code.
 //
-// This is deliberately DebugLab-style tooling (GameState.DebugLab, GDD
-// section 9, already reserves that state for exactly this kind of
-// dev-facing tool with no screen built yet) — NOT the real Milestone 10
-// PregameSetup screen MatchConfig.ts's own comment defers real pre-match
-// UI to, and NOT a final visual design (no material/color/layout decision
-// here; GDD section 96/97's visual approval gate is still pending). Bare
-// functional DOM controls only, styled like the existing DebugOverlay.
+// This is deliberately a DebugLab-style/dev tuning overlay, in the spirit
+// of GameState.DebugLab (GDD section 9, already reserves that state for
+// exactly this kind of dev-facing tool with no screen built yet) — but it
+// is NOT wired to that GameState: it mounts unconditionally at bootstrap
+// (F4 to toggle) and doesn't participate in any state transition. It is
+// also NOT the real Milestone 10 PregameSetup screen MatchConfig.ts's own
+// comment defers real pre-match UI to, and NOT a final visual design (no
+// material/color/layout decision here; GDD section 96/97's visual
+// approval gate is still pending). Bare functional DOM controls only,
+// styled like the existing DebugOverlay.
 //
 // Edits persist to localStorage (AttackProfileStorage.ts) and take effect
 // the same way MatchConfig's pre-match override does: resolved once at the
