@@ -13,6 +13,10 @@
 // Like MatchConfig, this only resolves the config a Bey is CREATED with —
 // it is applied at match/Bey creation time (see applyAttackProfileSettings
 // below), not hot-swapped into a running AttackController mid-match.
+//
+// Owner review (PR #8): also enforces dashMinSpeedMps <= dashMaxSpeedMps —
+// per-field sanitizing alone can't catch a min/max pair that's individually
+// valid but inverted (see resolveOneProfile below).
 // ============================================================
 
 import type { BeyAttackProfile } from '../../bey/archetype/BeyAttackProfile';
@@ -46,11 +50,20 @@ function sanitizeField(value: unknown, fallback: number): number {
 }
 
 function resolveOneProfile(defaults: BeyAttackProfile, override: Partial<BeyAttackProfile> | undefined): BeyAttackProfile {
+  const dashMinSpeedMps = sanitizeField(override?.dashMinSpeedMps, defaults.dashMinSpeedMps);
+  const dashMaxSpeedMps = sanitizeField(override?.dashMaxSpeedMps, defaults.dashMaxSpeedMps);
+  // AttackController lerps a Dash's speed from min to max as charge fills;
+  // min > max wouldn't crash, it would just make a fully-charged Dash
+  // SLOWER than a barely-charged one — a broken-feeling inversion, not a
+  // legitimate setting. The defaults are always min <= max by construction
+  // (built from the same base constants scaled by one positive factor —
+  // see BeyArchetypes.ts), so falling back to both is always safe.
+  const dashSpeedRangeValid = dashMinSpeedMps <= dashMaxSpeedMps;
   return {
     circularHitboxRadiusM: sanitizeField(override?.circularHitboxRadiusM, defaults.circularHitboxRadiusM),
     dashHitboxRadiusM: sanitizeField(override?.dashHitboxRadiusM, defaults.dashHitboxRadiusM),
-    dashMinSpeedMps: sanitizeField(override?.dashMinSpeedMps, defaults.dashMinSpeedMps),
-    dashMaxSpeedMps: sanitizeField(override?.dashMaxSpeedMps, defaults.dashMaxSpeedMps),
+    dashMinSpeedMps: dashSpeedRangeValid ? dashMinSpeedMps : defaults.dashMinSpeedMps,
+    dashMaxSpeedMps: dashSpeedRangeValid ? dashMaxSpeedMps : defaults.dashMaxSpeedMps,
   };
 }
 

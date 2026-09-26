@@ -77,6 +77,34 @@ describe('AttackProfileSettings — malformed overrides fail safe to the archety
   }
 });
 
+describe('AttackProfileSettings — an inverted dashMinSpeedMps/dashMaxSpeedMps pair falls back to the defaults', () => {
+  const defaults = createDefaultAttackProfileSettings();
+
+  it('min > max (each individually a valid positive number) falls back to both defaults, not a broken inversion', () => {
+    const resolved = resolveAttackProfileSettings({ attack: { dashMinSpeedMps: 50, dashMaxSpeedMps: 10 } });
+    expect(resolved.attack.dashMinSpeedMps).toBe(defaults.attack.dashMinSpeedMps);
+    expect(resolved.attack.dashMaxSpeedMps).toBe(defaults.attack.dashMaxSpeedMps);
+  });
+
+  it('min == max is a valid (if degenerate) range and is kept as given', () => {
+    const resolved = resolveAttackProfileSettings({ defense: { dashMinSpeedMps: 7, dashMaxSpeedMps: 7 } });
+    expect(resolved.defense.dashMinSpeedMps).toBe(7);
+    expect(resolved.defense.dashMaxSpeedMps).toBe(7);
+  });
+
+  it('overriding only dashMaxSpeedMps below the default dashMinSpeedMps still falls back to defaults for both', () => {
+    const resolved = resolveAttackProfileSettings({ stamina: { dashMaxSpeedMps: defaults.stamina.dashMinSpeedMps / 2 } });
+    expect(resolved.stamina.dashMinSpeedMps).toBe(defaults.stamina.dashMinSpeedMps);
+    expect(resolved.stamina.dashMaxSpeedMps).toBe(defaults.stamina.dashMaxSpeedMps);
+  });
+
+  it('a valid, non-inverted override is unaffected by the range check', () => {
+    const resolved = resolveAttackProfileSettings({ attack: { dashMinSpeedMps: 5, dashMaxSpeedMps: 15 } });
+    expect(resolved.attack.dashMinSpeedMps).toBe(5);
+    expect(resolved.attack.dashMaxSpeedMps).toBe(15);
+  });
+});
+
 describe('AttackProfileSettings — applyAttackProfileSettings() targets only the matching archetype', () => {
   it('replaces only the .attack field of the matching archetype definition, leaving every other field untouched', () => {
     const settings = resolveAttackProfileSettings({ attack: { dashMaxSpeedMps: 99 } });
