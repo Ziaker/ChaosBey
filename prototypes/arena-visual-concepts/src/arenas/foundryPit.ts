@@ -10,7 +10,7 @@ import { ARENA_RADIUS, bowlFloor, canvasTexture, disposeTree, floorCanvas, onCir
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
-const BOWL_DEPTH = 2.2;             // Default rim height above the center (m). Classic dish.
+const BOWL_DEPTH = 3.2;             // Default rim height above the center (m). Owner-approved value (all arenas).
 const WALL_HEIGHT = 1.8;            // Visible wall height above the rim (m).
 const WALL_SEGMENTS = 16;           // Heavy steel wall panels around the ring.
 const LAMP_COUNT = 4;               // Overhead work lamps.

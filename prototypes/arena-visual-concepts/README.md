@@ -2,7 +2,7 @@
 
 An interactive Three.js page for comparing **three temporary visual directions for the arena** before its final look is approved (GDD sections 35, 36 and 98). All three use the current game arena scale from `src/arena/colliders/ArenaTuning.ts`: floor radius 12 m and a wall of about 2 m. The Beys shown are the round-2 concepts from `../bey-visual-concepts/`, at game size.
 
-**Bowl depth:** each arena has its own profile. A is a parabolic dish (2.2 m by default), B is a funnel that slopes almost to the center (3.0 m), and C has a flat 2.6 m center plateau and then a curve (2.2 m). The slider changes the depth live. The game's physics floor is still **flat**; making it concave is a gameplay decision for later (GDD section 35).
+**Bowl depth (approved):** 3.2 m of rim height above the center for all arenas; see `docs/design-decisions/visual-prototypes-approval.md`. Each arena keeps its own profile: A is a parabolic dish, B is a funnel and C has a flat 2.6 m center plateau and then a curve. The slider changes the depth live for comparison. The game's physics floor is still **flat**, and implementing the concave floor is planned in that decision doc.
 
 This is **visual exploration only**. It imports nothing from `src/`, and it changes no colliders, ring-out rules, dimensions or gameplay. The Bey movement is a scripted demo loop, not physics.
 

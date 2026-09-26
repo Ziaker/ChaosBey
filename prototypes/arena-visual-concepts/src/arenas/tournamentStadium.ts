@@ -10,7 +10,7 @@ import { ARENA_RADIUS, bowlFloor, canvasTexture, disposeTree, floorCanvas, seede
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
-const BOWL_DEPTH = 2.2;            // Default rim height above the center (m).
+const BOWL_DEPTH = 3.2;            // Default rim height above the center (m). Owner-approved value (all arenas).
 const FLAT_CENTER = 2.6;           // Flat center plateau radius (m).
 const WALL_HEIGHT = 1.9;           // Polycarbonate wall height (m).
 const POSTS = 24;

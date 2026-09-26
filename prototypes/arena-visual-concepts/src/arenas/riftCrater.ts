@@ -10,7 +10,7 @@ import { ARENA_RADIUS, bowlFloor, canvasTexture, disposeTree, floorCanvas, seede
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
-const BOWL_DEPTH = 3.0;               // Default crater depth (m): the deepest of the three.
+const BOWL_DEPTH = 3.2;               // Default crater depth (m). Owner-approved value (all arenas).
 const BARRIER_HEIGHT = 2.2;           // Energy barrier height above the rim (m).
 const FISSURE_COLOR = 0x8f6bff;       // Normal fissure glow (violet).
 const CLASH_COLOR = 0xff3fb4;         // Fissures + barrier shift to magenta on Clash.
