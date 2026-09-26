@@ -17,19 +17,15 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import { type ControllerActions, Action } from '../../input/actions/Action';
 import { add, dot, fromYaw, length, scale, signedAngleBetween, type Vec2 } from '../../physics/Vec2';
 import {
-  ACCELERATION_MPS2,
   AIRBORNE_ACCELERATION_FACTOR,
   AIRBORNE_LATERAL_GRIP_PER_S,
   IMPACT_VELOCITY_DELTA_THRESHOLD_MPS,
-  INTENDED_MAX_SPEED_MPS,
-  LATERAL_GRIP_PER_S,
   LONGITUDINAL_DRAG_PER_S,
   OVERSPEED_DRAG_PER_MPS_OVER,
   POST_IMPACT_GRIP_SUPPRESSION_S,
-  REVERSE_ACCELERATION_MPS2,
-  STEERING_MAX_TURN_RATE_RAD_S,
   STEERING_RESPONSE_PER_S,
 } from './MovementTuning';
+import { DEFAULT_HANDLING_PROFILE, type BeyHandlingProfile } from '../archetype/BeyHandlingProfile';
 
 export interface MovementPreStepInput {
   actions: ControllerActions;
@@ -76,8 +72,12 @@ export class MovementController {
   private postImpactCooldownRemainingS = 0;
 
   private lastHeadingForward: Vec2 = fromYaw(0);
-  private lastLateralGripPerS = LATERAL_GRIP_PER_S;
+  private lastLateralGripPerS: number;
   private intendedVelocityThisTick: Vec2 | null = null;
+
+  constructor(private readonly handling: BeyHandlingProfile = DEFAULT_HANDLING_PROFILE) {
+    this.lastLateralGripPerS = handling.lateralGripPerS;
+  }
 
   /** Current heading, live (not lagged behind a snapshot) — for consumers like AttackController's lock-on that need it mid-tick, before this tick's postStep(). */
   getHeadingRad(): number {
@@ -95,7 +95,7 @@ export class MovementController {
       headingForward = fromYaw(this.headingRad);
     } else {
       const steerInput = (actions.held.has(Action.SteerRight) ? 1 : 0) - (actions.held.has(Action.SteerLeft) ? 1 : 0);
-      const targetTurnRate = steerInput * STEERING_MAX_TURN_RATE_RAD_S;
+      const targetTurnRate = steerInput * this.handling.turnRateRadS;
       this.turnRateRadPerS += (targetTurnRate - this.turnRateRadPerS) * Math.min(1, STEERING_RESPONSE_PER_S * fixedDeltaSeconds);
       this.headingRad += this.turnRateRadPerS * fixedDeltaSeconds;
       headingForward = fromYaw(this.headingRad);
@@ -118,14 +118,14 @@ export class MovementController {
       const accelFactor = (grounded ? 1 : AIRBORNE_ACCELERATION_FACTOR) * staminaAccelFactor;
       newLongitudinalSpeed = longitudinalSpeed;
       if (throttleInput > 0) {
-        newLongitudinalSpeed += ACCELERATION_MPS2 * accelFactor * fixedDeltaSeconds;
+        newLongitudinalSpeed += this.handling.accelerationMps2 * accelFactor * fixedDeltaSeconds;
       } else if (throttleInput < 0) {
-        newLongitudinalSpeed -= REVERSE_ACCELERATION_MPS2 * accelFactor * fixedDeltaSeconds;
+        newLongitudinalSpeed -= this.handling.reverseAccelerationMps2 * accelFactor * fixedDeltaSeconds;
       }
 
       const speedAbs = Math.abs(newLongitudinalSpeed);
-      if (speedAbs > INTENDED_MAX_SPEED_MPS) {
-        const over = speedAbs - INTENDED_MAX_SPEED_MPS;
+      if (speedAbs > this.handling.maxSpeedMps) {
+        const over = speedAbs - this.handling.maxSpeedMps;
         newLongitudinalSpeed -= Math.sign(newLongitudinalSpeed) * over * OVERSPEED_DRAG_PER_MPS_OVER * fixedDeltaSeconds;
       }
       newLongitudinalSpeed *= Math.max(0, 1 - LONGITUDINAL_DRAG_PER_S * fixedDeltaSeconds);
@@ -133,7 +133,9 @@ export class MovementController {
 
     // A Dash Attack commits fully to its locked-on line — no independent
     // lateral slide fighting the dash direction while it's active.
-    const lateralGripPerS = dashOverride ? LATERAL_GRIP_PER_S * 4 : (lateralGripOverridePerS ?? (grounded ? LATERAL_GRIP_PER_S : AIRBORNE_LATERAL_GRIP_PER_S));
+    const lateralGripPerS = dashOverride
+      ? this.handling.lateralGripPerS * 4
+      : (lateralGripOverridePerS ?? (grounded ? this.handling.lateralGripPerS : AIRBORNE_LATERAL_GRIP_PER_S));
     const newLateral = scale(lateralVec, Math.max(0, 1 - lateralGripPerS * fixedDeltaSeconds));
 
     const newVelHoriz = add(scale(headingForward, newLongitudinalSpeed), newLateral);

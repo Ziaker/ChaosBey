@@ -19,14 +19,25 @@ export interface BeyVisual {
   readonly spinGroup: THREE.Group;
 }
 
-export function createBeyMesh(): BeyVisual {
+export interface BeyMeshColorOverride {
+  /** PROTOTYPE differentiation only (GDD section 96/97) — not an approved final material/color. See BeyArchetypes.ts. */
+  bodyColorHex: number;
+  emissiveColorHex: number;
+}
+
+export function createBeyMesh(colorOverride?: BeyMeshColorOverride): BeyVisual {
   const group = new THREE.Group();
   const spinGroup = new THREE.Group();
   group.add(spinGroup);
 
   const bodyMesh = new THREE.Mesh(
     new THREE.CylinderGeometry(BEY_COLLIDER_RADIUS_M, BEY_COLLIDER_RADIUS_M * 0.75, BEY_COLLIDER_HALF_HEIGHT_M * 2, 28),
-    new THREE.MeshStandardMaterial({ color: 0x4fd1ff, emissive: 0x0b3a4a, roughness: 0.4, metalness: 0.6 }),
+    new THREE.MeshStandardMaterial({
+      color: colorOverride?.bodyColorHex ?? 0x4fd1ff,
+      emissive: colorOverride?.emissiveColorHex ?? 0x0b3a4a,
+      roughness: 0.4,
+      metalness: 0.6,
+    }),
   );
   spinGroup.add(bodyMesh);
 

@@ -36,14 +36,19 @@ export const FULL_PHYSICAL_CONDITION: PhysicalCondition = {
 };
 
 export class StaminaSystem {
-  readonly resource = new Resource(STAMINA_MAX);
+  readonly resource: Resource;
+
+  /** staminaStat: archetype Stamina multiplier (GDD section 6/31, Milestone 6) — 1 = neutral. Higher gives a larger max pool and divides drain, so it degrades slower; see BeyStats.ts. */
+  constructor(private readonly staminaStat: number = 1) {
+    this.resource = new Resource(STAMINA_MAX * staminaStat);
+  }
 
   /** Stamina only ever drains during a round (owner decision 2026-09-25: no passive in-round regen) — a small baseline drain from continuous spin/combat, plus extra drain the faster the Bey moves. */
   tick(currentSpeedMps: number, fixedDeltaSeconds: number): void {
     const speedFraction = currentSpeedMps / INTENDED_MAX_SPEED_MPS;
     const extraEffortFraction = Math.max(0, speedFraction - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION) / (1 - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION);
     const drainPerS = STAMINA_BASE_DRAIN_PER_S + STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED * Math.min(1, extraEffortFraction);
-    this.resource.subtract(drainPerS * fixedDeltaSeconds);
+    this.resource.subtract((drainPerS / this.staminaStat) * fixedDeltaSeconds);
   }
 
   getPhysicalCondition(): PhysicalCondition {

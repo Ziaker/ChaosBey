@@ -365,6 +365,7 @@ export function tickMatch(
   for (const resolved of toResolveNormally) {
     const hit = resolved.hit;
     const defenderIsFirst = !hit.attackerIsFirst;
+    const attacker = hit.attackerIsFirst ? first : second;
     const defender = hit.attackerIsFirst ? second : first;
 
     if (hit.caughtOpponentDashing) {
@@ -378,7 +379,7 @@ export function tickMatch(
       // ever come this period), otherwise arm the short pending window
       // until it actually leaves the ground.
       defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
-      applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage));
+      applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage, defender.definition.stats.defense));
       continue;
     }
 
@@ -388,6 +389,8 @@ export function tickMatch(
       defenderSpeedMps: resolved.defenderSpeedMps,
       defenderStabilityFraction: resolved.defenderStabilityFraction,
       defenderStaminaPenaltyFraction: resolved.defenderStaminaPenaltyFraction,
+      attackStat: attacker.definition.stats.attack,
+      defenseStat: defender.definition.stats.defense,
       attackerVelocityXZ: resolved.attackerVelocityXZ,
       impactDirectionXZ: normalize(subtract(resolved.defenderPositionXZ, resolved.attackerPositionXZ)),
     });
@@ -396,7 +399,11 @@ export function tickMatch(
     defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
     combatEvents.push({ kind: 'knockback', targetIsFirst: defenderIsFirst, force: knockback.force });
 
-    applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage) * resolved.forceMultiplier);
+    applyStabilityDamageAndTrackKo(
+      defenderIsFirst,
+      defender,
+      computeStabilityDamage(hit.hitbox.stabilityDamage, defender.definition.stats.defense) * resolved.forceMultiplier,
+    );
   }
 
   const ringOutFirst = isRingOut(firstPos);

@@ -19,6 +19,7 @@ export interface BeyRigidBody {
 export function createBeyRigidBody(
   physics: PhysicsWorld,
   spawnPosition: { x: number; y: number; z: number },
+  massKg: number = BEY_MASS_KG,
 ): BeyRigidBody {
   const body = physics.rapierWorld.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
@@ -34,7 +35,7 @@ export function createBeyRigidBody(
 
   const collider = physics.rapierWorld.createCollider(
     RAPIER.ColliderDesc.cylinder(BEY_COLLIDER_HALF_HEIGHT_M, BEY_COLLIDER_RADIUS_M)
-      .setMass(BEY_MASS_KG)
+      .setMass(massKg)
       .setRestitution(BEY_MATERIAL.restitution)
       .setFriction(BEY_MATERIAL.friction),
     body,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeKnockback, type KnockbackInput } from '../../src/combat/knockback/Knockback';
+import { computeKnockback, computeStabilityDamage, type KnockbackInput } from '../../src/combat/knockback/Knockback';
 
 // Stationary attacker / arbitrary impact direction — the collision-angle
 // factor is then a fixed neutral midpoint (see the dedicated describe
@@ -14,6 +14,8 @@ function input(overrides: Partial<KnockbackInput> = {}): KnockbackInput {
     defenderSpeedMps: 0,
     defenderStabilityFraction: 1,
     defenderStaminaPenaltyFraction: 0,
+    attackStat: 1,
+    defenseStat: 1,
     ...NEUTRAL_ANGLE_INPUT,
     ...overrides,
   };
@@ -90,5 +92,38 @@ describe('computeKnockback collision angle factor (GDD section 27)', () => {
 
     expect(Number.isFinite(result.force)).toBe(true);
     expect(result.force).toBeGreaterThan(0);
+  });
+});
+
+describe('computeKnockback archetype Attack/Defense stats (Milestone 6, GDD section 6/31)', () => {
+  it('is unchanged from pre-Milestone-6 behavior at neutral (1.0) stats', () => {
+    const neutral = computeKnockback(input({ attackStat: 1, defenseStat: 1 }));
+    const explicitNeutral = computeKnockback(input({}));
+
+    expect(neutral.force).toBe(explicitNeutral.force);
+  });
+
+  it('a higher attacker Attack stat increases knockback force', () => {
+    const base = computeKnockback(input({ attackStat: 1 }));
+    const boosted = computeKnockback(input({ attackStat: 1.3 }));
+
+    expect(boosted.force).toBeGreaterThan(base.force);
+  });
+
+  it('a higher defender Defense stat reduces knockback force', () => {
+    const base = computeKnockback(input({ defenseStat: 1 }));
+    const defended = computeKnockback(input({ defenseStat: 1.3 }));
+
+    expect(defended.force).toBeLessThan(base.force);
+  });
+});
+
+describe('computeStabilityDamage archetype Defense stat (Milestone 6, GDD section 31)', () => {
+  it('is a passthrough at neutral (1.0) Defense', () => {
+    expect(computeStabilityDamage(10, 1)).toBe(10);
+  });
+
+  it('a higher Defense stat reduces Stability damage taken', () => {
+    expect(computeStabilityDamage(10, 1.3)).toBeLessThan(computeStabilityDamage(10, 1));
   });
 });
