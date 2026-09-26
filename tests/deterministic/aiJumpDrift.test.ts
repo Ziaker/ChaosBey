@@ -52,6 +52,7 @@ describe('AI jump/drift — real physics', () => {
         stabilityFraction: 1,
         isBroken: false,
         attackEnergyFraction: 1,
+    airRecoveryAvailable: false,
       };
       const opponentRaw: CombatantRawState = {
         ...ownRaw,

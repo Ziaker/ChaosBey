@@ -32,6 +32,8 @@ const INITIAL_DASH_PREFERENCE_ESTIMATE = 0.5;
 /** Small, bounded nudge caps — adaptation biases the personality it's given, it never overrides it (GDD section 64's tendencies stay tendencies). */
 const MAX_CAUTION_NUDGE = 0.15;
 const MAX_AGGRESSION_NUDGE = 0.1;
+/** Meters: how much observed opponent tendencies (Dash-heavy play, frequent dodging) can nudge preferredEngageRangeM outward — a Dash-heavy or dodge-happy opponent is worth holding slightly more distance from (Dash has more reach; a close-range Circular is more likely to be dodged anyway) rather than forcing point-blank range. Never inward: adaptation here only ever adds caution about range, it doesn't make the AI press closer. */
+const MAX_ENGAGE_RANGE_NUDGE_M = 1.5;
 
 function clamp01(t: number): number {
   return Math.max(0, Math.min(1, t));
@@ -92,9 +94,17 @@ export function applyAdaptationNudge(
   const cautionNudge = (snapshot.observedAggressionFraction - INITIAL_AGGRESSION_ESTIMATE) * MAX_CAUTION_NUDGE * rate;
   const aggressionNudge = (INITIAL_AGGRESSION_ESTIMATE - snapshot.observedAggressionFraction) * MAX_AGGRESSION_NUDGE * rate;
 
+  // Blends how far above baseline each of the two range-relevant signals
+  // reads, then applies that blend as an outward-only distance nudge (see
+  // MAX_ENGAGE_RANGE_NUDGE_M's doc comment for why this never goes inward).
+  const dashPreferenceAboveBaseline = Math.max(0, snapshot.observedDashPreference - INITIAL_DASH_PREFERENCE_ESTIMATE);
+  const dodgeRateAboveBaseline = Math.max(0, snapshot.observedDodgeRate - INITIAL_DODGE_ESTIMATE);
+  const engageRangeNudgeM = (dashPreferenceAboveBaseline * 0.6 + dodgeRateAboveBaseline * 0.4) * MAX_ENGAGE_RANGE_NUDGE_M * rate;
+
   return {
     ...personality,
     caution: clamp01(personality.caution + cautionNudge),
     aggression: clamp01(personality.aggression + aggressionNudge),
+    preferredEngageRangeM: personality.preferredEngageRangeM + engageRangeNudgeM,
   };
 }

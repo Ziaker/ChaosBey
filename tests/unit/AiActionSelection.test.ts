@@ -33,6 +33,7 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    airRecoveryAvailable: false,
     ...overrides,
   };
 }
@@ -117,6 +118,13 @@ describe('ActionSelector', () => {
     );
     assertValidContract(actions);
     expect(actions.held.has(Action.Attack)).toBe(true);
+  });
+
+  it('presses Dodge for AirRecover unconditionally (no dodgeSkill roll, no dodgeState gate)', () => {
+    const selector = new ActionSelector();
+    const actions = selector.selectActions(AiIntent.AirRecover, world({ grounded: false, dodgeState: DodgeState.Cooldown }), ATTACK_AI_PERSONALITY, false, 1 / 60);
+    assertValidContract(actions);
+    expect(actions.pressedThisFrame.has(Action.Dodge)).toBe(true);
   });
 
   it('presses Dodge for DodgeThreat when the pre-rolled attempt succeeds and dodgeState is Idle', () => {

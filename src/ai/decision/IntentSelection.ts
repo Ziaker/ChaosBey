@@ -10,10 +10,11 @@
 // the scoring itself, so the "what would the AI ideally do" reasoning stays
 // inspectable on its own (see AiDebugState.ts).
 //
-// Two hard overrides sit above the normal scoring, matching the GDD's own
-// priority language: edge danger and an imminent incoming hit are things
-// the AI "should" react to (section 129/63), not merely weigh against
-// unrelated goals like a normal attack decision.
+// Three hard overrides sit above the normal scoring, matching the GDD's own
+// priority language: being airborne with a real recovery opportunity, edge
+// danger, and an imminent incoming hit are things the AI "should" react to
+// (section 21/129/63), not merely weigh against unrelated goals like a
+// normal attack decision.
 // ============================================================
 
 import { AttackState } from '../../combat/attacks/AttackController';
@@ -41,6 +42,13 @@ function clamp01(t: number): number {
 }
 
 export function selectIntent(world: WorldState, personality: AiPersonality, risk: RiskAssessment): IntentDecision {
+  // Highest priority: a real air-recovery window (GDD section 21) is only
+  // ever open for a short time after a launch, and everything else —
+  // edge danger included — is easier to address with movement control
+  // restored than while still tumbling from a knockback.
+  if (!world.own.grounded && world.own.airRecoveryAvailable) {
+    return { intent: AiIntent.AirRecover, reason: 'airborne with an active air-recovery window' };
+  }
   if (risk.edgeRisk >= EDGE_RISK_OVERRIDE_THRESHOLD) {
     return { intent: AiIntent.RecoverFromEdge, reason: `edge risk ${risk.edgeRisk.toFixed(2)} over threshold` };
   }
@@ -72,22 +80,44 @@ export function selectIntent(world: WorldState, personality: AiPersonality, risk
   const inCircularRange = world.distanceToOpponentM <= AI_CIRCULAR_ATTACK_RANGE_M;
   const inDashRange = world.distanceToOpponentM > AI_CIRCULAR_ATTACK_RANGE_M && world.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M;
 
+  // GDD section 42/63: AI can "intentionally create/accept Clash
+  // opportunities". An opponent with an imminent hitbox but still below
+  // THREAT_OVERRIDE_THRESHOLD (handled above) is a near-simultaneous-attack
+  // situation rather than a one-sided threat — an aggressive personality
+  // leans into finishing its own swing (accepting the Clash it might cause),
+  // a cautious one leans away from committing into it. 1 when the opponent
+  // has no imminent hitbox at all (nothing to accept or avoid).
+  const clashWillingness = world.opponent.hasImminentHitbox
+    ? clamp01(0.65 + personality.aggression * 0.5 - personality.caution * 0.45)
+    : 1;
+
+  // GDD section 30/64 Stamina: low Stamina should make resource-heavy
+  // offense (closing distance, committing to a Dash charge) less
+  // attractive in proportion to how much this personality values
+  // conserving resources (patience) — never an input-responsiveness
+  // penalty (GDD section 30 forbids that), only a preference shift in what
+  // the AI chooses to attempt.
+  const resourceConservation = clamp01(personality.patience * (1 - world.own.staminaFraction));
+
   const scores = new Map<AiIntent, number>();
 
   scores.set(
     AiIntent.PressAdvantage,
-    risk.opportunity * (0.5 + personality.aggression * 0.5) * (inCircularRange || inDashRange ? 1 : 0.3),
+    (risk.opportunity + risk.edgePressureOpportunity * (0.4 + personality.aggression * 0.4)) *
+      (0.5 + personality.aggression * 0.5) *
+      clashWillingness *
+      (inCircularRange || inDashRange ? 1 : 0.3),
   );
 
   scores.set(
     AiIntent.AttackCircular,
-    inCircularRange && !alreadyAttacking ? 0.4 + personality.aggression * 0.4 - personality.caution * 0.2 : 0,
+    inCircularRange && !alreadyAttacking ? (0.4 + personality.aggression * 0.4 - personality.caution * 0.2) * clashWillingness : 0,
   );
 
   scores.set(
     AiIntent.AttackDash,
     inDashRange && !alreadyAttacking && world.own.attackEnergyFraction > 0.25
-      ? 0.3 + personality.aggression * 0.5 - personality.patience * 0.2
+      ? (0.3 + personality.aggression * 0.5 - personality.patience * 0.2) * clashWillingness * (1 - resourceConservation * 0.6)
       : 0,
   );
 
@@ -96,17 +126,21 @@ export function selectIntent(world: WorldState, personality: AiPersonality, risk
 
   scores.set(
     AiIntent.Approach,
-    (tooFar ? 0.6 : 0.2) * (0.4 + personality.aggression * 0.6) * (1 - risk.selfVulnerability * 0.5),
+    (tooFar ? 0.6 : 0.2) *
+      (0.4 + personality.aggression * 0.6) *
+      (1 + risk.edgePressureOpportunity * 0.5) *
+      (1 - risk.selfVulnerability * 0.5) *
+      (1 - resourceConservation * 0.4),
   );
 
   scores.set(
     AiIntent.Retreat,
-    (tooClose ? 0.55 : 0.15) * (0.3 + personality.caution * 0.7) * (0.4 + risk.selfVulnerability * 0.6),
+    (tooClose ? 0.55 : 0.15) * (0.3 + personality.caution * 0.7) * (0.4 + risk.selfVulnerability * 0.6 + resourceConservation * 0.3),
   );
 
-  scores.set(AiIntent.Circle, !tooClose && !tooFar ? 0.35 + personality.patience * 0.3 : 0.1);
+  scores.set(AiIntent.Circle, !tooClose && !tooFar ? 0.35 + personality.patience * 0.3 + resourceConservation * 0.2 : 0.1);
 
-  scores.set(AiIntent.Wait, alreadyAttacking ? 0 : personality.patience * 0.15);
+  scores.set(AiIntent.Wait, alreadyAttacking ? 0 : personality.patience * 0.15 + resourceConservation * 0.15);
 
   // Below the hard override threshold, a milder threat with Dodge already
   // on cooldown still nudges normal scoring toward a preemptive jump — the

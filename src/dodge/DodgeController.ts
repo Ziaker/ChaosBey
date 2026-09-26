@@ -66,6 +66,19 @@ export class DodgeController {
   }
 
   /**
+   * Whether pressing Dodge right now (while airborne) would trigger air
+   * recovery — the same public state (GDD/owner rule: AI plays by the same
+   * rules as a player, so nothing it reads may be hidden/privileged) a
+   * player already signals through by having just been launched. Milestone
+   * 7's AIController uses this to recognize "I was just knocked airborne
+   * and should try to recover" as its own distinct situation, rather than
+   * only ever reacting to an opponent's imminent hitbox.
+   */
+  isAirRecoveryAvailable(): boolean {
+    return this.airRecoveryAvailable;
+  }
+
+  /**
    * Call when a knockback/launch impulse (normal knockback or the
    * Circular-catches-Dash upward launch) is applied to this Bey — arms Air
    * Recovery for the airborne period the launch causes (GDD section 21). A

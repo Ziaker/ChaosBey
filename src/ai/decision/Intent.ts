@@ -26,6 +26,8 @@ export enum AiIntent {
   UseJumpDrift = 'UseJumpDrift',
   /** Use Dodge specifically to answer an imminent opponent hitbox. */
   DodgeThreat = 'DodgeThreat',
+  /** Use Dodge specifically to trigger air recovery after being knocked airborne (GDD section 21) — distinct from DodgeThreat, which answers an opponent's hitbox rather than the AI's own airborne/launched state. */
+  AirRecover = 'AirRecover',
   /** Do nothing meaningful this tick (used sparingly — patience/whiff-recovery windows, not a default). */
   Wait = 'Wait',
 }

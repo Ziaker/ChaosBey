@@ -31,6 +31,8 @@ export interface AiDebugState {
   opponentThreatFraction: number;
   selfVulnerabilityFraction: number;
   opportunityFraction: number;
+  /** GDD section 63: "AI exploits opponents near the edge" — how attractive pressing the opponent is right now specifically because they're boundary-exposed (see RiskEvaluation.ts), independent of opportunityFraction. */
+  edgePressureOpportunityFraction: number;
   /** Seconds since the last fresh decision (GDD section 65 "reaction timer") — resets to 0 the tick a new decision is made. */
   reactionTimerS: number;
   /** Short label for whatever concrete action was pressed this tick (attack/dodge/jump/movement), for a one-line debug summary. */
