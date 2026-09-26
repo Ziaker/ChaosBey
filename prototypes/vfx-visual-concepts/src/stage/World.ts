@@ -13,6 +13,7 @@ import type { ConceptDefinition } from '../../../bey-visual-concepts/src/model/t
 import { FxLayer, StreakSparks } from '../fx/FxLayer';
 import type { FxContext, LanguageRuntime, Slot, VfxLanguage } from '../languages/types';
 import { RING_Y, type Pose, type Scenario, type WorldApi } from '../scenarios/scenarios';
+import { TUNING } from '../tuning';
 
 // ---------------- TUNING ----------------
 export const APPROVED_BOWL_DEPTH = 3.2;   // docs/design-decisions/visual-prototypes-approval.md
@@ -217,18 +218,21 @@ export class World {
       beyColor: (s) => this.beys[s]?.color.clone() ?? new THREE.Color(0xffffff),
       beyPos: (s) => this.beyPos(s),
       arenaSparks: this.arena.sparkColors,
-      shake: (amp, sec) => {
+      shake: (rawAmp, sec) => {
+        const amp = rawAmp * TUNING.shake;
         if (amp >= this.shake.amp * (this.shake.remaining / this.shake.total || 0)) this.shake = { amp, remaining: sec, total: sec };
       },
-      hitstop: (sec) => { this.hitstopT = Math.max(this.hitstopT, sec); },
+      hitstop: (sec) => { this.hitstopT = Math.max(this.hitstopT, sec * TUNING.hitstop); },
       slowMotion: (factor, sec) => { this.slow = { factor, remaining: sec }; },
-      impactFrame: (sec) => { this.impactT = Math.max(this.impactT, sec); },
-      focusLines: (pos, strength, sec, color = 'rgba(255,255,255,0.9)') => { this.focus.push({ pos: pos.clone(), strength, remaining: sec, total: sec, color }); },
+      impactFrame: (sec) => { this.impactT = Math.max(this.impactT, sec * TUNING.impactFrameLength); },
+      focusLines: (pos, strength, sec, color = 'rgba(255,255,255,0.9)') => {
+        if (TUNING.focusLines > 0) this.focus.push({ pos: pos.clone(), strength: strength * TUNING.focusLines, remaining: sec, total: sec, color });
+      },
       tint: (css, sec) => { this.tint = { css, remaining: sec }; },
       flash: (pos, color, intensity) => {
         this.flashLight.position.copy(pos).setY(pos.y + 0.5);
         this.flashLight.color.set(color);
-        this.flashLight.userData.peak = intensity;
+        this.flashLight.userData.peak = intensity * TUNING.flash;
         this.flashT = 1;
       },
       ghost: (slot, material) => {

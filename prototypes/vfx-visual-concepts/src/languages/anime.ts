@@ -10,6 +10,8 @@
 import * as THREE from 'three';
 import { beamFx, burstFx, debrisFx, flatFx, ghostFx, slashArcFx, spriteFx } from '../fx/primitives';
 import { crackMark, impactStar, ringTexture, smokePuff, softDot } from '../fx/textures';
+import { TUNING } from '../tuning';
+import { stochastic } from './mechanical';
 import type { FxContext, LanguageRuntime, VfxLanguage } from './types';
 
 // ---------------- TUNING ----------------
@@ -57,15 +59,19 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
     const onFloor = (p: THREE.Vector3, lift = 0.03): THREE.Vector3 => new THREE.Vector3(p.x, floorY(p) + lift, p.z);
 
     const stars = (at: THREE.Vector3, color: THREE.Color, m: number, life = 0.26): void => {
-      const size = lerp(STAR_SIZE, m);
+      const size = lerp(STAR_SIZE, m) * TUNING.starSize;
+      if (size <= 0.01) return;
       ctx.layer.add(burstFx({ tex: impactStar(12), color, pos: at, size: [size * 0.4, size * 1.25], life: life * 1.2, rotation: Math.random() * 6 }));
       ctx.layer.add(burstFx({ tex: impactStar(8), color: WHITE, pos: at, size: [size * 0.25, size * 0.8], life, rotation: Math.random() * 6 }));
     };
     const shockwave = (at: THREE.Vector3, color: THREE.ColorRepresentation, r: number, life: number): void => {
-      ctx.layer.add(flatFx({ tex: ringTexture(), color, pos: onFloor(at, 0.04), size: [0.4, r * 2], life, additive: true, opacity: 1 }));
+      if (TUNING.shockwave <= 0.01) return;
+      ctx.layer.add(flatFx({ tex: ringTexture(), color, pos: onFloor(at, 0.04), size: [0.4, r * 2 * TUNING.shockwave], life, additive: true, opacity: 1 }));
     };
     const lines = (at: THREE.Vector3, color: THREE.Color, count: number, speed: number, dir = new THREE.Vector3(0, 1, 0), spread = 2.2): void => {
-      ctx.sparks.emit(at, { count, speed, dir, spread, life: [0.12, 0.35], hot: WHITE, cool: color.getHex(), stretch: 0.085, upBias: 0.3 });
+      const n = stochastic(count * TUNING.sparkLines);
+      if (n <= 0) return;
+      ctx.sparks.emit(at, { count: n, speed, dir, spread, life: [0.12, 0.35], hot: WHITE, cool: color.getHex(), stretch: 0.085, upBias: 0.3 });
     };
 
     return {
@@ -88,8 +94,8 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
         if (chargeTimer <= 0) {
           chargeTimer = 0.13 - 0.07 * e.progress;
           const center = e.pos.clone().setY(e.pos.y - 0.1);
-          ctx.layer.add(flatFx({ tex: ringTexture(), color, pos: onFloor(center, 0.05), size: [2.6 - 0.4 * e.progress, 0.3], life: 0.32, additive: true, opacity: 0.4 + 0.6 * e.progress }));
-          for (let i = 0; i < 2 + Math.round(4 * e.progress); i++) {
+          if (TUNING.chargeAura > 0.01) ctx.layer.add(flatFx({ tex: ringTexture(), color, pos: onFloor(center, 0.05), size: [(2.6 - 0.4 * e.progress) * Math.max(0.4, TUNING.chargeAura), 0.3], life: 0.32, additive: true, opacity: Math.min(1, (0.4 + 0.6 * e.progress) * TUNING.chargeAura) }));
+          for (let i = 0; i < stochastic((2 + Math.round(4 * e.progress)) * TUNING.chargeAura); i++) {
             const a = Math.random() * Math.PI * 2;
             const r = rand(1.0, 1.6);
             const start = e.pos.clone().add(new THREE.Vector3(Math.cos(a) * r, rand(-0.2, 0.6), Math.sin(a) * r));
@@ -115,8 +121,9 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
         trailTimer = 0.012;
         const color = ctx.beyColor(e.slot);
         const p = e.pos.clone();
-        ctx.layer.add(spriteFx({ tex: softDot(), color, pos: p, size: [0.95 + 0.5 * e.m, 0.15], life: 0.32, opacity: 0.8 }));
-        ctx.layer.add(spriteFx({ tex: softDot(), color: WHITE, pos: p, size: [0.35, 0.05], life: 0.2, opacity: 0.9 }));
+        if (TUNING.trailWidth <= 0.01) return;
+        ctx.layer.add(spriteFx({ tex: softDot(), color, pos: p, size: [(0.95 + 0.5 * e.m) * TUNING.trailWidth, 0.15], life: 0.32 * TUNING.trailLife, opacity: 0.8 }));
+        ctx.layer.add(spriteFx({ tex: softDot(), color: WHITE, pos: p, size: [0.35 * TUNING.trailWidth, 0.05], life: 0.2 * TUNING.trailLife, opacity: 0.9 }));
       },
       circularSweep(e, t) {
         const color = ctx.beyColor(e.slot);
@@ -134,8 +141,8 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
         }
       },
       perfectDodge(e) {
-        ctx.slowMotion(0.2, 0.9);
-        ctx.tint('rgba(70,130,255,0.20)', 0.9);
+        ctx.slowMotion(TUNING.dodgeSlowFactor, TUNING.dodgeSlowSeconds);
+        if (TUNING.dodgeTint > 0) ctx.tint(`rgba(70,130,255,${TUNING.dodgeTint.toFixed(2)})`, Math.max(0.2, TUNING.dodgeSlowSeconds));
         ctx.focusLines(e.pos, 0.7, 0.6, 'rgba(170,215,255,0.85)');
         ctx.layer.add(burstFx({ tex: impactStar(8), color: 0x7fd0ff, pos: e.pos, size: [0.4, 2.2], life: 0.3 }));
         ctx.flash(e.pos, 0x7fd0ff, 50);
@@ -144,8 +151,10 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
         ghostTimer -= dt;
         if (ghostTimer > 0) return;
         ghostTimer = 0.05;
-        const mat = new THREE.MeshBasicMaterial({ color: ctx.beyColor(e.slot), transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
-        ctx.layer.add(ghostFx(ctx.ghost(e.slot, mat), mat, 0.5, 0.55));
+        if (TUNING.afterimageOpacity <= 0.01) return;
+        const op = TUNING.afterimageOpacity;
+        const mat = new THREE.MeshBasicMaterial({ color: ctx.beyColor(e.slot), transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending });
+        ctx.layer.add(ghostFx(ctx.ghost(e.slot, mat), mat, 0.5, op));
       },
       stabilityBreak(e) {
         const color = ctx.beyColor(e.slot);

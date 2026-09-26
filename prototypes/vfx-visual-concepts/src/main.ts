@@ -19,6 +19,7 @@ import type { VfxLanguage } from './languages/types';
 import { SCENARIOS } from './scenarios/scenarios';
 import { VfxStage } from './stage/VfxStage';
 import { World } from './stage/World';
+import { TuningPanel } from './ui/TuningPanel';
 
 const WIND_COMPARE: readonly WindStyle[] = ['sonic', 'comet', 'cel'];
 const WIND_SCENARIOS = ['burst', 'dash', 'dodge'];
@@ -131,9 +132,20 @@ for (const slot of [0, 1] as const) {
   sel.addEventListener('change', () => { state.bey[slot] = sel.value; rebuild(); });
 }
 
+// ---------- live tuning ----------
+const tuning = new TuningPanel($('tune-groups'), $('tune-status'), () => replay());
+$('tune-save').addEventListener('click', () => void tuning.saveFinal());
+$('tune-copy').addEventListener('click', () => void tuning.copy());
+$('tune-reset').addEventListener('click', () => tuning.reset());
+const tuningToggle = (): void => {
+  document.querySelector('.lab')!.classList.toggle('no-tuning');
+  requestAnimationFrame(() => stage.resetCamera());
+};
+
 mkButton($('toolbar'), 'tool-button', '<span>Replay</span><kbd>R</kbd>', replay);
 const slowToggle = mkButton($('toolbar'), 'tool-button', '<span>Slow motion</span><kbd>S</kbd>', () => toggleSlow());
 mkButton($('toolbar'), 'tool-button', '<span>Reset camera</span>', () => stage.resetCamera());
+mkButton($('toolbar'), 'tool-button', '<span>Tuning</span><kbd>P</kbd>', tuningToggle);
 
 function toggleSlow(): void {
   stage.slowMotion = !stage.slowMotion;
@@ -174,7 +186,7 @@ function syncUi(): void {
 }
 
 window.addEventListener('keydown', (e) => {
-  if (e.ctrlKey || e.metaKey || e.altKey || e.target instanceof HTMLSelectElement) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   const n = Number.parseInt(e.key, 10);
   if (n >= 1 && n <= SCENARIOS.length) { state.scenario = SCENARIOS[n - 1]!; replay(); return; }
   const k = e.key.toLowerCase();
@@ -193,6 +205,7 @@ window.addEventListener('keydown', (e) => {
     u: () => setWind('funnel'),
     r: replay,
     s: toggleSlow,
+    p: tuningToggle,
   };
   const act = actions[k];
   if (act) { e.preventDefault(); act(); }

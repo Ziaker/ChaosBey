@@ -22,10 +22,11 @@ import { debrisFx, jaggedRingFx, spiralWrapFx, spriteFx, wakeStreakFx, windFunne
 import { jaggedRing, toonSmoke, tornStreak } from '../fx/textures';
 import { createAnime } from './anime';
 import { MECHANICAL } from './mechanical';
+import { TUNING } from '../tuning';
+import { stochastic } from './mechanical';
 import type { DirEvent, FxContext, LanguageRuntime, VfxLanguage } from './types';
 
 // ---------------- TUNING ----------------
-const IMPACT_FRAME_MIN_M = 0.9;          // HIGH attacks only (heavy intensity in the lab = 1.0).
 const WIND_WHITE = 0xf4f8ff;
 const WIND_GREY = 0xc9d0da;
 // v1 funnel
@@ -34,13 +35,8 @@ const FUNNEL_MOUTH = [1.1, 2.0] as const;
 // Rings (sonic / cel)
 const RING_SIZE = [2.6, 5.2] as const;   // Final ring diameter (m) at m = 0 / 1.
 const RING_STAGGER = 0.07;               // Seconds between successive rings.
-// Cel Cyclone (owner-approved style): rings kept and a bit larger, wind lines toned down.
-const CEL_RING_SCALE = 1.15;             // Ring diameter multiplier vs RING_SIZE.
-const CEL_STREAK_COUNT_SCALE = 0.6;      // Fewer wake streaks than Comet Wake.
-const CEL_STREAK_WIDTH = 0.8;            // Thinner streaks.
-const CEL_STREAK_OPACITY = 0.7;          // Softer streaks (rings stay fully opaque).
-const CEL_SPIRAL_LINES = 3;
-const CEL_SPIRAL_OPACITY = 0.6;
+// Cel Cyclone values and the impact-frame threshold live in ../tuning.ts
+// (live-adjustable in the lab's tuning panel).
 // Wake (comet / cel)
 const WAKE_STREAKS = [8, 16] as const;   // Count at m = 0 / 1.
 const WAKE_OVERSHOOT = [1.5, 3.5] as const; // How far the wake extends behind the start point (m).
@@ -72,18 +68,18 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
   const accent = ctx.beyColor(e.slot);
   const m = e.m;
 
-  const rings = (count: number, look: WindLook, scale = 1): void => {
+  const rings = (count: number, look: WindLook, scale = 1, life = 0.42, driftScale = 1): void => {
     for (let i = 0; i < count; i++) {
       const size = lerp(RING_SIZE, m) * scale * (1 - i * 0.18);
       ctx.layer.add(jaggedRingFx({
         tex: jaggedRing(), follow, dir, color: i === count - 1 && !look.cel ? accent : WIND_WHITE,
-        size: [0.6, size], life: 0.42, delay: i * RING_STAGGER, drift: 0.6 + i * 0.5, look,
+        size: [0.6, size], life, delay: i * RING_STAGGER, drift: (0.6 + i * 0.5) * driftScale, look,
         groundAt: (p) => ctx.floorHeightAt(Math.hypot(p.x, p.z)),
       }));
     }
   };
-  const wake = (look: WindLook, widthScale: number, countScale = 1): void => {
-    const n = Math.max(3, Math.round(lerp(WAKE_STREAKS, m) * countScale));
+  const wake = (look: WindLook, widthScale: number, countScale = 1, lengthScale = 1): void => {
+    const n = Math.round(lerp(WAKE_STREAKS, m) * countScale);
     const [u, v] = perpendicular(dir);
     const origin = follow();
     for (let i = 0; i < n; i++) {
@@ -96,7 +92,7 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
         tex: tornStreak(), origin, follow, dir, offset,
         color: isAccent ? accent : i % 2 === 0 ? WIND_WHITE : WIND_GREY,
         width: (isAccent ? 0.14 : rand(0.45, 1.05)) * widthScale * (0.7 + 0.5 * m),
-        minLength: 1.5 + 1.5 * m, overshoot: lerp(WAKE_OVERSHOOT, m) * rand(0.6, 1.1), life: rand(0.55, 0.8), look,
+        minLength: (1.5 + 1.5 * m) * lengthScale, overshoot: lerp(WAKE_OVERSHOOT, m) * lengthScale * rand(0.6, 1.1), life: rand(0.55, 0.8), look,
       }));
     }
   };
@@ -145,11 +141,13 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
       spiral(3, 0.85);
       break;
     case 'cel':
-      rings(2, { cel: true, opacity: 1 }, CEL_RING_SCALE);
-      wake({ cel: true, opacity: CEL_STREAK_OPACITY }, CEL_STREAK_WIDTH, CEL_STREAK_COUNT_SCALE);
-      spiral(CEL_SPIRAL_LINES, CEL_SPIRAL_OPACITY);
-      toonDust(Math.round(5 + 5 * m));
-      debris(Math.round(4 + 6 * m));
+      rings(Math.round(TUNING.windRings), { cel: true, opacity: 1 }, TUNING.windRingSize, TUNING.windRingLife, TUNING.windRingDrift);
+      if (TUNING.windStreaks > 0 && TUNING.windStreakOpacity > 0) {
+        wake({ cel: true, opacity: TUNING.windStreakOpacity }, TUNING.windStreakWidth, TUNING.windStreaks, TUNING.windStreakLength);
+      }
+      spiral(Math.round(TUNING.windSpiralLines), TUNING.windSpiralOpacity);
+      toonDust(stochastic((5 + 5 * m) * TUNING.windDust));
+      debris(stochastic((4 + 6 * m) * TUNING.windDebris));
       break;
   }
 }
@@ -173,7 +171,8 @@ export function makeHybrid(style: WindStyle): VfxLanguage {
     },
     create(ctx): LanguageRuntime {
       const a = MECHANICAL.create(ctx);
-      const b = createAnime(ctx, { impactFrameMinM: IMPACT_FRAME_MIN_M });
+      // Getter: the impact-frame threshold follows the live tuning panel.
+      const b = createAnime(ctx, { get impactFrameMinM() { return TUNING.impactFrameMin; } });
       return {
         hit(e) { a.hit(e); b.hit(e); },
         dashCharge(e, dt) { b.dashCharge(e, dt); },

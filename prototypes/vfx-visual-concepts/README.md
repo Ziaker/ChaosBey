@@ -37,6 +37,16 @@ This is **visual exploration only**. The Bey motion is choreography, not physics
 | Global slow motion | `S` |
 | Orbit | Drag |
 
+## Live tuning (final configuration)
+
+The right-hand **Tuning** panel (`P` shows or hides it) exposes every effect parameter as a slider, grouped as Global feel, Contact sparks (A), Hit (B), Dash & trail (B), Perfect Dodge (B) and Wind burst (Cel Cyclone). Changes apply on the next effect. Rows in orange differ from the approved value, and the draft is remembered in the browser.
+
+- **Save as final** writes the values to the published artifact's shared store (document `config/final`), so Claude can read the owner's final configuration and carry it into the game.
+- **Copy values** copies them as JSON.
+- **Back to approved** resets every slider.
+
+All values and their ranges live in `src/tuning.ts`.
+
 ## Files
 
 | File | Contents |
