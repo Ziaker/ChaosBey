@@ -48,7 +48,7 @@ export function createBey(
   spawnPosition: { x: number; y: number; z: number },
   definition: BeyDefinition = DEFAULT_BEY_DEFINITION,
 ): Bey {
-  const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.massKg);
+  const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical);
   const stats = resolveBeyStats(definition.ratings);
   return {
     definition,

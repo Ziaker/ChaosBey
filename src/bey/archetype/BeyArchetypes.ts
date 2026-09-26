@@ -27,12 +27,14 @@ import { createBeyMesh } from '../procedural-model/createBeyMesh';
  * Attack-type: hits harder and moves faster, at the cost of Defense and a
  * lighter body that's easier to launch. Silhouette: a pronounced, wide,
  * thick ring (top-heavy, "impact zone" reads first) over a slim body and a
- * compact tip.
+ * compact tip. The physical collider is widened/flattened to roughly track
+ * that same silhouette (still one simplified cylinder, not per-piece
+ * colliders — GDD section 104).
  */
 export const ATTACK_ARCHETYPE: BeyDefinition = {
   id: 'attack-prototype',
   name: 'Attack (Prototype)',
-  massKg: BEY_MASS_KG * 0.85,
+  physical: { colliderRadiusM: 0.65, colliderHalfHeightM: 0.18, massKg: BEY_MASS_KG * 0.85 },
   ratings: { attack: 8, defense: 3, stamina: 4 },
   handling: {
     ...DEFAULT_HANDLING_PROFILE,
@@ -64,12 +66,13 @@ export const ATTACK_ARCHETYPE: BeyDefinition = {
  * Defense-type: sturdier and heavier — takes less knockback/Stability
  * damage and grips harder, at the cost of raw offense and top speed.
  * Silhouette: a wide, tall lower weight section (low center of mass) under
- * a modest, solid ring.
+ * a modest, solid ring. The physical collider is wider and taller to
+ * roughly track that heavier, taller silhouette.
  */
 export const DEFENSE_ARCHETYPE: BeyDefinition = {
   id: 'defense-prototype',
   name: 'Defense (Prototype)',
-  massKg: BEY_MASS_KG * 1.25,
+  physical: { colliderRadiusM: 0.62, colliderHalfHeightM: 0.27, massKg: BEY_MASS_KG * 1.25 },
   ratings: { attack: 3, defense: 8, stamina: 4 },
   handling: {
     ...DEFAULT_HANDLING_PROFILE,
@@ -101,12 +104,14 @@ export const DEFENSE_ARCHETYPE: BeyDefinition = {
  * Stamina-type: balanced handling with a larger, slower-draining Stamina
  * pool for a longer-lasting fight. Silhouette: elongated overall, with a
  * distinctly longer tip reading as "rotation endurance" — less heavy than
- * Defense, less aggressive than Attack.
+ * Defense, less aggressive than Attack. The physical collider is
+ * moderately taller than default to roughly track the elongated body/tip,
+ * radius left close to default.
  */
 export const STAMINA_ARCHETYPE: BeyDefinition = {
   id: 'stamina-prototype',
   name: 'Stamina (Prototype)',
-  massKg: BEY_MASS_KG,
+  physical: { colliderRadiusM: 0.58, colliderHalfHeightM: 0.24, massKg: BEY_MASS_KG },
   ratings: { attack: 4, defense: 4, stamina: 8 },
   handling: { ...DEFAULT_HANDLING_PROFILE },
   appearance: {

@@ -9,7 +9,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { BEY_MATERIAL } from '../../physics/materials/PhysicsMaterials';
-import { BEY_COLLIDER_HALF_HEIGHT_M, BEY_COLLIDER_RADIUS_M, BEY_MASS_KG } from './BeyTuning';
+import { DEFAULT_PHYSICAL_PROFILE, type BeyPhysicalProfile } from '../archetype/BeyPhysicalProfile';
 
 export interface BeyRigidBody {
   readonly body: RAPIER.RigidBody;
@@ -19,7 +19,7 @@ export interface BeyRigidBody {
 export function createBeyRigidBody(
   physics: PhysicsWorld,
   spawnPosition: { x: number; y: number; z: number },
-  massKg: number = BEY_MASS_KG,
+  physical: BeyPhysicalProfile = DEFAULT_PHYSICAL_PROFILE,
 ): BeyRigidBody {
   const body = physics.rapierWorld.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
@@ -34,8 +34,8 @@ export function createBeyRigidBody(
   );
 
   const collider = physics.rapierWorld.createCollider(
-    RAPIER.ColliderDesc.cylinder(BEY_COLLIDER_HALF_HEIGHT_M, BEY_COLLIDER_RADIUS_M)
-      .setMass(massKg)
+    RAPIER.ColliderDesc.cylinder(physical.colliderHalfHeightM, physical.colliderRadiusM)
+      .setMass(physical.massKg)
       .setRestitution(BEY_MATERIAL.restitution)
       .setFriction(BEY_MATERIAL.friction),
     body,
