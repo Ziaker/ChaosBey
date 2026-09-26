@@ -12,7 +12,7 @@ A and B stay in the lab as references.
 
 1. **Sonic Boom:** 3 jagged vertical shockwave rings (a vapor-cone look) in quick sequence, resting on the floor. Compact.
 2. **Comet Wake:** long torn wind streaks stretched along the real path of the advance, plus spiral lines wrapping the Bey. The Bey's color appears only on thin accents.
-3. **Cel Cyclone:** the full reference in solid cel shading: rings, torn wake, spiral, toon dust clouds and debris.
+3. **Cel Cyclone (APPROVED):** the full reference in solid cel shading: rings, torn wake, spiral, toon dust clouds and debris. Owner tweaks: rings kept and about 15% larger; wind lines toned down (fewer, thinner and softer streaks, plus a lighter spiral). It is the default in the lab.
 
 The v1 funnel stays available (`U`).
 
@@ -30,7 +30,7 @@ This is **visual exploration only**. The Bey motion is choreography, not physics
 | Action | Control |
 |---|---|
 | Pick an effect | `1`–`9` |
-| Pick the view | Wind 1 \| 2 \| 3 `Q` (default), Hybrid `H`, `A`, `B`, compare B \| C `W`, compare A \| B `V` |
+| Pick the view | Hybrid `H` (default, approved wind), Wind 1 \| 2 \| 3 `Q`, `A`, `B`, compare B \| C `W`, compare A \| B `V` |
 | Pick the wind style (for `H` and `W`) | `J` Sonic Boom, `K` Comet Wake, `L` Cel Cyclone, `U` v1 funnel |
 | Pick the intensity | `Z` light, `X` medium, `C` heavy |
 | Replay | `R` |

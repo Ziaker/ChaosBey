@@ -108,7 +108,13 @@ As três foram aprovadas. Detalhes e parâmetros estão em `prototypes/arena-vis
 
 Regras: todo efeito escala com a magnitude real do evento (GDD 51); VFX observa eventos e não decide resultados (GDD 158); tuning no topo dos arquivos.
 
-**Aguardando escolha do dono:** o estilo do burst de vento. As 3 opções foram criadas a partir da imagem de referência do dono: 1 Sonic Boom (anéis serrilhados), 2 Comet Wake (rastro rasgado + espiral) e 3 Cel Cyclone (a referência completa em cel-shading). O funil v1 continua disponível para comparação.
+**Burst de vento: APROVADO o estilo 3, Cel Cyclone** (`makeHybrid('cel')` em `prototypes/vfx-visual-concepts/src/languages/hybrid.ts`), com os ajustes do dono:
+- **Argolas mantidas:** 2 anéis verticais com borda serrilhada, em cel sólido, apoiados no chão e surgindo em sequência. São **~15% maiores** que no protótipo inicial (`CEL_RING_SCALE`).
+- **Linhas com menos intensidade:** menos faixas de rastro (60%), mais finas (80%) e mais suaves (opacidade 0,7), e a espiral mais leve (3 linhas, opacidade 0,6).
+- **O resto como estava:** rastro rasgado preso ao caminho real do avanço, nuvens de poeira de desenho em 3 tons de cinza e estilhaços escuros. O branco e o cinza dominam, e a cor do Bey só aparece em traços finos.
+- **Quando aparece:** na soltura do Dash e no acionamento do dodge. Tudo escala com a magnitude.
+
+As outras opções (1 Sonic Boom, 2 Comet Wake e o funil v1) ficam no laboratório só como referência.
 
 ## 4. Continua em ABERTO (não decidir sem o dono)
 

@@ -31,8 +31,8 @@ const INTENSITIES = [
 
 type View = 'A' | 'B' | 'C' | 'AB' | 'BC' | 'W';
 const state = {
-  view: 'W' as View,
-  wind: 'sonic' as WindStyle,
+  view: 'C' as View,
+  wind: 'cel' as WindStyle,
   scenario: SCENARIOS[0]!,
   intensity: INTENSITIES[1] as (typeof INTENSITIES)[number],
   arena: ARENAS[0]!,

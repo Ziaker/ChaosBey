@@ -34,6 +34,13 @@ const FUNNEL_MOUTH = [1.1, 2.0] as const;
 // Rings (sonic / cel)
 const RING_SIZE = [2.6, 5.2] as const;   // Final ring diameter (m) at m = 0 / 1.
 const RING_STAGGER = 0.07;               // Seconds between successive rings.
+// Cel Cyclone (owner-approved style): rings kept and a bit larger, wind lines toned down.
+const CEL_RING_SCALE = 1.15;             // Ring diameter multiplier vs RING_SIZE.
+const CEL_STREAK_COUNT_SCALE = 0.6;      // Fewer wake streaks than Comet Wake.
+const CEL_STREAK_WIDTH = 0.8;            // Thinner streaks.
+const CEL_STREAK_OPACITY = 0.7;          // Softer streaks (rings stay fully opaque).
+const CEL_SPIRAL_LINES = 3;
+const CEL_SPIRAL_OPACITY = 0.6;
 // Wake (comet / cel)
 const WAKE_STREAKS = [8, 16] as const;   // Count at m = 0 / 1.
 const WAKE_OVERSHOOT = [1.5, 3.5] as const; // How far the wake extends behind the start point (m).
@@ -44,7 +51,7 @@ export type WindStyle = 'funnel' | 'sonic' | 'comet' | 'cel';
 export const WIND_STYLES: ReadonlyArray<{ id: WindStyle; label: string; summary: string }> = [
   { id: 'sonic', label: '1 · Sonic Boom', summary: '3 jagged vertical shockwave rings (vapor-cone look), staggered; compact, reads instantly. Light dust.' },
   { id: 'comet', label: '2 · Comet Wake', summary: 'Long torn wind streaks stretched along the real path + spiral lines wrapping the Bey; accent color only on thin streaks.' },
-  { id: 'cel', label: '3 · Cel Cyclone', summary: 'The full reference in solid cel shading: rings + torn wake + spiral + toon dust clouds + debris. Heaviest.' },
+  { id: 'cel', label: '3 · Cel Cyclone', summary: 'APPROVED. Full reference in cel shading: large jagged rings + softer, thinner torn wake + light spiral + toon dust clouds + debris.' },
   { id: 'funnel', label: 'v1 · Funnel', summary: 'Previous version: short spiky twisting funnel (additive glow).' },
 ];
 
@@ -65,9 +72,9 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
   const accent = ctx.beyColor(e.slot);
   const m = e.m;
 
-  const rings = (count: number, look: WindLook): void => {
+  const rings = (count: number, look: WindLook, scale = 1): void => {
     for (let i = 0; i < count; i++) {
-      const size = lerp(RING_SIZE, m) * (1 - i * 0.18);
+      const size = lerp(RING_SIZE, m) * scale * (1 - i * 0.18);
       ctx.layer.add(jaggedRingFx({
         tex: jaggedRing(), follow, dir, color: i === count - 1 && !look.cel ? accent : WIND_WHITE,
         size: [0.6, size], life: 0.42, delay: i * RING_STAGGER, drift: 0.6 + i * 0.5, look,
@@ -75,8 +82,8 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
       }));
     }
   };
-  const wake = (look: WindLook, widthScale: number): void => {
-    const n = Math.round(lerp(WAKE_STREAKS, m));
+  const wake = (look: WindLook, widthScale: number, countScale = 1): void => {
+    const n = Math.max(3, Math.round(lerp(WAKE_STREAKS, m) * countScale));
     const [u, v] = perpendicular(dir);
     const origin = follow();
     for (let i = 0; i < n; i++) {
@@ -138,9 +145,9 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
       spiral(3, 0.85);
       break;
     case 'cel':
-      rings(2, { cel: true, opacity: 1 });
-      wake({ cel: true, opacity: 1 }, 1.15);
-      spiral(4, 1);
+      rings(2, { cel: true, opacity: 1 }, CEL_RING_SCALE);
+      wake({ cel: true, opacity: CEL_STREAK_OPACITY }, CEL_STREAK_WIDTH, CEL_STREAK_COUNT_SCALE);
+      spiral(CEL_SPIRAL_LINES, CEL_SPIRAL_OPACITY);
       toonDust(Math.round(5 + 5 * m));
       debris(Math.round(4 + 6 * m));
       break;
@@ -191,5 +198,5 @@ export function makeHybrid(style: WindStyle): VfxLanguage {
   };
 }
 
-/** Default hybrid (Sonic Boom wind) — kept as a named export for callers that want one language. */
-export const HYBRID = makeHybrid('sonic');
+/** Default hybrid (approved Cel Cyclone wind) — kept as a named export for callers that want one language. */
+export const HYBRID = makeHybrid('cel');
