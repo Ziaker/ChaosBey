@@ -6,29 +6,45 @@
 // GDD-required "assembled mechanical top" anatomy before any material/
 // color/emissive/particle decision is made.
 //
-// Owner direction (visual round 2): a "tornado/mechanical top" silhouette,
-// not stacked discs — wide at the ring, tapering CONTINUOUSLY down to the
+// Owner direction (visual round 2, approved as the macro silhouette
+// direction in round 3): a "tornado/mechanical top" silhouette, not
+// stacked discs — wide at the ring, tapering CONTINUOUSLY down to the
 // driver tip's point. Each of the four pieces (ring / upper body / lower
-// weight section / driver tip) is defined by its OWN top+bottom radius, and
-// adjacent pieces share the same radius at their seam (piece N's bottom
-// radius === piece N+1's top radius), so the whole body reads as one
-// converging volume with four legible proportion bands, not four separate
-// flat-sided cylinders with visible ledges between them. The lower weight
-// section + tip are deliberately given real height/volume (roughly 60%+ of
-// total height) rather than a thin stub, so the bottom of the Bey stays
-// visually present through tilt/wobble/bounce/off-axis spin, per the
-// owner's gameplay-readability note.
+// weight section / driver tip) is defined by its OWN top+bottom radius,
+// and adjacent pieces share the same radius at their seam (piece N's
+// bottom radius === piece N+1's top radius), so the whole body reads as
+// one converging volume, not four separate flat-sided cylinders with big
+// ledges between them. The lower weight section + tip are deliberately
+// given real height/volume (roughly 60%+ of total height) rather than a
+// thin stub, so the bottom of the Bey stays visually present through
+// tilt/wobble/bounce/off-axis spin.
+//
+// Owner refinement (visual round 3): the continuous taper alone made the
+// four pieces nearly illegible again (especially on Attack/Stamina) — a
+// thin recessed GROOVE is now inserted at each of the 3 seams (a short,
+// slightly-smaller-radius cylindrical band) so each piece still reads as
+// an assembled mechanical component without reintroducing a stepped/
+// stacked-disc look.
 //
 // Two-group structure per GDD section 17/83: `group` carries the
 // physics-derived position + tilt + wobble; `spinGroup` (its child, holding
-// all four pieces) is rotated purely from the decoupled visual spin value
-// and never touches physics.
+// all four pieces + grooves) is rotated purely from the decoupled visual
+// spin value and never touches physics.
 //
-// The whole assembly is anchored so the driver tip's point sits at the
-// physics collider's bottom (GDD section 104 explicitly allows the visual
-// mesh to be decoupled from the collider — this anchor just keeps a taller
-// 4-piece stack from visibly floating or clipping through the floor at
-// rest; the collider itself is unchanged by this file).
+// The whole assembly is anchored so the driver tip's point sits at THIS
+// Bey's own physical collider's bottom. Milestone 6 review 3: this used to
+// be hardcoded to the global BEY_COLLIDER_HALF_HEIGHT_M constant, which
+// silently mismatched any archetype whose BeyPhysicalProfile.
+// colliderHalfHeightM differs from the default (0.2) — visually clipping
+// through the floor (a taller collider) or floating above it (a shorter
+// one). The caller now passes its own colliderHalfHeightM explicitly (see
+// BeyArchetypes.ts, which derives it from the same BeyPhysicalProfile
+// object used to build the real Rapier collider — one source, not a
+// duplicated literal), defaulting to the shared default constant only when
+// omitted. GDD section 104 still permits the visual mesh's SHAPE to be
+// fully decoupled from the collider; only the anchor point is kept
+// consistent so a taller/shorter prototype doesn't visibly float or dig
+// into the arena floor at rest.
 // ============================================================
 
 import * as THREE from 'three';
@@ -75,9 +91,17 @@ export const DEFAULT_BEY_MESH_PROPORTIONS: BeyMeshProportions = {
   tip: { topRadiusM: 0.28, bottomRadiusM: 0.02, heightM: 0.12 },
 };
 
+// Groove seam between adjacent pieces: a short cylindrical band recessed
+// slightly inward from the seam's shared radius. Kept thin/shallow so it
+// reads as a mechanical assembly seam, not a step back to stacked discs.
+const GROOVE_HEIGHT_M = 0.018;
+const GROOVE_DEPTH_FACTOR = 0.88;
+
 export interface BeyMeshOptions {
   colorOverride?: BeyMeshColorOverride;
   proportions?: BeyMeshProportions;
+  /** This Bey's own BeyPhysicalProfile.colliderHalfHeightM — see the file header. Defaults to the shared default profile's value. */
+  colliderHalfHeightM?: number;
 }
 
 function taperedPiece(piece: BeyMeshPieceProportions, material: THREE.Material, centerY: number): THREE.Mesh {
@@ -86,8 +110,16 @@ function taperedPiece(piece: BeyMeshPieceProportions, material: THREE.Material, 
   return mesh;
 }
 
+function groovePiece(seamRadiusM: number, material: THREE.Material, centerY: number): THREE.Mesh {
+  const r = seamRadiusM * GROOVE_DEPTH_FACTOR;
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, GROOVE_HEIGHT_M, 28), material);
+  mesh.position.y = centerY;
+  return mesh;
+}
+
 export function createBeyMesh(options?: BeyMeshOptions): BeyVisual {
   const proportions = options?.proportions ?? DEFAULT_BEY_MESH_PROPORTIONS;
+  const colliderHalfHeightM = options?.colliderHalfHeightM ?? BEY_COLLIDER_HALF_HEIGHT_M;
   const material = new THREE.MeshStandardMaterial({
     color: options?.colorOverride?.bodyColorHex ?? 0x4fd1ff,
     emissive: options?.colorOverride?.emissiveColorHex ?? 0x0b3a4a,
@@ -102,20 +134,32 @@ export function createBeyMesh(options?: BeyMeshOptions): BeyVisual {
   // 4. Driver/tip — the piece that visibly touches the arena, converging
   // to a near-point. Deliberately substantial (not a thin stub) so the
   // Bey's bottom half stays visually present through tilt/wobble/bounce.
-  let y = -BEY_COLLIDER_HALF_HEIGHT_M;
+  let y = -colliderHalfHeightM;
   const tip = taperedPiece(proportions.tip, material, y + proportions.tip.heightM / 2);
   spinGroup.add(tip);
   y += proportions.tip.heightM;
+
+  const groove1 = groovePiece(proportions.tip.topRadiusM, material, y + GROOVE_HEIGHT_M / 2);
+  spinGroup.add(groove1);
+  y += GROOVE_HEIGHT_M;
 
   // 3. Lower body / weight section — the bulk of the "tornado" body's downward convergence.
   const lowerBody = taperedPiece(proportions.lowerBody, material, y + proportions.lowerBody.heightM / 2);
   spinGroup.add(lowerBody);
   y += proportions.lowerBody.heightM;
 
+  const groove2 = groovePiece(proportions.lowerBody.topRadiusM, material, y + GROOVE_HEIGHT_M / 2);
+  spinGroup.add(groove2);
+  y += GROOVE_HEIGHT_M;
+
   // 2. Upper body — connective mechanical volume between weight section and ring.
   const upperBody = taperedPiece(proportions.upperBody, material, y + proportions.upperBody.heightM / 2);
   spinGroup.add(upperBody);
   y += proportions.upperBody.heightM;
+
+  const groove3 = groovePiece(proportions.upperBody.topRadiusM, material, y + GROOVE_HEIGHT_M / 2);
+  spinGroup.add(groove3);
+  y += GROOVE_HEIGHT_M;
 
   // 1. Ring — main identity and impact zone, the widest piece.
   const ringCenterY = y + proportions.ring.heightM / 2;

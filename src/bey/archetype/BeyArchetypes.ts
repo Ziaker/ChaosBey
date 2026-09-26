@@ -22,6 +22,7 @@
 
 import type { BeyDefinition } from './BeyDefinition';
 import { DEFAULT_HANDLING_PROFILE } from './BeyHandlingProfile';
+import type { BeyPhysicalProfile } from './BeyPhysicalProfile';
 import { BEY_MASS_KG } from '../core/BeyTuning';
 import { createBeyMesh } from '../procedural-model/createBeyMesh';
 
@@ -34,10 +35,12 @@ import { createBeyMesh } from '../procedural-model/createBeyMesh';
  * flattened to roughly track that same silhouette (still one simplified
  * cylinder, not per-piece colliders — GDD section 104).
  */
+const ATTACK_PHYSICAL: BeyPhysicalProfile = { colliderRadiusM: 0.65, colliderHalfHeightM: 0.18, massKg: BEY_MASS_KG * 0.85 };
+
 export const ATTACK_ARCHETYPE: BeyDefinition = {
   id: 'attack-prototype',
   name: 'Attack (Prototype)',
-  physical: { colliderRadiusM: 0.65, colliderHalfHeightM: 0.18, massKg: BEY_MASS_KG * 0.85 },
+  physical: ATTACK_PHYSICAL,
   ratings: { attack: 8, defense: 3, stamina: 4 },
   handling: {
     ...DEFAULT_HANDLING_PROFILE,
@@ -51,6 +54,7 @@ export const ATTACK_ARCHETYPE: BeyDefinition = {
     createVisual: () =>
       createBeyMesh({
         colorOverride: { bodyColorHex: 0xff5c5c, emissiveColorHex: 0x4a0b0b },
+        colliderHalfHeightM: ATTACK_PHYSICAL.colliderHalfHeightM,
         proportions: {
           ring: { topRadiusM: 0.75, bottomRadiusM: 0.55, heightM: 0.14 },
           upperBody: { topRadiusM: 0.55, bottomRadiusM: 0.4, heightM: 0.12 },
@@ -70,10 +74,12 @@ export const ATTACK_ARCHETYPE: BeyDefinition = {
  * The physical collider is wider and taller to roughly track that heavier,
  * taller silhouette.
  */
+const DEFENSE_PHYSICAL: BeyPhysicalProfile = { colliderRadiusM: 0.62, colliderHalfHeightM: 0.27, massKg: BEY_MASS_KG * 1.25 };
+
 export const DEFENSE_ARCHETYPE: BeyDefinition = {
   id: 'defense-prototype',
   name: 'Defense (Prototype)',
-  physical: { colliderRadiusM: 0.62, colliderHalfHeightM: 0.27, massKg: BEY_MASS_KG * 1.25 },
+  physical: DEFENSE_PHYSICAL,
   ratings: { attack: 3, defense: 8, stamina: 4 },
   handling: {
     ...DEFAULT_HANDLING_PROFILE,
@@ -87,6 +93,7 @@ export const DEFENSE_ARCHETYPE: BeyDefinition = {
     createVisual: () =>
       createBeyMesh({
         colorOverride: { bodyColorHex: 0x4f8cff, emissiveColorHex: 0x0b1e4a },
+        colliderHalfHeightM: DEFENSE_PHYSICAL.colliderHalfHeightM,
         proportions: {
           ring: { topRadiusM: 0.62, bottomRadiusM: 0.56, heightM: 0.1 },
           upperBody: { topRadiusM: 0.56, bottomRadiusM: 0.52, heightM: 0.12 },
@@ -106,10 +113,12 @@ export const DEFENSE_ARCHETYPE: BeyDefinition = {
  * moderately taller than default to roughly track the elongated body/tip,
  * radius left close to default.
  */
+const STAMINA_PHYSICAL: BeyPhysicalProfile = { colliderRadiusM: 0.58, colliderHalfHeightM: 0.24, massKg: BEY_MASS_KG };
+
 export const STAMINA_ARCHETYPE: BeyDefinition = {
   id: 'stamina-prototype',
   name: 'Stamina (Prototype)',
-  physical: { colliderRadiusM: 0.58, colliderHalfHeightM: 0.24, massKg: BEY_MASS_KG },
+  physical: STAMINA_PHYSICAL,
   ratings: { attack: 4, defense: 4, stamina: 8 },
   handling: { ...DEFAULT_HANDLING_PROFILE },
   appearance: {
@@ -117,6 +126,7 @@ export const STAMINA_ARCHETYPE: BeyDefinition = {
     createVisual: () =>
       createBeyMesh({
         colorOverride: { bodyColorHex: 0x4fffb0, emissiveColorHex: 0x0b4a2e },
+        colliderHalfHeightM: STAMINA_PHYSICAL.colliderHalfHeightM,
         proportions: {
           ring: { topRadiusM: 0.6, bottomRadiusM: 0.48, heightM: 0.1 },
           upperBody: { topRadiusM: 0.48, bottomRadiusM: 0.38, heightM: 0.14 },

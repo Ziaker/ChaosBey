@@ -284,8 +284,8 @@ export function tickMatch(
   const firstYM = first.body.translation().y;
   const secondYM = second.body.translation().y;
   const rawHitEvents = detectHits(
-    { positionXZ: firstPos, positionYM: firstYM, hitbox: firstAttack.activeHitbox, state: firstAttack.state },
-    { positionXZ: secondPos, positionYM: secondYM, hitbox: secondAttack.activeHitbox, state: secondAttack.state },
+    { positionXZ: firstPos, positionYM: firstYM, hitbox: firstAttack.activeHitbox, state: firstAttack.state, colliderRadiusM: first.definition.physical.colliderRadiusM },
+    { positionXZ: secondPos, positionYM: secondYM, hitbox: secondAttack.activeHitbox, state: secondAttack.state, colliderRadiusM: second.definition.physical.colliderRadiusM },
   );
 
   let firstKoed = false;

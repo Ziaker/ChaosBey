@@ -38,5 +38,5 @@ export const DEFAULT_BEY_DEFINITION: BeyDefinition = {
   physical: DEFAULT_PHYSICAL_PROFILE,
   ratings: NEUTRAL_BEY_RATINGS,
   handling: DEFAULT_HANDLING_PROFILE,
-  appearance: { createVisual: () => createBeyMesh() },
+  appearance: { createVisual: () => createBeyMesh({ colliderHalfHeightM: DEFAULT_PHYSICAL_PROFILE.colliderHalfHeightM }) },
 };
