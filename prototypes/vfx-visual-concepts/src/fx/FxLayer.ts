@@ -12,6 +12,8 @@ export interface FxItem {
   readonly life: number;
   /** Face the camera every frame (sprites/planes). */
   readonly billboard?: boolean;
+  /** Cylindrical billboard: keep local +X on this axis and turn the plane toward the camera. */
+  readonly axisBillboard?: THREE.Vector3;
   /** k = age / life in [0, 1]. */
   update(k: number, dt: number, item: LiveFxItem): void;
 }
@@ -38,6 +40,7 @@ export class FxLayer {
       it.age += dt;
       const k = Math.min(1, it.age / it.life);
       if (it.billboard) it.object.quaternion.copy(this.camera.quaternion);
+      if (it.axisBillboard) axisFaceCamera(it.object, it.axisBillboard, this.camera);
       it.update(k, dt, it);
       if (it.age >= it.life) {
         this.scene.remove(it.object);
@@ -54,6 +57,22 @@ export class FxLayer {
     }
     this.items.length = 0;
   }
+}
+
+const _toCam = new THREE.Vector3();
+const _y = new THREE.Vector3();
+const _z = new THREE.Vector3();
+const _m = new THREE.Matrix4();
+/** Rotate `o` so its local +X lies on `axis` and its plane (local XY) faces the camera. */
+function axisFaceCamera(o: THREE.Object3D, axis: THREE.Vector3, camera: THREE.Camera): void {
+  const x = axis;
+  _toCam.copy(camera.position).sub(o.position);
+  _z.copy(_toCam).addScaledVector(x, -_toCam.dot(x));
+  if (_z.lengthSq() < 1e-6) return;
+  _z.normalize();
+  _y.crossVectors(_z, x).normalize();
+  _m.makeBasis(x, _y, _z);
+  o.quaternion.setFromRotationMatrix(_m);
 }
 
 /** Disposes geometries/materials created for an effect (textures are shared and kept). */

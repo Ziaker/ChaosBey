@@ -28,6 +28,9 @@ test('vfx language lab loads and plays every effect in the compared languages', 
     // Run past the main event of every scenario (all fire before t = 1.6 s).
     await page.waitForFunction(() => window.__vfxLab.time().every((t) => t > 1.6), null, { timeout: 60_000 });
   }
+  // Three-way wind burst comparison (three worlds side by side).
+  await page.evaluate(() => window.__vfxLab.set({ scenario: 'burst', intensity: 'heavy', view: 'W' }));
+  await page.waitForFunction(() => window.__vfxLab.time().length === 3 && window.__vfxLab.time().every((t) => t > 1.6), null, { timeout: 60_000 });
   await page.keyboard.press('a');
   await page.keyboard.press('b');
   await expect(page.locator('.badge')).toHaveCount(1);

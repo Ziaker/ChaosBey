@@ -298,3 +298,129 @@ export function windFunnelFx(o: WindFunnelOpts): FxItem {
     },
   };
 }
+
+/** Shared "cel" vs "soft" look for the wind effects. */
+export interface WindLook {
+  /** Opaque, hard-edged cel shapes (alpha-tested) instead of translucent ones. */
+  cel: boolean;
+  opacity: number;
+}
+
+const windMaterial = (tex: THREE.Texture, color: THREE.ColorRepresentation, look: WindLook): THREE.MeshBasicMaterial =>
+  new THREE.MeshBasicMaterial({
+    map: tex, color, side: THREE.DoubleSide, depthWrite: false, transparent: true,
+    opacity: look.opacity, alphaTest: look.cel ? 0.45 : 0.02, fog: false,
+  });
+
+/**
+ * Vertical jagged shockwave ring facing the movement direction (sonic-boom /
+ * vapor-cone look). Appears after `delay` seconds at the Bey's position at
+ * that moment, then expands and drifts backward.
+ */
+export function jaggedRingFx(o: {
+  tex: THREE.Texture; follow: () => THREE.Vector3; dir: THREE.Vector3; color: THREE.ColorRepresentation;
+  size: [number, number]; life: number; delay: number; drift: number; look: WindLook;
+  /** Floor height under a point: when given, the ring sits on the floor (Bey near its base, like the reference) instead of sinking into it. */
+  groundAt?: (p: THREE.Vector3) => number;
+}): FxItem {
+  const mat = windMaterial(o.tex, o.color, o.look);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+  const holder = new THREE.Group();
+  holder.add(mesh);
+  holder.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), o.dir.clone().normalize());
+  const total = o.delay + o.life;
+  let started = false;
+  const start = new THREE.Vector3();
+  const back = o.dir.clone().normalize().negate();
+  return {
+    object: holder,
+    life: total,
+    update(k) {
+      const t = k * total;
+      if (t < o.delay) {
+        holder.visible = false;
+        return;
+      }
+      if (!started) {
+        started = true;
+        start.copy(o.follow());
+      }
+      holder.visible = true;
+      const kk = (t - o.delay) / o.life;
+      const s = THREE.MathUtils.lerp(o.size[0], o.size[1], ease(kk));
+      mesh.scale.set(s, s, 1);
+      holder.position.copy(start).addScaledVector(back, o.drift * ease(kk));
+      if (o.groundAt) holder.position.y = o.groundAt(holder.position) + s * 0.46;
+      mat.opacity = o.look.opacity * (kk < 0.5 ? 1 : 1 - (kk - 0.5) / 0.5);
+    },
+  };
+}
+
+/**
+ * Long torn wind streak anchored to the path: its tail stays where the
+ * advance started, its head tracks the Bey, so the wake stretches along the
+ * real movement. Cylindrically billboarded around the path axis.
+ */
+export function wakeStreakFx(o: {
+  tex: THREE.Texture; origin: THREE.Vector3; follow: () => THREE.Vector3; dir: THREE.Vector3; offset: THREE.Vector3;
+  color: THREE.ColorRepresentation; width: number; minLength: number; overshoot: number; life: number; look: WindLook;
+}): FxItem {
+  const mat = windMaterial(o.tex, o.color, o.look);
+  // Texture: wide end at u = 0 (local -X, at the Bey), pointed end at u = 1 (local +X, far behind).
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+  const back = o.dir.clone().normalize().negate();
+  const axis = back.clone();
+  const holder = new THREE.Group();
+  holder.add(mesh);
+  const tail = o.origin.clone().add(o.offset).addScaledVector(back, o.overshoot);
+  const head = new THREE.Vector3();
+  let frozen = false;
+  return {
+    object: holder,
+    life: o.life,
+    axisBillboard: axis,
+    update(k) {
+      if (!frozen) head.copy(o.follow()).add(o.offset);
+      if (k > 0.45) frozen = true;
+      const len = Math.max(o.minLength, head.distanceTo(tail));
+      holder.position.copy(head).addScaledVector(axis, len / 2);
+      const grow = ease(Math.min(1, k * 3));
+      mesh.scale.set(len * grow, o.width * (1 - 0.4 * k), 1);
+      mesh.position.x = -(len * (1 - grow)) / 2; // keep the wide end on the Bey while growing
+      mat.opacity = o.look.opacity * (k < 0.55 ? 1 : 1 - (k - 0.55) / 0.45);
+    },
+  };
+}
+
+/** Thin helical wind lines wrapping around the Bey (follows it), spinning. */
+export function spiralWrapFx(o: {
+  follow: () => THREE.Vector3; dir: THREE.Vector3; radius: number; turns: number; length: number;
+  color: THREE.ColorRepresentation; thickness: number; phase: number; spin: number; life: number; opacity: number;
+}): FxItem {
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i <= 40; i++) {
+    const t = i / 40;
+    const a = o.phase + t * o.turns * Math.PI * 2;
+    const r = o.radius * (0.7 + 0.5 * t);
+    pts.push(new THREE.Vector3(-t * o.length, Math.cos(a) * r, Math.sin(a) * r));
+  }
+  const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, o.thickness, 5, false);
+  const mat = new THREE.MeshBasicMaterial({ color: o.color, transparent: true, depthWrite: false, opacity: o.opacity, fog: false });
+  const mesh = new THREE.Mesh(geo, mat);
+  const spinner = new THREE.Group();
+  spinner.add(mesh);
+  const holder = new THREE.Group();
+  holder.add(spinner);
+  holder.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), o.dir.clone().normalize());
+  return {
+    object: holder,
+    life: o.life,
+    update(k, dt) {
+      holder.position.copy(o.follow());
+      spinner.rotation.x += o.spin * dt;
+      const s = 0.6 + 0.5 * ease(Math.min(1, k * 2.5));
+      spinner.scale.set(1, s, s);
+      mat.opacity = o.opacity * (k < 0.4 ? 1 : 1 - (k - 0.4) / 0.6);
+    },
+  };
+}

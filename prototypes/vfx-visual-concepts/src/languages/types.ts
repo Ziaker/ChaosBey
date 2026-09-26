@@ -37,6 +37,8 @@ export interface FxContext {
   tint(css: string, seconds: number): void;
   /** Brief point-light flash. */
   flash(at: THREE.Vector3, color: number, intensity: number): void;
+  /** Current ring-center position of a Bey (for effects that follow it). */
+  beyPos(slot: Slot): THREE.Vector3;
   /** Ghost copy of a Bey at its current pose, using `material`. */
   ghost(slot: Slot, material: THREE.Material): THREE.Object3D;
 }

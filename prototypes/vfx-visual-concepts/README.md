@@ -8,6 +8,14 @@ An interactive page that compares **complete VFX languages** on the same scripte
 
 A and B stay in the lab as references.
 
+**Wind burst: 3 options (round 3)**, based on the owner's reference image and compared side by side with `Q`:
+
+1. **Sonic Boom:** 3 jagged vertical shockwave rings (a vapor-cone look) in quick sequence, resting on the floor. Compact.
+2. **Comet Wake:** long torn wind streaks stretched along the real path of the advance, plus spiral lines wrapping the Bey. The Bey's color appears only on thin accents.
+3. **Cel Cyclone:** the full reference in solid cel shading: rings, torn wake, spiral, toon dust clouds and debris.
+
+The v1 funnel stays available (`U`).
+
 The lab covers nine moments: collision hit, Dash Attack (charge + release), Circular Attack counter, Perfect Dodge, wind burst (advance), Stability Break, jump landing, wall scrape and ring-out. Each has light, medium and heavy intensity, and every effect scales with the impact magnitude `m` (GDD 51: VFX must not lie about power).
 
 This is **visual exploration only**. The Bey motion is choreography, not physics, and nothing in `src/` changes. The page reuses the approved arena (3.2 m bowl) and the round-2 Beys.
@@ -22,7 +30,8 @@ This is **visual exploration only**. The Bey motion is choreography, not physics
 | Action | Control |
 |---|---|
 | Pick an effect | `1`–`9` |
-| Pick the view | Hybrid `H` (default), `A`, `B`, compare B \| C `W`, compare A \| B `V` |
+| Pick the view | Wind 1 \| 2 \| 3 `Q` (default), Hybrid `H`, `A`, `B`, compare B \| C `W`, compare A \| B `V` |
+| Pick the wind style (for `H` and `W`) | `J` Sonic Boom, `K` Comet Wake, `L` Cel Cyclone, `U` v1 funnel |
 | Pick the intensity | `Z` light, `X` medium, `C` heavy |
 | Replay | `R` |
 | Global slow motion | `S` |
@@ -35,7 +44,7 @@ This is **visual exploration only**. The Bey motion is choreography, not physics
 | `src/languages/types.ts` | Language contract: one handler per combat event, with magnitude `m` |
 | `src/languages/mechanical.ts` | Language A (tuning at the top of the file) |
 | `src/languages/anime.ts` | Language B (tuning at the top of the file) |
-| `src/languages/hybrid.ts` | Language C: composes A and B, plus the wind funnel (tuning at the top of the file) |
+| `src/languages/hybrid.ts` | Language C: composes A and B, plus the 4 wind-burst styles (tuning at the top of the file) |
 | `src/scenarios/scenarios.ts` | The 9 choreographies and the events they fire |
 | `src/fx/` | Effect runtime (`FxLayer`, `StreakSparks`), primitives and procedural textures |
 | `src/stage/World.ts` | One scene: arena + Beys + language, with its own hitstop and slow-motion clock |

@@ -108,7 +108,7 @@ As três foram aprovadas. Detalhes e parâmetros estão em `prototypes/arena-vis
 
 Regras: todo efeito escala com a magnitude real do evento (GDD 51); VFX observa eventos e não decide resultados (GDD 158); tuning no topo dos arquivos.
 
-**Aguardando revisão do dono:** o visual final do burst de vento (forma, cor e duração), que acabou de ser prototipado.
+**Aguardando escolha do dono:** o estilo do burst de vento. As 3 opções foram criadas a partir da imagem de referência do dono: 1 Sonic Boom (anéis serrilhados), 2 Comet Wake (rastro rasgado + espiral) e 3 Cel Cyclone (a referência completa em cel-shading). O funil v1 continua disponível para comparação.
 
 ## 4. Continua em ABERTO (não decidir sem o dono)
 

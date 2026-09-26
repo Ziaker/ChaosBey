@@ -75,15 +75,17 @@ export class VfxStage {
   /** Put the camera back on its default framing around the current action. */
   resetCamera(): void {
     const f = this.worlds[0]?.focusPoint() ?? new THREE.Vector3(0, 0.8, 0);
+    // Narrow columns (3-way compare) get a closer camera so the effects stay readable.
+    const k = this.worlds.length >= 3 ? 0.68 : 1;
     this.controls.target.copy(f);
     const r = Math.hypot(f.x, f.z);
     if (r > 2) {
       // Action near the wall: look outward from inside the bowl so the wall never blocks the view.
       const inward = new THREE.Vector3(-f.x / r, 0, -f.z / r);
       const side = new THREE.Vector3(-inward.z, 0, inward.x);
-      this.camera.position.copy(f).addScaledVector(inward, CAMERA_WALL_BACK).addScaledVector(side, 3.5).add(new THREE.Vector3(0, 5.2, 0));
+      this.camera.position.copy(f).addScaledVector(inward, CAMERA_WALL_BACK * k).addScaledVector(side, 3.5 * k).add(new THREE.Vector3(0, 5.2 * k, 0));
     } else {
-      this.camera.position.copy(f).add(CAMERA_OFFSET);
+      this.camera.position.copy(f).addScaledVector(CAMERA_OFFSET, k);
     }
     this.lastFocus = f;
   }
@@ -91,9 +93,13 @@ export class VfxStage {
   private viewports(): Array<{ x: number; y: number; w: number; h: number }> {
     const W = this.stage.clientWidth;
     const H = this.stage.clientHeight;
-    if (this.worlds.length < 2) return [{ x: 0, y: 0, w: W, h: H }];
-    const half = Math.floor((W - DIVIDER_PX) / 2);
-    return [{ x: 0, y: 0, w: half, h: H }, { x: half + DIVIDER_PX, y: 0, w: W - half - DIVIDER_PX, h: H }];
+    const n = Math.max(1, this.worlds.length);
+    // Equal columns separated by thin dividers (1, 2 or 3 worlds side by side).
+    const colW = Math.floor((W - DIVIDER_PX * (n - 1)) / n);
+    return Array.from({ length: n }, (_, i) => {
+      const x = i * (colW + DIVIDER_PX);
+      return { x, y: 0, w: i === n - 1 ? W - x : colW, h: H };
+    });
   }
 
   private frame(): void {

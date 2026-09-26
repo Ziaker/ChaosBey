@@ -113,3 +113,70 @@ export const crackMark = (): THREE.CanvasTexture => make('crack', 256, (g, s) =>
     g.stroke();
   }
 });
+
+/** Anime shockwave ring with a jagged, spiky outer edge (sonic-boom look). */
+export const jaggedRing = (): THREE.CanvasTexture => make('jaggedRing', 512, (g, s) => {
+  const c = s / 2;
+  const teeth = 64;
+  g.beginPath();
+  for (let i = 0; i <= teeth * 2; i++) {
+    const a = (i / (teeth * 2)) * Math.PI * 2;
+    const spike = i % 2 === 0 ? 0.98 - ((i * 37) % 9) * 0.018 : 0.84;
+    const r = c * spike;
+    if (i === 0) g.moveTo(c + Math.cos(a) * r, c + Math.sin(a) * r);
+    else g.lineTo(c + Math.cos(a) * r, c + Math.sin(a) * r);
+  }
+  g.closePath();
+  g.arc(c, c, c * 0.74, 0, Math.PI * 2, true);
+  g.fillStyle = '#ffffff';
+  g.fill('evenodd');
+  // Soft grey inner shade (two-tone cel look).
+  g.globalCompositeOperation = 'source-atop';
+  g.strokeStyle = 'rgba(150,160,175,0.55)';
+  g.lineWidth = c * 0.05;
+  g.beginPath();
+  g.arc(c, c, c * 0.77, 0, Math.PI * 2);
+  g.stroke();
+});
+
+/** Long torn brush stroke: jagged top/bottom edges, tapering to a point on the right. */
+export const tornStreak = (): THREE.CanvasTexture => make('tornStreak', 512, (g, s) => {
+  const h = s / 4;
+  const mid = s / 2;
+  const top: Array<[number, number]> = [];
+  const bot: Array<[number, number]> = [];
+  for (let i = 0; i <= 40; i++) {
+    const t = i / 40;
+    const width = h * Math.pow(1 - t, 0.8) * Math.min(1, t * 8 + 0.3);
+    const jag = (i % 2 === 0 ? 1 : 0.55) * (0.8 + ((i * 29) % 7) / 20);
+    top.push([t * s, mid - width * jag]);
+    bot.push([t * s, mid + width * (i % 3 === 0 ? 0.6 : 1) * 0.8]);
+  }
+  g.beginPath();
+  top.forEach(([x, y], i) => (i === 0 ? g.moveTo(x, y) : g.lineTo(x, y)));
+  for (let i = bot.length - 1; i >= 0; i--) g.lineTo(bot[i]![0], bot[i]![1]);
+  g.closePath();
+  g.fillStyle = '#ffffff';
+  g.fill();
+  // Grey lower band = second cel tone.
+  g.globalCompositeOperation = 'source-atop';
+  g.fillStyle = 'rgba(150,158,170,0.7)';
+  g.fillRect(0, mid + h * 0.15, s, h);
+});
+
+/** Toon smoke: 3 flat grey tones with hard edges (cel-shaded dust cloud). */
+export const toonSmoke = (): THREE.CanvasTexture => make('toonSmoke', 256, (g, s) => {
+  const blobs: Array<[number, number, number]> = [];
+  for (let i = 0; i < 9; i++) blobs.push([s * (0.3 + ((i * 37) % 40) / 100), s * (0.35 + ((i * 53) % 30) / 100), s * (0.13 + ((i * 17) % 8) / 100)]);
+  const layer = (color: string, dx: number, dy: number, grow: number): void => {
+    g.fillStyle = color;
+    for (const [x, y, r] of blobs) {
+      g.beginPath();
+      g.arc(x + dx, y + dy, r * grow, 0, Math.PI * 2);
+      g.fill();
+    }
+  };
+  layer('#8d939c', 0, 0, 1);
+  layer('#b9bec6', -s * 0.02, -s * 0.03, 0.85);
+  layer('#e8ebef', -s * 0.04, -s * 0.06, 0.6);
+});

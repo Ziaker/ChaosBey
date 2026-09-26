@@ -215,6 +215,7 @@ export class World {
       sparks: this.sparks,
       floorHeightAt: this.arena.floorHeightAt,
       beyColor: (s) => this.beys[s]?.color.clone() ?? new THREE.Color(0xffffff),
+      beyPos: (s) => this.beyPos(s),
       arenaSparks: this.arena.sparkColors,
       shake: (amp, sec) => {
         if (amp >= this.shake.amp * (this.shake.remaining / this.shake.total || 0)) this.shake = { amp, remaining: sec, total: sec };
