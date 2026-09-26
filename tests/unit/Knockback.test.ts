@@ -118,12 +118,16 @@ describe('computeKnockback archetype Attack/Defense stats (Milestone 6, GDD sect
   });
 });
 
-describe('computeStabilityDamage archetype Defense stat (Milestone 6, GDD section 31)', () => {
-  it('is a passthrough at neutral (1.0) Defense', () => {
-    expect(computeStabilityDamage(10, 1)).toBe(10);
+describe('computeStabilityDamage archetype Attack/Defense stats (Milestone 6, GDD section 6/31)', () => {
+  it('is a passthrough at neutral (1.0) Attack/Defense', () => {
+    expect(computeStabilityDamage(10, 1, 1)).toBe(10);
   });
 
-  it('a higher Defense stat reduces Stability damage taken', () => {
-    expect(computeStabilityDamage(10, 1.3)).toBeLessThan(computeStabilityDamage(10, 1));
+  it('a higher attacker Attack stat increases Stability damage dealt', () => {
+    expect(computeStabilityDamage(10, 1.3, 1)).toBeGreaterThan(computeStabilityDamage(10, 1, 1));
+  });
+
+  it('a higher defender Defense stat reduces Stability damage taken', () => {
+    expect(computeStabilityDamage(10, 1, 1.3)).toBeLessThan(computeStabilityDamage(10, 1, 1));
   });
 });

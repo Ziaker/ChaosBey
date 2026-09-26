@@ -379,7 +379,11 @@ export function tickMatch(
       // ever come this period), otherwise arm the short pending window
       // until it actually leaves the ground.
       defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
-      applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage, defender.definition.stats.defense));
+      applyStabilityDamageAndTrackKo(
+        defenderIsFirst,
+        defender,
+        computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense),
+      );
       continue;
     }
 
@@ -389,8 +393,8 @@ export function tickMatch(
       defenderSpeedMps: resolved.defenderSpeedMps,
       defenderStabilityFraction: resolved.defenderStabilityFraction,
       defenderStaminaPenaltyFraction: resolved.defenderStaminaPenaltyFraction,
-      attackStat: attacker.definition.stats.attack,
-      defenseStat: defender.definition.stats.defense,
+      attackStat: attacker.stats.attack,
+      defenseStat: defender.stats.defense,
       attackerVelocityXZ: resolved.attackerVelocityXZ,
       impactDirectionXZ: normalize(subtract(resolved.defenderPositionXZ, resolved.attackerPositionXZ)),
     });
@@ -402,7 +406,7 @@ export function tickMatch(
     applyStabilityDamageAndTrackKo(
       defenderIsFirst,
       defender,
-      computeStabilityDamage(hit.hitbox.stabilityDamage, defender.definition.stats.defense) * resolved.forceMultiplier,
+      computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense) * resolved.forceMultiplier,
     );
   }
 

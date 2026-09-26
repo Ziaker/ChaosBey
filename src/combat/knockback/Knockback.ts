@@ -85,9 +85,15 @@ export function computeKnockback(input: KnockbackInput): KnockbackResult {
   };
 }
 
-/** defenseStat: defender's archetype Defense stat (BeyStats.defense) — 1 = neutral, higher takes less Stability damage (GDD section 31). */
-export function computeStabilityDamage(baseDamage: number, defenseStat: number): number {
-  return baseDamage / defenseStat;
+/**
+ * attackStat: attacker's archetype Attack stat — 1 = neutral, higher deals more Stability damage.
+ * defenseStat: defender's archetype Defense stat — 1 = neutral, higher takes less Stability damage.
+ * GDD section 6/31: Attack is explicitly responsible for Stability damage too, not knockback alone.
+ * Never fed into ClashController's own ClashPower/mash formula — that stays Attack-independent
+ * (see ClashOrchestration.ts: only the post-resolution physical consequence reads these stats).
+ */
+export function computeStabilityDamage(baseDamage: number, attackStat: number, defenseStat: number): number {
+  return (baseDamage * attackStat) / defenseStat;
 }
 
 /** Applies a horizontal + upward knockback impulse to the defender, directed away from the attacker. */

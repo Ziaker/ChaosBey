@@ -264,8 +264,8 @@ export class ClashOrchestration {
       defenderSpeedMps: winningHit.defenderSpeedMps,
       defenderStabilityFraction: winningHit.defenderStabilityFraction,
       defenderStaminaPenaltyFraction: winningHit.defenderStaminaPenaltyFraction,
-      attackStat: winner.definition.stats.attack,
-      defenseStat: loser.definition.stats.defense,
+      attackStat: winner.stats.attack,
+      defenseStat: loser.stats.defense,
       attackerVelocityXZ: winningHit.attackerVelocityXZ,
       impactDirectionXZ: normalize(subtract(winningHit.defenderPositionXZ, winningHit.attackerPositionXZ)),
     });
@@ -273,7 +273,7 @@ export class ClashOrchestration {
     loser.dodge.registerLaunch(!isGrounded(physics, loser.collider));
 
     const stabilityDamageAmount =
-      computeStabilityDamage(winningHit.hit.hitbox.stabilityDamage, loser.definition.stats.defense) * this.matchConfig.clashImpactMultiplier;
+      computeStabilityDamage(winningHit.hit.hitbox.stabilityDamage, winner.stats.attack, loser.stats.defense) * this.matchConfig.clashImpactMultiplier;
     const { causedBreak, isQualifyingKoHit } = loser.stability.applyDamage(stabilityDamageAmount);
 
     return {

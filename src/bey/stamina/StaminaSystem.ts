@@ -38,7 +38,18 @@ export const FULL_PHYSICAL_CONDITION: PhysicalCondition = {
 export class StaminaSystem {
   readonly resource: Resource;
 
-  /** staminaStat: archetype Stamina multiplier (GDD section 6/31, Milestone 6) — 1 = neutral. Higher gives a larger max pool and divides drain, so it degrades slower; see BeyStats.ts. */
+  /**
+   * staminaStat: archetype Stamina multiplier (GDD section 6/31, Milestone
+   * 6) — 1 = neutral. Higher gives a larger max pool and divides drain, so
+   * it degrades slower; see BeyStats.ts.
+   * PROTOTYPE tuning approach, not a final balance decision: scaling both
+   * max-pool size and drain rate together is one reasonable reading of
+   * "higher Stamina lasts longer," picked so the archetype has a
+   * measurable effect without inventing new Stamina rules beyond what
+   * StaminaTuning.ts already approved. A different split (pool only, drain
+   * only, or a curve instead of a flat divisor) is equally open pending
+   * owner balance review.
+   */
   constructor(private readonly staminaStat: number = 1) {
     this.resource = new Resource(STAMINA_MAX * staminaStat);
   }
