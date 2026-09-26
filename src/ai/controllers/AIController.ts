@@ -70,10 +70,14 @@ const OPPONENT_DASH_STATES: ReadonlySet<AttackState> = new Set([AttackState.Char
 /** How many of the best candidates the one-line overlay summary shows (the debug state and telemetry carry all of them). */
 const SCORES_SUMMARY_SHOWN = 4;
 
-function summarizeScores(scores: readonly ConsideredScore[] | undefined, shown = SCORES_SUMMARY_SHOWN): string {
+function summarizeScores(decision: IntentDecision, shown = SCORES_SUMMARY_SHOWN): string {
+  const scores: readonly ConsideredScore[] | undefined = decision.consideredScores;
   if (!scores || scores.length === 0) return 'override (see reason)';
   const head = scores.slice(0, shown).map((entry) => `${entry.intent} ${entry.score.toFixed(2)}`).join(' / ');
-  return scores.length > shown ? `${head} (+${scores.length - shown} more)` : head;
+  const summary = scores.length > shown ? `${head} (+${scores.length - shown} more)` : head;
+  // Only when it actually shaped this decision (see IntentSelection.clashWillingness).
+  const willingness = decision.clashWillingness;
+  return willingness !== undefined && willingness < 1 ? `${summary} [clash x${willingness.toFixed(2)}]` : summary;
 }
 
 function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey): CombatantRawState {
@@ -281,7 +285,7 @@ export class AIController implements CombatController {
         edgeRiskFraction: risk.edgeRisk,
         opponentThreatFraction: risk.opponentThreat,
         extraReactionDelayS: extraDelaySeconds,
-        consideredScores: summarizeScores(ideal.consideredScores, Number.POSITIVE_INFINITY),
+        consideredScores: summarizeScores(ideal, Number.POSITIVE_INFINITY),
       });
     }
   }
@@ -344,8 +348,9 @@ export class AIController implements CombatController {
       difficultyProfileId: this.difficulty.id,
       idealIntent: this.idealDecision.intent,
       idealIntentReason: this.idealDecision.reason,
-      consideredScoresSummary: summarizeScores(this.idealDecision.consideredScores),
+      consideredScoresSummary: summarizeScores(this.idealDecision),
       consideredScores: this.idealDecision.consideredScores ?? [],
+      clashWillingness: this.idealDecision.clashWillingness ?? 1,
       activeIntent: this.activeDecision.intent,
       activeIntentReason: this.activeDecision.reason,
       deliberateErrorApplied: this.deliberateErrorApplied,

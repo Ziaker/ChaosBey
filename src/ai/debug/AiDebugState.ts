@@ -23,6 +23,8 @@ export interface AiDebugState {
   consideredScoresSummary: string;
   /** Every candidate intent and its score from the latest fresh decision, best first; empty when a hard override decided. */
   consideredScores: readonly { intent: AiIntent; score: number }[];
+  /** The Clash-willingness multiplier the latest fresh decision's scoring applied to its attack candidates (IntentSelection.clashWillingness); 1 when none applied or a hard override decided. */
+  clashWillingness: number;
   /** The intent actually acted on this decision tick — equal to idealIntent unless deliberateErrorApplied is true. */
   activeIntent: AiIntent;
   activeIntentReason: string;

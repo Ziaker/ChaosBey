@@ -21,6 +21,9 @@
 // ============================================================
 
 import { AttackState } from '../../combat/attacks/AttackController';
+import { ClashState } from '../../combat/clash/ClashController';
+import { computeStaminaFactor } from '../../combat/clash/ClashFormula';
+import { CLASH_STAMINA_FACTOR_MAX, CLASH_STAMINA_FACTOR_MIN } from '../../combat/clash/ClashTuning';
 import { DodgeState } from '../../dodge/DodgeController';
 import { DriftState } from '../../drift/DriftController';
 import type { AiPersonality } from '../personalities/AiPersonality';
@@ -78,6 +81,19 @@ const TEMPO_PATIENCE_SCALE = 1.6;
 /** At full tempo, Circle and Wait keep only (1 - this) of their normal score. */
 const TEMPO_MAX_PASSIVE_DAMPING = 0.6;
 
+// ============================================================
+// CLASH WILLINGNESS TUNING (ported from PR #15)
+// Engineering placeholders (GDD section 167). Willingness = BASE +
+// aggression x AGGRESSION - caution x CAUTION + Stamina edge x STAMINA_EDGE,
+// clamped to 0..1 (1 = attack as usual).
+// ============================================================
+
+const CLASH_WILLINGNESS_BASE = 0.65;
+const CLASH_WILLINGNESS_AGGRESSION_WEIGHT = 0.5;
+const CLASH_WILLINGNESS_CAUTION_WEIGHT = 0.45;
+/** Per unit of Clash StaminaFactor advantage (own - opponent, over its full range): Clash power scales with it (ClashFormula), so a Stamina edge makes a Clash worth accepting. */
+const CLASH_WILLINGNESS_STAMINA_EDGE_WEIGHT = 0.3;
+
 export interface ConsideredScore {
   intent: AiIntent;
   score: number;
@@ -89,6 +105,8 @@ export interface IntentDecision {
   reason: string;
   /** Every candidate of the normal scoring pass with its score, highest first (GDD section 65: "considered action scores"); empty when an override decided (the reason says which). */
   consideredScores?: readonly ConsideredScore[];
+  /** The clashWillingness multiplier the normal scoring pass applied to the attack candidates (1 = none); absent when an override decided. */
+  clashWillingness?: number;
   /** True when this decision is part of getting away from the ring-out edge (RecoverFromEdge, or an edge-safe evasion of a live hit while in edge danger) — AIController keeps the lower release threshold (hysteresis) across such decisions, including an evasion in the middle of a recovery. */
   edgeRecovery?: boolean;
 }
@@ -131,6 +149,31 @@ export function isCounterableDash(world: WorldState): boolean {
 
 function clamp01(t: number): number {
   return Math.max(0, Math.min(1, t));
+}
+
+/**
+ * 0..1 multiplier on this AI's attack scores when attacking now would meet
+ * the opponent's own live/imminent attack — the situation a Clash comes
+ * from (both sides' hits connecting within the Clash window; GDD section
+ * 42/63: the AI can create/accept Clash opportunities). Aggression leans
+ * in, caution away, and a Stamina edge leans in (Clash power scales with
+ * ClashFormula's StaminaFactor; both Stamina bars are visible). 1 when
+ * there is nothing to accept: the opponent isn't attacking, or the Clash
+ * system isn't Idle (on Cooldown a contested exchange resolves as a
+ * weakened trade, not a Clash). A multiplier on scores, never a rule: it
+ * can make an attack lose to another candidate, it never forces one.
+ */
+export function clashWillingness(world: WorldState, personality: AiPersonality): number {
+  if (!world.opponent.hasImminentHitbox || world.clash.state !== ClashState.Idle) return 1;
+  const staminaEdge =
+    (computeStaminaFactor(world.own.staminaFraction) - computeStaminaFactor(world.opponent.staminaFraction)) /
+    (CLASH_STAMINA_FACTOR_MAX - CLASH_STAMINA_FACTOR_MIN);
+  return clamp01(
+    CLASH_WILLINGNESS_BASE +
+      personality.aggression * CLASH_WILLINGNESS_AGGRESSION_WEIGHT -
+      personality.caution * CLASH_WILLINGNESS_CAUTION_WEIGHT +
+      staminaEdge * CLASH_WILLINGNESS_STAMINA_EDGE_WEIGHT,
+  );
 }
 
 export function selectIntent(
@@ -243,13 +286,14 @@ export function selectIntent(
   const collisionReluctance = clamp01(personality.collisionAvoidance * (1 - opening) * (1 - tempo));
 
   const scores = new Map<AiIntent, number>();
+  const willingness = clashWillingness(world, personality);
 
   // Two kinds of advantage feed PressAdvantage: a weakened opponent, or one
   // near the ring-out edge (ActionSelection approaches the latter from the
   // center side so the hit drives them outward).
   const stabilityAdvantage = risk.opportunity * (0.5 + personality.aggression * 0.5);
   const edgeAdvantage = risk.edgePressure * (EDGE_PRESSURE_SCORE_BASE + personality.edgePressureAffinity * EDGE_PRESSURE_SCORE_AFFINITY_WEIGHT);
-  scores.set(AiIntent.PressAdvantage, Math.max(stabilityAdvantage, edgeAdvantage) * (inCircularRange || inDashRange ? 1 : 0.3));
+  scores.set(AiIntent.PressAdvantage, Math.max(stabilityAdvantage, edgeAdvantage) * willingness * (inCircularRange || inDashRange ? 1 : 0.3));
 
   // A visible recovery window (whiffed/spent attack) invites a punish —
   // how strongly depends on the personality (GDD section 64 Defense).
@@ -258,7 +302,7 @@ export function selectIntent(
   scores.set(
     AiIntent.AttackCircular,
     inCircularRange && !alreadyAttacking
-      ? 0.4 + personality.aggression * 0.4 - personality.caution * 0.2 + punishBonus * PUNISH_CIRCULAR_SCORE_BONUS
+      ? (0.4 + personality.aggression * 0.4 - personality.caution * 0.2 + punishBonus * PUNISH_CIRCULAR_SCORE_BONUS) * willingness
       : 0,
   );
 
@@ -266,6 +310,7 @@ export function selectIntent(
     AiIntent.AttackDash,
     inDashRange && !alreadyAttacking && world.own.attackEnergyFraction > 0.25
       ? (0.3 + personality.aggression * 0.5 - personality.patience * 0.2 + punishBonus * PUNISH_DASH_SCORE_BONUS) *
+          willingness *
           (1 - collisionReluctance * COLLISION_AVOIDANCE_DASH_DAMPING)
       : 0,
   );
@@ -321,5 +366,10 @@ export function selectIntent(
   // deterministic.
   const consideredScores = [...scores.entries()].map(([intent, score]) => ({ intent, score })).sort((a, b) => b.score - a.score);
 
-  return { intent: bestIntent, reason: `best score ${clamp01(bestScore).toFixed(2)} among ${scores.size} candidates`, consideredScores };
+  return {
+    intent: bestIntent,
+    reason: `best score ${clamp01(bestScore).toFixed(2)} among ${scores.size} candidates`,
+    consideredScores,
+    clashWillingness: willingness,
+  };
 }
