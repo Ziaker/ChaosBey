@@ -19,6 +19,14 @@ export enum Action {
 }
 
 /**
+ * App/UI actions (not gameplay): never delayed by hitstop buffering, and
+ * still honored while the keyboard focus is in a settings text field. Any
+ * new UI-only action belongs here, or it silently behaves like a gameplay
+ * input.
+ */
+export const UI_ACTIONS: ReadonlySet<Action> = new Set([Action.Pause, Action.DebugToggle, Action.SettingsToggle]);
+
+/**
  * Per-frame action state sampled from a controller. `held` actions (movement,
  * charge attacks) need duration; `pressed` actions (dodge, pause) need a
  * clean single-frame edge regardless of how long the underlying key/button

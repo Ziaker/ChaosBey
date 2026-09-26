@@ -121,3 +121,14 @@ describe('ActionSampleBuffer — UI actions stay responsive through a freeze', (
     expect(later.pressedThisFrame.has(Action.Pause)).toBe(false);
   });
 });
+
+describe('ActionSampleBuffer — every UI action stays responsive through a freeze', () => {
+  // Regression: SettingsToggle (F4) was missing from the UI-action set, so a
+  // press during hitstop was held back like a gameplay input until the
+  // freeze ended, unlike F3.
+  it.each([Action.Pause, Action.DebugToggle, Action.SettingsToggle])('%s is delivered on the frozen sample itself', (action) => {
+    const buffer = new ActionSampleBuffer();
+    buffer.registerPress(action);
+    expect(buffer.sample(DT, true).pressedThisFrame.has(action)).toBe(true);
+  });
+});
