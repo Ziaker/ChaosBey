@@ -1,10 +1,11 @@
 // ============================================================
 // APP ENTRYPOINT
-// Composes the app's foundation pieces plus the Milestone 2 basic combat
-// match (two Beys: player + a temporary idle stand-in opponent — real AI
-// is Milestone 7). Keep this file a thin wiring layer — real logic
-// belongs in the owning component module, not here (GDD section 1.4: no
-// giant GameManager).
+// Composes the app's foundation pieces plus the two-Bey match: a
+// keyboard-driven player and, as of Milestone 7, a real AIController
+// opponent (GDD section 62-65/143) — Milestones 2-6 used a temporary
+// IdleController stand-in instead. Keep this file a thin wiring layer —
+// real logic belongs in the owning component module, not here (GDD
+// section 1.4: no giant GameManager).
 // ============================================================
 
 import { createMatchScene } from './app/bootstrap/createMatchScene';
@@ -16,7 +17,11 @@ import { ClashPresentationTracker } from './app/simulation/ClashPresentationTrac
 import { RoundState } from './combat/round-rules/RoundState';
 import { ClashOutcome, ClashState } from './combat/clash/ClashController';
 import { computeClashPower, computeMashPerformance, computeStaminaFactor, computeVelocityFactor } from './combat/clash/ClashFormula';
+import { NullAiMashSource } from './combat/clash/ClashMash';
 import { CLASH_PROGRESSIVE_VFX_INTERVAL_TICKS, CLASH_TARGET_DURATION_S } from './combat/clash/ClashTuning';
+import { AIController } from './ai/controllers/AIController';
+import { DEFAULT_AI_DIFFICULTY_PROFILE } from './ai/difficulty/AiDifficultyProfile';
+import { personalityForBeyDefinitionId } from './ai/personalities/AiArchetypePersonalities';
 import { CombatCameraController, type CombatCameraOutput } from './camera/CombatCameraController';
 import { ClashCameraDirector } from './camera/ClashCameraDirector';
 import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from './camera/ImpactEvents';
@@ -29,7 +34,6 @@ import { DebugOverlay, type DebugOverlayState } from './debug/overlay/DebugOverl
 import { AttackProfileSettingsPanel } from './debug/settings/AttackProfileSettingsPanel';
 import { Action } from './input/actions/Action';
 import { KeyboardController } from './input/devices/KeyboardController';
-import { IdleController } from './automation/scripted-scenarios/IdleController';
 import { FixedTimestepLoop } from './physics/fixed-step/FixedTimestepLoop';
 import { checkAngularVelocity, checkLinearVelocity } from './physics/diagnostics/physicsSafety';
 import { PhysicsWorld } from './physics/world/PhysicsWorld';
@@ -57,7 +61,12 @@ async function bootstrap(): Promise<void> {
   const telemetry = new TelemetryRecorder();
   const stateMachine = new GameStateMachine();
   const roundState = new RoundState();
-  const clash = new ClashOrchestration(matchConfig);
+  // Milestone 7: the real AIController below mashes Clash via its own real
+  // Z/X/C presses (see AIController.sampleClashMashActions), so the
+  // FixedIntervalAiMashSource placeholder must be disabled here — leaving
+  // it active would silently add its contribution on top of the AI's own
+  // personality-driven mash rate (see ClashMash.ts's NullAiMashSource doc).
+  const clash = new ClashOrchestration(matchConfig, new NullAiMashSource());
 
   const seedText = generateRandomSeedText();
   const rngStreams = createRngStreams(seedText);
@@ -73,7 +82,26 @@ async function bootstrap(): Promise<void> {
 
   const playerController = new KeyboardController();
   playerController.attach();
-  const opponentController = new IdleController();
+  // Milestone 7: the opponent is now a real AIController (was IdleController
+  // through Milestone 6 — see GDD section 62-65/143). Personality is looked
+  // up from the opponent Bey's own archetype id (GDD section 64); the
+  // difficulty profile is the internal default until a pre-game selection
+  // UI (Milestone 10) exists to resolve a real one — see
+  // AiDifficultyProfile.ts for why that's explicitly not a player-facing
+  // tier decision. Reads match.first as its opponent and match.second as
+  // its own Bey — it never reaches into the RigidBody or any other
+  // privileged state (GDD/owner rule: AI plays by the same rules as a
+  // player), only the same public getters the debug overlay/telemetry use.
+  const opponentController = new AIController(
+    physics,
+    match.second,
+    match.first,
+    clash.controller,
+    personalityForBeyDefinitionId(match.second.definition.id),
+    DEFAULT_AI_DIFFICULTY_PROFILE,
+    rngStreams.ai,
+    telemetry,
+  );
 
   const debugOverlay = new DebugOverlay(debugOverlayRoot, runtimeConfig.debugOverlayVisibleOnBoot);
   const attackProfileSettingsPanel = new AttackProfileSettingsPanel(attackSettingsRoot);
@@ -429,6 +457,7 @@ async function bootstrap(): Promise<void> {
         secondClashVelocityFactor: computeVelocityFactor(clash.controller.getSecondSpeedMpsAtStart()),
         secondClashPower: computeClashPower(currentSecondClashMashEventCount, clash.controller.getSecondStaminaFractionAtStart(), clash.controller.getSecondSpeedMpsAtStart()),
         clashImpactMultiplier: matchConfig.clashImpactMultiplier,
+        aiDebug: opponentController.getDebugState(),
       };
     },
     onRenderFrame: (frameDeltaSeconds) => {
