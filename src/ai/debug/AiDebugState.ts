@@ -19,6 +19,8 @@ export interface AiDebugState {
   /** The intent IntentSelection.ts chose this decision tick, before any deliberate-error downgrade. */
   idealIntent: AiIntent;
   idealIntentReason: string;
+  /** The best-scoring candidates behind idealIntent, e.g. "AttackCircular 0.72 / Circle 0.41 / Approach 0.20" — or "override (see reason)" when a hard override decided (GDD section 65: "considered action scores where practical"). */
+  consideredScoresSummary: string;
   /** The intent actually acted on this decision tick — equal to idealIntent unless deliberateErrorApplied is true. */
   activeIntent: AiIntent;
   activeIntentReason: string;

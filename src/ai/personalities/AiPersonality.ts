@@ -43,4 +43,13 @@ export interface AiPersonality {
 
   /** Preferred distance (m) from the opponent this personality tries to hold outside of an active engagement — Attack tends low, Defense/Stamina higher. */
   readonly preferredEngageRangeM: number;
+
+  /** 0..1 chance, per fresh decision, of answering a telegraphed/incoming Dash Attack with a timed Circular counter (GDD section 23/107: Circular catching a Dash launches the dasher) instead of evading it. Defense high (GDD section 64: "uses counter opportunities"). */
+  readonly counterAffinity: number;
+
+  /** 0..1. How strongly an opponent stuck in attack recovery (a whiffed Dash, a spent Circular) pulls this AI into attacking it (GDD section 64 Defense: "punishes commitment"; section 106 whiff punishment). */
+  readonly punishAffinity: number;
+
+  /** 0..1. How strongly an opponent near the ring-out boundary pulls this AI into pressing them toward it from the center side (GDD section 63/129: "AI exploits opponents near the edge"). */
+  readonly edgePressureAffinity: number;
 }

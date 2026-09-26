@@ -14,7 +14,7 @@ import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { perceiveCombatant, type CombatantRawState } from '../../src/ai/perception/AiPerception';
 import { buildWorldState, type WorldState } from '../../src/ai/decision/WorldState';
 import { evaluateRisk } from '../../src/ai/decision/RiskEvaluation';
-import { selectIntent } from '../../src/ai/decision/IntentSelection';
+import { NEUTRAL_DECISION_CONTEXT, selectIntent, type DecisionContext } from '../../src/ai/decision/IntentSelection';
 import { AiIntent } from '../../src/ai/decision/Intent';
 import { ATTACK_AI_PERSONALITY, DEFENSE_AI_PERSONALITY, STAMINA_AI_PERSONALITY } from '../../src/ai/personalities/AiArchetypePersonalities';
 
@@ -101,5 +101,107 @@ describe('selectIntent', () => {
     // available — pressing the advantage is GDD section 64's explicit
     // Attack-archetype tendency.
     expect([AiIntent.Retreat, AiIntent.Wait]).not.toContain(attackIntent);
+  });
+});
+
+// ============================================================
+// M7 Part 2 — counter read, punish windows, edge pressure, tempo,
+// considered scores.
+// ============================================================
+
+function decide(own: Partial<CombatantRawState>, opponent: Partial<CombatantRawState>, personality = DEFENSE_AI_PERSONALITY, context: DecisionContext = NEUTRAL_DECISION_CONTEXT) {
+  const w = world(own, opponent);
+  return selectIntent(w, personality, evaluateRisk(w, personality), context);
+}
+
+describe('selectIntent — Circular counter read (M7 Part 2)', () => {
+  const telegraph = { positionXZ: { x: 0, z: 5 }, attackState: AttackState.ChargingDash };
+
+  it('holds a CounterAttack stance against a telegraphed Dash when this Dash was rolled for a counter', () => {
+    expect(decide({}, telegraph, DEFENSE_AI_PERSONALITY, { ...NEUTRAL_DECISION_CONTEXT, counterDash: true }).intent).toBe(AiIntent.CounterAttack);
+  });
+
+  it('does not counter when the roll said no', () => {
+    expect(decide({}, telegraph, DEFENSE_AI_PERSONALITY, NEUTRAL_DECISION_CONTEXT).intent).not.toBe(AiIntent.CounterAttack);
+  });
+
+  it('does not counter while already mid-attack, or against a Circular', () => {
+    expect(decide({ attackState: AttackState.ChargingDash }, telegraph, DEFENSE_AI_PERSONALITY, { ...NEUTRAL_DECISION_CONTEXT, counterDash: true }).intent).not.toBe(
+      AiIntent.CounterAttack,
+    );
+    expect(
+      decide({}, { positionXZ: { x: 0, z: 1.5 }, attackState: AttackState.CircularActive }, DEFENSE_AI_PERSONALITY, { ...NEUTRAL_DECISION_CONTEXT, counterDash: true }).intent,
+    ).not.toBe(AiIntent.CounterAttack);
+  });
+
+  it('edge danger still outranks a counter read', () => {
+    const nearEdge = { positionXZ: { x: RINGOUT_RADIUS_M - 0.5, z: 0 } };
+    expect(
+      decide(nearEdge, { positionXZ: { x: RINGOUT_RADIUS_M - 4, z: 0 }, attackState: AttackState.ChargingDash }, DEFENSE_AI_PERSONALITY, {
+        ...NEUTRAL_DECISION_CONTEXT,
+        counterDash: true,
+      }).intent,
+    ).toBe(AiIntent.RecoverFromEdge);
+  });
+});
+
+describe('selectIntent — punish windows (M7 Part 2)', () => {
+  it('Defense punishes a whiffed Dash in Dash range that it would otherwise just circle', () => {
+    const inDashRange = { positionXZ: { x: 0, z: 4.5 } };
+    expect(decide({}, inDashRange, DEFENSE_AI_PERSONALITY).intent).toBe(AiIntent.Circle);
+    expect(decide({}, { ...inDashRange, attackState: AttackState.DashRecovery }, DEFENSE_AI_PERSONALITY).intent).toBe(AiIntent.AttackDash);
+  });
+});
+
+describe('selectIntent — edge pressure (M7 Part 2)', () => {
+  it('Attack presses an opponent at the edge instead of a plain attack', () => {
+    const own = { positionXZ: { x: RINGOUT_RADIUS_M - 2.4, z: 0 } };
+    const middle = { positionXZ: { x: 1.5, z: 0 } };
+    const atEdge = { positionXZ: { x: RINGOUT_RADIUS_M - 0.4, z: 0 } };
+    expect(decide({}, middle, ATTACK_AI_PERSONALITY).intent).toBe(AiIntent.AttackCircular);
+    expect(decide(own, atEdge, ATTACK_AI_PERSONALITY).intent).toBe(AiIntent.PressAdvantage);
+  });
+});
+
+describe('selectIntent — anti-passivity tempo (M7 Part 2)', () => {
+  it('a patient personality circles at first but engages after a long stretch without attacking', () => {
+    const inDashRange = { positionXZ: { x: 0, z: 4.5 } };
+    expect(decide({}, inDashRange, STAMINA_AI_PERSONALITY, NEUTRAL_DECISION_CONTEXT).intent).toBe(AiIntent.Circle);
+    const later = decide({}, inDashRange, STAMINA_AI_PERSONALITY, { ...NEUTRAL_DECISION_CONTEXT, secondsSinceOwnAttack: 20 }).intent;
+    expect([AiIntent.Circle, AiIntent.Wait]).not.toContain(later);
+  });
+});
+
+describe('selectIntent — considered scores (M7 Part 2, GDD section 65)', () => {
+  it('reports up to 3 candidates, best first, with the winner on top', () => {
+    const decision = decide({}, { positionXZ: { x: 0, z: 4.5 } }, DEFENSE_AI_PERSONALITY);
+    const scores = decision.consideredScores ?? [];
+    expect(scores.length).toBe(3);
+    expect(scores[0]!.intent).toBe(decision.intent);
+    expect(scores[0]!.score).toBeGreaterThanOrEqual(scores[1]!.score);
+    expect(scores[1]!.score).toBeGreaterThanOrEqual(scores[2]!.score);
+  });
+
+  it('reports no scores when an override decided', () => {
+    const decision = decide({ positionXZ: { x: RINGOUT_RADIUS_M - 0.3, z: 0 } }, { positionXZ: { x: 0, z: 0 } });
+    expect(decision.intent).toBe(AiIntent.RecoverFromEdge);
+    expect(decision.consideredScores ?? []).toHaveLength(0);
+  });
+});
+
+describe('selectIntent — edge recovery hysteresis (M7 Part 2)', () => {
+  // Defense edgeCautionMultiplier 1.3: at z=10.2 raw edge risk ~0.23 -> weighted ~0.30; at z=10.9 ~0.43 -> ~0.56.
+  const opponentFarAway = { positionXZ: { x: 0, z: -6 } };
+
+  it('keeps recovering below the entry threshold once already recovering, and releases once well clear', () => {
+    const between = { positionXZ: { x: 0, z: 10.6 } };
+    expect(decide(between, opponentFarAway, DEFENSE_AI_PERSONALITY).intent).not.toBe(AiIntent.RecoverFromEdge);
+    expect(decide(between, opponentFarAway, DEFENSE_AI_PERSONALITY, { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true }).intent).toBe(
+      AiIntent.RecoverFromEdge,
+    );
+    const clear = { positionXZ: { x: 0, z: 9 } };
+    expect(decide(clear, opponentFarAway, DEFENSE_AI_PERSONALITY, { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true }).intent).not.toBe(
+      AiIntent.RecoverFromEdge,
+    );
   });
 });

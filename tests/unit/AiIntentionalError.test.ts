@@ -14,8 +14,8 @@ import { maybeApplyIntentionalError } from '../../src/ai/errors/IntentionalError
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../src/ai/difficulty/AiDifficultyProfile';
 import { ATTACK_AI_PERSONALITY } from '../../src/ai/personalities/AiArchetypePersonalities';
 
-const NO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0 };
-const CRITICAL_EDGE_RISK: RiskAssessment = { edgeRisk: 0.95, opponentThreat: 0, selfVulnerability: 0, opportunity: 0 };
+const NO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, punishWindow: false, edgePressure: 0 };
+const CRITICAL_EDGE_RISK: RiskAssessment = { edgeRisk: 0.95, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, punishWindow: false, edgePressure: 0 };
 
 const decision: IntentDecision = { intent: AiIntent.AttackDash, reason: 'test' };
 const edgeDecision: IntentDecision = { intent: AiIntent.RecoverFromEdge, reason: 'edge risk high' };
