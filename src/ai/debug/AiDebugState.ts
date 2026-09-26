@@ -23,6 +23,8 @@ export interface AiDebugState {
   activeIntent: AiIntent;
   activeIntentReason: string;
   deliberateErrorApplied: boolean;
+  /** The outcome of AiPersonality.dodgeSkill's single pre-roll for the current decision (see AIController.makeFreshDecision) — only meaningful while activeIntent is DodgeThreat. Exposed for GDD section 65's "why a dodge/jump was chosen" and to make the once-per-decision (not once-per-tick) rolling semantics independently observable. */
+  dodgeAttemptSucceeds: boolean;
   targetPositionXZ: Vec2;
   distanceToOpponentM: number;
   edgeRiskFraction: number;

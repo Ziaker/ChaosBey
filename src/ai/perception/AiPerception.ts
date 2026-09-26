@@ -48,7 +48,13 @@ export interface PerceivedCombatant extends CombatantRawState {
   hasImminentHitbox: boolean;
 }
 
-const IMMINENT_HITBOX_STATES: ReadonlySet<AttackState> = new Set([
+/**
+ * Attack states with a live or imminent hitbox. Exported (not just used
+ * internally) so AIController.ts can reuse the exact same set to recognize
+ * "I am myself mid-attack right now" — a single definition of "engaged",
+ * never two lists that could silently drift apart.
+ */
+export const ENGAGED_ATTACK_STATES: ReadonlySet<AttackState> = new Set([
   AttackState.Buffering,
   AttackState.ChargingDash,
   AttackState.CircularActive,
@@ -62,7 +68,7 @@ export function perceiveCombatant(raw: CombatantRawState): PerceivedCombatant {
     distanceToEdgeM: distanceToEdgeM(raw.positionXZ),
     directionTowardCenter: directionTowardCenter(raw.positionXZ),
     edgeRiskFraction: edgeRiskFraction(raw.positionXZ, EDGE_RISK_MARGIN_M),
-    hasImminentHitbox: IMMINENT_HITBOX_STATES.has(raw.attackState),
+    hasImminentHitbox: ENGAGED_ATTACK_STATES.has(raw.attackState),
   };
 }
 

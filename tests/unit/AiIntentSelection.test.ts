@@ -66,6 +66,24 @@ describe('selectIntent', () => {
     expect(selectIntent(w, DEFENSE_AI_PERSONALITY, risk).intent).toBe(AiIntent.DodgeThreat);
   });
 
+  it('falls back to UseJumpDrift when threatened and Dodge is on cooldown but jump is available (regression for the M7 part 1 review)', () => {
+    const w = world(
+      { positionXZ: { x: 0, z: 0 }, dodgeState: DodgeState.Cooldown, driftState: DriftState.Idle, grounded: true },
+      { positionXZ: { x: 1, z: 0 }, attackState: AttackState.DashActive },
+    );
+    const risk = evaluateRisk(w, DEFENSE_AI_PERSONALITY);
+    expect(selectIntent(w, DEFENSE_AI_PERSONALITY, risk).intent).toBe(AiIntent.UseJumpDrift);
+  });
+
+  it('falls back to Retreat when threatened and both Dodge and jump are unavailable (regression for the M7 part 1 review)', () => {
+    const w = world(
+      { positionXZ: { x: 0, z: 0 }, dodgeState: DodgeState.Cooldown, driftState: DriftState.Idle, grounded: false },
+      { positionXZ: { x: 1, z: 0 }, attackState: AttackState.DashActive },
+    );
+    const risk = evaluateRisk(w, DEFENSE_AI_PERSONALITY);
+    expect(selectIntent(w, DEFENSE_AI_PERSONALITY, risk).intent).toBe(AiIntent.Retreat);
+  });
+
   it('never selects an attack intent while already mid-attack', () => {
     const w = world({ positionXZ: { x: 0, z: 0 }, attackState: AttackState.ChargingDash }, { positionXZ: { x: 1, z: 0 } });
     const risk = evaluateRisk(w, ATTACK_AI_PERSONALITY);

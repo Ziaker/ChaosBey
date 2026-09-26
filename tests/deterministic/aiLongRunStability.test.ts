@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { AIController } from '../../src/ai/controllers/AIController';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../src/ai/difficulty/AiDifficultyProfile';
 import { ATTACK_AI_PERSONALITY, DEFENSE_AI_PERSONALITY } from '../../src/ai/personalities/AiArchetypePersonalities';
+import { NullAiMashSource } from '../../src/combat/clash/ClashMash';
 import { Action, type ControllerActions } from '../../src/input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { SeededRng } from '../../src/rng/SeededRng';
@@ -41,7 +42,14 @@ function assertFiniteFraction(value: number, label: string): void {
 
 describe('AI vs AI long-run stability', () => {
   it('runs a full match for thousands of ticks with a valid controller contract and no invalid/NaN state throughout', async () => {
-    const harness = await CombatHarness.create();
+    // Both sides are real AIControllers, each already contributing its own
+    // real Z/X/C presses during an Active Clash — this must mirror
+    // production's wiring (main.ts passes NullAiMashSource for exactly
+    // this reason) so the long-run doesn't exercise a scenario production
+    // never actually runs (the Milestone 5 FixedIntervalAiMashSource
+    // placeholder silently adding a second, parallel mash contribution on
+    // top of the AI's own).
+    const harness = await CombatHarness.create(undefined, undefined, {}, new NullAiMashSource());
     const firstAi = new AIController(
       harness.physics,
       harness.first,

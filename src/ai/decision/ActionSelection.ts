@@ -24,8 +24,8 @@ import { DodgeState } from '../../dodge/DodgeController';
 import { DriftState } from '../../drift/DriftController';
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { fromYaw, perpendicular, scale, signedAngleBetween, type Vec2 } from '../../physics/Vec2';
-import type { SeededRng } from '../../rng/SeededRng';
 import type { AiPersonality } from '../personalities/AiPersonality';
+import { AI_CIRCULAR_ATTACK_RANGE_M, AI_DASH_ATTACK_MAX_RANGE_M } from './AiCombatRanges';
 import { AiIntent } from './Intent';
 import type { WorldState } from './WorldState';
 
@@ -80,14 +80,21 @@ export class ActionSelector {
   private readonly holdStartedAtTick = new Map<Action, number>();
 
   /**
-   * Produces this tick's ControllerActions from the current intent. `rng`
-   * must be the AI's own dedicated seeded stream (GDD section 73) — the
-   * only randomness used here is whether a threatened dodge actually fires
-   * in time (AiPersonality.dodgeSkill), consumed only when that specific
-   * branch is actually reached, so the same seed always reproduces the
-   * same sequence of draws.
+   * Produces this tick's ControllerActions from the current intent.
+   * `dodgeAttemptSucceeds` is a single pre-rolled outcome (AIController
+   * rolls AiPersonality.dodgeSkill exactly once per fresh DodgeThreat
+   * decision, not here — see AIController.makeFreshDecision — a per-tick
+   * roll would let a moderate dodgeSkill converge to near-certain success
+   * over the several ticks a single threat window can span). Ignored for
+   * every intent other than DodgeThreat.
    */
-  selectActions(intent: AiIntent, world: WorldState, personality: AiPersonality, rng: SeededRng, fixedDeltaSeconds: number): ControllerActions {
+  selectActions(
+    intent: AiIntent,
+    world: WorldState,
+    personality: AiPersonality,
+    dodgeAttemptSucceeds: boolean,
+    fixedDeltaSeconds: number,
+  ): ControllerActions {
     const desiredHeld = new Set<Action>();
 
     const moveDirection = computeDesiredMoveDirection(intent, world);
@@ -99,12 +106,21 @@ export class ActionSelector {
       desiredHeld.add(Action.MoveForward);
     }
 
-    if (intent === AiIntent.AttackCircular && world.own.attackState === AttackState.Neutral) {
-      desiredHeld.add(Action.Attack);
-    }
+    // PressAdvantage is an attack intent too (GDD section 64: Attack AI
+    // "pressures broken Stability") — it picks Circular or Dash by current
+    // range exactly like the two dedicated attack intents, rather than only
+    // ever moving toward the target and never actually swinging.
+    const wantsToAttack = intent === AiIntent.AttackCircular || intent === AiIntent.AttackDash || intent === AiIntent.PressAdvantage;
+    const wantsCircular = intent === AiIntent.AttackCircular || (intent === AiIntent.PressAdvantage && world.distanceToOpponentM <= AI_CIRCULAR_ATTACK_RANGE_M);
+    const wantsDash =
+      intent === AiIntent.AttackDash ||
+      (intent === AiIntent.PressAdvantage && world.distanceToOpponentM > AI_CIRCULAR_ATTACK_RANGE_M && world.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M);
 
-    if (
-      intent === AiIntent.AttackDash &&
+    if (wantsToAttack && wantsCircular && world.own.attackState === AttackState.Neutral) {
+      desiredHeld.add(Action.Attack);
+    } else if (
+      wantsToAttack &&
+      wantsDash &&
       (world.own.attackState === AttackState.Neutral ||
         world.own.attackState === AttackState.Buffering ||
         world.own.attackState === AttackState.ChargingDash) &&
@@ -114,11 +130,21 @@ export class ActionSelector {
       desiredHeld.add(Action.Attack);
     }
 
-    if (intent === AiIntent.DodgeThreat && world.own.dodgeState === DodgeState.Idle && rng.nextBool(personality.dodgeSkill)) {
+    if (intent === AiIntent.DodgeThreat && world.own.dodgeState === DodgeState.Idle && dodgeAttemptSucceeds) {
       desiredHeld.add(Action.Dodge);
     }
 
-    if (intent === AiIntent.UseJumpDrift && world.own.driftState === DriftState.Idle && world.own.grounded) {
+    // Sustain JumpDrift through the whole Idle->Hopping->Drifting sequence,
+    // not just the tick that starts it — DriftController only transitions
+    // Hopping->Drifting if JumpDrift (and steering) are STILL held the
+    // moment it re-lands (see DriftController.tick), so releasing after one
+    // tick can only ever produce a bare hop, never a real drift.
+    if (
+      intent === AiIntent.UseJumpDrift &&
+      ((world.own.driftState === DriftState.Idle && world.own.grounded) ||
+        world.own.driftState === DriftState.Hopping ||
+        world.own.driftState === DriftState.Drifting)
+    ) {
       desiredHeld.add(Action.JumpDrift);
     }
 

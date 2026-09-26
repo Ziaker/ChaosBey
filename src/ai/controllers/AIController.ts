@@ -28,6 +28,7 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Bey } from '../../bey/core/Bey';
 import { ClashState, type ClashController } from '../../combat/clash/ClashController';
+import { DriftState } from '../../drift/DriftController';
 import { Action, type CombatController, type ControllerActions, type ControllerContext } from '../../input/actions/Action';
 import { isGrounded } from '../../physics/collision/GroundCheck';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
@@ -43,11 +44,18 @@ import { buildWorldState, type WorldState } from '../decision/WorldState';
 import type { AiDebugState } from '../debug/AiDebugState';
 import type { AiDifficultyProfile } from '../difficulty/AiDifficultyProfile';
 import { maybeApplyIntentionalError } from '../errors/IntentionalError';
-import { perceiveCombatant, type CombatantRawState } from '../perception/AiPerception';
+import { ENGAGED_ATTACK_STATES, perceiveCombatant, type CombatantRawState } from '../perception/AiPerception';
 import type { AiPersonality } from '../personalities/AiPersonality';
 
 /** Baseline EMA smoothing factor applied to AdaptationTracker per decision (see AdaptationTracker.ts) — this AI's adaptationRate/the active difficulty's adaptationMultiplier further scale how much this actually moves anything. */
 const ADAPTATION_BASE_ALPHA = 0.15;
+
+/** How far ahead AiDifficultyProfile.predictionStrength extrapolates the opponent's position for targeting/steering (GDD section 59/111) — short enough that a sharp, unpredictable direction change doesn't make the prediction actively misleading. */
+const PREDICTION_HORIZON_S = 0.35;
+
+function isAttackIntent(intent: AiIntent): boolean {
+  return intent === AiIntent.AttackCircular || intent === AiIntent.AttackDash || intent === AiIntent.PressAdvantage;
+}
 
 function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey): CombatantRawState {
   const translation = body.translation();
@@ -82,6 +90,8 @@ export class AIController implements CombatController {
   private lastRisk: RiskAssessment = ZERO_RISK;
   private lastWorld: WorldState | null = null;
   private lastActionSummary = 'none yet';
+  /** Rolled exactly once per fresh DodgeThreat decision (see makeFreshDecision) — ActionSelection reads this instead of rolling AiPersonality.dodgeSkill itself every fixed tick, which would otherwise let a moderate skill converge toward near-certain success over a multi-tick threat window. */
+  private dodgeAttemptSucceeds = false;
 
   constructor(
     private readonly physics: PhysicsWorld,
@@ -109,20 +119,38 @@ export class AIController implements CombatController {
     const opponentRaw = extractRawState(this.physics, this.opponentBey.body, this.opponentBey);
     const ownPerceived = perceiveCombatant(ownRaw);
     const opponentPerceived = perceiveCombatant(opponentRaw);
-    const world = buildWorldState(this.nowS, ownPerceived, opponentPerceived, {
-      state: this.clashController.getState(),
-      cooldownRemainingS: this.clashController.getCooldownRemainingS(),
-    });
+    const world = buildWorldState(
+      this.nowS,
+      ownPerceived,
+      opponentPerceived,
+      { state: this.clashController.getState(), cooldownRemainingS: this.clashController.getCooldownRemainingS() },
+      { horizonSeconds: PREDICTION_HORIZON_S, strength: this.difficulty.predictionStrength },
+    );
     this.lastWorld = world;
+
+    // A commitment already in flight — this AI's own attack mid-swing, or
+    // its own jump/drift mid-hop — must survive reaction-delay-gated
+    // re-decisions rather than being silently abandoned the instant a new
+    // decision would otherwise fire. Without this, AttackDash's charge (or
+    // UseJumpDrift's hop-into-drift) could be cut short by an unrelated
+    // re-decision well before its own intentional release/landing point —
+    // ActionSelection only keeps holding Attack/JumpDrift while the
+    // matching intent is still active. Re-decision resumes the instant the
+    // real system itself reports the commitment over (attack back to
+    // Neutral/Recovery, drift back to Idle/Recovering).
+    const committedToAttack = ENGAGED_ATTACK_STATES.has(ownRaw.attackState) && isAttackIntent(this.activeDecision.intent);
+    const committedToDrift =
+      (ownRaw.driftState === DriftState.Hopping || ownRaw.driftState === DriftState.Drifting) && this.activeDecision.intent === AiIntent.UseJumpDrift;
+    const committed = committedToAttack || committedToDrift;
 
     const effectiveReactionDelayS = Math.max(0, this.personality.reactionDelaySeconds * this.difficulty.reactionDelayMultiplier);
     this.decisionTimerS += context.fixedDeltaSeconds;
-    if (this.decisionTimerS >= effectiveReactionDelayS) {
+    if (!committed && this.decisionTimerS >= effectiveReactionDelayS) {
       this.decisionTimerS = 0;
       this.makeFreshDecision(world);
     }
 
-    const actions = this.actionSelector.selectActions(this.activeDecision.intent, world, this.personality, this.rng, context.fixedDeltaSeconds);
+    const actions = this.actionSelector.selectActions(this.activeDecision.intent, world, this.personality, this.dodgeAttemptSucceeds, context.fixedDeltaSeconds);
     this.lastActionSummary = summarizeActions(actions);
     return actions;
   }
@@ -140,6 +168,10 @@ export class AIController implements CombatController {
     const { decision, errorApplied } = maybeApplyIntentionalError(ideal, risk, adjustedPersonality, this.difficulty, this.rng);
     this.activeDecision = decision;
     this.deliberateErrorApplied = errorApplied;
+
+    // Rolled exactly once for this fresh decision (see the field's own doc
+    // comment) — a no-op (stays false) for every other intent.
+    this.dodgeAttemptSucceeds = decision.intent === AiIntent.DodgeThreat ? this.rng.nextBool(adjustedPersonality.dodgeSkill) : false;
 
     if (this.telemetry) {
       this.telemetry.record({
@@ -197,6 +229,7 @@ export class AIController implements CombatController {
       activeIntent: this.activeDecision.intent,
       activeIntentReason: this.activeDecision.reason,
       deliberateErrorApplied: this.deliberateErrorApplied,
+      dodgeAttemptSucceeds: this.dodgeAttemptSucceeds,
       targetPositionXZ: world ? world.opponent.positionXZ : { x: 0, z: 0 },
       distanceToOpponentM: world ? world.distanceToOpponentM : 0,
       edgeRiskFraction: this.lastRisk.edgeRisk,

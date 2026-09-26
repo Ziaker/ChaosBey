@@ -18,14 +18,16 @@
 
 import { AttackState } from '../../combat/attacks/AttackController';
 import { DodgeState } from '../../dodge/DodgeController';
+import { DriftState } from '../../drift/DriftController';
 import type { AiPersonality } from '../personalities/AiPersonality';
+import { AI_CIRCULAR_ATTACK_RANGE_M, AI_DASH_ATTACK_MAX_RANGE_M } from './AiCombatRanges';
 import { AiIntent } from './Intent';
 import type { RiskAssessment } from './RiskEvaluation';
 import type { WorldState } from './WorldState';
 
 /** Above this edgeRisk, recovering toward the center overrides normal intent scoring entirely (GDD section 129). */
 const EDGE_RISK_OVERRIDE_THRESHOLD = 0.55;
-/** Above this opponentThreat, answering with a dodge overrides normal scoring (still subject to IntentionalError.ts's imperfection pass, and to dodgeSkill at the action-selection stage). */
+/** Above this opponentThreat, answering the imminent hitbox overrides normal scoring — with WHICH answer (dodge, jump, or plain spacing) depending on what's actually available right now, never blindly picking dodge regardless of its cooldown. */
 const THREAT_OVERRIDE_THRESHOLD = 0.35;
 
 export interface IntentDecision {
@@ -43,7 +45,19 @@ export function selectIntent(world: WorldState, personality: AiPersonality, risk
     return { intent: AiIntent.RecoverFromEdge, reason: `edge risk ${risk.edgeRisk.toFixed(2)} over threshold` };
   }
   if (risk.opponentThreat >= THREAT_OVERRIDE_THRESHOLD) {
-    return { intent: AiIntent.DodgeThreat, reason: `opponent threat ${risk.opponentThreat.toFixed(2)} — imminent hitbox in range` };
+    // GDD section 20: "a jump can count as an evasive action when it causes
+    // an attack to miss" — Dodge is preferred when it's actually available,
+    // but a real threat must still get *some* evasive answer instead of
+    // silently falling through to normal scoring just because Dodge is on
+    // cooldown (that previously left ActionSelection with nothing to press,
+    // since it only ever presses Dodge from DodgeState.Idle).
+    if (world.own.dodgeState === DodgeState.Idle) {
+      return { intent: AiIntent.DodgeThreat, reason: `opponent threat ${risk.opponentThreat.toFixed(2)} — dodging` };
+    }
+    if (world.own.driftState === DriftState.Idle && world.own.grounded) {
+      return { intent: AiIntent.UseJumpDrift, reason: `opponent threat ${risk.opponentThreat.toFixed(2)} — dodge on cooldown, jumping instead` };
+    }
+    return { intent: AiIntent.Retreat, reason: `opponent threat ${risk.opponentThreat.toFixed(2)} — dodge and jump both unavailable, creating distance` };
   }
 
   // Never try to attack while already mid-attack (Buffering/Charging/Active
@@ -55,8 +69,8 @@ export function selectIntent(world: WorldState, personality: AiPersonality, risk
     world.own.attackState !== AttackState.DashRecovery &&
     world.own.attackState !== AttackState.CircularRecovery;
 
-  const inCircularRange = world.distanceToOpponentM <= 2.2;
-  const inDashRange = world.distanceToOpponentM > 2.2 && world.distanceToOpponentM <= 9;
+  const inCircularRange = world.distanceToOpponentM <= AI_CIRCULAR_ATTACK_RANGE_M;
+  const inDashRange = world.distanceToOpponentM > AI_CIRCULAR_ATTACK_RANGE_M && world.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M;
 
   const scores = new Map<AiIntent, number>();
 
@@ -94,12 +108,13 @@ export function selectIntent(world: WorldState, personality: AiPersonality, risk
 
   scores.set(AiIntent.Wait, alreadyAttacking ? 0 : personality.patience * 0.15);
 
-  // Dodge is on cooldown but the opponent still looks dangerous — a jump
-  // is the only other evasive option left (GDD section 20: "a jump can
-  // count as an evasive action when it causes an attack to miss").
+  // Below the hard override threshold, a milder threat with Dodge already
+  // on cooldown still nudges normal scoring toward a preemptive jump — the
+  // threat->threshold override above handles anything at/past
+  // THREAT_OVERRIDE_THRESHOLD directly.
   scores.set(
     AiIntent.UseJumpDrift,
-    world.opponent.hasImminentHitbox && world.own.dodgeState === DodgeState.Cooldown && risk.opponentThreat > 0.3 ? 0.5 : 0.05,
+    world.opponent.hasImminentHitbox && world.own.dodgeState === DodgeState.Cooldown && risk.opponentThreat > 0.15 ? 0.5 : 0.05,
   );
 
   let bestIntent = AiIntent.Circle;
