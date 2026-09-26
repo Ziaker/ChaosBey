@@ -23,7 +23,10 @@ import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from 
 import { CLASH_RESOLVED_MAGNITUDE } from './camera/ImpactMagnitude';
 import { createDefaultRuntimeConfig } from './config/runtime/RuntimeConfig';
 import { resolveMatchConfig } from './config/match/MatchConfig';
+import { resolveAttackProfileSettings } from './config/attack-profile/AttackProfileSettings';
+import { loadAttackProfileOverrides } from './config/attack-profile/AttackProfileStorage';
 import { DebugOverlay, type DebugOverlayState } from './debug/overlay/DebugOverlay';
+import { AttackProfileSettingsPanel } from './debug/settings/AttackProfileSettingsPanel';
 import { Action } from './input/actions/Action';
 import { KeyboardController } from './input/devices/KeyboardController';
 import { IdleController } from './automation/scripted-scenarios/IdleController';
@@ -39,7 +42,8 @@ import { VfxManager } from './vfx/VfxManager';
 async function bootstrap(): Promise<void> {
   const canvas = document.querySelector<HTMLCanvasElement>('#app-canvas');
   const debugOverlayRoot = document.querySelector<HTMLElement>('#debug-overlay-root');
-  if (!canvas || !debugOverlayRoot) {
+  const attackSettingsRoot = document.querySelector<HTMLElement>('#attack-settings-root');
+  if (!canvas || !debugOverlayRoot || !attackSettingsRoot) {
     throw new Error('bootstrap: required DOM mount points are missing from index.html.');
   }
 
@@ -60,13 +64,19 @@ async function bootstrap(): Promise<void> {
 
   const appRenderer = createRenderer(canvas);
   const physics = await PhysicsWorld.create();
-  const match = createMatchScene(appRenderer.scene, physics);
+  // Owner requirement (PR #8 review): per-archetype BeyAttackProfile values
+  // must be editable from the game's settings, not locked in code. Resolved
+  // once at boot from whatever the settings panel below last persisted —
+  // the same "single resolved pre-match config" model as matchConfig above.
+  const attackProfileSettings = resolveAttackProfileSettings(loadAttackProfileOverrides() ?? undefined);
+  const match = createMatchScene(appRenderer.scene, physics, attackProfileSettings);
 
   const playerController = new KeyboardController();
   playerController.attach();
   const opponentController = new IdleController();
 
   const debugOverlay = new DebugOverlay(debugOverlayRoot, runtimeConfig.debugOverlayVisibleOnBoot);
+  const attackProfileSettingsPanel = new AttackProfileSettingsPanel(attackSettingsRoot);
 
   telemetry.record({
     kind: TelemetryEventKind.AppBoot,
@@ -108,6 +118,9 @@ async function bootstrap(): Promise<void> {
       const secondActions = opponentController.sampleActions({ fixedDeltaSeconds, simulationFrozen: isFrozenByHitstop });
       if (firstActions.pressedThisFrame.has(Action.DebugToggle)) {
         debugOverlay.toggle();
+      }
+      if (firstActions.pressedThisFrame.has(Action.SettingsToggle)) {
+        attackProfileSettingsPanel.toggle();
       }
 
       let result: MatchTickResult;

@@ -26,11 +26,18 @@
         pointer-events: none;
         z-index: 1000;
       }
+      #attack-settings-root {
+        position: fixed;
+        top: 0;
+        right: 0;
+        z-index: 1001;
+      }
     </style>
   </head>
   <body>
     <canvas id="app-canvas"></canvas>
     <div id="debug-overlay-root"></div>
+    <div id="attack-settings-root"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

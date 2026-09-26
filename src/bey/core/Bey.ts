@@ -62,6 +62,6 @@ export function createBey(
     stamina: new StaminaSystem(stats.stamina),
     stability: new StabilitySystem(),
     attackEnergy: new AttackEnergySystem(),
-    attack: new AttackController(),
+    attack: new AttackController(definition.attack),
   };
 }

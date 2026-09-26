@@ -20,11 +20,37 @@
 // that decision is the owner's, pending the visual approval gate.
 // ============================================================
 
+import { DEFAULT_ATTACK_PROFILE, type BeyAttackProfile } from './BeyAttackProfile';
 import type { BeyDefinition } from './BeyDefinition';
 import { DEFAULT_HANDLING_PROFILE } from './BeyHandlingProfile';
 import type { BeyPhysicalProfile } from './BeyPhysicalProfile';
 import { BEY_MASS_KG } from '../core/BeyTuning';
 import { createBeyMesh } from '../procedural-model/createBeyMesh';
+
+/**
+ * Attack-type: reaches further and dashes faster, consistent with its
+ * established "hits harder and moves faster" identity — a separate axis
+ * from the raw knockback/Stability power already carried by its Ratings
+ * (see BeyAttackProfile.ts). Engineering placeholder (GDD section 167).
+ */
+export const ATTACK_ATTACK_PROFILE: BeyAttackProfile = {
+  circularHitboxRadiusM: DEFAULT_ATTACK_PROFILE.circularHitboxRadiusM * 1.15,
+  dashHitboxRadiusM: DEFAULT_ATTACK_PROFILE.dashHitboxRadiusM * 1.15,
+  dashMinSpeedMps: DEFAULT_ATTACK_PROFILE.dashMinSpeedMps * 1.1,
+  dashMaxSpeedMps: DEFAULT_ATTACK_PROFILE.dashMaxSpeedMps * 1.1,
+};
+
+/**
+ * Defense-type: shorter reach and a slower Dash, consistent with its
+ * established "less aggressive, slower" identity. Engineering placeholder
+ * (GDD section 167).
+ */
+export const DEFENSE_ATTACK_PROFILE: BeyAttackProfile = {
+  circularHitboxRadiusM: DEFAULT_ATTACK_PROFILE.circularHitboxRadiusM * 0.9,
+  dashHitboxRadiusM: DEFAULT_ATTACK_PROFILE.dashHitboxRadiusM * 0.9,
+  dashMinSpeedMps: DEFAULT_ATTACK_PROFILE.dashMinSpeedMps * 0.85,
+  dashMaxSpeedMps: DEFAULT_ATTACK_PROFILE.dashMaxSpeedMps * 0.85,
+};
 
 /**
  * Attack-type: hits harder and moves faster, at the cost of Defense and a
@@ -42,6 +68,7 @@ export const ATTACK_ARCHETYPE: BeyDefinition = {
   name: 'Attack (Prototype)',
   physical: ATTACK_PHYSICAL,
   ratings: { attack: 8, defense: 3, stamina: 4 },
+  attack: ATTACK_ATTACK_PROFILE,
   handling: {
     ...DEFAULT_HANDLING_PROFILE,
     accelerationMps2: DEFAULT_HANDLING_PROFILE.accelerationMps2 * 1.2,
@@ -81,6 +108,7 @@ export const DEFENSE_ARCHETYPE: BeyDefinition = {
   name: 'Defense (Prototype)',
   physical: DEFENSE_PHYSICAL,
   ratings: { attack: 3, defense: 8, stamina: 4 },
+  attack: DEFENSE_ATTACK_PROFILE,
   handling: {
     ...DEFAULT_HANDLING_PROFILE,
     accelerationMps2: DEFAULT_HANDLING_PROFILE.accelerationMps2 * 0.85,
@@ -120,6 +148,7 @@ export const STAMINA_ARCHETYPE: BeyDefinition = {
   name: 'Stamina (Prototype)',
   physical: STAMINA_PHYSICAL,
   ratings: { attack: 4, defense: 4, stamina: 8 },
+  attack: DEFAULT_ATTACK_PROFILE,
   handling: { ...DEFAULT_HANDLING_PROFILE },
   appearance: {
     // PROTOTYPE ONLY — silhouette/proportion + placeholder green, not an approved visual design.
