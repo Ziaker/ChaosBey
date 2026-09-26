@@ -31,7 +31,16 @@ export interface AiDebugState {
   pendingRemainingS: number;
   /** The outcome of AiPersonality.dodgeSkill's single pre-roll for the current decision (see AIController.makeFreshDecision) — only meaningful while activeIntent is DodgeThreat. Exposed for GDD section 65's "why a dodge/jump was chosen" and to make the once-per-decision (not once-per-tick) rolling semantics independently observable. */
   dodgeAttemptSucceeds: boolean;
-  targetPositionXZ: Vec2;
+  /** The opponent's position as observed right now (range checks use this). */
+  observedOpponentXZ: Vec2;
+  /** The point this AI aims at: observed, pulled toward predicted by predictionStrength (see WorldState.TargetingInfo). */
+  aimPointXZ: Vec2;
+  /** Linear extrapolation of the opponent predictionHorizonS ahead; null when prediction is off — never the observed position relabeled. */
+  predictedOpponentXZ: Vec2 | null;
+  predictionHorizonS: number;
+  predictionStrength: number;
+  /** Direction the active intent steered toward this tick; null when it had no movement goal. Differs from the aim point for Retreat, RecoverFromEdge, Circle and edge-pressure flanking. */
+  moveDirectionXZ: Vec2 | null;
   distanceToOpponentM: number;
   edgeRiskFraction: number;
   opponentThreatFraction: number;

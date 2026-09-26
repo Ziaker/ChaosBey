@@ -39,6 +39,8 @@ interface SmokeFlags {
   lastTick: number | null;
   aiSectionSeen: boolean;
   aiScoresSeen: boolean;
+  /** Observed / predicted / aim point lines, with a real predicted position (not "off"). */
+  aiTargetingSeen: boolean;
   updates: number;
 }
 
@@ -76,6 +78,7 @@ test('AI opponent runs in the real loop through hits, hitstop and (when it happe
       lastTick: null,
       aiSectionSeen: false,
       aiScoresSeen: false,
+      aiTargetingSeen: false,
       updates: 0,
     };
     window.__aiSmoke = flags;
@@ -105,6 +108,7 @@ test('AI opponent runs in the real loop through hits, hitstop and (when it happe
       if (text.includes('SIMULATION HALTED')) flags.haltedSeen = true;
       if (text.includes('-- ai (second, M7) --') && !text.includes('(no AIController attached)')) flags.aiSectionSeen = true;
       if (/^scores\s+\S/m.test(text)) flags.aiScoresSeen = true;
+      if (/^opponent seen\s+\(/m.test(text) && /^predicted\s+\(/m.test(text) && /^aim point\s+\(/m.test(text)) flags.aiTargetingSeen = true;
     };
 
     new MutationObserver(read).observe(pre, { subtree: true, childList: true, characterData: true });
@@ -140,6 +144,7 @@ test('AI opponent runs in the real loop through hits, hitstop and (when it happe
   expect(result.gameStates).toContain('Combat');
   expect(result.aiSectionSeen, 'AI debug section is live in the real runtime').toBe(true);
   expect(result.aiScoresSeen, 'AI considered-scores line is live').toBe(true);
+  expect(result.aiTargetingSeen, 'AI observed/predicted/aim lines are live').toBe(true);
   expect(result.hitstopActiveSeen, 'at least one real hit froze the simulation (hitstop ACTIVE)').toBe(true);
   expect(result.tickWhenFirstHitstopEnded, 'the hitstop ended').not.toBeNull();
   expect(result.lastTick!, 'the fixed-step loop kept advancing after the hitstop').toBeGreaterThanOrEqual(

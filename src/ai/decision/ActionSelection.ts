@@ -282,6 +282,7 @@ function isCounterTapMoment(world: WorldState): boolean {
 
 export class ActionSelector {
   private circleSign: 1 | -1 = 1;
+  private lastMoveDirection: Vec2 | null = null;
   private currentTick = 0;
   private previousHeld = new Set<Action>();
   private readonly holdStartedAtTick = new Map<Action, number>();
@@ -295,6 +296,11 @@ export class ActionSelector {
    * over the several ticks a single threat window can span). Ignored for
    * every intent other than DodgeThreat.
    */
+  /** The world direction the last selectActions() steered toward (its movement goal), or null when that intent had none (Wait, a counter stance, JumpEvade...). Debug only. */
+  getLastMoveDirection(): Vec2 | null {
+    return this.lastMoveDirection;
+  }
+
   selectActions(
     intent: AiIntent,
     world: WorldState,
@@ -307,6 +313,7 @@ export class ActionSelector {
     const edgePlan = intent === AiIntent.PressAdvantage ? edgePressurePlan(world) : null;
     if (intent === AiIntent.Circle) this.updateCircleSign(world);
     const movePlan = computeMovePlan(intent, world, edgePlan, this.circleSign);
+    this.lastMoveDirection = movePlan && length(movePlan.direction) > 0 ? movePlan.direction : null;
     if (movePlan) addMovementActions(movePlan, world.own.headingRad, desiredHeld);
 
     // PressAdvantage is an attack intent too (GDD section 64: Attack AI

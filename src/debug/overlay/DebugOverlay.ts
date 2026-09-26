@@ -90,6 +90,12 @@ export interface DebugOverlayState {
     pendingIntent: string | null;
     pendingRemainingS: number;
     dodgeAttemptSucceeds: boolean;
+    observedOpponentXZ: Vec2;
+    aimPointXZ: Vec2;
+    predictedOpponentXZ: Vec2 | null;
+    predictionHorizonS: number;
+    predictionStrength: number;
+    moveDirectionXZ: Vec2 | null;
     distanceToOpponentM: number;
     edgeRiskFraction: number;
     opponentThreatFraction: number;
@@ -197,6 +203,10 @@ export class DebugOverlay {
           `slow to react    ${state.aiDebug.pendingIntent ? `${state.aiDebug.pendingIntent} lands in ${state.aiDebug.pendingRemainingS.toFixed(2)} s` : '-'}\n` +
           `dodge roll       ${state.aiDebug.activeIntent === 'DodgeThreat' ? (state.aiDebug.dodgeAttemptSucceeds ? 'succeeds' : 'fails') : '-'}\n` +
           `distance         ${state.aiDebug.distanceToOpponentM.toFixed(2)} m\n` +
+          `opponent seen    ${fmtVec2(state.aiDebug.observedOpponentXZ)}\n` +
+          `predicted        ${state.aiDebug.predictedOpponentXZ ? `${fmtVec2(state.aiDebug.predictedOpponentXZ)} in ${state.aiDebug.predictionHorizonS.toFixed(2)} s, trusted x${state.aiDebug.predictionStrength.toFixed(2)}` : 'off (reacts to the observed position only)'}\n` +
+          `aim point        ${fmtVec2(state.aiDebug.aimPointXZ)}\n` +
+          `moving toward    ${state.aiDebug.moveDirectionXZ ? fmtVec2(state.aiDebug.moveDirectionXZ) : '- (no movement goal)'}\n` +
           `risk             edge ${state.aiDebug.edgeRiskFraction.toFixed(2)} opponentThreat ${state.aiDebug.opponentThreatFraction.toFixed(2)} selfVuln ${state.aiDebug.selfVulnerabilityFraction.toFixed(2)} opportunity ${state.aiDebug.opportunityFraction.toFixed(2)}\n` +
           `reaction timer   ${state.aiDebug.reactionTimerS.toFixed(2)} s\n` +
           `action           ${state.aiDebug.chosenActionSummary}\n` +
