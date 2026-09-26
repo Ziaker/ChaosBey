@@ -18,7 +18,7 @@ export enum AiIntent {
   AttackCircular = 'AttackCircular',
   /** Commit to charging then releasing a Dash Attack. */
   AttackDash = 'AttackDash',
-  /** Press an existing advantage against a Broken/low-Stability opponent (GDD section 64 Attack). */
+  /** Press an existing advantage: a Broken/low-Stability opponent (GDD section 64 Attack), or one near the ring-out edge — approached from the center side so the hit drives them outward (GDD section 63/129). */
   PressAdvantage = 'PressAdvantage',
   /** Prioritize returning toward the arena center over any other goal (GDD section 129: edge/ring-out awareness overrides normal play when risk is high). */
   RecoverFromEdge = 'RecoverFromEdge',
@@ -26,6 +26,8 @@ export enum AiIntent {
   UseJumpDrift = 'UseJumpDrift',
   /** Use Dodge specifically to answer an imminent opponent hitbox. */
   DodgeThreat = 'DodgeThreat',
+  /** Hold ground against a telegraphed/incoming Dash Attack and tap a Circular Attack timed to catch it (GDD section 23/107: the Circular-catches-Dash counter launches the dasher upward). Timing must still land — this is a read, not a guaranteed win. */
+  CounterAttack = 'CounterAttack',
   /** Do nothing meaningful this tick (used sparingly — patience/whiff-recovery windows, not a default). */
   Wait = 'Wait',
 }

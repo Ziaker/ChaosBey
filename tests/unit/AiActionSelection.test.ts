@@ -74,7 +74,9 @@ describe('ActionSelector', () => {
     const selector = new ActionSelector();
     const chargingLow = selector.selectActions(
       AiIntent.AttackDash,
-      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.1, attackEnergyFraction: 1 }),
+      // Opponent straight ahead (heading 0 faces +Z) so only the charge
+      // target decides — see the alignment test below for the other gate.
+      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.1, attackEnergyFraction: 1 }, { positionXZ: { x: 0, z: 5 } }),
       ATTACK_AI_PERSONALITY,
       false,
       1 / 60,
@@ -84,7 +86,7 @@ describe('ActionSelector', () => {
 
     const chargedEnough = selector.selectActions(
       AiIntent.AttackDash,
-      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.99, attackEnergyFraction: 1 }),
+      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.99, attackEnergyFraction: 1 }, { positionXZ: { x: 0, z: 5 } }),
       ATTACK_AI_PERSONALITY,
       false,
       1 / 60,
@@ -215,5 +217,140 @@ describe('ActionSelector', () => {
     expect(frozen2.pressedThisFrame.size).toBe(0);
     // Frozen ticks must not let the charge clock keep climbing.
     expect(frozen2.attackHoldDurationSeconds).toBe(frozen1.attackHoldDurationSeconds);
+  });
+});
+
+// ============================================================
+// M7 Part 2 — execution: steering discipline, Dash release, counter
+// timing, edge pressure. Heading 0 faces +Z (fromYaw convention).
+// ============================================================
+
+const DT = 1 / 60;
+
+describe('ActionSelector — steering discipline (M7 Part 2)', () => {
+  it('turns before throttling when an Approach target is behind, instead of driving forward away from it', () => {
+    const selector = new ActionSelector();
+    const actions = selector.selectActions(AiIntent.Approach, world({ headingRad: 0 }, { positionXZ: { x: 0.3, z: -5 } }), ATTACK_AI_PERSONALITY, false, DT);
+    assertValidContract(actions);
+    expect(actions.held.has(Action.MoveForward)).toBe(false);
+    expect(actions.held.has(Action.MoveBackward)).toBe(false);
+    expect(actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight)).toBe(true);
+  });
+
+  it('reverses back toward the center for RecoverFromEdge when facing out of the ring', () => {
+    const selector = new ActionSelector();
+    // At z=11 facing +Z = facing straight at the boundary.
+    const actions = selector.selectActions(
+      AiIntent.RecoverFromEdge,
+      world({ positionXZ: { x: 0, z: 11 }, headingRad: 0 }, { positionXZ: { x: 5, z: 0 } }),
+      ATTACK_AI_PERSONALITY,
+      false,
+      DT,
+    );
+    assertValidContract(actions);
+    expect(actions.held.has(Action.MoveBackward)).toBe(true);
+    expect(actions.held.has(Action.MoveForward)).toBe(false);
+  });
+
+  it('never retreats straight out of the ring when the opponent is between it and the center', () => {
+    const selector = new ActionSelector();
+    // Own at x=11 facing the opponent (heading -90° faces -X), opponent at
+    // x=9: "straight away" is straight out. Reversing would do exactly that.
+    const actions = selector.selectActions(
+      AiIntent.Retreat,
+      world({ positionXZ: { x: 11, z: 0 }, headingRad: -Math.PI / 2 }, { positionXZ: { x: 9, z: 0 } }),
+      ATTACK_AI_PERSONALITY,
+      false,
+      DT,
+    );
+    assertValidContract(actions);
+    expect(actions.held.has(Action.MoveBackward)).toBe(false);
+    expect(actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight)).toBe(true);
+  });
+});
+
+describe('ActionSelector — Dash release (M7 Part 2)', () => {
+  it('keeps charging past the charge target until the heading is on line, then releases', () => {
+    const selector = new ActionSelector();
+    const charged = { attackState: AttackState.ChargingDash, dashChargeFraction: 0.9, attackEnergyFraction: 0.8 };
+
+    const offLine = selector.selectActions(AiIntent.AttackDash, world(charged, { positionXZ: { x: 5, z: 0 } }), ATTACK_AI_PERSONALITY, false, DT);
+    expect(offLine.held.has(Action.Attack)).toBe(true);
+
+    const onLine = selector.selectActions(AiIntent.AttackDash, world(charged, { positionXZ: { x: 0, z: 5 } }), ATTACK_AI_PERSONALITY, false, DT);
+    expect(onLine.held.has(Action.Attack)).toBe(false);
+  });
+
+  it('starts a fresh Dash from Neutral even though the previous Dash reached its charge target (regression: one Dash per match)', () => {
+    const selector = new ActionSelector();
+    // Raw charge 0.6 is the stale value AttackController keeps reporting
+    // after a Dash; perception must not read it as "already charged".
+    const actions = selector.selectActions(
+      AiIntent.AttackDash,
+      world({ attackState: AttackState.Neutral, dashChargeFraction: 0.6 }, { positionXZ: { x: 0, z: 5 } }),
+      ATTACK_AI_PERSONALITY,
+      false,
+      DT,
+    );
+    expect(actions.pressedThisFrame.has(Action.Attack)).toBe(true);
+  });
+});
+
+describe('ActionSelector — Circular counter timing (M7 Part 2)', () => {
+  function incomingDash(distanceM: number): WorldState {
+    // Opponent dashing straight at own position at 15 m/s.
+    return world({}, { positionXZ: { x: 0, z: distanceM }, velocityXZ: { x: 0, z: -15 }, attackState: AttackState.DashActive, dashChargeFraction: 0.5 });
+  }
+
+  it('holds ground (no tap) while the incoming dasher is still too far to be caught', () => {
+    const selector = new ActionSelector();
+    const actions = selector.selectActions(AiIntent.CounterAttack, incomingDash(6), ATTACK_AI_PERSONALITY, false, DT);
+    assertValidContract(actions);
+    expect(actions.held.size).toBe(0);
+  });
+
+  it('taps Circular once the dasher is about to enter reach', () => {
+    const selector = new ActionSelector();
+    const actions = selector.selectActions(AiIntent.CounterAttack, incomingDash(4.5), ATTACK_AI_PERSONALITY, false, DT);
+    assertValidContract(actions);
+    expect(actions.pressedThisFrame.has(Action.Attack)).toBe(true);
+  });
+
+  it('does not tap against a Dash that is not closing in', () => {
+    const selector = new ActionSelector();
+    const passing = world({}, { positionXZ: { x: 0, z: 3 }, velocityXZ: { x: 15, z: 0 }, attackState: AttackState.DashActive });
+    const actions = selector.selectActions(AiIntent.CounterAttack, passing, ATTACK_AI_PERSONALITY, false, DT);
+    expect(actions.held.has(Action.Attack)).toBe(false);
+  });
+});
+
+describe('ActionSelector — edge pressure (M7 Part 2)', () => {
+  // Opponent near the +X edge; "center side" means own sits at smaller x.
+  const nearEdgeOpponent = { positionXZ: { x: 11, z: 0 }, isBroken: false };
+
+  it('does not swing from the outside/flank — moves around toward the center side first', () => {
+    const selector = new ActionSelector();
+    const actions = selector.selectActions(
+      AiIntent.PressAdvantage,
+      world({ positionXZ: { x: 11, z: 1.8 }, headingRad: Math.PI }, nearEdgeOpponent),
+      ATTACK_AI_PERSONALITY,
+      false,
+      DT,
+    );
+    assertValidContract(actions);
+    expect(actions.held.has(Action.Attack)).toBe(false);
+  });
+
+  it('swings once center-side, so the hit drives the opponent outward', () => {
+    const selector = new ActionSelector();
+    const actions = selector.selectActions(
+      AiIntent.PressAdvantage,
+      world({ positionXZ: { x: 9.2, z: 0 }, headingRad: Math.PI / 2 }, nearEdgeOpponent),
+      ATTACK_AI_PERSONALITY,
+      false,
+      DT,
+    );
+    assertValidContract(actions);
+    expect(actions.pressedThisFrame.has(Action.Attack)).toBe(true);
   });
 });

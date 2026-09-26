@@ -7,6 +7,7 @@
 // situation", it never itself decides what to do about it.
 // ============================================================
 
+import { AttackState } from '../../combat/attacks/AttackController';
 import type { AiPersonality } from '../personalities/AiPersonality';
 import type { WorldState } from './WorldState';
 
@@ -19,7 +20,22 @@ export interface RiskAssessment {
   selfVulnerability: number;
   /** 0..1: how good an opening the opponent is presenting right now (Broken, low Stability, or caught in an exposed recovery-adjacent state) — GDD section 64 Attack: "pressures broken Stability". */
   opportunity: number;
+  /** True while the opponent is stuck in an attack's recovery (a whiffed/spent Dash or Circular) — a visible punish window (GDD section 106: whiff punishment emerges from recovery time), not a hidden debuff. */
+  punishWindow: boolean;
+  /** 0..1: how close the opponent is to the ring-out boundary (1 = pinned against the wall) — unweighted by this AI's personality (GDD section 63/129: exploit opponents near the edge). */
+  edgePressure: number;
 }
+
+/**
+ * Opponent edge risk at which edge pressure reads as maximal. The arena
+ * wall keeps a grounded Bey's center ~1.5 m inside the ring-out line, so an
+ * opponent pinned against the wall only reads ~0.55 edge risk — scaling by
+ * this keeps "against the wall" meaning "full pressure".
+ */
+const EDGE_PRESSURE_FULL_AT_OPPONENT_EDGE_RISK = 0.5;
+
+/** Opponent attack states that leave them exposed with no live hitbox (see punishWindow). */
+const RECOVERY_ATTACK_STATES: ReadonlySet<AttackState> = new Set([AttackState.DashRecovery, AttackState.CircularRecovery]);
 
 function clamp01(t: number): number {
   return Math.max(0, Math.min(1, t));
@@ -42,5 +58,8 @@ export function evaluateRisk(world: WorldState, personality: AiPersonality): Ris
 
   const opportunity = clamp01((world.opponent.isBroken ? 0.7 : 0) + (1 - world.opponent.stabilityFraction) * 0.3);
 
-  return { edgeRisk, opponentThreat, selfVulnerability, opportunity };
+  const punishWindow = RECOVERY_ATTACK_STATES.has(world.opponent.attackState);
+  const edgePressure = clamp01(world.opponent.edgeRiskFraction / EDGE_PRESSURE_FULL_AT_OPPONENT_EDGE_RISK);
+
+  return { edgeRisk, opponentThreat, selfVulnerability, opportunity, punishWindow, edgePressure };
 }

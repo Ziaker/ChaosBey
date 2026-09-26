@@ -51,7 +51,11 @@ describe('AI combat behaviors', () => {
       harness.second,
       harness.first,
       harness.clash.controller,
-      DEFENSE_AI_PERSONALITY,
+      // This test is about the dodge answer specifically — Defense's own
+      // counterAffinity (M7 Part 2) would otherwise mostly answer these
+      // telegraphed Dashes with a Circular counter instead (covered by
+      // aiTactics.test.ts).
+      { ...DEFENSE_AI_PERSONALITY, counterAffinity: 0 },
       DEFAULT_AI_DIFFICULTY_PROFILE,
       SeededRng.fromSeedText('ai-can-dodge-seed'),
     );

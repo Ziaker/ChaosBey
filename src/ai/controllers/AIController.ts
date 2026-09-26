@@ -27,6 +27,7 @@
 
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Bey } from '../../bey/core/Bey';
+import { AttackState } from '../../combat/attacks/AttackController';
 import { ClashState, type ClashController } from '../../combat/clash/ClashController';
 import { DriftState } from '../../drift/DriftController';
 import { Action, type CombatController, type ControllerActions, type ControllerContext } from '../../input/actions/Action';
@@ -38,7 +39,7 @@ import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecor
 import { applyAdaptationNudge, AdaptationTracker } from '../adaptation/AdaptationTracker';
 import { ActionSelector } from '../decision/ActionSelection';
 import { AiIntent } from '../decision/Intent';
-import { selectIntent, type IntentDecision } from '../decision/IntentSelection';
+import { selectIntent, type ConsideredScore, type IntentDecision } from '../decision/IntentSelection';
 import { evaluateRisk, type RiskAssessment } from '../decision/RiskEvaluation';
 import { buildWorldState, type WorldState } from '../decision/WorldState';
 import type { AiDebugState } from '../debug/AiDebugState';
@@ -54,7 +55,20 @@ const ADAPTATION_BASE_ALPHA = 0.15;
 const PREDICTION_HORIZON_S = 0.35;
 
 function isAttackIntent(intent: AiIntent): boolean {
-  return intent === AiIntent.AttackCircular || intent === AiIntent.AttackDash || intent === AiIntent.PressAdvantage;
+  return (
+    intent === AiIntent.AttackCircular ||
+    intent === AiIntent.AttackDash ||
+    intent === AiIntent.PressAdvantage ||
+    intent === AiIntent.CounterAttack
+  );
+}
+
+/** An opponent Dash in progress — from its visible charge through its active lunge. */
+const OPPONENT_DASH_STATES: ReadonlySet<AttackState> = new Set([AttackState.ChargingDash, AttackState.DashActive]);
+
+function summarizeScores(scores: readonly ConsideredScore[] | undefined): string {
+  if (!scores || scores.length === 0) return 'override (see reason)';
+  return scores.map((entry) => `${entry.intent} ${entry.score.toFixed(2)}`).join(' / ');
 }
 
 function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey): CombatantRawState {
@@ -76,7 +90,7 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
   };
 }
 
-const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0 };
+const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, punishWindow: false, edgePressure: 0 };
 
 export class AIController implements CombatController {
   private readonly actionSelector = new ActionSelector();
@@ -92,6 +106,11 @@ export class AIController implements CombatController {
   private lastActionSummary = 'none yet';
   /** Rolled exactly once per fresh DodgeThreat decision (see makeFreshDecision) — ActionSelection reads this instead of rolling AiPersonality.dodgeSkill itself every fixed tick, which would otherwise let a moderate skill converge toward near-certain success over a multi-tick threat window. */
   private dodgeAttemptSucceeds = false;
+  /** AiPersonality.counterAffinity rolled once per opponent Dash (ChargingDash through DashActive); null while the opponent isn't dashing. Same once-per-event reasoning as dodgeAttemptSucceeds. */
+  private counterRollForOpponentDash: boolean | null = null;
+  /** Simulated time this AI last started an attack (own attackState left Neutral) — feeds the anti-passivity tempo (see IntentSelection.passivityTempo). */
+  private lastOwnAttackStartS = 0;
+  private lastOwnAttackState: AttackState = AttackState.Neutral;
 
   constructor(
     private readonly physics: PhysicsWorld,
@@ -125,8 +144,22 @@ export class AIController implements CombatController {
       opponentPerceived,
       { state: this.clashController.getState(), cooldownRemainingS: this.clashController.getCooldownRemainingS() },
       { horizonSeconds: PREDICTION_HORIZON_S, strength: this.difficulty.predictionStrength },
+      { circularReachM: this.ownCircularReachM() },
     );
     this.lastWorld = world;
+
+    if (this.lastOwnAttackState === AttackState.Neutral && ownRaw.attackState !== AttackState.Neutral) {
+      this.lastOwnAttackStartS = this.nowS;
+    }
+    this.lastOwnAttackState = ownRaw.attackState;
+
+    if (OPPONENT_DASH_STATES.has(opponentRaw.attackState)) {
+      if (this.counterRollForOpponentDash === null) {
+        this.counterRollForOpponentDash = this.rng.nextBool(this.personality.counterAffinity);
+      }
+    } else {
+      this.counterRollForOpponentDash = null;
+    }
 
     // A commitment already in flight — this AI's own attack mid-swing, or
     // its own jump/drift mid-hop — must survive reaction-delay-gated
@@ -141,7 +174,14 @@ export class AIController implements CombatController {
     const committedToAttack = ENGAGED_ATTACK_STATES.has(ownRaw.attackState) && isAttackIntent(this.activeDecision.intent);
     const committedToDrift =
       (ownRaw.driftState === DriftState.Hopping || ownRaw.driftState === DriftState.Drifting) && this.activeDecision.intent === AiIntent.UseJumpDrift;
-    const committed = committedToAttack || committedToDrift;
+    // Holding ground for a Circular counter must survive re-decisions while
+    // the opponent's Dash is still coming, or the stance would be dropped
+    // right before the moment it exists for.
+    const committedToCounter =
+      this.activeDecision.intent === AiIntent.CounterAttack &&
+      ownRaw.attackState === AttackState.Neutral &&
+      OPPONENT_DASH_STATES.has(opponentRaw.attackState);
+    const committed = committedToAttack || committedToDrift || committedToCounter;
 
     const effectiveReactionDelayS = Math.max(0, this.personality.reactionDelaySeconds * this.difficulty.reactionDelayMultiplier);
     this.decisionTimerS += context.fixedDeltaSeconds;
@@ -162,7 +202,11 @@ export class AIController implements CombatController {
     const risk = evaluateRisk(world, adjustedPersonality);
     this.lastRisk = risk;
 
-    const ideal = selectIntent(world, adjustedPersonality, risk);
+    const ideal = selectIntent(world, adjustedPersonality, risk, {
+      counterDash: this.counterRollForOpponentDash === true,
+      secondsSinceOwnAttack: world.nowS - this.lastOwnAttackStartS,
+      recoveringFromEdge: this.activeDecision.intent === AiIntent.RecoverFromEdge,
+    });
     this.idealDecision = ideal;
 
     const { decision, errorApplied } = maybeApplyIntentionalError(ideal, risk, adjustedPersonality, this.difficulty, this.rng);
@@ -184,6 +228,14 @@ export class AIController implements CombatController {
         opponentThreatFraction: risk.opponentThreat,
       });
     }
+  }
+
+  /** This AI's own Circular reach, the same sum HitDetection uses (own hitbox radius + both bodies' averaged radii) — its own Bey's attack profile and the opponent's visible size, nothing hidden. */
+  private ownCircularReachM(): number {
+    return (
+      this.ownBey.definition.attack.circularHitboxRadiusM +
+      (this.ownBey.definition.physical.colliderRadiusM + this.opponentBey.definition.physical.colliderRadiusM) / 2
+    );
   }
 
   private clampedAdaptationRate(): number {
@@ -226,6 +278,7 @@ export class AIController implements CombatController {
       difficultyProfileId: this.difficulty.id,
       idealIntent: this.idealDecision.intent,
       idealIntentReason: this.idealDecision.reason,
+      consideredScoresSummary: summarizeScores(this.idealDecision.consideredScores),
       activeIntent: this.activeDecision.intent,
       activeIntentReason: this.activeDecision.reason,
       deliberateErrorApplied: this.deliberateErrorApplied,

@@ -9,7 +9,8 @@
 // ============================================================
 
 import { ClashState } from '../../combat/clash/ClashController';
-import { length, subtract, type Vec2 } from '../../physics/Vec2';
+import { dot, length, subtract, type Vec2 } from '../../physics/Vec2';
+import { AI_DEFAULT_CIRCULAR_REACH_M } from './AiCombatRanges';
 import { distanceBetweenM, predictPositionXZ, type PerceivedCombatant } from '../perception/AiPerception';
 
 export interface ClashContext {
@@ -45,6 +46,15 @@ export interface WorldState {
   readonly directionToOpponent: Vec2;
   /** Own speed relative to the opponent's — positive means own is faster (used by RiskEvaluation for "a slower defender is more vulnerable", GDD section 27, from the AI's own perspective as a potential defender). */
   readonly relativeSpeedAdvantageMps: number;
+  /** How fast (m/s) the gap between the two is shrinking right now (relative velocity along the line between them); negative while separating. From real current positions/velocities only. */
+  readonly closingSpeedMps: number;
+  /** This AI's own Circular reach (m) — knowledge of its OWN Bey's attack profile, which a player has too; never anything about the opponent's hidden state. */
+  readonly ownCircularReachM: number;
+}
+
+/** What an AI knows about its own Bey (not the opponent's) — see WorldState.ownCircularReachM. */
+export interface SelfKnowledge {
+  readonly circularReachM: number;
 }
 
 export function buildWorldState(
@@ -53,6 +63,7 @@ export function buildWorldState(
   opponent: PerceivedCombatant,
   clash: ClashContext,
   prediction?: PredictionConfig,
+  self?: SelfKnowledge,
 ): WorldState {
   const targetPositionXZ =
     prediction && prediction.strength > 0
@@ -60,6 +71,10 @@ export function buildWorldState(
       : opponent.positionXZ;
   const toTarget = subtract(targetPositionXZ, own.positionXZ);
   const dist = length(toTarget);
+  const toOpponentNow = subtract(opponent.positionXZ, own.positionXZ);
+  const distNow = length(toOpponentNow);
+  const closingSpeedMps =
+    distNow > 1e-6 ? dot(subtract(own.velocityXZ, opponent.velocityXZ), { x: toOpponentNow.x / distNow, z: toOpponentNow.z / distNow }) : 0;
   return {
     nowS,
     own,
@@ -68,6 +83,8 @@ export function buildWorldState(
     distanceToOpponentM: distanceBetweenM(own, opponent),
     directionToOpponent: dist > 1e-6 ? { x: toTarget.x / dist, z: toTarget.z / dist } : { x: 0, z: 0 },
     relativeSpeedAdvantageMps: own.speedMps - opponent.speedMps,
+    closingSpeedMps,
+    ownCircularReachM: self?.circularReachM ?? AI_DEFAULT_CIRCULAR_REACH_M,
   };
 }
 

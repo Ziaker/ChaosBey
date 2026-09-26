@@ -132,6 +132,12 @@ describe('evaluateRisk', () => {
   });
 });
 
+function worldWith(ownOverrides: Partial<CombatantRawState>, opponentOverrides: Partial<CombatantRawState>) {
+  const own = perceiveCombatant(rawState({ positionXZ: { x: 0, z: 0 }, ...ownOverrides }));
+  const opponent = perceiveCombatant(rawState({ positionXZ: { x: 2, z: 0 }, ...opponentOverrides }));
+  return buildWorldState(0, own, opponent, { state: ClashState.Idle, cooldownRemainingS: 0 });
+}
+
 describe('perceiveCombatant — live Dash charge (M7 Part 2 regression)', () => {
   it('reports the charge only while it is live (ChargingDash / DashActive), never the stale value from a finished Dash', () => {
     for (const state of [AttackState.Neutral, AttackState.Buffering, AttackState.DashRecovery, AttackState.CircularActive, AttackState.CircularRecovery]) {
@@ -140,5 +146,23 @@ describe('perceiveCombatant — live Dash charge (M7 Part 2 regression)', () => 
     for (const state of [AttackState.ChargingDash, AttackState.DashActive]) {
       expect(perceiveCombatant(rawState({ attackState: state, dashChargeFraction: 0.6 })).dashChargeFraction, state).toBe(0.6);
     }
+  });
+});
+
+describe('evaluateRisk — punish window and edge pressure (M7 Part 2)', () => {
+  it('flags a punish window only while the opponent is in attack recovery', () => {
+    for (const state of [AttackState.DashRecovery, AttackState.CircularRecovery]) {
+      expect(evaluateRisk(worldWith({}, { attackState: state }), DEFAULT_AI_PERSONALITY).punishWindow, state).toBe(true);
+    }
+    for (const state of [AttackState.Neutral, AttackState.ChargingDash, AttackState.DashActive, AttackState.CircularActive]) {
+      expect(evaluateRisk(worldWith({}, { attackState: state }), DEFAULT_AI_PERSONALITY).punishWindow, state).toBe(false);
+    }
+  });
+
+  it('edge pressure follows the opponent’s distance to the edge', () => {
+    const center = evaluateRisk(worldWith({}, { positionXZ: { x: 0, z: 0 } }), DEFAULT_AI_PERSONALITY).edgePressure;
+    const edge = evaluateRisk(worldWith({}, { positionXZ: { x: 12.5, z: 0 } }), DEFAULT_AI_PERSONALITY).edgePressure;
+    expect(center).toBe(0);
+    expect(edge).toBeGreaterThan(0.8);
   });
 });
