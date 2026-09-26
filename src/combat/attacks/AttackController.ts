@@ -10,22 +10,19 @@
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { type Vec2 } from '../../physics/Vec2';
 import type { MovementPreStepInput } from '../../bey/movement/MovementController';
+import { DEFAULT_ATTACK_PROFILE, type BeyAttackProfile } from '../../bey/archetype/BeyAttackProfile';
 import {
   CIRCULAR_ACTIVE_DURATION_S,
   CIRCULAR_BASE_KNOCKBACK_FORCE,
-  CIRCULAR_HITBOX_RADIUS_M,
   CIRCULAR_RECOVERY_S,
   CIRCULAR_STABILITY_DAMAGE,
   DASH_ACTIVE_DURATION_S,
-  DASH_HITBOX_RADIUS_M,
   DASH_LOCK_ON_MAX_TURN_RATE_RAD_S,
   DASH_MAX_CHARGE_S,
   DASH_MAX_KNOCKBACK_FORCE,
-  DASH_MAX_SPEED_MPS,
   DASH_MAX_STABILITY_DAMAGE,
   DASH_MIN_CHARGE_S,
   DASH_MIN_KNOCKBACK_FORCE,
-  DASH_MIN_SPEED_MPS,
   DASH_MIN_STABILITY_DAMAGE,
   DASH_WHIFF_RECOVERY_S,
   TAP_MAX_HOLD_S,
@@ -85,6 +82,8 @@ export class AttackController {
   private activeTimerS = 0;
   private recoveryTimerS = 0;
 
+  constructor(private readonly profile: BeyAttackProfile = DEFAULT_ATTACK_PROFILE) {}
+
   getState(): AttackState {
     return this.state;
   }
@@ -138,7 +137,7 @@ export class AttackController {
 
       case AttackState.DashActive: {
         this.activeTimerS += fixedDeltaSeconds;
-        const speed = lerp(DASH_MIN_SPEED_MPS, DASH_MAX_SPEED_MPS, this.dashChargeFraction());
+        const speed = lerp(this.profile.dashMinSpeedMps, this.profile.dashMaxSpeedMps, this.dashChargeFraction());
         const desiredHeading = headingRadToward(ownPositionXZ, opponentPositionXZ);
         const guidedHeading = turnTowardRad(ownHeadingRad, desiredHeading, DASH_LOCK_ON_MAX_TURN_RATE_RAD_S * fixedDeltaSeconds);
         dashOverride = { headingRad: guidedHeading, longitudinalSpeedMps: speed };
@@ -195,7 +194,7 @@ export class AttackController {
     if (this.state === AttackState.CircularActive) {
       return {
         kind: 'circular',
-        radiusM: CIRCULAR_HITBOX_RADIUS_M,
+        radiusM: this.profile.circularHitboxRadiusM,
         knockbackForce: CIRCULAR_BASE_KNOCKBACK_FORCE,
         stabilityDamage: CIRCULAR_STABILITY_DAMAGE,
       };
@@ -204,7 +203,7 @@ export class AttackController {
       const t = this.dashChargeFraction();
       return {
         kind: 'dash',
-        radiusM: DASH_HITBOX_RADIUS_M,
+        radiusM: this.profile.dashHitboxRadiusM,
         knockbackForce: lerp(DASH_MIN_KNOCKBACK_FORCE, DASH_MAX_KNOCKBACK_FORCE, t),
         stabilityDamage: lerp(DASH_MIN_STABILITY_DAMAGE, DASH_MAX_STABILITY_DAMAGE, t),
       };
