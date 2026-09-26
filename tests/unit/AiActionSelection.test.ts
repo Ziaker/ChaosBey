@@ -464,3 +464,38 @@ describe('ActionSelector — JumpEvade (M7 Part 2b)', () => {
     expect(landed.pressedThisFrame.has(Action.JumpDrift)).toBe(false);
   });
 });
+
+describe('ActionSelector — AirRecover (M7 Part 2b)', () => {
+  const launched = { grounded: false, airRecoveryAvailable: true };
+
+  it('presses Dodge once inside the window, and lets go the tick the window closes (used)', () => {
+    const selector = new ActionSelector();
+    const open = selector.selectActions(AiIntent.AirRecover, world(launched), ATTACK_AI_PERSONALITY, false, DT);
+    assertValidContract(open);
+    expect(open.pressedThisFrame.has(Action.Dodge)).toBe(true);
+    const closed = selector.selectActions(AiIntent.AirRecover, world({ grounded: false, airRecoveryAvailable: false }), ATTACK_AI_PERSONALITY, false, DT);
+    expect(closed.held.has(Action.Dodge)).toBe(false);
+  });
+
+  it('never presses Dodge once grounded — on the ground that press would be a ground dodge, not a recovery', () => {
+    const selector = new ActionSelector();
+    const landed = selector.selectActions(AiIntent.AirRecover, world({ grounded: true, airRecoveryAvailable: true }), ATTACK_AI_PERSONALITY, false, DT);
+    expect(landed.held.has(Action.Dodge)).toBe(false);
+  });
+
+  it('never presses Dodge in the air for any other intent (no general air dodge)', () => {
+    for (const intent of Object.values(AiIntent)) {
+      if (intent === AiIntent.AirRecover) continue;
+      const selector = new ActionSelector();
+      const actions = selector.selectActions(intent, world({ grounded: false, airRecoveryAvailable: true }, { positionXZ: { x: 1.5, z: 0 }, attackState: AttackState.CircularActive }), ATTACK_AI_PERSONALITY, true, DT);
+      expect(actions.held.has(Action.Dodge), intent).toBe(false);
+    }
+  });
+
+  it('keeps holding Attack when launched mid-charge, so the charge is not dumped as an airborne Dash', () => {
+    const selector = new ActionSelector();
+    const actions = selector.selectActions(AiIntent.AirRecover, world({ ...launched, attackState: AttackState.ChargingDash, dashChargeFraction: 0.3 }), ATTACK_AI_PERSONALITY, false, DT);
+    expect(actions.held.has(Action.Attack)).toBe(true);
+    expect(actions.held.has(Action.Dodge)).toBe(true);
+  });
+});

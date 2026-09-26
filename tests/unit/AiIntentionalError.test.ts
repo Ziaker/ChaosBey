@@ -64,3 +64,16 @@ describe('maybeApplyIntentionalError', () => {
     }
   });
 });
+
+describe('maybeApplyIntentionalError — critical decisions (M7 Part 2b)', () => {
+  it('never downgrades a critical decision (AirRecover), even with errorRate 1 and no edge risk', () => {
+    const alwaysErrorPersonality = { ...ATTACK_AI_PERSONALITY, errorRate: 1 };
+    const rng = SeededRng.fromSeedText('air-recover-critical');
+    const airRecover: IntentDecision = { intent: AiIntent.AirRecover, reason: 'launched', critical: true };
+    for (let i = 0; i < 50; i++) {
+      const result = maybeApplyIntentionalError(airRecover, NO_RISK, alwaysErrorPersonality, DEFAULT_AI_DIFFICULTY_PROFILE, rng);
+      expect(result.decision.intent).toBe(AiIntent.AirRecover);
+      expect(result.errorApplied).toBe(false);
+    }
+  });
+});

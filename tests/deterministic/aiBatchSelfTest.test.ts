@@ -21,7 +21,7 @@ import { ClashOrchestration } from '../../src/app/simulation/ClashOrchestration'
 import { tickMatch } from '../../src/app/simulation/tickMatch';
 import { createArenaColliders } from '../../src/arena/colliders/createArenaColliders';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
-import { createBey } from '../../src/bey/core/Bey';
+import { createBey, type Bey } from '../../src/bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { AttackState } from '../../src/combat/attacks/AttackController';
 import { ClashState } from '../../src/combat/clash/ClashController';
@@ -29,7 +29,9 @@ import { NullAiMashSource } from '../../src/combat/clash/ClashMash';
 import { RoundState } from '../../src/combat/round-rules/RoundState';
 import { resolveMatchConfig } from '../../src/config/match/MatchConfig';
 import { DodgeState } from '../../src/dodge/DodgeController';
+import { DODGE_STAMINA_COST } from '../../src/dodge/DodgeTuning';
 import { Action, type ControllerActions } from '../../src/input/actions/Action';
+import { isGrounded } from '../../src/physics/collision/GroundCheck';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { PhysicsWorld } from '../../src/physics/world/PhysicsWorld';
 import { SeededRng } from '../../src/rng/SeededRng';
@@ -80,6 +82,18 @@ function assertFinite(value: number, label: string): void {
   expect(Number.isFinite(value), label).toBe(true);
 }
 
+/**
+ * What DodgeController would do with a Dodge press on the coming tick
+ * (same grounded value tickMatch passes it): start a ground dodge (Idle,
+ * grounded, Stamina >= cost) or trigger air recovery (window open while
+ * airborne). Anything else is a press the system ignores.
+ */
+function dodgePressWouldDoSomething(physics: PhysicsWorld, bey: Bey): boolean {
+  const grounded = isGrounded(physics, bey.collider);
+  if (!grounded) return bey.dodge.isAirRecoveryAvailable();
+  return bey.dodge.getState() === DodgeState.Idle && bey.stamina.resource.value >= DODGE_STAMINA_COST;
+}
+
 function assertContract(actions: ControllerActions, label: string): void {
   for (const action of actions.pressedThisFrame) expect(actions.held.has(action), `${label}: pressed ⊆ held`).toBe(true);
   assertFinite(actions.attackHoldDurationSeconds, `${label}: attackHoldDurationSeconds`);
@@ -127,7 +141,7 @@ async function runMatch(pairing: [ArchetypeKey, ArchetypeKey], seed: string, tot
       // Outside a Clash mash, a press that the system will ignore is spam.
       if (!clashActive) {
         if (actions[i]!.pressedThisFrame.has(Action.Attack) && beys[i]!.attack.getState() !== AttackState.Neutral) wastedPresses++;
-        if (actions[i]!.pressedThisFrame.has(Action.Dodge) && beys[i]!.dodge.getState() !== DodgeState.Idle) wastedPresses++;
+        if (actions[i]!.pressedThisFrame.has(Action.Dodge) && !dodgePressWouldDoSomething(physics, beys[i]!)) wastedPresses++;
       }
     }
 

@@ -44,7 +44,13 @@ export interface CombatantRawState {
    * ignored, and the AI used to count that as having dodged.
    */
   dodgeReady: boolean;
-  /** DodgeController.isAirRecoveryAvailable(): armed by a launch AND currently airborne — a Dodge press now would trigger air recovery (GDD section 21). */
+  /**
+   * A Dodge press on the coming tick would trigger air recovery (GDD
+   * section 21): DodgeController.isAirRecoveryAvailable() (armed by a
+   * launch, airborne as of the last tick) AND airborne right now. The
+   * getter alone is one tick behind on landing — on the landing tick a
+   * Dodge press would start a ground dodge instead.
+   */
   airRecoveryAvailable: boolean;
 }
 

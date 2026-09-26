@@ -36,8 +36,8 @@ export function maybeApplyIntentionalError(
   difficulty: AiDifficultyProfile,
   rng: SeededRng,
 ): ErrorAppliedResult {
-  // Critical decisions (IntentDecision.critical: anything in a critical
-  // edge episode) are never touched — GDD section 129's "do not
+  // Critical decisions (IntentDecision.critical: air recovery, anything in
+  // a critical edge episode) are never touched — GDD section 129's "do not
   // give AI hidden teleport recovery" is about not cheating recovery, not
   // about being allowed to skip it at real danger.
   if (decision.critical || (decision.intent === AiIntent.RecoverFromEdge && risk.edgeRisk >= CRITICAL_EDGE_RISK)) {

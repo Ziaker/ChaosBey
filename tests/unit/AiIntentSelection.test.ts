@@ -268,3 +268,29 @@ describe('selectIntent — edge-safe evasion (M7 Part 2b)', () => {
     expect(decide(atEdge, liveCircularFromCenter, noErrors).critical).toBe(false);
   });
 });
+
+describe('selectIntent — air recovery (M7 Part 2b)', () => {
+  const launched = { grounded: false, airRecoveryAvailable: true };
+  const noErrors = { ...DEFENSE_AI_PERSONALITY, errorRate: 0 };
+
+  it('recovers first when launched airborne with the window open — over edge danger and an incoming hit — and marks it critical', () => {
+    const decision = decide({ ...launched, positionXZ: { x: 0, z: 11.5 } }, { positionXZ: { x: 0, z: 10 }, attackState: AttackState.CircularActive }, noErrors);
+    expect(decision.intent).toBe(AiIntent.AirRecover);
+    expect(decision.critical).toBe(true);
+  });
+
+  it('is never chosen for a normal jump (airborne, no window) — Dodge is not a general air dodge', () => {
+    const decision = decide({ grounded: false, airRecoveryAvailable: false, driftState: DriftState.Hopping }, { positionXZ: { x: 1.5, z: 0 }, attackState: AttackState.CircularActive }, noErrors);
+    expect(decision.intent).not.toBe(AiIntent.AirRecover);
+  });
+
+  it('is not chosen once grounded, even if the window flag were still reported', () => {
+    expect(decide({ grounded: true, airRecoveryAvailable: true }, {}, noErrors).intent).not.toBe(AiIntent.AirRecover);
+  });
+
+  it('keeps an ongoing edge episode going, so recovery resumes with the release threshold after landing', () => {
+    const context = { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true };
+    expect(decide({ ...launched, positionXZ: { x: 0, z: 11 } }, {}, noErrors, context).edgeEpisode).toBe(true);
+    expect(decide({ ...launched, positionXZ: { x: 0, z: 11 } }, {}, noErrors).edgeEpisode).toBeFalsy();
+  });
+});

@@ -76,11 +76,12 @@ function summarizeScores(scores: readonly ConsideredScore[] | undefined): string
 function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey): CombatantRawState {
   const translation = body.translation();
   const velocity = body.linvel();
+  const grounded = isGrounded(physics, bey.collider);
   return {
     positionXZ: { x: translation.x, z: translation.z },
     velocityXZ: { x: velocity.x, z: velocity.z },
     headingRad: bey.movement.getHeadingRad(),
-    grounded: isGrounded(physics, bey.collider),
+    grounded,
     attackState: bey.attack.getState(),
     dashChargeFraction: bey.attack.getChargeFraction(),
     dodgeState: bey.dodge.getState(),
@@ -90,7 +91,10 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     isBroken: bey.stability.isBroken,
     attackEnergyFraction: bey.attackEnergy.resource.fraction,
     dodgeReady: bey.dodge.getState() === DodgeState.Idle && bey.stamina.resource.value >= DODGE_STAMINA_COST,
-    airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable(),
+    // Same grounded value tickMatch passes DodgeController on the coming
+    // tick (nothing moves in between), so this is exactly "a press now
+    // triggers air recovery" — see CombatantRawState.airRecoveryAvailable.
+    airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable() && !grounded,
   };
 }
 
@@ -185,7 +189,12 @@ export class AIController implements CombatController {
       this.activeDecision.intent === AiIntent.CounterAttack &&
       ownRaw.attackState === AttackState.Neutral &&
       OPPONENT_DASH_STATES.has(opponentRaw.attackState);
-    const committed = committedToAttack || committedToDrift || committedToCounter;
+    // An open air-recovery window (GDD section 21) outranks every
+    // commitment: being launched mid-swing or mid-hop must not lock the AI
+    // out of the one action that answers it. It still waits for the normal
+    // decision cadence (reaction delay) like any other reaction.
+    const airRecoveryWindowOpen = ownPerceived.airRecoveryAvailable;
+    const committed = !airRecoveryWindowOpen && (committedToAttack || committedToDrift || committedToCounter);
 
     const effectiveReactionDelayS = Math.max(0, this.personality.reactionDelaySeconds * this.difficulty.reactionDelayMultiplier);
     this.decisionTimerS += context.fixedDeltaSeconds;

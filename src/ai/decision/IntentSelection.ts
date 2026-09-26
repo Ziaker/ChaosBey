@@ -147,6 +147,13 @@ export function selectIntent(
   risk: RiskAssessment,
   context: DecisionContext = NEUTRAL_DECISION_CONTEXT,
 ): IntentDecision {
+  // Highest priority: an open air-recovery window (GDD section 21). It only
+  // lasts while airborne after a launch, and edge danger or an incoming hit
+  // is easier to answer with the Bey stabilized. Critical: no deliberate
+  // error may drop it. Keeps an ongoing edge episode going.
+  if (!world.own.grounded && world.own.airRecoveryAvailable) {
+    return { intent: AiIntent.AirRecover, reason: 'launched airborne — air recovery window open', edgeEpisode: context.recoveringFromEdge, critical: true };
+  }
   const edgeThreshold = context.recoveringFromEdge ? EDGE_RISK_RELEASE_THRESHOLD : EDGE_RISK_OVERRIDE_THRESHOLD;
   if (risk.edgeRisk >= edgeThreshold) {
     const critical = risk.edgeRisk >= CRITICAL_EDGE_RISK;

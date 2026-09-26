@@ -151,6 +151,10 @@ function computeMovePlan(intent: AiIntent, world: WorldState, edgePlan: EdgePres
       return hasOpponentDirection ? { direction: retreatDirection(world), allowReverse: true } : null;
     case AiIntent.RecoverFromEdge:
       return { direction: world.own.directionTowardCenter, allowReverse: true };
+    case AiIntent.AirRecover:
+      // Whatever air control there is goes back toward the center, only
+      // when there is any edge risk at all.
+      return world.own.edgeRiskFraction > 0 ? { direction: world.own.directionTowardCenter, allowReverse: true } : null;
     case AiIntent.Circle:
       // Side chosen (with hysteresis) by ActionSelector.updateCircleSign.
       return { direction: scale(perpendicular(world.directionToOpponent), circleSign), allowReverse: false };
@@ -371,6 +375,20 @@ export class ActionSelector {
       const throttle = chooseJumpEvadeThrottle(world);
       if (throttle > 0) desiredHeld.add(Action.MoveForward);
       else if (throttle < 0) desiredHeld.add(Action.MoveBackward);
+    }
+
+    // AirRecover: Dodge only while a press would really trigger air
+    // recovery (airborne, window open — re-checked every tick), so the press
+    // lands inside the window and is released the tick the window closes
+    // (used, or landed). Never a general air dodge.
+    if (intent === AiIntent.AirRecover && !world.own.grounded && world.own.airRecoveryAvailable) {
+      desiredHeld.add(Action.Dodge);
+    }
+    // Launched mid-charge: AirRecover pre-empts the Dash commitment, but
+    // letting go of Attack would dump the charge as a Dash fired from the
+    // air — keep holding it; the next decision decides what to do with it.
+    if (intent === AiIntent.AirRecover && world.own.attackState === AttackState.ChargingDash) {
+      desiredHeld.add(Action.Attack);
     }
 
     // Sustain JumpDrift through the whole Idle->Hopping->Drifting sequence,

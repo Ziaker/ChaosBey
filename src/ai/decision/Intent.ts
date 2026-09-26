@@ -28,6 +28,8 @@ export enum AiIntent {
   DodgeThreat = 'DodgeThreat',
   /** Jump to make an immediate hit miss when Dodge isn't available (GDD section 20: a jump that makes an attack miss is an evasion) — full-height jump (no steering, so no drift), carried toward the safe side. */
   JumpEvade = 'JumpEvade',
+  /** Press Dodge while a launch's air-recovery window is open (GDD section 21: after being launched/knocked airborne, Dodge is an air recovery — a distinct action, never a general air dodge). Critical: never downgraded or delayed by a deliberate error. */
+  AirRecover = 'AirRecover',
   /** Hold ground against a telegraphed/incoming Dash Attack and tap a Circular Attack timed to catch it (GDD section 23/107: the Circular-catches-Dash counter launches the dasher upward). Timing must still land — this is a read, not a guaranteed win. */
   CounterAttack = 'CounterAttack',
   /** Do nothing meaningful this tick (used sparingly — patience/whiff-recovery windows, not a default). */

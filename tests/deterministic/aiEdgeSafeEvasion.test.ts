@@ -161,7 +161,9 @@ describe('AI edge-safe evasion (M7 Part 2b)', () => {
   it('with Stamina below the Dodge cost it jumps instead: no Dodge press, JumpDrift while grounded, no outward throttle, no ring-out', async () => {
     const { harness, records } = await runEdgeScenario(7, 15, DODGE_STAMINA_COST - 8);
 
-    expect(records.some((r) => r.actions.pressedThisFrame.has(Action.Dodge)), 'never pressed a Dodge it cannot afford').toBe(false);
+    // A ground Dodge press it can't afford would be silently ignored. (An
+    // airborne press after being knocked up is air recovery — no cost.)
+    expect(records.some((r) => r.grounded && r.actions.pressedThisFrame.has(Action.Dodge)), 'never pressed a ground Dodge it cannot afford').toBe(false);
     const jumpIndex = records.findIndex((r) => r.actions.pressedThisFrame.has(Action.JumpDrift));
     expect(jumpIndex, 'the AI jumped').toBeGreaterThanOrEqual(0);
     const jump = records[jumpIndex]!;
