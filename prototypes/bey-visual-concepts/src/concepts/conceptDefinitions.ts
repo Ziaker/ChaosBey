@@ -1,25 +1,27 @@
 // ============================================================
-// BEY VISUAL CONCEPTS — THE NINE EXPLORATION DIRECTIONS
+// BEY VISUAL CONCEPTS — ROUND 2: THE NINE EXPLORATION DIRECTIONS
 // TEMPORARY codes only (Attack A … Stamina C). These are NOT names, NOT
 // approved designs and NOT used by the game (GDD section 32 / 96 / 171).
+// Round 1 is archived in prototypes/bey-visual-concepts-round1/.
 //
-// Each concept = palette + five swappable part slots. To remix, e.g.
-// "Attack B with the tip of Attack C and a 10% smaller ring":
+// Every concept uses the same four-piece anatomy (see model/types.ts):
+//   1 TOP LAYER · 2 RING (widest) · 3 DISC (smaller than ring) · 4 DRIVER
+// Size rule kept by every concept: ring > disc > driver top.
+//
+// To remix, e.g. "Attack B with the tip of Attack C and a 10% smaller ring":
 //
 //   parts: {
 //     ...ATTACK_B.parts,
 //     tip: ATTACK_C.parts.tip,
-//     upperRing: rings.sweptBlades({ hubRadius: 1.55 * 0.9, ... }),
+//     ring: rings.sweptBlades({ hubRadius: 1.6 * 0.9 }),
 //   }
-//
-// Part builders live in ../parts/*.ts; every numeric knob is a named param.
 // ============================================================
 
-import * as cores from '../parts/cores';
-import * as lower from '../parts/lowerBodies';
-import * as middle from '../parts/middleLayers';
+import * as discs from '../parts/discs';
+import * as driver from '../parts/driverBodies';
+import * as rings from '../parts/rings';
 import * as tips from '../parts/tips';
-import * as rings from '../parts/upperRings';
+import * as top from '../parts/topLayers';
 import type { ConceptDefinition } from '../model/types';
 
 // ---------------- ATTACK ----------------
@@ -29,15 +31,20 @@ export const ATTACK_A: ConceptDefinition = {
   archetype: 'attack',
   letter: 'A',
   headline: 'Low radial striker',
-  description: 'Four ramped impact lobes end in steep metal-faced leading edges. Low, wide profile with mass pushed to the rim over a compact bolted center.',
-  traits: ['4 impact lobes', 'low profile', 'metal impact faces', 'flat rubber tip'],
+  description: 'Low and wide. Four ramped impact lobes with metal-faced leading edges over a notched metal disc; flat rubber driver for aggressive movement.',
+  pieces: {
+    topLayer: 'Bolted gem crown',
+    ring: '4 impact lobes, metal leading faces',
+    disc: 'Thick notched metal disc (4 notches)',
+    driver: 'Flared housing + flat rubber tip',
+  },
   palette: { primary: 0xc4202b, secondary: 0x2a2d35, accent: 0xff7a1a, metal: 0xb9bdc6, darkMetal: 0x3a3e47, translucent: 0xff5a3c, glow: 0xff6a2a },
   parts: {
-    tip: tips.flatStriker({ length: 1.5, contactRadius: 0.42 }),
-    lowerBody: lower.flared({ height: 0.8, bottomRadius: 0.4, topRadius: 1.8, ribs: 8 }),
-    middleLayer: middle.cutoutWeightDisc({ radius: 2.0, height: 0.34, cutouts: 4 }),
-    upperRing: rings.impactLobes({ baseRadius: 2.15, innerRadius: 1.2, lobes: 4, reach: 0.85, height: 0.42, lift: 0.1 }),
-    core: cores.gemBolts({ radius: 1.0, height: 0.4, bolts: 6 }),
+    topLayer: top.gemCrown({ radius: 1.05, height: 0.6 }),
+    ring: rings.impactLobes({ baseRadius: 2.1, innerRadius: 1.1, lobes: 4, reach: 0.8, height: 0.45 }),
+    disc: discs.notchedDisc({ radius: 1.65, height: 0.4, notches: 4 }),
+    driverBody: driver.flared({ height: 0.65, bottomRadius: 0.6, topRadius: 1.3 }),
+    tip: tips.flatStriker({ topRadius: 0.6, height: 1.05 }),
   },
 };
 
@@ -46,15 +53,20 @@ export const ATTACK_B: ConceptDefinition = {
   archetype: 'attack',
   letter: 'B',
   headline: 'Asymmetric directional slicer',
-  description: 'Three swept, pitched blades of unequal size — one dominant — over an exposed gear frame and translucent under-plate. Reads as moving even at rest.',
-  traits: ['3 unequal blades', 'asymmetric', 'exposed gear layer', 'hex spike tip'],
+  description: 'Three pitched blades of unequal size, one dominant, over a toothed gear disc with a translucent layer. Reads as moving even at rest.',
+  pieces: {
+    topLayer: 'Faceted hub, off-center chevron',
+    ring: '3 unequal swept blades (asymmetric)',
+    disc: 'Toothed gear disc + translucent layer',
+    driver: 'Faceted 7-sided housing + hex spike',
+  },
   palette: { primary: 0xd21a6e, secondary: 0x5a1027, accent: 0xff8f3a, metal: 0xc3c7cf, darkMetal: 0x2c2f37, translucent: 0xff4fa0, glow: 0xff3d8b },
   parts: {
-    tip: tips.hexSpike({ length: 1.7 }),
-    lowerBody: lower.faceted({ height: 0.8, bottomRadius: 0.3, topRadius: 1.45, facets: 7 }),
-    middleLayer: middle.gearFrame({ radius: 1.75, height: 0.3, teeth: 28, spokes: 3 }),
-    upperRing: rings.sweptBlades({ hubRadius: 1.55, height: 0.34, lift: 0.18, pitchDeg: 12 }),
-    core: cores.offsetSigil({ radius: 0.85, height: 0.45 }),
+    topLayer: top.sigilHub({ radius: 0.95, height: 0.6 }),
+    ring: rings.sweptBlades({ hubRadius: 1.6, innerRadius: 0.95, height: 0.45 }),
+    disc: discs.gearDisc({ radius: 1.45, height: 0.42 }),
+    driverBody: driver.faceted({ height: 0.85, bottomRadius: 0.56, topRadius: 1.15 }),
+    tip: tips.hexSpike({ topRadius: 0.56, height: 1.25 }),
   },
 };
 
@@ -63,15 +75,20 @@ export const ATTACK_C: ConceptDefinition = {
   archetype: 'attack',
   letter: 'C',
   headline: 'Twin-hammer mass impactor',
-  description: 'Two huge bolted hammer blocks on a thick band — impact by mass, not sharpness. Tall armored drum center and a robust rubber dome tip.',
-  traits: ['2 hammer heads', 'bar silhouette', 'heavy drum center', 'dome ram tip'],
+  description: 'Two huge chamfered hammer blocks on a thick band — impact by mass, not sharpness — over a heavy faceted drum disc and a rubber dome ram.',
+  pieces: {
+    topLayer: 'Heavy bolted dome',
+    ring: '2 hammer blocks on a thick band',
+    disc: 'Heavy 10-panel metal drum',
+    driver: 'Bolted drum housing + rubber dome',
+  },
   palette: { primary: 0x8f1822, secondary: 0x33363d, accent: 0xf26a21, metal: 0xa9adb5, darkMetal: 0x25272c, translucent: 0xff6d3a, glow: 0xff5a1e },
   parts: {
-    tip: tips.domeRam({ length: 1.6, radius: 0.4 }),
-    lowerBody: lower.drum({ height: 0.75, radius: 1.25, bottomRadius: 0.42, bolts: 8 }),
-    middleLayer: middle.armoredDrum({ radius: 1.55, height: 0.55, panels: 10 }),
-    upperRing: rings.hammerHeads({ bandInner: 1.45, bandOuter: 1.95, height: 0.6, heads: 2, headRadial: 1.1, headTangential: 1.55, headHeight: 0.9 }),
-    core: cores.boltedCap({ radius: 1.15, height: 0.6, bolts: 8 }),
+    topLayer: top.boltedDome({ radius: 1.1, height: 0.7 }),
+    ring: rings.hammerHeads({ bandInner: 1.15, bandOuter: 1.9, height: 0.6, heads: 2 }),
+    disc: discs.heavyDrum({ radius: 1.55, height: 0.5 }),
+    driverBody: driver.drum({ height: 0.75, bottomRadius: 0.68, topRadius: 1.25 }),
+    tip: tips.domeRam({ topRadius: 0.68, height: 1.1 }),
   },
 };
 
@@ -82,15 +99,20 @@ export const DEFENSE_A: ConceptDefinition = {
   archetype: 'defense',
   letter: 'A',
   headline: 'Overlapping scale shield',
-  description: 'Eight tilted plates lap over each other into a wide, nearly circular shield. Few protrusions, heavy steel dome center, guarded ball tip.',
-  traits: ['8 overlapping plates', 'near-circular', 'steel dome center', 'guarded ball tip'],
+  description: 'Eight tilted plates lap over each other into a wide, nearly circular shield over a layered round steel disc. Heavy dome center, guarded ball tip.',
+  pieces: {
+    topLayer: 'Wide steel dome with lens',
+    ring: '8 overlapping tilted plates',
+    disc: 'Two-layer round steel disc, rivets',
+    driver: 'Convex bowl housing + guarded ball',
+  },
   palette: { primary: 0x2358c4, secondary: 0x16307a, accent: 0x3fd2ff, metal: 0xc8ced8, darkMetal: 0x39404d, translucent: 0x5fdcff, glow: 0x49d6ff },
   parts: {
-    tip: tips.guardedBall({ length: 1.6, ball: 0.3 }),
-    lowerBody: lower.bowl({ height: 0.75, bottomRadius: 0.36, topRadius: 2.0 }),
-    middleLayer: middle.layeredPlates({ radius: 2.25, height: 0.3 }),
-    upperRing: rings.overlappingPlates({ outerRadius: 2.85, innerRadius: 1.6, plates: 8, tiltDeg: 6 }),
-    core: cores.shieldDome({ radius: 1.35, height: 0.55 }),
+    topLayer: top.shieldDome({ radius: 1.3, height: 0.6 }),
+    ring: rings.overlappingPlates({ outerRadius: 2.8, innerRadius: 1.3, plates: 8, tiltDeg: 6 }),
+    disc: discs.layeredDisc({ radius: 1.95, height: 0.42 }),
+    driverBody: driver.bowl({ height: 0.8, bottomRadius: 0.6, topRadius: 1.5 }),
+    tip: tips.guardedBall({ topRadius: 0.6, height: 1.15 }),
   },
 };
 
@@ -99,15 +121,20 @@ export const DEFENSE_B: ConceptDefinition = {
   archetype: 'defense',
   letter: 'B',
   headline: 'Segmented bumper array',
-  description: 'Six independent thick bumper pods with rubber strips, each on a coil-spring arm, over a wide rubber skirt. Gaps between pods; strong lateral presence.',
-  traits: ['6 separate pods', 'spring arms', 'rubber skirt', 'crown ring tip'],
+  description: 'Six independent bumper pods on coil-spring arms around a solid band, over a metal disc wrapped in a rubber tire. Everything built to absorb contact.',
+  pieces: {
+    topLayer: 'Raised hex hub with pistons',
+    ring: '6 separate pods on spring arms',
+    disc: 'Metal disc with rubber bumper tire',
+    driver: 'Sprung skirt housing + crown ring tip',
+  },
   palette: { primary: 0x1c9bd8, secondary: 0x123a66, accent: 0x9eeaff, metal: 0xb7bfca, darkMetal: 0x2d3440, translucent: 0x7fe5ff, glow: 0x6fe0ff },
   parts: {
-    tip: tips.crown({ length: 1.5, crownRadius: 0.36 }),
-    lowerBody: lower.skirt({ height: 1.1, bottomRadius: 0.5, skirtRadius: 2.0, topRadius: 1.3, absorbers: 6 }),
-    middleLayer: middle.hubArms({ hubRadius: 1.15, height: 0.5, arms: 6, armLength: 1.95 }),
-    upperRing: rings.bumperPods({ pods: 6, radius: 2.35, podHeight: 0.7 }),
-    core: cores.hexHub({ radius: 0.95, height: 0.5 }),
+    topLayer: top.hexHub({ radius: 0.95, height: 0.6 }),
+    ring: rings.bumperPods({ pods: 6, radius: 2.3, innerRadius: 0.95, bandRadius: 1.55 }),
+    disc: discs.tireDisc({ radius: 1.7, height: 0.45 }),
+    driverBody: driver.sprungSkirt({ height: 0.9, bottomRadius: 0.64, bandRadius: 1.35, topRadius: 1.2 }),
+    tip: tips.crown({ topRadius: 0.64, height: 1.0 }),
   },
 };
 
@@ -116,15 +143,20 @@ export const DEFENSE_C: ConceptDefinition = {
   archetype: 'defense',
   letter: 'C',
   headline: 'Compact stepped fortress',
-  description: 'Tall three-tier octagonal tower over a narrow crenellated ring and stepped octagonal base. Highest center, smallest outer ring of the defense set.',
-  traits: ['tall tower center', '8 merlons', 'narrow ring', 'stacked segment tip'],
+  description: 'The round-1 reference, now with its disc exposed: tall octagonal tower, crenellated ring, buttressed octagonal disc and a stepped driver with stacked tip.',
+  pieces: {
+    topLayer: 'Tall 3-tier octagonal tower',
+    ring: '8 merlons (crenellated), metal facings',
+    disc: 'Octagonal disc with buttresses',
+    driver: 'Stepped octagonal housing + stacked tip',
+  },
   palette: { primary: 0x1b3290, secondary: 0x4a5566, accent: 0x55b2ff, metal: 0xc2c8d2, darkMetal: 0x262c38, translucent: 0x68c4ff, glow: 0x3fb8ff },
   parts: {
-    tip: tips.stacked({ length: 1.75, segments: 4, topRadius: 0.58 }),
-    lowerBody: lower.stepped({ height: 0.95, bottomRadius: 0.58, topRadius: 1.6, steps: 3, sides: 8 }),
-    middleLayer: middle.fortressBase({ radius: 1.85, height: 0.45, sides: 8 }),
-    upperRing: rings.crenellated({ outerRadius: 2.3, innerRadius: 1.55, merlons: 8 }),
-    core: cores.tower({ tiers: 3, baseRadius: 1.3, tierHeight: 0.42 }),
+    topLayer: top.tower({ tiers: 3, baseRadius: 1.25, tierHeight: 0.42 }),
+    ring: rings.crenellated({ outerRadius: 2.3, innerRadius: 1.4, merlons: 8 }),
+    disc: discs.octagonDisc({ radius: 1.7, height: 0.45 }),
+    driverBody: driver.stepped({ height: 0.95, bottomRadius: 0.62, topRadius: 1.35 }),
+    tip: tips.stacked({ topRadius: 0.62, height: 1.45 }),
   },
 };
 
@@ -135,15 +167,20 @@ export const STAMINA_A: ConceptDefinition = {
   archetype: 'stamina',
   letter: 'A',
   headline: 'Open flywheel rim',
-  description: 'Largest diameter: a thin metal rim with five clamped weights, joined to a tiny hub by five long curved spokes. Mostly empty space; long needle tip.',
-  traits: ['largest diameter', '5 curved spokes', 'mass at rim', 'needle tip'],
+  description: 'Largest diameter: a thin metal rim with five clamped weights on long curved spokes, over a windowed bead disc. Small center, long needle driver.',
+  pieces: {
+    topLayer: 'Small low cap (minimal center)',
+    ring: 'Flywheel rim, 5 curved spokes, 5 weights',
+    disc: 'Windowed disc with rim beads',
+    driver: 'Waisted slim housing + needle tip',
+  },
   palette: { primary: 0x12a08c, secondary: 0x0f4d45, accent: 0xe4b83c, metal: 0xd3d7de, darkMetal: 0x3a4146, translucent: 0x6fe8d0, glow: 0x5ff0d0 },
   parts: {
-    tip: tips.needle({ length: 2.15 }),
-    lowerBody: lower.slender({ height: 0.9, bottomRadius: 0.22, waist: 0.26, topRadius: 0.95 }),
-    middleLayer: middle.curvedSpokes({ hubRadius: 0.8, rimRadius: 2.9, spokes: 5, curve: 0.55 }),
-    upperRing: rings.flywheelRim({ radius: 3.05, weights: 5, phase: 0.55 }),
-    core: cores.smallPin({ radius: 0.55, height: 0.3 }),
+    topLayer: top.smallCap({ radius: 0.8, height: 0.45 }),
+    ring: rings.flywheel({ radius: 3.0, hubRadius: 0.95, spokes: 5, weights: 5 }),
+    disc: discs.beadDisc({ radius: 1.6, height: 0.32 }),
+    driverBody: driver.waisted({ height: 0.85, bottomRadius: 0.48, topRadius: 1.05 }),
+    tip: tips.needle({ topRadius: 0.48, height: 1.45 }),
   },
 };
 
@@ -152,15 +189,20 @@ export const STAMINA_B: ConceptDefinition = {
   archetype: 'stamina',
   letter: 'B',
   headline: 'Concentric precision gyro',
-  description: 'Three concentric rings at stepped heights joined by thin pins, outer ring finely toothed. Open cage housing and exposed ball-bearing tip; mostly metal.',
-  traits: ['3 concentric rings', 'open gaps', 'open cage housing', 'bearing tip'],
+  description: 'Three concentric rings at stepped heights joined by thin pins, over a three-step precision disc. Open cage driver with an exposed bearing; mostly metal.',
+  pieces: {
+    topLayer: 'Precision lens with tick bezel',
+    ring: '3 concentric rings, toothed outer ring',
+    disc: '3-step precision disc with pins',
+    driver: 'Open cage housing + bearing tip',
+  },
   palette: { primary: 0x1f8f86, secondary: 0x2f3a3c, accent: 0xd8b04a, metal: 0xd7dbe2, darkMetal: 0x4a5257, translucent: 0x8ff5e0, glow: 0x3fe0c0 },
   parts: {
-    tip: tips.bearing({ length: 1.85, balls: 10 }),
-    lowerBody: lower.cage({ height: 1.0, bottomRadius: 0.36, topRadius: 1.25, struts: 6 }),
-    middleLayer: middle.precisionPlate({ radius: 1.4, height: 0.12, pins: 12 }),
-    upperRing: rings.concentricRings({ outer: 2.7, middle: 2.05, inner: 1.5, teeth: 48, pins: 6 }),
-    core: cores.precisionLens({ radius: 0.7, height: 0.35 }),
+    topLayer: top.precisionLens({ radius: 0.95, height: 0.55 }),
+    ring: rings.concentricRings({ outer: 2.7, middle: 2.05, inner: 1.45, floorRadius: 1.25 }),
+    disc: discs.steppedPrecision({ radius: 1.55, height: 0.42 }),
+    driverBody: driver.cage({ height: 1.0, bottomRadius: 0.52, topRadius: 1.15 }),
+    tip: tips.bearing({ topRadius: 0.52, height: 1.3 }),
   },
 };
 
@@ -169,15 +211,20 @@ export const STAMINA_C: ConceptDefinition = {
   archetype: 'stamina',
   letter: 'C',
   headline: 'Vertical aero glider',
-  description: 'Tallest profile: a long finned fairing and ogive cone tip below a medium tri-lobed ring, crowned by a slender spire. Detail concentrated underneath.',
-  traits: ['tallest', 'tri-lobe ring', '3 swept fins below', 'long ogive tip'],
+  description: 'Tallest profile: slender spire over a tri-lobed ring and a smooth lens disc, then a long finned fairing and ogive tip. Detail concentrated underneath.',
+  pieces: {
+    topLayer: 'Tall teardrop spire',
+    ring: 'Smooth tri-lobed ring, 3 edge weights',
+    disc: 'Lens-shaped aero metal disc',
+    driver: 'Finned fairing + long ogive tip',
+  },
   palette: { primary: 0xe3c24a, secondary: 0x1f6b45, accent: 0x3cbf6e, metal: 0xd0d4db, darkMetal: 0x3b4240, translucent: 0xb8f5a0, glow: 0x9dff7a },
   parts: {
-    tip: tips.longCone({ length: 2.3, topRadius: 0.34 }),
-    lowerBody: lower.finnedFairing({ height: 1.5, bottomRadius: 0.3, topRadius: 1.5, fins: 3, finReach: 0.5 }),
-    middleLayer: middle.aeroShell({ radius: 1.9, height: 0.3, innerRadius: 1.5 }),
-    upperRing: rings.triLobeAero({ radius: 2.2, lobes: 3, lobeAmp: 0.2, width: 0.42 }),
-    core: cores.spire({ radius: 1.1, height: 1.0 }),
+    topLayer: top.spire({ radius: 1.15, height: 1.0 }),
+    ring: rings.triLobeAero({ radius: 2.15, width: 0.5, innerRadius: 1.15 }),
+    disc: discs.lensDisc({ radius: 1.7, height: 0.4 }),
+    driverBody: driver.finnedFairing({ height: 1.3, bottomRadius: 0.55, topRadius: 1.3 }),
+    tip: tips.longOgive({ topRadius: 0.55, height: 1.6 }),
   },
 };
 

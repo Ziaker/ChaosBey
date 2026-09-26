@@ -15,6 +15,8 @@ const built = new Map<string, BuiltConcept>(CONCEPTS.map((c) => [c.id, assembleC
 
 afterAll(() => built.forEach((b) => b.dispose()));
 
+const concept = (id: string): BuiltConcept => built.get(id)!;
+
 type Plane = 'top' | 'side';
 
 function silhouette(concept: BuiltConcept, plane: Plane): Uint8Array {
@@ -87,6 +89,17 @@ describe('Bey visual concepts prototype', () => {
     let meshes = 0;
     concept.root.traverse((o) => { if (o instanceof THREE.Mesh) meshes++; });
     expect(meshes).toBeGreaterThanOrEqual(10); // not a two-primitive toy
+  });
+
+  it.each(CONCEPTS.map((c) => c.id))('%s has four distinct pieces: ring widest, disc smaller than ring but wider than the driver', (id) => {
+    const { pieces } = built.get(id)!.measurements;
+    const names = concept(id).root.children.map((c) => c.name);
+    expect(names).toEqual(['driver', 'disc', 'ring', 'topLayer']);
+    expect(pieces.ring.diameter).toBeGreaterThanOrEqual(Math.max(pieces.disc.diameter, pieces.driver.diameter, pieces.topLayer.diameter));
+    expect(pieces.disc.diameter).toBeLessThanOrEqual(pieces.ring.diameter * 0.9); // disc visibly smaller than the ring
+    expect(pieces.disc.diameter).toBeGreaterThan(pieces.driver.diameter * 0.95);
+    expect(pieces.disc.height).toBeGreaterThanOrEqual(0.3); // real side face, not a sheet
+    expect(pieces.topLayer.diameter).toBeLessThan(pieces.ring.diameter * 0.7);
   });
 
   it('every pair of concepts has a clearly different top or side silhouette', () => {

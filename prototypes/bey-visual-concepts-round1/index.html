@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ChaosBey — Bey Visual Concepts (prototype)</title>
+    <title>ChaosBey — Bey Visual Concepts, round 1 (archived)</title>
     <link rel="icon" href="/favicon.ico" />
     <style>
       :root {
@@ -54,15 +54,10 @@
       .stage.is-silhouette { background: #dfe3e8; }
       #lab-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
-      .info { position: absolute; top: 20px; left: 22px; max-width: 420px; pointer-events: none; }
+      .info { position: absolute; top: 20px; left: 22px; max-width: 380px; pointer-events: none; }
       .info-kicker { font: 700 12px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--accent); }
       .info-title { margin: 8px 0 6px; font-size: 26px; line-height: 1.1; }
       .info-desc { margin: 0 0 10px; font-size: 13px; line-height: 1.5; color: #b6c0ce; }
-      .info-pieces { margin: 0 0 10px; padding: 0; list-style: none; counter-reset: piece; display: grid; gap: 3px; }
-      .info-pieces li { counter-increment: piece; display: grid; grid-template-columns: 22px 78px 1fr auto; gap: 8px; align-items: baseline; font-size: 12px; color: #c9d2de; background: rgba(12,16,23,.72); border: 1px solid var(--line); border-radius: 3px; padding: 4px 8px; }
-      .info-pieces li::before { content: counter(piece); font: 700 11px ui-monospace, Consolas, monospace; color: var(--accent); }
-      .piece-name { font: 700 11px ui-monospace, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; color: var(--text); }
-      .piece-size { font: 10.5px ui-monospace, Consolas, monospace; color: var(--muted); }
       .info-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; padding: 0; list-style: none; }
       .info-chips li { font: 10.5px ui-monospace, Consolas, monospace; text-transform: uppercase; letter-spacing: 0.06em; border: 1px solid var(--line); background: rgba(12,16,23,.7); padding: 3px 7px; border-radius: 3px; color: #c9d2de; }
       .info-dims { display: grid; grid-template-columns: auto auto auto auto; gap: 2px 12px; margin: 0; font: 11px ui-monospace, Consolas, monospace; color: var(--muted); width: max-content; }
@@ -96,16 +91,15 @@
     <div class="lab">
       <aside class="panel">
         <header>
-          <div class="kicker">ChaosBey · Visual prototype</div>
+          <div class="kicker">ChaosBey · Visual prototype · Round 1 (archived)</div>
           <h1>Bey Concept Lab</h1>
-          <p class="warn">Round 2 · 4-piece anatomy: Top Layer · Ring · Disc · Driver. Exploration only. Temporary codes, not names. Not final models, materials, lore, gameplay, physics or colliders.</p>
+          <p class="warn">Exploration only. Temporary codes, not names. Not final models, materials, lore, gameplay, physics or colliders.</p>
         </header>
         <nav id="concept-picker" aria-label="Concepts"></nav>
         <section class="keys" aria-label="Keyboard shortcuts">
           <kbd>1</kbd>–<kbd>9</kbd> select concept<br />
           <kbd>T</kbd> top · <kbd>D</kbd> diagonal · <kbd>F</kbd> free<br />
           <kbd>S</kbd> side · <kbd>B</kbd> below<br />
-          <kbd>E</kbd> explode the 4 pieces<br />
           <kbd>R</kbd> auto rotate · <kbd>K</kbd> black silhouette<br />
           Faint floor ring = Ø 6 size reference
         </section>

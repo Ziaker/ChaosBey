@@ -24,7 +24,6 @@ const FRAMING_MARGIN = 1.12;             // >1 leaves breathing room around the 
 const VIEW_TRANSITION_SEC = 0.6;         // Camera glide time between preset views.
 const AUTO_ROTATE_RAD_PER_SEC = 0.45;    // Turntable speed. Slow on purpose: inspection, not spin simulation.
 const PRESET_BREAK_ANGLE_RAD = 0.03;    // Orbiting further than this away from a preset view switches the mode to FREE.
-const EXPLODE_TRANSITION_SEC = 0.5;     // Time to pull the four pieces apart / back together.
 const REFERENCE_RING_DIAMETER = 6;       // Faint floor ring to compare sizes across concepts (same units as models).
 const FLOOR_RADIUS = 16;
 // ------------------------------------------------
@@ -59,8 +58,6 @@ export class ConceptViewer {
   private mode: ViewMode = 'diagonal';
   private autoRotate = true;
   private silhouette = false;
-  private explodeTarget = 0;
-  private explodeAmount = 0;
   private readonly modeListeners: Array<(mode: ViewMode) => void> = [];
 
   constructor(canvas: HTMLCanvasElement, private readonly stage: HTMLElement) {
@@ -114,10 +111,6 @@ export class ConceptViewer {
     return this.autoRotate;
   }
 
-  get isExploded(): boolean {
-    return this.explodeTarget > 0;
-  }
-
   get isSilhouette(): boolean {
     return this.silhouette;
   }
@@ -137,7 +130,6 @@ export class ConceptViewer {
       this.current.dispose();
     }
     this.current = assembleConcept(definition);
-    this.current.setExplode(this.explodeAmount);
     this.turntable.rotation.y = 0;
     this.turntable.add(this.current.root);
     this.computeFraming();
@@ -182,18 +174,6 @@ export class ConceptViewer {
     this.startTween(offset, this.framing.target);
   }
 
-  /** Pull the four pieces apart vertically (true) or reassemble (false). */
-  setExploded(on: boolean): void {
-    this.explodeTarget = on ? 1 : 0;
-    this.computeFraming();
-    if (this.mode !== 'free') this.setView(this.mode);
-    else {
-      const offset = new THREE.Spherical().setFromVector3(this.camera.position.clone().sub(this.controls.target));
-      offset.radius = this.framing.distance;
-      this.startTween(offset, this.framing.target);
-    }
-  }
-
   setAutoRotate(on: boolean): void {
     this.autoRotate = on;
   }
@@ -216,11 +196,7 @@ export class ConceptViewer {
 
   private computeFraming(): void {
     if (!this.current) return;
-    // Frame for the target explode state so the pulled-apart pieces fit.
-    this.current.setExplode(this.explodeTarget);
-    this.current.root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(this.current.root);
-    this.current.setExplode(this.explodeAmount);
     const sphere = box.getBoundingSphere(new THREE.Sphere());
     const radius = THREE.MathUtils.lerp(REFERENCE_FRAMING_RADIUS, sphere.radius, FRAMING_BLEND);
     const vFov = THREE.MathUtils.degToRad(this.camera.fov);
@@ -247,13 +223,6 @@ export class ConceptViewer {
     const dt = Math.min((now - this.lastFrameMs) / 1000, 0.1);
     this.lastFrameMs = now;
     if (this.autoRotate) this.turntable.rotation.y += AUTO_ROTATE_RAD_PER_SEC * dt;
-    if (this.explodeAmount !== this.explodeTarget) {
-      const step = dt / EXPLODE_TRANSITION_SEC;
-      this.explodeAmount = this.explodeTarget > this.explodeAmount
-        ? Math.min(this.explodeTarget, this.explodeAmount + step)
-        : Math.max(this.explodeTarget, this.explodeAmount - step);
-      this.current?.setExplode(this.explodeAmount);
-    }
 
     if (this.tween) {
       const tw = this.tween;

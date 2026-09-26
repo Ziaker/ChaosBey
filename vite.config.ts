@@ -34,6 +34,7 @@ export default defineConfig(({ command, isPreview }) => ({
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         beyVisualConcepts: fileURLToPath(new URL('./prototypes/bey-visual-concepts/index.html', import.meta.url)),
+        beyVisualConceptsRound1: fileURLToPath(new URL('./prototypes/bey-visual-concepts-round1/index.html', import.meta.url)),
       },
     },
   },

@@ -4,7 +4,7 @@
 // concept only touches conceptDefinitions.ts.
 //
 // Keys: 1–9 select · T top · D diagonal · F free · S side · B below
-//       E explode pieces · R auto-rotate · K silhouette
+//       R auto-rotate · K silhouette
 // ============================================================
 
 import type { ConceptMeasurements } from '../model/assembleConcept';
@@ -16,7 +16,6 @@ export interface ConceptLabUiHandlers {
   view(mode: ViewMode): void;
   toggleAutoRotate(): void;
   toggleSilhouette(): void;
-  toggleExplode(): void;
 }
 
 const ARCHETYPE_ORDER: readonly ConceptArchetype[] = ['attack', 'defense', 'stamina'];
@@ -34,7 +33,6 @@ export class ConceptLabUi {
   private readonly viewButtons = new Map<ViewMode, HTMLButtonElement>();
   private readonly rotateButton: HTMLButtonElement;
   private readonly silhouetteButton: HTMLButtonElement;
-  private readonly explodeButton: HTMLButtonElement;
 
   constructor(
     private readonly concepts: readonly ConceptDefinition[],
@@ -56,8 +54,7 @@ export class ConceptLabUi {
     toggles.className = 'toolbar-group';
     this.rotateButton = this.toolbarButton('Auto rotate', 'R', () => handlers.toggleAutoRotate());
     this.silhouetteButton = this.toolbarButton('Silhouette', 'K', () => handlers.toggleSilhouette());
-    this.explodeButton = this.toolbarButton('Explode', 'E', () => handlers.toggleExplode());
-    toggles.append(this.explodeButton, this.rotateButton, this.silhouetteButton);
+    toggles.append(this.rotateButton, this.silhouetteButton);
     toolbar.append(views, toggles);
 
     window.addEventListener('keydown', (e) => this.onKey(e));
@@ -71,28 +68,19 @@ export class ConceptLabUi {
     const kicker = el('div', 'info-kicker', `${concept.archetype.toUpperCase()} — CONCEPT ${concept.letter}`);
     const title = el('h2', 'info-title', concept.headline);
     const desc = el('p', 'info-desc', concept.description);
-    const pieces = el('ol', 'info-pieces');
-    for (const [label, note, piece] of [
-      ['Top Layer', concept.pieces.topLayer, m.pieces.topLayer],
-      ['Ring', concept.pieces.ring, m.pieces.ring],
-      ['Disc', concept.pieces.disc, m.pieces.disc],
-      ['Driver', concept.pieces.driver, m.pieces.driver],
-    ] as const) {
-      const li = el('li', '');
-      li.append(el('span', 'piece-name', label), el('span', 'piece-note', note), el('span', 'piece-size', `Ø ${fmt(piece.diameter)}`));
-      pieces.append(li);
-    }
+    const chips = el('ul', 'info-chips');
+    concept.traits.forEach((t) => chips.append(el('li', '', t)));
     const dims = el('dl', 'info-dims');
     const tipShare = Math.round((m.tipLength / m.height) * 100);
     for (const [k, v] of [
       ['Ø', fmt(m.diameter)],
       ['Height', fmt(m.height)],
       ['Tip', `${fmt(m.tipLength)} (${tipShare}%)`],
-      ['Driver H', fmt(m.pieces.driver.height)],
+      ['Under ring', fmt(m.underbodyLength)],
     ] as const) {
       dims.append(el('dt', '', k), el('dd', '', v));
     }
-    this.info.append(kicker, title, desc, pieces, dims);
+    this.info.append(kicker, title, desc, chips, dims);
   }
 
   setViewMode(mode: ViewMode): void {
@@ -101,10 +89,6 @@ export class ConceptLabUi {
 
   setAutoRotate(on: boolean): void {
     this.rotateButton.setAttribute('aria-pressed', String(on));
-  }
-
-  setExploded(on: boolean): void {
-    this.explodeButton.setAttribute('aria-pressed', String(on));
   }
 
   setSilhouette(on: boolean): void {
@@ -161,7 +145,6 @@ export class ConceptLabUi {
       case 'b': this.handlers.view('below'); break;
       case 'r': this.handlers.toggleAutoRotate(); break;
       case 'k': this.handlers.toggleSilhouette(); break;
-      case 'e': this.handlers.toggleExplode(); break;
       default: return;
     }
     e.preventDefault();

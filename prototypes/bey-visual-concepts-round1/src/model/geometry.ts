@@ -237,24 +237,3 @@ export function cylinderUp(radiusTop: number, radiusBottom: number, height: numb
 export function annulus(innerRadius: number, outerRadius: number, height: number, material: THREE.Material, bevel = 0.02): THREE.Mesh {
   return mesh(extrudeUp(polarShape(() => outerRadius, 128, innerRadius), height, bevel), material);
 }
-
-/**
- * Solid body of revolution between a bottom and top radius — the basic
- * volume of every piece so each one reads as a real component, not a sheet.
- * `bulge` > 0 bows the side outward (convex), < 0 inward (concave).
- * `chamfer` softens the top/bottom edges.
- */
-export function taperBody({
-  bottomRadius, topRadius, height, bulge = 0, chamfer = 0.04, segments = 72,
-}: { bottomRadius: number; topRadius: number; height: number; bulge?: number; chamfer?: number; segments?: number }): THREE.LatheGeometry {
-  const c = Math.min(chamfer, height * 0.2);
-  const profile: Array<[number, number]> = [[0, 0], [Math.max(0, bottomRadius - c), 0]];
-  const steps = 12;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const r = bottomRadius + (topRadius - bottomRadius) * t + bulge * Math.sin(Math.PI * t);
-    profile.push([r, c + (height - 2 * c) * t]);
-  }
-  profile.push([Math.max(0, topRadius - c), height], [0, height]);
-  return lathe(profile, segments);
-}

@@ -42,10 +42,6 @@ const ui = new ConceptLabUi(
       viewer.setSilhouette(!viewer.isSilhouette);
       ui.setSilhouette(viewer.isSilhouette);
     },
-    toggleExplode: () => {
-      viewer.setExploded(!viewer.isExploded);
-      ui.setExploded(viewer.isExploded);
-    },
   },
   requireElement('concept-picker'),
   requireElement('concept-info'),
@@ -72,16 +68,11 @@ Object.assign(window, {
       viewer.setSilhouette(on);
       ui.setSilhouette(on);
     },
-    setExploded: (on: boolean) => {
-      viewer.setExploded(on);
-      ui.setExploded(on);
-    },
     state: () => ({
       settled: viewer.isSettled,
       mode: viewer.viewMode,
       autoRotate: viewer.isAutoRotating,
       silhouette: viewer.isSilhouette,
-      exploded: viewer.isExploded,
       cameraDistance: viewer.camera.position.distanceTo(viewer.controls.target),
       cameraHeight: viewer.camera.position.y,
       measurements: viewer.measurements,

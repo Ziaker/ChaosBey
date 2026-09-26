@@ -10,6 +10,7 @@ interface LabState {
   mode: string;
   autoRotate: boolean;
   silhouette: boolean;
+  exploded: boolean;
   cameraDistance: number;
   cameraHeight: number;
   measurements: { diameter: number; height: number; tipLength: number } | null;
@@ -31,6 +32,10 @@ test('bey visual concepts prototype loads, switches all nine concepts and respon
   page.on('response', (r) => {
     if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`);
   });
+
+  // Archived round 1 must keep loading too.
+  await page.goto('/ChaosBey/prototypes/bey-visual-concepts-round1/');
+  await page.waitForFunction(() => Boolean(window.__beyConceptLab));
 
   await page.goto('/ChaosBey/prototypes/bey-visual-concepts/');
   await page.waitForFunction(() => Boolean(window.__beyConceptLab));
@@ -83,6 +88,12 @@ test('bey visual concepts prototype loads, switches all nine concepts and respon
   await page.keyboard.press('b');
   await settle();
   expect((await state()).cameraHeight).toBeLessThan(0);
+
+  // Explode separates the four pieces (and toggles back).
+  await page.keyboard.press('e');
+  expect((await state()).exploded).toBe(true);
+  await page.keyboard.press('e');
+  expect((await state()).exploded).toBe(false);
 
   // Silhouette mode toggles.
   await page.keyboard.press('k');

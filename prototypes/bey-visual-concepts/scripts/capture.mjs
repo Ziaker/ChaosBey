@@ -4,7 +4,7 @@
 //   npm run preview -- --port 4173          (in another terminal)
 //   node prototypes/bey-visual-concepts/scripts/capture.mjs <outDir> [views] [ids]
 //
-// views: comma list of top,diagonal,free,side,below,silhouette-top,silhouette-side
+// views: comma list of top,diagonal,free,side,below,exploded,silhouette-top,silhouette-side
 //        (default: diagonal,top). ids: optional comma list, e.g. attack-a,stamina-c.
 // Set CHAOSBEY_PW_CHROMIUM_PATH to use a specific Chromium binary.
 import { mkdirSync } from 'node:fs';
@@ -31,11 +31,13 @@ const ids = idArg ? idArg.split(',') : await page.evaluate(() => window.__beyCon
 for (const id of ids) {
   await page.evaluate((conceptId) => window.__beyConceptLab.select(conceptId), id);
   for (const view of views) {
-    const [silhouette, mode] = view.startsWith('silhouette-') ? [true, view.slice('silhouette-'.length)] : [false, view];
-    await page.evaluate(([s, m]) => {
+    const exploded = view === 'exploded';
+    const [silhouette, mode] = view.startsWith('silhouette-') ? [true, view.slice('silhouette-'.length)] : [false, exploded ? 'diagonal' : view];
+    await page.evaluate(([s, m, e]) => {
       window.__beyConceptLab.setSilhouette(s);
+      window.__beyConceptLab.setExploded(e);
       window.__beyConceptLab.view(m);
-    }, [silhouette, mode]);
+    }, [silhouette, mode, exploded]);
     await page.waitForTimeout(150);
     await page.waitForFunction(() => window.__beyConceptLab.state().settled, null, { timeout: 60_000 });
     await page.waitForTimeout(700);
