@@ -2,20 +2,22 @@
 // BEY ARCHETYPES — THREE VISUAL/GAMEPLAY PROTOTYPES (MILESTONE 6)
 // GDD section 6/31's three archetypes (Attack/Defense/Stamina), expressed
 // purely as data: player-facing Ratings (1-10 scale) + a Handling profile
-// + mass, plus a PROTOTYPE-ONLY appearance (a distinct 4-piece silhouette
-// per archetype — ring/upper body/lower weight section/driver tip, see
-// createBeyMesh.ts — with color used only to tell the three apart) so the
-// owner has something concrete to look at and approve.
+// + a Physical profile, plus a PROTOTYPE-ONLY appearance (a distinct
+// "tornado/mechanical top" silhouette per archetype — ring/upper body/
+// lower weight section/driver tip, continuously tapered per owner
+// direction (visual round 2), see createBeyMesh.ts — with color used only
+// to tell the three apart) so the owner has something concrete to look at
+// and approve.
 //
 // The four anatomy pieces are shared across all three archetypes; only
 // their relative proportions differ, so silhouette alone (even in a single
 // neutral gray) should read as Attack/Defense/Stamina. Every rating/
-// handling/mass/proportion number below is an engineering placeholder for
-// balance purposes (GDD section 167) and every appearance is explicitly a
-// design prototype (GDD section 96/97) — none of this is final. Do not
-// treat the colors, exact proportions, ratings, or which two of the three
-// currently appear in createMatchScene.ts as approved/final; that decision
-// is the owner's, pending the visual approval gate.
+// handling/physical/proportion number below is an engineering placeholder
+// for balance purposes (GDD section 167) and every appearance is
+// explicitly a design prototype (GDD section 96/97) — none of this is
+// final. Do not treat the colors, exact proportions, ratings, or which two
+// of the three currently appear in createMatchScene.ts as approved/final;
+// that decision is the owner's, pending the visual approval gate.
 // ============================================================
 
 import type { BeyDefinition } from './BeyDefinition';
@@ -25,11 +27,12 @@ import { createBeyMesh } from '../procedural-model/createBeyMesh';
 
 /**
  * Attack-type: hits harder and moves faster, at the cost of Defense and a
- * lighter body that's easier to launch. Silhouette: a pronounced, wide,
- * thick ring (top-heavy, "impact zone" reads first) over a slim body and a
- * compact tip. The physical collider is widened/flattened to roughly track
- * that same silhouette (still one simplified cylinder, not per-piece
- * colliders — GDD section 104).
+ * lighter body that's easier to launch. Silhouette: the widest, most
+ * flared-open ring (top-heavy, "impact zone" reads first), tapering
+ * continuously — but relatively quickly — down through a slim mid-body to
+ * a compact-but-real driver tip. The physical collider is widened/
+ * flattened to roughly track that same silhouette (still one simplified
+ * cylinder, not per-piece colliders — GDD section 104).
  */
 export const ATTACK_ARCHETYPE: BeyDefinition = {
   id: 'attack-prototype',
@@ -49,14 +52,10 @@ export const ATTACK_ARCHETYPE: BeyDefinition = {
       createBeyMesh({
         colorOverride: { bodyColorHex: 0xff5c5c, emissiveColorHex: 0x4a0b0b },
         proportions: {
-          ringRadiusM: 0.72,
-          ringHeightM: 0.18,
-          upperBodyRadiusM: 0.42,
-          upperBodyHeightM: 0.08,
-          lowerBodyRadiusM: 0.32,
-          lowerBodyHeightM: 0.08,
-          tipRadiusM: 0.09,
-          tipHeightM: 0.06,
+          ring: { topRadiusM: 0.75, bottomRadiusM: 0.55, heightM: 0.14 },
+          upperBody: { topRadiusM: 0.55, bottomRadiusM: 0.4, heightM: 0.12 },
+          lowerBody: { topRadiusM: 0.4, bottomRadiusM: 0.22, heightM: 0.22 },
+          tip: { topRadiusM: 0.22, bottomRadiusM: 0.02, heightM: 0.16 },
         },
       }),
   },
@@ -65,9 +64,11 @@ export const ATTACK_ARCHETYPE: BeyDefinition = {
 /**
  * Defense-type: sturdier and heavier — takes less knockback/Stability
  * damage and grips harder, at the cost of raw offense and top speed.
- * Silhouette: a wide, tall lower weight section (low center of mass) under
- * a modest, solid ring. The physical collider is wider and taller to
- * roughly track that heavier, taller silhouette.
+ * Silhouette: a modest, solid (not flared-open) ring, tapering gently into
+ * a thick, tall mid/lower body — the most voluminous of the three, reading
+ * as low-center-of-mass and heavy — before converging into a sturdy tip.
+ * The physical collider is wider and taller to roughly track that heavier,
+ * taller silhouette.
  */
 export const DEFENSE_ARCHETYPE: BeyDefinition = {
   id: 'defense-prototype',
@@ -87,14 +88,10 @@ export const DEFENSE_ARCHETYPE: BeyDefinition = {
       createBeyMesh({
         colorOverride: { bodyColorHex: 0x4f8cff, emissiveColorHex: 0x0b1e4a },
         proportions: {
-          ringRadiusM: 0.55,
-          ringHeightM: 0.08,
-          upperBodyRadiusM: 0.52,
-          upperBodyHeightM: 0.1,
-          lowerBodyRadiusM: 0.62,
-          lowerBodyHeightM: 0.24,
-          tipRadiusM: 0.17,
-          tipHeightM: 0.09,
+          ring: { topRadiusM: 0.62, bottomRadiusM: 0.56, heightM: 0.1 },
+          upperBody: { topRadiusM: 0.56, bottomRadiusM: 0.52, heightM: 0.12 },
+          lowerBody: { topRadiusM: 0.52, bottomRadiusM: 0.36, heightM: 0.28 },
+          tip: { topRadiusM: 0.36, bottomRadiusM: 0.03, heightM: 0.14 },
         },
       }),
   },
@@ -102,9 +99,10 @@ export const DEFENSE_ARCHETYPE: BeyDefinition = {
 
 /**
  * Stamina-type: balanced handling with a larger, slower-draining Stamina
- * pool for a longer-lasting fight. Silhouette: elongated overall, with a
- * distinctly longer tip reading as "rotation endurance" — less heavy than
- * Defense, less aggressive than Attack. The physical collider is
+ * pool for a longer-lasting fight. Silhouette: a moderate ring tapering
+ * smoothly and evenly all the way down, with the most distinctly elongated
+ * driver tip of the three — reading as "rotation endurance" — less heavy
+ * than Defense, less aggressive than Attack. The physical collider is
  * moderately taller than default to roughly track the elongated body/tip,
  * radius left close to default.
  */
@@ -120,14 +118,10 @@ export const STAMINA_ARCHETYPE: BeyDefinition = {
       createBeyMesh({
         colorOverride: { bodyColorHex: 0x4fffb0, emissiveColorHex: 0x0b4a2e },
         proportions: {
-          ringRadiusM: 0.58,
-          ringHeightM: 0.1,
-          upperBodyRadiusM: 0.44,
-          upperBodyHeightM: 0.14,
-          lowerBodyRadiusM: 0.4,
-          lowerBodyHeightM: 0.14,
-          tipRadiusM: 0.14,
-          tipHeightM: 0.16,
+          ring: { topRadiusM: 0.6, bottomRadiusM: 0.48, heightM: 0.1 },
+          upperBody: { topRadiusM: 0.48, bottomRadiusM: 0.38, heightM: 0.14 },
+          lowerBody: { topRadiusM: 0.38, bottomRadiusM: 0.24, heightM: 0.2 },
+          tip: { topRadiusM: 0.24, bottomRadiusM: 0.02, heightM: 0.22 },
         },
       }),
   },
