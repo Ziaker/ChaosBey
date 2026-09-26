@@ -16,7 +16,7 @@ import type { ImpactEvent } from '../camera/ImpactEvents';
 
 export type VfxRoute = 'spark' | 'landing' | 'none';
 
-const SPARK_ELIGIBLE_EVENT_KINDS: ReadonlySet<ImpactEvent['kind']> = new Set(['hit', 'wallImpact']);
+const SPARK_ELIGIBLE_EVENT_KINDS: ReadonlySet<ImpactEvent['kind']> = new Set(['hit', 'wallImpact', 'clashResolved']);
 
 export function routeImpactEventToVfx(event: ImpactEvent): VfxRoute {
   if (event.kind === 'landing') return 'landing';

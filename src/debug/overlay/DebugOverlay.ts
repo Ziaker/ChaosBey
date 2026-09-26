@@ -56,6 +56,22 @@ export interface DebugOverlayState {
   isHitstopActive: boolean;
   hitstopRemainingS: number;
   cameraHighSpeedBlend: number;
+
+  // Clash (Milestone 5, GDD section 152).
+  clashState: string;
+  clashElapsedS: number;
+  clashCooldownRemainingS: number;
+  clashOutcome: string;
+  firstClashMashEventCount: number;
+  secondClashMashEventCount: number;
+  firstClashMashPerformance: number;
+  firstClashStaminaFactor: number;
+  firstClashVelocityFactor: number;
+  firstClashPower: number;
+  secondClashMashPerformance: number;
+  secondClashStaminaFactor: number;
+  secondClashVelocityFactor: number;
+  secondClashPower: number;
 }
 
 const RAD_TO_DEG = 180 / Math.PI;
@@ -133,7 +149,15 @@ export class DebugOverlay {
       `fov              ${state.cameraFovDeg.toFixed(1)} deg\n` +
       `shake offset     ${fmtVec3(state.cameraShakeOffsetM)}\n` +
       `hitstop          ${state.isHitstopActive ? `ACTIVE (${state.hitstopRemainingS.toFixed(3)}s left)` : 'idle'}\n` +
-      `high-speed blend ${(state.cameraHighSpeedBlend * 100).toFixed(0)}%`;
+      `high-speed blend ${(state.cameraHighSpeedBlend * 100).toFixed(0)}%\n` +
+      `-- clash (M5) --\n` +
+      `state            ${state.clashState}` +
+      `${state.clashState === 'Active' ? ` (${state.clashElapsedS.toFixed(2)}s)` : ''}` +
+      `${state.clashState === 'Cooldown' ? ` (${state.clashCooldownRemainingS.toFixed(1)}s left)` : ''}\n` +
+      `last outcome     ${state.clashOutcome}\n` +
+      `mash counts      first ${state.firstClashMashEventCount} / second ${state.secondClashMashEventCount}\n` +
+      `first factors    mash ${state.firstClashMashPerformance.toFixed(2)} stamina ${state.firstClashStaminaFactor.toFixed(2)} velocity ${state.firstClashVelocityFactor.toFixed(2)} -> power ${state.firstClashPower.toFixed(3)}\n` +
+      `second factors   mash ${state.secondClashMashPerformance.toFixed(2)} stamina ${state.secondClashStaminaFactor.toFixed(2)} velocity ${state.secondClashVelocityFactor.toFixed(2)} -> power ${state.secondClashPower.toFixed(3)}`;
   }
 
   private applyVisibility(): void {

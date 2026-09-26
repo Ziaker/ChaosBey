@@ -30,7 +30,7 @@ export interface WorldPositionM {
   z: number;
 }
 
-export type ImpactEventKind = 'hit' | 'stabilityBreak' | 'ko' | 'ringOut' | 'perfectDodge' | 'dodged' | 'wallImpact' | 'landing';
+export type ImpactEventKind = 'hit' | 'stabilityBreak' | 'ko' | 'ringOut' | 'perfectDodge' | 'dodged' | 'wallImpact' | 'landing' | 'clashResolved';
 
 export interface ImpactEvent {
   kind: ImpactEventKind;

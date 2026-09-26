@@ -105,7 +105,7 @@ function smoothAngleRad(current: number, target: number, t: number): number {
 }
 
 /** Event kinds that plausibly involve a Bey being launched/thrown — the only ones eligible to bias camera focus via "knockback follow". */
-const KNOCKBACK_FOLLOW_EVENT_KINDS = new Set(['hit', 'stabilityBreak', 'ko', 'ringOut']);
+const KNOCKBACK_FOLLOW_EVENT_KINDS = new Set(['hit', 'stabilityBreak', 'ko', 'ringOut', 'clashResolved']);
 
 export interface CombatCameraTickInput {
   firstPositionM: WorldPositionM;

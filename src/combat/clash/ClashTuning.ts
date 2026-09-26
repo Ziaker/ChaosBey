@@ -47,3 +47,27 @@ export const CLASH_TIE_EPSILON = 1e-6;
 // --- Downstream integration (data only — not applied by this package) ---
 /** Configurable multiplier the eventual knockback/stability resolution (Milestone 5 integration, not yet implemented here) applies to the Clash's outcome. Present now so tuning has a home; unused until that integration lands. */
 export const CLASH_IMPACT_MULTIPLIER = 1;
+
+// --- AI mash (Milestone 7 placeholder — see ClashMash.ts's FixedIntervalAiMashSource) ---
+/** How often (in fixed ticks) the placeholder AI contributes a mash event during an Active Clash — NOT real AI behavior, just enough for the integration/self-tests to exercise the AI-mash pathway before Milestone 7 exists. ~10 events/second at 60Hz. */
+export const CLASH_AI_MASH_INTERVAL_TICKS = 6;
+
+// --- Cooldown "alternative resolution" (GDD: during Cooldown, a compatible
+// double-hit does not start a new Clash — both hits still resolve with
+// their own normal knockback/Stability damage, but the slower combatant
+// (by current speed) takes proportionally more, as a deterrent against
+// spamming collisions while a Clash is on cooldown). Engineering
+// placeholder (GDD section 167) — the GDD specifies the "slower suffers
+// more" direction, not an exact number. ---
+/** Extra multiplier (added on top of 1.0) applied to the slower combatant's incoming knockback/Stability damage when the speed gap between the two combatants is at or above CLASH_VELOCITY_REFERENCE_MPS; scales down to 0 extra when they're equal or the "slower" one is actually not slower at all. */
+export const CLASH_COOLDOWN_ALT_SLOWER_PENALTY_MAX = 0.5;
+
+// --- Tie resolution (owner decision: both Beys receive symmetric physical
+// repulsion, no winner, no Stability damage — normal physics decides the
+// rest, a ring-out is never declared by the Clash system itself). ---
+/** Base "force" (same units as a hitbox's knockbackForce — see combat/knockback/Knockback.ts) used for the symmetric repulsion impulse applied to both Beys on a Tie. Engineering placeholder (GDD section 167); scaled by CLASH_IMPACT_MULTIPLIER like every other Clash-driven knockback. */
+export const CLASH_TIE_REPULSION_BASE_FORCE = 10;
+
+// --- Presentation cadence (main.ts) ---
+/** How often (in fixed ticks) a small progressive spark burst spawns at the clash point while Active, so visual intensity is felt building over the ~4s contest rather than only flashing once at the very end. */
+export const CLASH_PROGRESSIVE_VFX_INTERVAL_TICKS = 10;

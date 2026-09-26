@@ -11,9 +11,15 @@ import { createMatchScene } from './app/bootstrap/createMatchScene';
 import { createRenderer } from './app/bootstrap/createRenderer';
 import { GameState, GameStateMachine } from './app/lifecycle/GameState';
 import { tickMatch, type MatchTickResult } from './app/simulation/tickMatch';
+import { ClashOrchestration } from './app/simulation/ClashOrchestration';
 import { RoundState } from './combat/round-rules/RoundState';
+import { ClashOutcome, ClashState } from './combat/clash/ClashController';
+import { computeClashPower, computeMashPerformance, computeStaminaFactor, computeVelocityFactor } from './combat/clash/ClashFormula';
+import { CLASH_PROGRESSIVE_VFX_INTERVAL_TICKS, CLASH_TARGET_DURATION_S } from './combat/clash/ClashTuning';
 import { CombatCameraController, type CombatCameraOutput } from './camera/CombatCameraController';
-import { buildImpactEventsForTick } from './camera/ImpactEvents';
+import { ClashCameraDirector } from './camera/ClashCameraDirector';
+import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from './camera/ImpactEvents';
+import { CLASH_RESOLVED_MAGNITUDE } from './camera/ImpactMagnitude';
 import { createDefaultRuntimeConfig } from './config/runtime/RuntimeConfig';
 import { DebugOverlay, type DebugOverlayState } from './debug/overlay/DebugOverlay';
 import { Action } from './input/actions/Action';
@@ -39,6 +45,7 @@ async function bootstrap(): Promise<void> {
   const telemetry = new TelemetryRecorder();
   const stateMachine = new GameStateMachine();
   const roundState = new RoundState();
+  const clash = new ClashOrchestration();
 
   const seedText = generateRandomSeedText();
   const rngStreams = createRngStreams(seedText);
@@ -67,9 +74,13 @@ async function bootstrap(): Promise<void> {
   let lastOverlayFields: CombatOverlayFields | null = null;
 
   const cameraDirector = new CombatCameraController();
+  const clashCameraDirector = new ClashCameraDirector();
   const vfxManager = new VfxManager(appRenderer.scene, appRenderer.camera);
   let lastMatchResult: MatchTickResult | null = null;
   let lastCameraOutput: CombatCameraOutput | null = null;
+  let previousClashState: ClashState = ClashState.Idle;
+  let previousFirstClashMashEventCount = 0;
+  let previousSecondClashMashEventCount = 0;
 
   const loop = new FixedTimestepLoop({
     onFixedTick: (tickIndex, fixedDeltaSeconds) => {
@@ -98,7 +109,7 @@ async function bootstrap(): Promise<void> {
         result = lastMatchResult;
       } else {
         const stepStart = performance.now();
-        result = tickMatch(physics, match.first, match.second, firstActions, secondActions, fixedDeltaSeconds, roundState);
+        result = tickMatch(physics, match.first, match.second, firstActions, secondActions, fixedDeltaSeconds, roundState, clash);
         lastPhysicsStepTimeMs = performance.now() - stepStart;
         lastMatchResult = result;
 
@@ -168,26 +179,140 @@ async function bootstrap(): Promise<void> {
         }
       }
 
+      // Clash (Milestone 5) state-edge telemetry + GameState transitions —
+      // safe to check every tick, including a hitstop-frozen one where
+      // nothing changed and this is a no-op: the pure ClashController's
+      // state only actually advances inside a real tickMatch() call.
+      const currentClashState = clash.controller.getState();
+      if (previousClashState === ClashState.Idle && currentClashState === ClashState.Active) {
+        telemetry.record({
+          kind: TelemetryEventKind.ClashStart,
+          firstStaminaFraction: result.first.staminaFraction,
+          secondStaminaFraction: result.second.staminaFraction,
+          firstSpeedMps: result.first.movement.speedMps,
+          secondSpeedMps: result.second.movement.speedMps,
+        });
+        stateMachine.transitionTo(GameState.Clash);
+        clashCameraDirector.reset();
+      }
+      if (result.clashResolvedThisTick) {
+        const clashResult = result.clashResolvedThisTick;
+        telemetry.record({
+          kind: TelemetryEventKind.ClashResult,
+          outcome: clashResult.outcome,
+          firstClashPower: clashResult.firstClashPower,
+          secondClashPower: clashResult.secondClashPower,
+          firstMashEventCount: clashResult.firstMashEventCount,
+          secondMashEventCount: clashResult.secondMashEventCount,
+        });
+      }
+      if (previousClashState === ClashState.Cooldown && currentClashState === ClashState.Idle) {
+        telemetry.record({ kind: TelemetryEventKind.ClashEnd });
+        // The round may have ended during Cooldown via ordinary physics
+        // (a natural ring-out/KO) — don't clobber that with Combat.
+        if (stateMachine.getCurrentState() === GameState.Clash) stateMachine.transitionTo(GameState.Combat);
+      }
+      const currentFirstClashMashEventCount = clash.controller.getFirstMashEventCount();
+      const currentSecondClashMashEventCount = clash.controller.getSecondMashEventCount();
+      if (currentFirstClashMashEventCount > previousFirstClashMashEventCount) {
+        telemetry.record({ kind: TelemetryEventKind.ClashMashInput, isFirst: true, mashEventCount: currentFirstClashMashEventCount });
+      }
+      if (currentSecondClashMashEventCount > previousSecondClashMashEventCount) {
+        telemetry.record({ kind: TelemetryEventKind.ClashMashInput, isFirst: false, mashEventCount: currentSecondClashMashEventCount });
+      }
+      previousFirstClashMashEventCount = currentFirstClashMashEventCount;
+      previousSecondClashMashEventCount = currentSecondClashMashEventCount;
+      previousClashState = currentClashState;
+
       lastFirstVisual = { spin: result.first.spin.visualSpinAngleRad, wobble: result.first.spin.wobbleOffsetRad };
       lastSecondVisual = { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad };
 
-      // Camera/VFX (Milestone 4) — always ticks, even on a hitstop-frozen
-      // tick (with an empty impact-events list, since nothing new happened
-      // that tick), so shake/FOV-punch/hitstop-remaining keep decaying in
-      // real time and the freeze doesn't become permanent.
+      // Camera/VFX — always ticks, even on a hitstop-frozen tick (with an
+      // empty impact-events list, since nothing new happened that tick),
+      // so shake/FOV-punch/hitstop-remaining keep decaying in real time
+      // and the freeze doesn't become permanent.
       const firstPositionM = match.first.body.translation();
       const secondPositionM = match.second.body.translation();
-      const impactEvents = isFrozenByHitstop ? [] : buildImpactEventsForTick(result, firstPositionM, secondPositionM);
-      vfxManager.onImpactEvents(impactEvents);
-      lastCameraOutput = cameraDirector.tick({
-        firstPositionM,
-        secondPositionM,
-        firstSpeedMps: result.first.movement.speedMps,
-        secondSpeedMps: result.second.movement.speedMps,
-        firstVelocityXZ: result.first.movement.actualVelocityVector,
-        impactEvents,
-        fixedDeltaSeconds,
-      });
+      const midpointM: WorldPositionM = {
+        x: (firstPositionM.x + secondPositionM.x) / 2,
+        y: (firstPositionM.y + secondPositionM.y) / 2,
+        z: (firstPositionM.z + secondPositionM.z) / 2,
+      };
+
+      if (result.clashResolvedThisTick) {
+        // Resolution beat (owner decision): a strong, dedicated impact
+        // event at the clash point drives Milestone 4's existing
+        // hitstop/shake/FOV-punch pipeline exactly like any other big
+        // moment — the freeze holds the already-applied knockback impulse
+        // in place for a beat, then physics.step() (resuming next tick,
+        // no longer frozen) plays out the real physical result. The normal
+        // CombatCameraController resumes driving the camera from here
+        // (its knockback-follow bias will naturally settle on the loser,
+        // or hold center for a Tie — see 'clashResolved' in
+        // KNOCKBACK_FOLLOW_EVENT_KINDS).
+        const resolutionEvent: ImpactEvent = {
+          kind: 'clashResolved',
+          magnitude: CLASH_RESOLVED_MAGNITUDE,
+          worldPositionM: midpointM,
+          isFirst: result.clashResolvedThisTick.outcome !== ClashOutcome.SecondWins,
+        };
+        vfxManager.onImpactEvents([resolutionEvent]);
+        lastCameraOutput = cameraDirector.tick({
+          firstPositionM,
+          secondPositionM,
+          firstSpeedMps: result.first.movement.speedMps,
+          secondSpeedMps: result.second.movement.speedMps,
+          firstVelocityXZ: result.first.movement.actualVelocityVector,
+          impactEvents: [resolutionEvent],
+          fixedDeltaSeconds,
+        });
+      } else if (currentClashState === ClashState.Active) {
+        // Dedicated Clash camera (owner decision, profile C): a controlled
+        // cinematic orbit near the confrontation point, intensity growing
+        // progressively over the ~4s contest, while keeping the normal
+        // CombatCameraController's own smoothing state settling toward the
+        // (frozen) midpoint too — with no fresh impact events, since
+        // nothing new happened — so resuming it after resolution isn't a
+        // snap. Small progressive sparks land at a fixed cadence so the
+        // escalation is actually felt building, not just flashing once at
+        // the end.
+        cameraDirector.tick({
+          firstPositionM,
+          secondPositionM,
+          firstSpeedMps: 0,
+          secondSpeedMps: 0,
+          firstVelocityXZ: { x: 0, z: 0 },
+          impactEvents: [],
+          fixedDeltaSeconds,
+        });
+        const progressFraction = clash.controller.getElapsedS() / CLASH_TARGET_DURATION_S;
+        const clashCameraOutput = clashCameraDirector.tick({ midpointM, progressFraction, fixedDeltaSeconds });
+        lastCameraOutput = {
+          cameraPositionM: clashCameraOutput.cameraPositionM,
+          focusPositionM: clashCameraOutput.focusPositionM,
+          shakeOffsetM: clashCameraOutput.shakeOffsetM,
+          fovDeg: clashCameraOutput.fovDeg,
+          isHitstopActive: false,
+          hitstopRemainingS: 0,
+          highSpeedBlend: 0,
+          speedLinesScreenDirection: { x: 0, y: 0 },
+        };
+        if (tickIndex % CLASH_PROGRESSIVE_VFX_INTERVAL_TICKS === 0) {
+          vfxManager.onImpactEvents([{ kind: 'hit', magnitude: 0.1 + progressFraction * 0.3, worldPositionM: midpointM, isFirst: true }]);
+        }
+      } else {
+        const impactEvents = isFrozenByHitstop ? [] : buildImpactEventsForTick(result, firstPositionM, secondPositionM);
+        vfxManager.onImpactEvents(impactEvents);
+        lastCameraOutput = cameraDirector.tick({
+          firstPositionM,
+          secondPositionM,
+          firstSpeedMps: result.first.movement.speedMps,
+          secondSpeedMps: result.second.movement.speedMps,
+          firstVelocityXZ: result.first.movement.actualVelocityVector,
+          impactEvents,
+          fixedDeltaSeconds,
+        });
+      }
 
       lastOverlayFields = {
         intendedSteeringVector: result.first.movement.intendedSteeringVector,
@@ -220,6 +345,20 @@ async function bootstrap(): Promise<void> {
         isHitstopActive: lastCameraOutput.isHitstopActive,
         hitstopRemainingS: lastCameraOutput.hitstopRemainingS,
         cameraHighSpeedBlend: lastCameraOutput.highSpeedBlend,
+        clashState: currentClashState,
+        clashElapsedS: clash.controller.getElapsedS(),
+        clashCooldownRemainingS: clash.controller.getCooldownRemainingS(),
+        clashOutcome: clash.controller.getLastResult()?.outcome ?? '-',
+        firstClashMashEventCount: currentFirstClashMashEventCount,
+        secondClashMashEventCount: currentSecondClashMashEventCount,
+        firstClashMashPerformance: computeMashPerformance(currentFirstClashMashEventCount),
+        firstClashStaminaFactor: computeStaminaFactor(result.first.staminaFraction),
+        firstClashVelocityFactor: computeVelocityFactor(result.first.movement.speedMps),
+        firstClashPower: computeClashPower(currentFirstClashMashEventCount, result.first.staminaFraction, result.first.movement.speedMps),
+        secondClashMashPerformance: computeMashPerformance(currentSecondClashMashEventCount),
+        secondClashStaminaFactor: computeStaminaFactor(result.second.staminaFraction),
+        secondClashVelocityFactor: computeVelocityFactor(result.second.movement.speedMps),
+        secondClashPower: computeClashPower(currentSecondClashMashEventCount, result.second.staminaFraction, result.second.movement.speedMps),
       };
     },
     onRenderFrame: (frameDeltaSeconds) => {

@@ -94,6 +94,15 @@ export class ClashController {
     return this.lastResult;
   }
 
+  /** Live running mash-event counts while Active (0 outside of an active contest) — for real-time debug/HUD display, distinct from getLastResult()'s post-resolution snapshot. */
+  getFirstMashEventCount(): number {
+    return this.firstMashEventCount;
+  }
+
+  getSecondMashEventCount(): number {
+    return this.secondMashEventCount;
+  }
+
   /**
    * Attempts to start a Clash. No-ops (returns false) if a Clash is
    * already Active or its Cooldown hasn't elapsed yet — a Clash can never
