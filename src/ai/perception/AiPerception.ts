@@ -61,9 +61,22 @@ export const ENGAGED_ATTACK_STATES: ReadonlySet<AttackState> = new Set([
   AttackState.DashActive,
 ]);
 
+/**
+ * Attack states in which a Dash charge is actually live. AttackController.
+ * getChargeFraction() deliberately keeps reporting the most recent Dash's
+ * charge afterward (for the HUD/debug), so outside these states that value
+ * is stale history, not "how charged am I now".
+ */
+const LIVE_DASH_CHARGE_STATES: ReadonlySet<AttackState> = new Set([AttackState.ChargingDash, AttackState.DashActive]);
+
 export function perceiveCombatant(raw: CombatantRawState): PerceivedCombatant {
   return {
     ...raw,
+    // Regression (M7 Part 2): reading the stale value made an AI whose
+    // previous Dash had reached its charge target believe it was already
+    // charged forever after — it never pressed Attack for a Dash again,
+    // so every AI dashed exactly once per match.
+    dashChargeFraction: LIVE_DASH_CHARGE_STATES.has(raw.attackState) ? raw.dashChargeFraction : 0,
     speedMps: length(raw.velocityXZ),
     distanceToEdgeM: distanceToEdgeM(raw.positionXZ),
     directionTowardCenter: directionTowardCenter(raw.positionXZ),

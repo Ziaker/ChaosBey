@@ -131,3 +131,14 @@ describe('evaluateRisk', () => {
     );
   });
 });
+
+describe('perceiveCombatant — live Dash charge (M7 Part 2 regression)', () => {
+  it('reports the charge only while it is live (ChargingDash / DashActive), never the stale value from a finished Dash', () => {
+    for (const state of [AttackState.Neutral, AttackState.Buffering, AttackState.DashRecovery, AttackState.CircularActive, AttackState.CircularRecovery]) {
+      expect(perceiveCombatant(rawState({ attackState: state, dashChargeFraction: 0.6 })).dashChargeFraction, state).toBe(0);
+    }
+    for (const state of [AttackState.ChargingDash, AttackState.DashActive]) {
+      expect(perceiveCombatant(rawState({ attackState: state, dashChargeFraction: 0.6 })).dashChargeFraction, state).toBe(0.6);
+    }
+  });
+});
