@@ -5,9 +5,15 @@
 // finished one-shot effects every render frame, updates the persistent
 // per-Bey/per-camera effects. Thin wiring only (GDD section 1.4) — the
 // actual look of each effect lives in its own module.
+//
+// Milestone 6: sparks/landing bursts are tinted from each side's own
+// BeyParticleProfile (defaulting to the fixed VfxTuning colors, so any
+// caller not yet passing a profile keeps its exact prior behavior) — the
+// real consumer of the per-archetype particle identity hook.
 // ============================================================
 
 import * as THREE from 'three';
+import { DEFAULT_PARTICLE_PROFILE, type BeyParticleProfile } from '../bey/archetype/BeyParticleProfile';
 import type { ImpactEvent, WorldPositionM } from '../camera/ImpactEvents';
 import { createLandingBurst, disposeLandingBurst, updateLandingBurst, type ActiveLandingBurst } from './LandingBurstVfx';
 import { createSparkBurst, disposeSparkBurst, updateSparkBurst, type ActiveSparkBurst } from './SparkBurstVfx';
@@ -23,7 +29,12 @@ export class VfxManager {
   private readonly secondTrail: SpeedTrail;
   private readonly speedLines: SpeedLines;
 
-  constructor(private readonly scene: THREE.Scene, camera: THREE.Camera) {
+  constructor(
+    private readonly scene: THREE.Scene,
+    camera: THREE.Camera,
+    private readonly firstParticleProfile: BeyParticleProfile = DEFAULT_PARTICLE_PROFILE,
+    private readonly secondParticleProfile: BeyParticleProfile = DEFAULT_PARTICLE_PROFILE,
+  ) {
     this.firstTrail = new SpeedTrail(TRAIL_COLOR_FIRST_HEX);
     this.secondTrail = new SpeedTrail(TRAIL_COLOR_SECOND_HEX);
     scene.add(this.firstTrail.object3D);
@@ -49,14 +60,15 @@ export class VfxManager {
   onImpactEvents(events: ImpactEvent[]): void {
     for (const event of events) {
       const route = routeImpactEventToVfx(event);
+      const particleProfile = event.isFirst ? this.firstParticleProfile : this.secondParticleProfile;
       if (route === 'landing') {
         if (event.magnitude < LANDING_MIN_MAGNITUDE_TO_SPAWN) continue;
-        const burst = createLandingBurst(event.magnitude, event.worldPositionM);
+        const burst = createLandingBurst(event.magnitude, event.worldPositionM, particleProfile.landingTintHex);
         this.scene.add(burst.mesh);
         this.activeLandingBursts.push(burst);
       } else if (route === 'spark') {
         if (event.magnitude < SPARK_MIN_MAGNITUDE_TO_SPAWN) continue;
-        const burst = createSparkBurst(event.magnitude, event.worldPositionM);
+        const burst = createSparkBurst(event.magnitude, event.worldPositionM, particleProfile.sparkTintHex);
         this.scene.add(burst.points);
         this.activeSparkBursts.push(burst);
       }

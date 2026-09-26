@@ -93,7 +93,7 @@ async function bootstrap(): Promise<void> {
 
   const cameraDirector = new CombatCameraController();
   const clashCameraDirector = new ClashCameraDirector();
-  const vfxManager = new VfxManager(appRenderer.scene, appRenderer.camera);
+  const vfxManager = new VfxManager(appRenderer.scene, appRenderer.camera, match.first.definition.particle, match.second.definition.particle);
   let lastMatchResult: MatchTickResult | null = null;
   let lastCameraOutput: CombatCameraOutput | null = null;
   const clashPresentationTracker = new ClashPresentationTracker();
