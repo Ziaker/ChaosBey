@@ -45,7 +45,7 @@ The right-hand **Tuning** panel (`P` shows or hides it) exposes every effect par
 - **Copy values** copies them as JSON.
 - **Back to approved** resets every slider.
 
-All values and their ranges live in `src/tuning.ts`.
+All values and their ranges live in `src/tuning.ts`. `APPROVED` there now holds the **owner's final configuration** (2026-09-26), recorded in `docs/design-decisions/visual-prototypes-approval.md` §3c, and "Back to approved" returns to it.
 
 ## Files
 

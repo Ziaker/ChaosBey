@@ -93,7 +93,7 @@ As três foram aprovadas. Detalhes e parâmetros estão em `prototypes/arena-vis
 
 ---
 
-## 3b. VFX de combate: direção HÍBRIDA (APROVADA em princípio)
+## 3b. VFX de combate: direção HÍBRIDA (APROVADA)
 
 **Origem:** `prototypes/vfx-visual-concepts/`. O dono gostou das duas linguagens (A Mecânica e B Anime) e pediu para misturá-las. A mistura é a linguagem **C — Híbrida** (`src/languages/hybrid.ts`).
 
@@ -103,7 +103,7 @@ As três foram aprovadas. Detalhes e parâmetros estão em `prototypes/arena-vis
 | Faíscas e marcas de derrapagem em **alta velocidade** | **A — Mecânica** |
 | Efeito de golpe: estrelas de impacto, ondas de choque, linhas de faísca, linhas de foco | **B — Anime** |
 | Dash (aura carregando, soltura, rastro), speed lines, Circular, Perfect Dodge, quebra de Stability, aterrissagem, ring-out | **B — Anime** |
-| **Frame de impacto** (flash negativo) | Só em ataque **HIGH/pesado** (magnitude ≥ 0,9) |
+| **Frame de impacto** (flash negativo) | Só em ataque forte: magnitude **≥ 0,65** (valor final, ver 3c) |
 | **Burst de vento (NOVO):** funil espetado e girando, como um mini-furacão de anime, atrás do Bey | Todo avanço brusco: **soltura do Dash** e **acionamento do dodge** |
 
 Regras: todo efeito escala com a magnitude real do evento (GDD 51); VFX observa eventos e não decide resultados (GDD 158); tuning no topo dos arquivos.
@@ -115,6 +115,89 @@ Regras: todo efeito escala com a magnitude real do evento (GDD 51); VFX observa 
 - **Quando aparece:** na soltura do Dash e no acionamento do dodge. Tudo escala com a magnitude.
 
 As outras opções (1 Sonic Boom, 2 Comet Wake e o funil v1) ficam no laboratório só como referência.
+
+## 3c. VFX: CONFIGURAÇÃO FINAL (definida pelo dono, 2026-09-26)
+
+O dono definiu estes valores no painel de ajuste do laboratório (`prototypes/vfx-visual-concepts`, aba Tuning). **Esta é a configuração final a implementar.** A fonte da verdade no protótipo é `APPROVED` em `prototypes/vfx-visual-concepts/src/tuning.ts`.
+
+Os números são **multiplicadores** sobre os valores-base do código dos efeitos (1 = base), exceto onde a unidade está indicada.
+
+| Grupo | Parâmetro | Valor | Leitura |
+|---|---|---|---|
+| Global | Tremor de câmera | 1,35 | 35% mais forte |
+| Global | Duração do hitstop | 1,2 | 20% mais longo |
+| Global | Clarão de luz | 1,25 | |
+| Global | Linhas de foco / speed lines | 1,05 | |
+| Global | Frame de impacto a partir de | **0,65** de magnitude | aparece em golpes fortes, não em leves nem médios fracos |
+| Global | Duração do frame de impacto | 0,6 | mais curto que a base (flash rápido) |
+| Faíscas (A) | Quantidade, velocidade e duração das faíscas, estilhaços, poeira, marcas no chão, faíscas de velocidade, derrapagem | 1 | como a base |
+| Golpe (B) | Tamanho da estrela de impacto | 0,9 | |
+| Golpe (B) | Anel de choque | **1,95** | quase o dobro |
+| Golpe (B) | Linhas de faísca | **3** | o triplo (máximo do slider) |
+| Dash (B) | Aura de carga | **1,95** | quase o dobro |
+| Dash (B) | Largura do rastro de energia | 0,55 | rastro fino |
+| Dash (B) | Comprimento do rastro | **3** | rastro longo (máximo do slider) |
+| Perfect Dodge | Velocidade da câmera lenta | 0,3 | 30% da velocidade normal |
+| Perfect Dodge | Duração da câmera lenta | 0,45 s | |
+| Perfect Dodge | Tom azul | 0,12 | sutil |
+| Perfect Dodge | Opacidade dos afterimages | 0,25 | sutil |
+| Vento (Cel Cyclone) | Número de argolas | **1** | |
+| Vento (Cel Cyclone) | Tamanho da argola | 0,65 | |
+| Vento (Cel Cyclone) | Duração da argola | 0,71 s | |
+| Vento (Cel Cyclone) | Recuo da argola | 2,25 | a argola "fica para trás" |
+| Vento (Cel Cyclone) | Quantidade de linhas de vento | 0,7 | |
+| Vento (Cel Cyclone) | Largura das linhas | 0,15 | linhas bem finas |
+| Vento (Cel Cyclone) | Opacidade das linhas | 0,6 | |
+| Vento (Cel Cyclone) | Comprimento das linhas | **3** | rastro longo (máximo do slider) |
+| Vento (Cel Cyclone) | Linhas da espiral | 3 | |
+| Vento (Cel Cyclone) | Opacidade da espiral | 0,5 | |
+| Vento (Cel Cyclone) | Nuvens de poeira | 1,65 | |
+| Vento (Cel Cyclone) | Estilhaços | 2,6 | |
+
+Valores exatos (JSON, as chaves de `Tuning`):
+
+```json
+{
+  "shake": 1.35,
+  "hitstop": 1.2,
+  "flash": 1.25,
+  "focusLines": 1.05,
+  "impactFrameMin": 0.65,
+  "impactFrameLength": 0.6,
+  "contactSparks": 1,
+  "sparkSpeed": 1,
+  "sparkLife": 1,
+  "chips": 1,
+  "dust": 1,
+  "scuffs": 1,
+  "speedSparks": 1,
+  "skidMarks": 1,
+  "starSize": 0.9,
+  "shockwave": 1.95,
+  "sparkLines": 3,
+  "chargeAura": 1.95,
+  "trailWidth": 0.55,
+  "trailLife": 3,
+  "dodgeSlowFactor": 0.3,
+  "dodgeSlowSeconds": 0.45,
+  "dodgeTint": 0.12,
+  "afterimageOpacity": 0.25,
+  "windRings": 1,
+  "windRingSize": 0.65,
+  "windRingLife": 0.71,
+  "windRingDrift": 2.25,
+  "windStreaks": 0.7,
+  "windStreakWidth": 0.15,
+  "windStreakOpacity": 0.6,
+  "windStreakLength": 3,
+  "windSpiralLines": 3,
+  "windSpiralOpacity": 0.5,
+  "windDust": 1.65,
+  "windDebris": 2.6
+}
+```
+
+Na implementação: estes valores vão para os arquivos de tuning de `src/vfx/` e de câmera/hitstop, com comentário de origem no topo de cada arquivo (GDD 1.3). Os multiplicadores precisam ser convertidos em valores absolutos a partir das bases do protótipo (`mechanical.ts`, `anime.ts` e `hybrid.ts`). A intensidade de cada efeito continua escalando com a magnitude real do evento (GDD 51).
 
 ## 4. Continua em ABERTO (não decidir sem o dono)
 
