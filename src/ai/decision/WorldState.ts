@@ -35,6 +35,23 @@ export interface PredictionConfig {
   readonly strength: number;
 }
 
+/**
+ * What this AI's targeting is made of, kept apart so debug never passes one
+ * off as another (GDD section 65: "AI current target", "predicted path").
+ */
+export interface TargetingInfo {
+  /** The opponent's position as observed right now — what anyone watching sees. Range checks use this. */
+  readonly observedOpponentXZ: Vec2;
+  /** The opponent's position extrapolated linearly from its current velocity, predictionHorizonS ahead. Null when no prediction is in use (strength 0, or no PredictionConfig) — never the observed position relabeled. */
+  readonly predictedOpponentXZ: Vec2 | null;
+  /** The point this AI actually aims at (directionToOpponent points here): observed, pulled toward predicted by predictionStrength. Equals observedOpponentXZ when there is no prediction. */
+  readonly aimPointXZ: Vec2;
+  /** Seconds ahead predictedOpponentXZ looks; 0 when there is no prediction. */
+  readonly predictionHorizonS: number;
+  /** 0..1 how much aimPointXZ trusts the prediction; 0 when there is no prediction. */
+  readonly predictionStrength: number;
+}
+
 export interface WorldState {
   readonly nowS: number;
   readonly own: PerceivedCombatant;
@@ -50,6 +67,8 @@ export interface WorldState {
   readonly closingSpeedMps: number;
   /** This AI's own Circular reach (m) — knowledge of its OWN Bey's attack profile, which a player has too; never anything about the opponent's hidden state. */
   readonly ownCircularReachM: number;
+  /** Observed vs predicted vs aimed-at opponent position (see TargetingInfo). */
+  readonly targeting: TargetingInfo;
 }
 
 /** What an AI knows about its own Bey (not the opponent's) — see WorldState.ownCircularReachM. */
@@ -65,11 +84,10 @@ export function buildWorldState(
   prediction?: PredictionConfig,
   self?: SelfKnowledge,
 ): WorldState {
-  const targetPositionXZ =
-    prediction && prediction.strength > 0
-      ? lerpVec2(opponent.positionXZ, predictPositionXZ(opponent, prediction.horizonSeconds), prediction.strength)
-      : opponent.positionXZ;
-  const toTarget = subtract(targetPositionXZ, own.positionXZ);
+  const predicting = prediction !== undefined && prediction.strength > 0;
+  const predictedOpponentXZ = predicting ? predictPositionXZ(opponent, prediction.horizonSeconds) : null;
+  const aimPointXZ = predictedOpponentXZ ? lerpVec2(opponent.positionXZ, predictedOpponentXZ, prediction!.strength) : opponent.positionXZ;
+  const toTarget = subtract(aimPointXZ, own.positionXZ);
   const dist = length(toTarget);
   const toOpponentNow = subtract(opponent.positionXZ, own.positionXZ);
   const distNow = length(toOpponentNow);
@@ -85,6 +103,13 @@ export function buildWorldState(
     relativeSpeedAdvantageMps: own.speedMps - opponent.speedMps,
     closingSpeedMps,
     ownCircularReachM: self?.circularReachM ?? AI_DEFAULT_CIRCULAR_REACH_M,
+    targeting: {
+      observedOpponentXZ: opponent.positionXZ,
+      predictedOpponentXZ,
+      aimPointXZ,
+      predictionHorizonS: predicting ? prediction.horizonSeconds : 0,
+      predictionStrength: predicting ? prediction.strength : 0,
+    },
   };
 }
 

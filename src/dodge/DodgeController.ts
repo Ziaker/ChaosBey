@@ -66,6 +66,17 @@ export class DodgeController {
   }
 
   /**
+   * Whether a Dodge press right now would trigger air recovery: armed by a
+   * launch (see registerLaunch) AND airborne as of the last tick. The armed
+   * flag alone is not "now": an unused one is only overwritten at the next
+   * takeoff, so it can stay set after landing. The launch it reflects is
+   * something a player sees happen to their own Bey (GDD section 21).
+   */
+  isAirRecoveryAvailable(): boolean {
+    return this.airRecoveryAvailable && !this.wasGrounded;
+  }
+
+  /**
    * Call when a knockback/launch impulse (normal knockback or the
    * Circular-catches-Dash upward launch) is applied to this Bey — arms Air
    * Recovery for the airborne period the launch causes (GDD section 21). A

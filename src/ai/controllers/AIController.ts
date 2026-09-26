@@ -29,6 +29,8 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { ClashState, type ClashController } from '../../combat/clash/ClashController';
+import { DodgeState } from '../../dodge/DodgeController';
+import { DODGE_STAMINA_COST } from '../../dodge/DodgeTuning';
 import { DriftState } from '../../drift/DriftController';
 import { Action, type CombatController, type ControllerActions, type ControllerContext } from '../../input/actions/Action';
 import { isGrounded } from '../../physics/collision/GroundCheck';
@@ -66,19 +68,29 @@ function isAttackIntent(intent: AiIntent): boolean {
 /** An opponent Dash in progress — from its visible charge through its active lunge. */
 const OPPONENT_DASH_STATES: ReadonlySet<AttackState> = new Set([AttackState.ChargingDash, AttackState.DashActive]);
 
-function summarizeScores(scores: readonly ConsideredScore[] | undefined): string {
+function summarizeScores(decision: IntentDecision): string {
+  const scores = decision.consideredScores;
   if (!scores || scores.length === 0) return 'override (see reason)';
-  return scores.map((entry) => `${entry.intent} ${entry.score.toFixed(2)}`).join(' / ');
+  const summary = scores.map((entry: ConsideredScore) => `${entry.intent} ${entry.score.toFixed(2)}`).join(' / ');
+  const modifiers = decision.scoreModifiers;
+  if (!modifiers) return summary;
+  // Only the ones actually shaping this decision, so the line stays short.
+  const notes = [
+    modifiers.clashWillingness < 1 ? `clash x${modifiers.clashWillingness.toFixed(2)}` : '',
+    modifiers.staminaConservation > 0 ? `conserve ${modifiers.staminaConservation.toFixed(2)}` : '',
+  ].filter((note) => note !== '');
+  return notes.length > 0 ? `${summary} (${notes.join(', ')})` : summary;
 }
 
 function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey): CombatantRawState {
   const translation = body.translation();
   const velocity = body.linvel();
+  const grounded = isGrounded(physics, bey.collider);
   return {
     positionXZ: { x: translation.x, z: translation.z },
     velocityXZ: { x: velocity.x, z: velocity.z },
     headingRad: bey.movement.getHeadingRad(),
-    grounded: isGrounded(physics, bey.collider),
+    grounded,
     attackState: bey.attack.getState(),
     dashChargeFraction: bey.attack.getChargeFraction(),
     dodgeState: bey.dodge.getState(),
@@ -87,10 +99,15 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     stabilityFraction: bey.stability.resource.fraction,
     isBroken: bey.stability.isBroken,
     attackEnergyFraction: bey.attackEnergy.resource.fraction,
+    dodgeReady: bey.dodge.getState() === DodgeState.Idle && bey.stamina.resource.value >= DODGE_STAMINA_COST,
+    // Same grounded value tickMatch passes DodgeController on the coming
+    // tick (nothing moves in between), so this is exactly "a press now
+    // triggers air recovery" — see CombatantRawState.airRecoveryAvailable.
+    airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable() && !grounded,
   };
 }
 
-const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, punishWindow: false, edgePressure: 0 };
+const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, punishWindow: false, edgePressure: 0, immediateThreat: false };
 
 export class AIController implements CombatController {
   private readonly actionSelector = new ActionSelector();
@@ -111,6 +128,15 @@ export class AIController implements CombatController {
   /** Simulated time this AI last started an attack (own attackState left Neutral) — feeds the anti-passivity tempo (see IntentSelection.passivityTempo). */
   private lastOwnAttackStartS = 0;
   private lastOwnAttackState: AttackState = AttackState.Neutral;
+  /**
+   * A decision held back by a slow-to-react deliberate error (see
+   * IntentionalError.ts): it becomes the active decision once remainingS
+   * runs out (and no commitment is in flight); until then the current
+   * decision keeps acting and non-critical fresh decisions are skipped, so
+   * the late reaction lands as the one that was decided. A critical
+   * decision replaces it at once.
+   */
+  private pendingDecision: { decision: IntentDecision; remainingS: number; dodgeAttemptSucceeds: boolean } | null = null;
 
   constructor(
     private readonly physics: PhysicsWorld,
@@ -181,10 +207,27 @@ export class AIController implements CombatController {
       this.activeDecision.intent === AiIntent.CounterAttack &&
       ownRaw.attackState === AttackState.Neutral &&
       OPPONENT_DASH_STATES.has(opponentRaw.attackState);
-    const committed = committedToAttack || committedToDrift || committedToCounter;
+    // An open air-recovery window (GDD section 21) outranks every
+    // commitment: being launched mid-swing or mid-hop must not lock the AI
+    // out of the one action that answers it. It still waits for the normal
+    // decision cadence (reaction delay) like any other reaction.
+    const airRecoveryWindowOpen = ownPerceived.airRecoveryAvailable;
+    const committed = !airRecoveryWindowOpen && (committedToAttack || committedToDrift || committedToCounter);
 
     const effectiveReactionDelayS = Math.max(0, this.personality.reactionDelaySeconds * this.difficulty.reactionDelayMultiplier);
     this.decisionTimerS += context.fixedDeltaSeconds;
+    if (this.pendingDecision) {
+      this.pendingDecision.remainingS -= context.fixedDeltaSeconds;
+      if (this.pendingDecision.remainingS <= 0 && !committed) {
+        // The late reaction lands now; it gets a full reaction period
+        // before anything replaces it, like any fresh decision.
+        this.activeDecision = this.pendingDecision.decision;
+        this.dodgeAttemptSucceeds = this.pendingDecision.dodgeAttemptSucceeds;
+        this.deliberateErrorApplied = true;
+        this.pendingDecision = null;
+        this.decisionTimerS = 0;
+      }
+    }
     if (!committed && this.decisionTimerS >= effectiveReactionDelayS) {
       this.decisionTimerS = 0;
       this.makeFreshDecision(world);
@@ -205,17 +248,34 @@ export class AIController implements CombatController {
     const ideal = selectIntent(world, adjustedPersonality, risk, {
       counterDash: this.counterRollForOpponentDash === true,
       secondsSinceOwnAttack: world.nowS - this.lastOwnAttackStartS,
-      recoveringFromEdge: this.activeDecision.intent === AiIntent.RecoverFromEdge,
+      // From the ideal decision, so a deliberate-error downgrade can't end
+      // an edge episode early.
+      recoveringFromEdge: this.idealDecision.edgeEpisode === true,
     });
+    // Still reacting late to a held-back decision: it lands first, unless
+    // this one is critical (air recovery, critical edge) — never delayed.
+    if (this.pendingDecision && !ideal.critical) return;
+    this.pendingDecision = null;
     this.idealDecision = ideal;
 
-    const { decision, errorApplied } = maybeApplyIntentionalError(ideal, risk, adjustedPersonality, this.difficulty, this.rng);
-    this.activeDecision = decision;
-    this.deliberateErrorApplied = errorApplied;
-
+    const { decision, errorApplied, reactionDelayS } = maybeApplyIntentionalError(
+      ideal,
+      risk,
+      adjustedPersonality,
+      this.difficulty,
+      this.rng,
+      this.activeDecision.intent,
+    );
     // Rolled exactly once for this fresh decision (see the field's own doc
     // comment) — a no-op (stays false) for every other intent.
-    this.dodgeAttemptSucceeds = decision.intent === AiIntent.DodgeThreat ? this.rng.nextBool(adjustedPersonality.dodgeSkill) : false;
+    const dodgeAttemptSucceeds = decision.intent === AiIntent.DodgeThreat ? this.rng.nextBool(adjustedPersonality.dodgeSkill) : false;
+    if (reactionDelayS > 0) {
+      this.pendingDecision = { decision, remainingS: reactionDelayS, dodgeAttemptSucceeds };
+    } else {
+      this.activeDecision = decision;
+      this.dodgeAttemptSucceeds = dodgeAttemptSucceeds;
+      this.deliberateErrorApplied = errorApplied;
+    }
 
     if (this.telemetry) {
       this.telemetry.record({
@@ -278,12 +338,19 @@ export class AIController implements CombatController {
       difficultyProfileId: this.difficulty.id,
       idealIntent: this.idealDecision.intent,
       idealIntentReason: this.idealDecision.reason,
-      consideredScoresSummary: summarizeScores(this.idealDecision.consideredScores),
+      consideredScoresSummary: summarizeScores(this.idealDecision),
       activeIntent: this.activeDecision.intent,
       activeIntentReason: this.activeDecision.reason,
       deliberateErrorApplied: this.deliberateErrorApplied,
+      pendingIntent: this.pendingDecision ? this.pendingDecision.decision.intent : null,
+      pendingRemainingS: this.pendingDecision ? Math.max(0, this.pendingDecision.remainingS) : 0,
       dodgeAttemptSucceeds: this.dodgeAttemptSucceeds,
-      targetPositionXZ: world ? world.opponent.positionXZ : { x: 0, z: 0 },
+      observedOpponentXZ: world ? world.targeting.observedOpponentXZ : { x: 0, z: 0 },
+      aimPointXZ: world ? world.targeting.aimPointXZ : { x: 0, z: 0 },
+      predictedOpponentXZ: world ? world.targeting.predictedOpponentXZ : null,
+      predictionHorizonS: world ? world.targeting.predictionHorizonS : 0,
+      predictionStrength: world ? world.targeting.predictionStrength : 0,
+      moveDirectionXZ: this.actionSelector.getLastMoveDirection(),
       distanceToOpponentM: world ? world.distanceToOpponentM : 0,
       edgeRiskFraction: this.lastRisk.edgeRisk,
       opponentThreatFraction: this.lastRisk.opponentThreat,

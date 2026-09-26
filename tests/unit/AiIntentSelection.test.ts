@@ -14,7 +14,7 @@ import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { perceiveCombatant, type CombatantRawState } from '../../src/ai/perception/AiPerception';
 import { buildWorldState, type WorldState } from '../../src/ai/decision/WorldState';
 import { evaluateRisk } from '../../src/ai/decision/RiskEvaluation';
-import { NEUTRAL_DECISION_CONTEXT, selectIntent, type DecisionContext } from '../../src/ai/decision/IntentSelection';
+import { clashWillingness, NEUTRAL_DECISION_CONTEXT, selectIntent, staminaConservation, type DecisionContext } from '../../src/ai/decision/IntentSelection';
 import { AiIntent } from '../../src/ai/decision/Intent';
 import { ATTACK_AI_PERSONALITY, DEFENSE_AI_PERSONALITY, STAMINA_AI_PERSONALITY } from '../../src/ai/personalities/AiArchetypePersonalities';
 
@@ -32,6 +32,8 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    dodgeReady: true,
+    airRecoveryAvailable: false,
     ...overrides,
   };
 }
@@ -203,5 +205,164 @@ describe('selectIntent — edge recovery hysteresis (M7 Part 2)', () => {
     expect(decide(clear, opponentFarAway, DEFENSE_AI_PERSONALITY, { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true }).intent).not.toBe(
       AiIntent.RecoverFromEdge,
     );
+  });
+});
+
+// ============================================================
+// M7 Part 2b — edge danger + immediate threat at once.
+// Defense edgeCautionMultiplier 1.3: at z=11 raw edge risk ~0.46 -> ~0.59
+// (over the 0.55 entry threshold). Opponent approaches from the center side.
+// ============================================================
+
+describe('selectIntent — edge-safe evasion (M7 Part 2b)', () => {
+  const atEdge = { positionXZ: { x: 0, z: 11 } };
+  const liveCircularFromCenter = { positionXZ: { x: 0, z: 9.5 }, attackState: AttackState.CircularActive };
+  const noErrors = { ...DEFENSE_AI_PERSONALITY, errorRate: 0 };
+
+  it('dodges when Dodge is ready, and marks the decision as part of the edge episode', () => {
+    const decision = decide(atEdge, liveCircularFromCenter, noErrors);
+    expect(decision.intent).toBe(AiIntent.DodgeThreat);
+    expect(decision.edgeEpisode).toBe(true);
+  });
+
+  it('keeps DodgeThreat while already dodging instead of jumping out of its own i-frames', () => {
+    expect(decide({ ...atEdge, dodgeState: DodgeState.Dodging, dodgeReady: false }, liveCircularFromCenter, noErrors).intent).toBe(AiIntent.DodgeThreat);
+  });
+
+  it('jumps (JumpEvade) when Dodge is on cooldown but a jump is available', () => {
+    expect(decide({ ...atEdge, dodgeState: DodgeState.Cooldown, dodgeReady: false }, liveCircularFromCenter, noErrors).intent).toBe(AiIntent.JumpEvade);
+  });
+
+  it('treats Dodge as unavailable when Stamina is below its cost even though the state is Idle', () => {
+    // Regression (source-semantics audit): Idle alone used to count as "can dodge".
+    expect(decide({ ...atEdge, dodgeState: DodgeState.Idle, dodgeReady: false }, liveCircularFromCenter, noErrors).intent).toBe(AiIntent.JumpEvade);
+  });
+
+  it('falls back to the safest movement when neither Dodge nor a jump is available', () => {
+    const decision = decide({ ...atEdge, dodgeState: DodgeState.Cooldown, dodgeReady: false, driftState: DriftState.Hopping }, liveCircularFromCenter, noErrors);
+    expect(decision.intent).toBe(AiIntent.Retreat);
+    expect(decision.edgeEpisode).toBe(true);
+  });
+
+  it('answers a telegraph (charging Dash) by recovering from the edge, not by spending an early dodge', () => {
+    expect(decide(atEdge, { positionXZ: { x: 0, z: 6 }, attackState: AttackState.ChargingDash }, noErrors).intent).toBe(AiIntent.RecoverFromEdge);
+  });
+
+  it('counts an active Dash as immediate only once it can arrive within ~0.4 s', () => {
+    const farDash = { positionXZ: { x: 0, z: 0 }, velocityXZ: { x: 0, z: 15 }, attackState: AttackState.DashActive };
+    const nearDash = { positionXZ: { x: 0, z: 6 }, velocityXZ: { x: 0, z: 15 }, attackState: AttackState.DashActive };
+    expect(decide(atEdge, farDash, noErrors).intent).toBe(AiIntent.RecoverFromEdge);
+    expect(decide(atEdge, nearDash, noErrors).intent).toBe(AiIntent.DodgeThreat);
+  });
+
+  it('resumes edge recovery once the threat is gone, inside the hysteresis band (no evade/recover flip-flop)', () => {
+    // z=10.6: weighted edge risk ~0.45 — below the 0.55 entry threshold, above the 0.30 release.
+    const stillNearEdge = { positionXZ: { x: 0, z: 10.6 } };
+    const threatGone = { positionXZ: { x: 0, z: 7 }, attackState: AttackState.DashRecovery };
+    expect(decide(stillNearEdge, threatGone, noErrors, { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true }).intent).toBe(AiIntent.RecoverFromEdge);
+  });
+
+  it('marks edge-episode decisions critical at critical edge risk, so deliberate errors can never touch them', () => {
+    const almostOut = { positionXZ: { x: 0, z: RINGOUT_RADIUS_M - 0.3 } };
+    expect(decide(almostOut, liveCircularFromCenter, noErrors).critical).toBe(true);
+    expect(decide(atEdge, liveCircularFromCenter, noErrors).critical).toBe(false);
+  });
+});
+
+describe('selectIntent — air recovery (M7 Part 2b)', () => {
+  const launched = { grounded: false, airRecoveryAvailable: true };
+  const noErrors = { ...DEFENSE_AI_PERSONALITY, errorRate: 0 };
+
+  it('recovers first when launched airborne with the window open — over edge danger and an incoming hit — and marks it critical', () => {
+    const decision = decide({ ...launched, positionXZ: { x: 0, z: 11.5 } }, { positionXZ: { x: 0, z: 10 }, attackState: AttackState.CircularActive }, noErrors);
+    expect(decision.intent).toBe(AiIntent.AirRecover);
+    expect(decision.critical).toBe(true);
+  });
+
+  it('is never chosen for a normal jump (airborne, no window) — Dodge is not a general air dodge', () => {
+    const decision = decide({ grounded: false, airRecoveryAvailable: false, driftState: DriftState.Hopping }, { positionXZ: { x: 1.5, z: 0 }, attackState: AttackState.CircularActive }, noErrors);
+    expect(decision.intent).not.toBe(AiIntent.AirRecover);
+  });
+
+  it('is not chosen once grounded, even if the window flag were still reported', () => {
+    expect(decide({ grounded: true, airRecoveryAvailable: true }, {}, noErrors).intent).not.toBe(AiIntent.AirRecover);
+  });
+
+  it('keeps an ongoing edge episode going, so recovery resumes with the release threshold after landing', () => {
+    const context = { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true };
+    expect(decide({ ...launched, positionXZ: { x: 0, z: 11 } }, {}, noErrors, context).edgeEpisode).toBe(true);
+    expect(decide({ ...launched, positionXZ: { x: 0, z: 11 } }, {}, noErrors).edgeEpisode).toBeFalsy();
+  });
+});
+
+// ============================================================
+// M7 Part 2b — Clash willingness and Stamina conservation (ported from
+// PR #13, reconciled with the Part 2 scoring).
+// ============================================================
+
+function scoreOf(decision: ReturnType<typeof selectIntent>, intent: AiIntent): number | undefined {
+  return decision.consideredScores?.find((entry) => entry.intent === intent)?.score;
+}
+
+describe('clashWillingness (M7 Part 2b)', () => {
+  const opponentCharging = { positionXZ: { x: 0, z: 6 }, attackState: AttackState.ChargingDash };
+
+  it('is 1 (attack as usual) when the opponent is not attacking', () => {
+    expect(clashWillingness(world({}, { positionXZ: { x: 0, z: 6 } }), DEFENSE_AI_PERSONALITY)).toBe(1);
+  });
+
+  it('is 1 while the Clash system is on Cooldown — a contested swing is then a plain trade, not a Clash to accept', () => {
+    const w = world({}, opponentCharging);
+    expect(clashWillingness({ ...w, clash: { state: ClashState.Cooldown, cooldownRemainingS: 2 } }, DEFENSE_AI_PERSONALITY)).toBe(1);
+  });
+
+  it('leans in with aggression, away with caution, and toward a Stamina edge (Clash power scales with it)', () => {
+    const w = world({}, opponentCharging);
+    expect(clashWillingness(w, ATTACK_AI_PERSONALITY)).toBeGreaterThan(clashWillingness(w, DEFENSE_AI_PERSONALITY));
+    const ahead = clashWillingness(world({ staminaFraction: 1 }, { ...opponentCharging, staminaFraction: 0.2 }), DEFENSE_AI_PERSONALITY);
+    const behind = clashWillingness(world({ staminaFraction: 0.2 }, { ...opponentCharging, staminaFraction: 1 }), DEFENSE_AI_PERSONALITY);
+    expect(ahead).toBeGreaterThan(behind);
+    for (const value of [ahead, behind]) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('scales the attack score in real scoring: a cautious AI Dashing into a charging opponent scores exactly willingness x the idle-opponent score', () => {
+    const intoCharging = decide({}, opponentCharging, DEFENSE_AI_PERSONALITY);
+    const intoIdle = decide({}, { positionXZ: { x: 0, z: 6 } }, DEFENSE_AI_PERSONALITY);
+    const willingness = intoCharging.scoreModifiers!.clashWillingness;
+    expect(willingness).toBeLessThan(1);
+    expect(scoreOf(intoCharging, AiIntent.AttackDash)!).toBeCloseTo(scoreOf(intoIdle, AiIntent.AttackDash)! * willingness, 9);
+  });
+});
+
+describe('staminaConservation (M7 Part 2b)', () => {
+  it('is 0 at full Stamina and grows with missing Stamina x patience', () => {
+    expect(staminaConservation(world({ staminaFraction: 1 }, {}), STAMINA_AI_PERSONALITY, 0)).toBe(0);
+    const low = staminaConservation(world({ staminaFraction: 0.2 }, {}), STAMINA_AI_PERSONALITY, 0);
+    expect(low).toBeGreaterThan(0);
+    expect(low).toBeGreaterThan(staminaConservation(world({ staminaFraction: 0.2 }, {}), ATTACK_AI_PERSONALITY, 0));
+  });
+
+  it('is faded out by the anti-passivity tempo, so conserving can never become circling forever', () => {
+    const lowStamina = { staminaFraction: 0.1 };
+    const opponent = { positionXZ: { x: 0, z: 6 } };
+    expect(staminaConservation(world(lowStamina, opponent), STAMINA_AI_PERSONALITY, 1)).toBe(0);
+
+    const fresh = { ...NEUTRAL_DECISION_CONTEXT, secondsSinceOwnAttack: 0 };
+    const worn = { ...NEUTRAL_DECISION_CONTEXT, secondsSinceOwnAttack: 60 };
+    const lowFresh = decide(lowStamina, opponent, STAMINA_AI_PERSONALITY, fresh);
+    const fullFresh = decide({}, opponent, STAMINA_AI_PERSONALITY, fresh);
+    const lowWorn = decide(lowStamina, opponent, STAMINA_AI_PERSONALITY, worn);
+    const fullWorn = decide({}, opponent, STAMINA_AI_PERSONALITY, worn);
+
+    // Right after an attack, low Stamina damps the Dash...
+    expect(lowFresh.scoreModifiers!.staminaConservation).toBeGreaterThan(0);
+    expect(scoreOf(lowFresh, AiIntent.AttackDash)!).toBeLessThan(scoreOf(fullFresh, AiIntent.AttackDash)!);
+    // ...but once the tempo has worn down, it scores exactly as at full Stamina, and the AI engages.
+    expect(lowWorn.scoreModifiers!.staminaConservation).toBe(0);
+    expect(scoreOf(lowWorn, AiIntent.AttackDash)!).toBeCloseTo(scoreOf(fullWorn, AiIntent.AttackDash)!, 9);
+    expect(lowWorn.intent).toBe(AiIntent.AttackDash);
   });
 });

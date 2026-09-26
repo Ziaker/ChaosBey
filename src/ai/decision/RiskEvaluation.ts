@@ -9,6 +9,7 @@
 
 import { AttackState } from '../../combat/attacks/AttackController';
 import type { AiPersonality } from '../personalities/AiPersonality';
+import { AI_CIRCULAR_ATTACK_RANGE_M, AI_COUNTER_MIN_CLOSING_SPEED_MPS, AI_DEFAULT_DASH_REACH_M } from './AiCombatRanges';
 import type { WorldState } from './WorldState';
 
 export interface RiskAssessment {
@@ -24,6 +25,33 @@ export interface RiskAssessment {
   punishWindow: boolean;
   /** 0..1: how close the opponent is to the ring-out boundary (1 = pinned against the wall) — unweighted by this AI's personality (GDD section 63/129: exploit opponents near the edge). */
   edgePressure: number;
+  /**
+   * A hit that can land within moments, not a telegraph: a live/just-pressed
+   * Circular in reach, or an active Dash closing in within
+   * IMMEDIATE_DASH_THREAT_HORIZON_S. A charging Dash never counts — near
+   * the edge, the right answer to a telegraph is to get away from the edge,
+   * not to spend a dodge early.
+   */
+  immediateThreat: boolean;
+}
+
+/** An active Dash counts as an immediate threat when it can reach this AI within this many seconds. */
+const IMMEDIATE_DASH_THREAT_HORIZON_S = 0.4;
+/** A live or just-pressed Circular counts as immediate within Circular range plus this margin (m). */
+const IMMEDIATE_CIRCULAR_MARGIN_M = 0.5;
+
+function isImmediateThreat(world: WorldState): boolean {
+  switch (world.opponent.attackState) {
+    case AttackState.Buffering:
+    case AttackState.CircularActive:
+      return world.distanceToOpponentM <= AI_CIRCULAR_ATTACK_RANGE_M + IMMEDIATE_CIRCULAR_MARGIN_M;
+    case AttackState.DashActive: {
+      if (world.closingSpeedMps < AI_COUNTER_MIN_CLOSING_SPEED_MPS) return world.distanceToOpponentM <= AI_DEFAULT_DASH_REACH_M + IMMEDIATE_CIRCULAR_MARGIN_M;
+      return (world.distanceToOpponentM - AI_DEFAULT_DASH_REACH_M) / world.closingSpeedMps <= IMMEDIATE_DASH_THREAT_HORIZON_S;
+    }
+    default:
+      return false;
+  }
 }
 
 /**
@@ -61,5 +89,5 @@ export function evaluateRisk(world: WorldState, personality: AiPersonality): Ris
   const punishWindow = RECOVERY_ATTACK_STATES.has(world.opponent.attackState);
   const edgePressure = clamp01(world.opponent.edgeRiskFraction / EDGE_PRESSURE_FULL_AT_OPPONENT_EDGE_RISK);
 
-  return { edgeRisk, opponentThreat, selfVulnerability, opportunity, punishWindow, edgePressure };
+  return { edgeRisk, opponentThreat, selfVulnerability, opportunity, punishWindow, edgePressure, immediateThreat: isImmediateThreat(world) };
 }

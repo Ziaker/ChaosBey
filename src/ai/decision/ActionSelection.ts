@@ -44,16 +44,22 @@ const THROTTLE_MAX_HEADING_ERROR_RAD = 1.75;
 const REVERSE_MIN_HEADING_ERROR_RAD = 1.9;
 /** A Dash is only released once heading is within this (rad) of the opponent — the Dash lock-on can only turn so fast, so releasing far off-line mostly whiffs. Charging continues (and keeps paying Attack Energy) while the AI turns. */
 const DASH_RELEASE_MAX_HEADING_ERROR_RAD = 0.5;
-/** Retreat/DodgeThreat: how much of the outward (away-from-center) part of "straight away from the opponent" is removed per unit of own edge risk — 2 removes all of it by edge risk 0.5. */
+/** Retreat/DodgeThreat/JumpEvade: how fast the allowed outward (away-from-center) cosine of "straight away from the opponent" shrinks per unit of own edge risk — 2 allows none by edge risk 0.5. */
 const RETREAT_OUTWARD_SUPPRESSION_PER_EDGE_RISK = 2;
-/** If trimming the outward part leaves less than this of a direction, the opponent sits between this AI and the center: slide sideways along the edge instead. */
-const RETREAT_MIN_TRIMMED_LENGTH = 0.2;
+/** Below this much sideways component (relative to outward), "away" is treated as straight outward and the retreat slides along the edge to a fixed side, so a sideways part hovering around zero can't flip the side every tick. */
+const RETREAT_MIN_SIDEWAYS_LENGTH = 0.2;
 /** Edge pressure: below this opponent edge risk, PressAdvantage attacks from wherever it already is. */
 const EDGE_PRESSURE_POSITIONING_MIN_RISK = 0.2;
 /** Edge pressure: "center side" means own->opponent points outward (away from the arena center) at least this much (cosine). Knockback pushes along attacker->defender, so this is what makes a hit drive the opponent toward the edge. */
 const EDGE_PRESSURE_CENTER_SIDE_MIN_DOT = 0.5;
 /** Edge pressure: how far (m) inward of the opponent the flanking approach aims while not yet center-side. */
 const EDGE_PRESSURE_STANDOFF_M = 2;
+/** DodgeThreat: how much a candidate dodge direction is rewarded for leading toward the arena center, per unit of own edge risk. */
+const DODGE_INWARD_WEIGHT_PER_EDGE_RISK = 2;
+/** DodgeThreat: while there's any edge risk, a candidate leading outward more than this (cosine) is ruled out — unless every candidate does. */
+const DODGE_MAX_OUTWARD_DOT_NEAR_EDGE = 0.2;
+/** DodgeThreat: how much moving away from the attacker is preferred over toward it, on top of sidestepping off the attack line. */
+const DODGE_AWAY_WEIGHT = 0.5;
 /** Circle keeps its current side unless the other side leads toward the center at least this much (cosine) — and only re-picks at all once some edge risk exists. Without this hysteresis the side flipped every few ticks near the center, and each flip meant turning around. */
 const CIRCLE_SIDE_SWITCH_MIN_DOT = 0.3;
 
@@ -77,20 +83,30 @@ interface MovePlan {
 }
 
 /**
- * Away from the opponent, with the part that leads out of the ring trimmed
- * in proportion to own edge risk — a retreat must never back the AI
- * straight out of the ring (GDD section 129). When the opponent is between
- * this AI and the center, that leaves nothing: escape sideways instead.
+ * Away from the opponent, turned toward the edge's tangent just enough that
+ * its outward (away-from-center) cosine is at most 1 − suppression, where
+ * suppression grows with own edge risk — a retreat must never back the AI
+ * straight out of the ring (GDD section 129). By edge risk 0.5 it only
+ * slides along the edge.
+ *
+ * Regression (M7 Part 2b): this used to subtract part of the outward
+ * component and re-normalize. When "away" pointed straight outward (the
+ * opponent between this AI and the center), re-normalizing the trimmed
+ * vector gave back a straight-outward direction at any edge risk below
+ * 0.4 — JumpEvade throttled toward the ring-out and the post-dodge
+ * movement drifted outward.
  */
 function retreatDirection(world: WorldState): Vec2 {
   const away = scale(world.directionToOpponent, -1);
   const outward = scale(world.own.directionTowardCenter, -1);
-  const outwardAmount = dot(away, outward);
+  if (length(outward) === 0) return away;
   const suppression = Math.min(1, Math.max(0, world.own.edgeRiskFraction * RETREAT_OUTWARD_SUPPRESSION_PER_EDGE_RISK));
-  if (outwardAmount <= 0 || suppression === 0) return away;
-  const trimmed = subtract(away, scale(outward, outwardAmount * suppression));
-  if (length(trimmed) >= RETREAT_MIN_TRIMMED_LENGTH) return normalize(trimmed);
-  return perpendicular(away);
+  const maxOutwardCos = 1 - suppression;
+  const outwardCos = dot(away, outward);
+  if (outwardCos <= maxOutwardCos) return away;
+  const sideways = subtract(away, scale(outward, outwardCos));
+  const side = length(sideways) >= RETREAT_MIN_SIDEWAYS_LENGTH ? normalize(sideways) : perpendicular(outward);
+  return add(scale(outward, maxOutwardCos), scale(side, Math.sqrt(1 - maxOutwardCos * maxOutwardCos)));
 }
 
 interface EdgePressurePlan {
@@ -135,10 +151,15 @@ function computeMovePlan(intent: AiIntent, world: WorldState, edgePlan: EdgePres
       return hasOpponentDirection ? { direction: retreatDirection(world), allowReverse: true } : null;
     case AiIntent.RecoverFromEdge:
       return { direction: world.own.directionTowardCenter, allowReverse: true };
+    case AiIntent.AirRecover:
+      // Whatever air control there is goes back toward the center, only
+      // when there is any edge risk at all.
+      return world.own.edgeRiskFraction > 0 ? { direction: world.own.directionTowardCenter, allowReverse: true } : null;
     case AiIntent.Circle:
       // Side chosen (with hysteresis) by ActionSelector.updateCircleSign.
       return { direction: scale(perpendicular(world.directionToOpponent), circleSign), allowReverse: false };
     case AiIntent.CounterAttack:
+    case AiIntent.JumpEvade:
     case AiIntent.Wait:
       return null;
     default:
@@ -171,6 +192,86 @@ function addMovementActions(plan: MovePlan, headingRad: number, desiredHeld: Set
   if (headingErrorRad <= THROTTLE_MAX_HEADING_ERROR_RAD) desiredHeld.add(Action.MoveForward);
 }
 
+/** Held inputs for a dodge burst: forward (+1 MoveForward / -1 MoveBackward) and lateral (+1 SteerRight / -1 SteerLeft). */
+export interface DodgeInputs {
+  forward: -1 | 0 | 1;
+  lateral: -1 | 0 | 1;
+}
+
+const DODGE_INPUT_CANDIDATES: readonly DodgeInputs[] = [
+  { forward: 1, lateral: 0 },
+  { forward: 1, lateral: 1 },
+  { forward: 0, lateral: 1 },
+  { forward: -1, lateral: 1 },
+  { forward: -1, lateral: 0 },
+  { forward: -1, lateral: -1 },
+  { forward: 0, lateral: -1 },
+  { forward: 1, lateral: -1 },
+];
+
+/** World direction DodgeController.applyBurst produces for these held inputs — mirrors its math exactly (forward = fromYaw(heading), right = perpendicular(forward)). */
+export function dodgeBurstDirection(headingRad: number, inputs: DodgeInputs): Vec2 {
+  const forward = fromYaw(headingRad);
+  return normalize(add(scale(forward, inputs.forward), scale(perpendicular(forward), inputs.lateral)));
+}
+
+/**
+ * The dodge direction (as held inputs) for an imminent hit: sidestep off
+ * the attack line, prefer away over toward the attacker, and — scaled by
+ * own edge risk — lead toward the center, never clearly outward while any
+ * alternative exists (GDD section 129).
+ */
+export function chooseDodgeInputs(world: WorldState): DodgeInputs {
+  return bestEvadeInputs(world, DODGE_INPUT_CANDIDATES);
+}
+
+/**
+ * JumpEvade's throttle while the jump carries it: forward, backward or
+ * neither, scored exactly like a dodge direction but limited to what the
+ * throttle alone can do (steering during the hop would turn it into a
+ * drift). Staying put scores as a sidestep with no inward lead, so the
+ * throttle is used only when the heading already points off the attack
+ * line — never along it toward the attacker, never outward near the edge.
+ */
+export function chooseJumpEvadeThrottle(world: WorldState): -1 | 0 | 1 {
+  return bestEvadeInputs(world, JUMP_EVADE_THROTTLE_CANDIDATES).forward;
+}
+
+const JUMP_EVADE_THROTTLE_CANDIDATES: readonly DodgeInputs[] = [
+  { forward: 0, lateral: 0 },
+  { forward: 1, lateral: 0 },
+  { forward: -1, lateral: 0 },
+];
+
+function bestEvadeInputs(world: WorldState, candidates: readonly DodgeInputs[]): DodgeInputs {
+  const toAttacker = normalize(subtract(world.opponent.positionXZ, world.own.positionXZ));
+  const towardCenter = world.own.directionTowardCenter;
+  const edgeRisk = world.own.edgeRiskFraction;
+  let best: DodgeInputs = candidates[0]!;
+  let bestScore = -Infinity;
+  let bestAllowed = false;
+  for (const candidate of candidates) {
+    const direction = dodgeBurstDirection(world.own.headingRad, candidate);
+    const alongAttack = dot(direction, toAttacker);
+    const score = 1 - Math.abs(alongAttack) - alongAttack * DODGE_AWAY_WEIGHT + dot(direction, towardCenter) * edgeRisk * DODGE_INWARD_WEIGHT_PER_EDGE_RISK;
+    const allowed = edgeRisk <= 0 || -dot(direction, towardCenter) <= DODGE_MAX_OUTWARD_DOT_NEAR_EDGE;
+    if ((allowed && !bestAllowed) || (allowed === bestAllowed && score > bestScore)) {
+      best = candidate;
+      bestScore = score;
+      bestAllowed = allowed;
+    }
+  }
+  return best;
+}
+
+function setMovementInputs(desiredHeld: Set<Action>, inputs: DodgeInputs): void {
+  for (const action of [Action.MoveForward, Action.MoveBackward, Action.SteerLeft, Action.SteerRight]) desiredHeld.delete(action);
+  if (inputs.forward > 0) desiredHeld.add(Action.MoveForward);
+  if (inputs.forward < 0) desiredHeld.add(Action.MoveBackward);
+  if (inputs.lateral > 0) desiredHeld.add(Action.SteerRight);
+  if (inputs.lateral < 0) desiredHeld.add(Action.SteerLeft);
+}
+
 /** CounterAttack's tap moment: the incoming dasher is within AI_COUNTER_MAX_LEAD_S of entering own Circular reach (or already inside it). */
 function isCounterTapMoment(world: WorldState): boolean {
   if (world.opponent.attackState !== AttackState.DashActive) return false;
@@ -181,6 +282,7 @@ function isCounterTapMoment(world: WorldState): boolean {
 
 export class ActionSelector {
   private circleSign: 1 | -1 = 1;
+  private lastMoveDirection: Vec2 | null = null;
   private currentTick = 0;
   private previousHeld = new Set<Action>();
   private readonly holdStartedAtTick = new Map<Action, number>();
@@ -194,6 +296,11 @@ export class ActionSelector {
    * over the several ticks a single threat window can span). Ignored for
    * every intent other than DodgeThreat.
    */
+  /** The world direction the last selectActions() steered toward (its movement goal), or null when that intent had none (Wait, a counter stance, JumpEvade...). Debug only. */
+  getLastMoveDirection(): Vec2 | null {
+    return this.lastMoveDirection;
+  }
+
   selectActions(
     intent: AiIntent,
     world: WorldState,
@@ -206,6 +313,7 @@ export class ActionSelector {
     const edgePlan = intent === AiIntent.PressAdvantage ? edgePressurePlan(world) : null;
     if (intent === AiIntent.Circle) this.updateCircleSign(world);
     const movePlan = computeMovePlan(intent, world, edgePlan, this.circleSign);
+    this.lastMoveDirection = movePlan && length(movePlan.direction) > 0 ? movePlan.direction : null;
     if (movePlan) addMovementActions(movePlan, world.own.headingRad, desiredHeld);
 
     // PressAdvantage is an attack intent too (GDD section 64: Attack AI
@@ -249,8 +357,45 @@ export class ActionSelector {
       desiredHeld.add(Action.Attack);
     }
 
-    if (intent === AiIntent.DodgeThreat && world.own.dodgeState === DodgeState.Idle && dodgeAttemptSucceeds) {
+    // The dodge burst goes wherever the movement keys held on the press tick
+    // point (DodgeController.applyBurst), so that tick's keys are chosen for
+    // the dodge itself, not for the retreat movement.
+    if (
+      intent === AiIntent.DodgeThreat &&
+      world.own.dodgeState === DodgeState.Idle &&
+      world.own.dodgeReady &&
+      world.own.grounded &&
+      dodgeAttemptSucceeds
+    ) {
+      setMovementInputs(desiredHeld, chooseDodgeInputs(world));
       desiredHeld.add(Action.Dodge);
+    }
+
+    // JumpEvade: a full-height jump (JumpDrift held with no steering, so the
+    // variable-jump assist applies and it never turns into a drift), with the
+    // throttle carrying it off the attack line only when that is edge-safe
+    // (chooseJumpEvadeThrottle — the dodge's own scoring).
+    if (intent === AiIntent.JumpEvade) {
+      if ((world.own.driftState === DriftState.Idle && world.own.grounded) || world.own.driftState === DriftState.Hopping) {
+        desiredHeld.add(Action.JumpDrift);
+      }
+      const throttle = chooseJumpEvadeThrottle(world);
+      if (throttle > 0) desiredHeld.add(Action.MoveForward);
+      else if (throttle < 0) desiredHeld.add(Action.MoveBackward);
+    }
+
+    // AirRecover: Dodge only while a press would really trigger air
+    // recovery (airborne, window open — re-checked every tick), so the press
+    // lands inside the window and is released the tick the window closes
+    // (used, or landed). Never a general air dodge.
+    if (intent === AiIntent.AirRecover && !world.own.grounded && world.own.airRecoveryAvailable) {
+      desiredHeld.add(Action.Dodge);
+    }
+    // Launched mid-charge: AirRecover pre-empts the Dash commitment, but
+    // letting go of Attack would dump the charge as a Dash fired from the
+    // air — keep holding it; the next decision decides what to do with it.
+    if (intent === AiIntent.AirRecover && world.own.attackState === AttackState.ChargingDash) {
+      desiredHeld.add(Action.Attack);
     }
 
     // Sustain JumpDrift through the whole Idle->Hopping->Drifting sequence,

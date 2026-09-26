@@ -32,6 +32,8 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    dodgeReady: true,
+    airRecoveryAvailable: false,
     ...overrides,
   };
 }
@@ -81,5 +83,36 @@ describe('buildWorldState prediction blending', () => {
 
     expect(noPrediction.distanceToOpponentM).toBeCloseTo(5, 5);
     expect(fullPrediction.distanceToOpponentM).toBeCloseTo(5, 5);
+  });
+});
+
+describe('buildWorldState — targeting debug semantics (M7 Part 2b)', () => {
+  const clash = { state: ClashState.Idle, cooldownRemainingS: 0 };
+  const own = perceiveCombatant(rawState({ positionXZ: { x: 0, z: 0 } }));
+  const movingOpponent = perceiveCombatant(rawState({ positionXZ: { x: 5, z: 0 }, velocityXZ: { x: 0, z: 4 } }));
+
+  it('with no prediction: predicted is null (not the observed position relabeled), horizon/strength 0, aim = observed', () => {
+    for (const world of [buildWorldState(0, own, movingOpponent, clash), buildWorldState(0, own, movingOpponent, clash, { horizonSeconds: 0.35, strength: 0 })]) {
+      expect(world.targeting.predictedOpponentXZ).toBeNull();
+      expect(world.targeting.predictionHorizonS).toBe(0);
+      expect(world.targeting.predictionStrength).toBe(0);
+      expect(world.targeting.observedOpponentXZ).toEqual({ x: 5, z: 0 });
+      expect(world.targeting.aimPointXZ).toEqual({ x: 5, z: 0 });
+    }
+  });
+
+  it('with prediction: observed stays the current position, predicted is the extrapolation, aim sits between them by strength', () => {
+    const world = buildWorldState(0, own, movingOpponent, clash, { horizonSeconds: 0.5, strength: 0.5 });
+    expect(world.targeting.observedOpponentXZ).toEqual({ x: 5, z: 0 });
+    expect(world.targeting.predictedOpponentXZ!.x).toBeCloseTo(5, 9);
+    expect(world.targeting.predictedOpponentXZ!.z).toBeCloseTo(2, 9); // 4 m/s x 0.5 s
+    expect(world.targeting.aimPointXZ.z).toBeCloseTo(1, 9); // halfway
+    expect(world.targeting.predictionHorizonS).toBe(0.5);
+    expect(world.targeting.predictionStrength).toBe(0.5);
+    // directionToOpponent points at the aim point, not the observed one.
+    const aim = world.targeting.aimPointXZ;
+    const expected = { x: aim.x / Math.hypot(aim.x, aim.z), z: aim.z / Math.hypot(aim.x, aim.z) };
+    expect(world.directionToOpponent.x).toBeCloseTo(expected.x, 9);
+    expect(world.directionToOpponent.z).toBeCloseTo(expected.z, 9);
   });
 });

@@ -37,6 +37,21 @@ export interface CombatantRawState {
   stabilityFraction: number;
   isBroken: boolean;
   attackEnergyFraction: number;
+  /**
+   * DodgeController would start a ground dodge on a Dodge press right now,
+   * apart from being grounded: Idle AND enough Stamina for the cost. Idle
+   * alone is not enough — a press below the Stamina cost is silently
+   * ignored, and the AI used to count that as having dodged.
+   */
+  dodgeReady: boolean;
+  /**
+   * A Dodge press on the coming tick would trigger air recovery (GDD
+   * section 21): DodgeController.isAirRecoveryAvailable() (armed by a
+   * launch, airborne as of the last tick) AND airborne right now. The
+   * getter alone is one tick behind on landing — on the landing tick a
+   * Dodge press would start a ground dodge instead.
+   */
+  airRecoveryAvailable: boolean;
 }
 
 export interface PerceivedCombatant extends CombatantRawState {
