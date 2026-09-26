@@ -10,7 +10,7 @@ import { ARENA_RADIUS, bowlFloor, canvasTexture, disposeTree, floorCanvas, seede
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
-const BOWL_DEPTH = 1.4;               // Deeper crater than A/C (m).
+const BOWL_DEPTH = 3.0;               // Default crater depth (m): the deepest of the three.
 const BARRIER_HEIGHT = 2.2;           // Energy barrier height above the rim (m).
 const FISSURE_COLOR = 0x8f6bff;       // Normal fissure glow (violet).
 const CLASH_COLOR = 0xff3fb4;         // Fissures + barrier shift to magenta on Clash.
@@ -18,7 +18,8 @@ const FISSURE_GLOW = 1.1;             // Base emissive strength of the fissures.
 const RIM_ROCKS = 34;
 // -----------------------------------------
 
-const heightAt = (r: number): number => BOWL_DEPTH * Math.pow(Math.min(r, ARENA_RADIUS) / ARENA_RADIUS, 1.7);
+// Funnel: the slope continues almost all the way to the center.
+const bowlProfile = (depth: number) => (r: number): number => depth * Math.pow(Math.min(r, ARENA_RADIUS) / ARENA_RADIUS, 1.3);
 
 function paintFloor(): { color: THREE.CanvasTexture; glow: THREE.CanvasTexture } {
   const { canvas, g, c, px } = floorCanvas();
@@ -97,7 +98,9 @@ export const RIFT_CRATER: ArenaConcept = {
     background: 'Indigo night sky with stars and slowly drifting rock shards',
     impact: 'Violet-cyan sparks; on Clash the fissures and barrier surge magenta',
   },
-  build(): BuiltArena {
+  defaultDepth: BOWL_DEPTH,
+  build(depth = BOWL_DEPTH): BuiltArena {
+    const heightAt = bowlProfile(depth);
     const root = new THREE.Group();
     const R = ARENA_RADIUS;
     const rim = heightAt(R);
@@ -193,6 +196,7 @@ export const RIFT_CRATER: ArenaConcept = {
     const tmp = new THREE.Color();
     return {
       root,
+      depth,
       floorHeightAt: heightAt,
       wallRadius: R,
       sparkColors: [0xd9ccff, 0x7f5cff],

@@ -10,8 +10,8 @@ import { ARENA_RADIUS, bowlFloor, canvasTexture, disposeTree, floorCanvas, seede
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
-const BOWL_DEPTH = 0.35;           // Shallow bowl (m).
-const FLAT_CENTER = 3;             // Flat center plateau radius (m).
+const BOWL_DEPTH = 2.2;            // Default rim height above the center (m).
+const FLAT_CENTER = 2.6;           // Flat center plateau radius (m).
 const WALL_HEIGHT = 1.9;           // Polycarbonate wall height (m).
 const POSTS = 24;
 const RIG_SPOTS = 8;
@@ -21,7 +21,9 @@ const CLASH_COLORS = [0x3fa9ff, 0xff4f4f] as const; // LED rail alternates on Cl
 const CROWD = 1500;
 // -----------------------------------------
 
-const heightAt = (r: number): number => (r <= FLAT_CENTER ? 0 : BOWL_DEPTH * Math.pow((Math.min(r, ARENA_RADIUS) - FLAT_CENTER) / (ARENA_RADIUS - FLAT_CENTER), 2));
+// Flat center plateau, then a curved slope up to the wall.
+const bowlProfile = (depth: number) => (r: number): number =>
+  r <= FLAT_CENTER ? 0 : depth * Math.pow((Math.min(r, ARENA_RADIUS) - FLAT_CENTER) / (ARENA_RADIUS - FLAT_CENTER), 1.4);
 
 function paintFloor(): THREE.CanvasTexture {
   const { canvas, g, c, px } = floorCanvas();
@@ -45,6 +47,12 @@ function paintFloor(): THREE.CanvasTexture {
   }
   g.lineWidth = px(0.05);
   g.beginPath(); g.moveTo(c - px(10.4), c); g.lineTo(c - px(3), c); g.moveTo(c + px(3), c); g.lineTo(c + px(10.4), c); g.stroke();
+  // Faint contour rings every meter so the slope reads on the light floor.
+  g.strokeStyle = 'rgba(40,50,64,0.16)';
+  g.lineWidth = px(0.03);
+  for (let r = 3.5; r < 10.4; r += 1) {
+    g.beginPath(); g.arc(c, c, px(r), 0, Math.PI * 2); g.stroke();
+  }
   // Outer danger band + ticks.
   g.fillStyle = '#d4463d';
   g.beginPath(); g.arc(c, c, px(12), 0, Math.PI * 2); g.arc(c, c, px(10.6), 0, Math.PI * 2, true); g.fill();
@@ -76,7 +84,9 @@ export const TOURNAMENT_STADIUM: ArenaConcept = {
     background: 'Dim stands with a crowd, dark venue ceiling',
     impact: 'White-yellow sparks; on Clash the LED rail flashes both player colors and the crowd lights up',
   },
-  build(): BuiltArena {
+  defaultDepth: BOWL_DEPTH,
+  build(depth = BOWL_DEPTH): BuiltArena {
+    const heightAt = bowlProfile(depth);
     const root = new THREE.Group();
     const R = ARENA_RADIUS;
     const rim = heightAt(R);
@@ -185,6 +195,7 @@ export const TOURNAMENT_STADIUM: ArenaConcept = {
     const tmp = new THREE.Color();
     return {
       root,
+      depth,
       floorHeightAt: heightAt,
       wallRadius: R,
       sparkColors: [0xffffff, 0xffc94a],

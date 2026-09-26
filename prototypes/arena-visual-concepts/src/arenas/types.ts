@@ -28,6 +28,8 @@ export interface ArenaFrameState {
 
 export interface BuiltArena {
   readonly root: THREE.Object3D;
+  /** Rim height above the arena center (m) this arena was built with. */
+  readonly depth: number;
   /** Floor surface height at distance r from the center (y = 0 at the center). */
   floorHeightAt(r: number): number;
   /** Inner radius of the boundary wall. */
@@ -54,5 +56,8 @@ export interface ArenaConcept {
   readonly headline: string;
   readonly description: string;
   readonly answers: ArenaAnswers;
-  build(): BuiltArena;
+  /** Default bowl depth: rim height above the center, in meters. */
+  readonly defaultDepth: number;
+  /** Builds the arena; `depth` overrides the default bowl depth (m). */
+  build(depth?: number): BuiltArena;
 }

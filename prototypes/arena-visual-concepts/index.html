@@ -48,6 +48,14 @@
       #arena-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
       .info { position: absolute; top: 18px; left: 20px; max-width: min(460px, calc(100% - 40px)); pointer-events: none; text-shadow: 0 1px 3px #000; }
       .arena-details { display: grid; gap: 8px; }
+      .depth { display: grid; gap: 6px; }
+      .depth label, .depth-note { font-size: 11px; color: var(--muted); }
+      .depth-row { display: flex; align-items: center; gap: 10px; }
+      .depth input { flex: 1; accent-color: var(--accent); }
+      .depth output { font: 600 13px ui-monospace, Consolas, monospace; min-width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+      .depth-note { flex: 1; }
+      .depth-reset { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; font: 11px inherit; font-family: inherit; cursor: pointer; }
+      .depth-reset:focus-visible, .depth input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       .info-kicker { font: 700 12px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--accent); }
       .info-title { margin: 8px 0 6px; font-size: 24px; line-height: 1.1; }
       .info-desc { margin: 0 0 10px; font-size: 13px; line-height: 1.5; color: #b6c0ce; }
@@ -85,6 +93,18 @@
           <h3>ARENA</h3>
           <nav id="arena-picker" aria-label="Arena concepts"></nav>
         </section>
+        <section class="depth">
+          <h3>BOWL DEPTH</h3>
+          <label for="depth">Rim height above the center</label>
+          <div class="depth-row">
+            <input type="range" id="depth" min="0" max="4" step="0.1" />
+            <output id="depth-value" for="depth"></output>
+          </div>
+          <div class="depth-row">
+            <span class="depth-note" id="depth-note"></span>
+            <button type="button" class="depth-reset" id="depth-reset">Default</button>
+          </div>
+        </section>
         <section class="arena-details" id="arena-info" aria-live="polite"></section>
         <section class="bey-select">
           <h3>BEYS IN THE ARENA</h3>
@@ -97,7 +117,8 @@
           <kbd>1</kbd>–<kbd>3</kbd> arena<br />
           <kbd>O</kbd> overview · <kbd>G</kbd> game cam · <kbd>T</kbd> top · <kbd>F</kbd> free<br />
           <kbd>M</kbd> motion · <kbd>X</kbd> clash lighting · <kbd>I</kbd> wall impact<br />
-          Drag to orbit, wheel to zoom.
+          Drag to orbit, wheel to zoom.<br />
+          Bowl depth is visual only; the game floor is still flat.
         </section>
       </aside>
       <main class="stage" id="stage">

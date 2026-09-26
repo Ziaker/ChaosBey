@@ -10,7 +10,7 @@ import { ARENA_RADIUS, bowlFloor, canvasTexture, disposeTree, floorCanvas, onCir
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
-const BOWL_DEPTH = 0.6;             // Rim height above the center (m). Gentle bowl.
+const BOWL_DEPTH = 2.2;             // Default rim height above the center (m). Classic dish.
 const WALL_HEIGHT = 1.8;            // Visible wall height above the rim (m).
 const WALL_SEGMENTS = 16;           // Heavy steel wall panels around the ring.
 const LAMP_COUNT = 4;               // Overhead work lamps.
@@ -20,7 +20,8 @@ const CLASH_LAMP_COLOR = 0xffffff;  // Lamps go white-hot during a Clash.
 const HAZARD_ORANGE = '#f28a1c';
 // -----------------------------------------
 
-const heightAt = (r: number): number => BOWL_DEPTH * Math.pow(Math.min(r, ARENA_RADIUS) / ARENA_RADIUS, 2);
+// Parabolic dish: flatter in the middle, steeper toward the wall.
+const bowlProfile = (depth: number) => (r: number): number => depth * Math.pow(Math.min(r, ARENA_RADIUS) / ARENA_RADIUS, 2);
 
 function paintFloor(): { color: THREE.CanvasTexture; rough: THREE.CanvasTexture } {
   const { canvas, g, c, px } = floorCanvas();
@@ -111,7 +112,9 @@ export const FOUNDRY_PIT: ArenaConcept = {
     background: 'Near-black hall fading into fog',
     impact: 'Orange-yellow sparks; hazard stripes glow and lamps flare white on Clash',
   },
-  build(): BuiltArena {
+  defaultDepth: BOWL_DEPTH,
+  build(depth = BOWL_DEPTH): BuiltArena {
+    const heightAt = bowlProfile(depth);
     const root = new THREE.Group();
     const R = ARENA_RADIUS;
     const rim = heightAt(R);
@@ -197,6 +200,7 @@ export const FOUNDRY_PIT: ArenaConcept = {
     const clashColor = new THREE.Color(CLASH_LAMP_COLOR);
     return {
       root,
+      depth,
       floorHeightAt: heightAt,
       wallRadius: R,
       sparkColors: [0xffe28a, 0xff6a14],

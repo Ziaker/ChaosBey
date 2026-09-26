@@ -38,9 +38,32 @@ for (const [i, arena] of ARENAS.entries()) {
   $('arena-picker').append(b);
 }
 
+// ---------- bowl depth ----------
+const depthInput = $<HTMLInputElement>('depth');
+const depths = new Map<string, number>(); // per-arena choice, kept while switching
+let currentArena: ArenaConcept = ARENAS[0]!;
+
+function showDepth(depth: number): void {
+  depthInput.value = String(depth);
+  $('depth-value').textContent = `${depth.toFixed(1)} m`;
+  const avgSlope = (Math.atan(depth / 12) * 180) / Math.PI;
+  $('depth-note').textContent = `avg slope ≈ ${avgSlope.toFixed(0)}° · default ${currentArena.defaultDepth.toFixed(1)} m`;
+}
+function applyDepth(depth: number): void {
+  depths.set(currentArena.id, depth);
+  showDepth(depth);
+  viewer.showArena(currentArena, depth);
+}
+depthInput.addEventListener('input', () => showDepth(Number(depthInput.value)));
+depthInput.addEventListener('change', () => applyDepth(Number(depthInput.value)));
+$('depth-reset').addEventListener('click', () => applyDepth(currentArena.defaultDepth));
+
 function selectArena(id: string): void {
   const arena = ARENAS.find((a) => a.id === id) ?? ARENAS[0]!;
-  viewer.showArena(arena);
+  currentArena = arena;
+  const depth = depths.get(arena.id) ?? arena.defaultDepth;
+  showDepth(depth);
+  viewer.showArena(arena, depth);
   arenaButtons.forEach((b, key) => b.setAttribute('aria-pressed', String(key === arena.id)));
   document.documentElement.dataset.arena = arena.letter;
   const title = $('arena-title');
@@ -135,7 +158,7 @@ syncCam(viewer.cameraMode);
 motionBtn.setAttribute('aria-pressed', 'true');
 
 window.addEventListener('keydown', (e) => {
-  if (e.ctrlKey || e.metaKey || e.altKey || e.target instanceof HTMLSelectElement) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   const n = Number.parseInt(e.key, 10);
   if (n >= 1 && n <= ARENAS.length) return selectArena(ARENAS[n - 1]!.id);
   const actions: Record<string, () => void> = {
@@ -166,6 +189,7 @@ Object.assign(window, {
     clash: (on: boolean) => { if (viewer.isClash !== on) toggleClash(); },
     motion: (on: boolean) => { if (viewer.isMotion !== on) toggleMotion(); },
     impact: () => viewer.triggerImpact(),
+    depth: applyDepth,
     state: () => ({ mode: viewer.cameraMode, motion: viewer.isMotion, clash: viewer.isClash }),
   },
 });

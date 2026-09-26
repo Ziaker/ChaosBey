@@ -24,6 +24,20 @@ const TOP = { height: 40, fov: 38 };
 const GAMEPLAY = { back: 6.5, up: 3.0, fov: 62 };  // Opponent-focused chase framing (GDD section 48).
 // ------------------------------------------------
 
+/** Soft round sprite so sparks read as glowing points, not squares. */
+function sparkSprite(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const g = canvas.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.8)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(canvas);
+}
+
 export type CameraMode = 'overview' | 'gameplay' | 'top' | 'free';
 
 interface Spark { pos: THREE.Vector3; vel: THREE.Vector3; life: number; maxLife: number; hot: THREE.Color; cool: THREE.Color }
@@ -73,7 +87,7 @@ export class ArenaViewer {
     this.sparkGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(SPARK_POOL * 3), 3));
     this.sparkGeo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(SPARK_POOL * 3), 3));
     this.sparkPoints = new THREE.Points(this.sparkGeo, new THREE.PointsMaterial({
-      size: 0.14, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+      size: 0.11, vertexColors: true, map: sparkSprite(), alphaTest: 0.01, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
     }));
     this.sparkPoints.frustumCulled = false;
     this.scene.add(this.sparkPoints);
@@ -89,12 +103,12 @@ export class ArenaViewer {
   get isMotion(): boolean { return this.motion; }
   get isClash(): boolean { return this.clashTarget > 0; }
 
-  showArena(concept: ArenaConcept): void {
+  showArena(concept: ArenaConcept, depth = concept.defaultDepth): void {
     if (this.arena) {
       this.scene.remove(this.arena.root);
       this.arena.dispose();
     }
-    this.arena = concept.build();
+    this.arena = concept.build(depth);
     this.scene.add(this.arena.root);
     this.scene.fog = this.arena.fog;
     this.scene.environmentIntensity = this.arena.environmentIntensity;
