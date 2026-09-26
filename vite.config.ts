@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 // ChaosBey is deployed to GitHub Pages under the repository subpath
@@ -26,6 +27,15 @@ export default defineConfig(({ command, isPreview }) => ({
   build: {
     target: 'es2022',
     sourcemap: true,
+    // Multi-page build: the game plus isolated visual prototypes. Prototype
+    // pages import nothing from the game and ship under their own path
+    // (e.g. /ChaosBey/prototypes/bey-visual-concepts/).
+    rolldownOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        beyVisualConcepts: fileURLToPath(new URL('./prototypes/bey-visual-concepts/index.html', import.meta.url)),
+      },
+    },
   },
   // Rapier ships a WASM binary that must not be pre-bundled by esbuild.
   optimizeDeps: {
