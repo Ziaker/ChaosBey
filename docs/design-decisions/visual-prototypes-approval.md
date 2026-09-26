@@ -93,6 +93,23 @@ As três foram aprovadas. Detalhes e parâmetros estão em `prototypes/arena-vis
 
 ---
 
+## 3b. VFX de combate: direção HÍBRIDA (APROVADA em princípio)
+
+**Origem:** `prototypes/vfx-visual-concepts/`. O dono gostou das duas linguagens (A Mecânica e B Anime) e pediu para misturá-las. A mistura é a linguagem **C — Híbrida** (`src/languages/hybrid.ts`).
+
+| Momento | Fonte |
+|---|---|
+| Faíscas, estilhaços e poeira no **contato** (golpes, parede, desgaste) | **A — Mecânica** |
+| Faíscas e marcas de derrapagem em **alta velocidade** | **A — Mecânica** |
+| Efeito de golpe: estrelas de impacto, ondas de choque, linhas de faísca, linhas de foco | **B — Anime** |
+| Dash (aura carregando, soltura, rastro), speed lines, Circular, Perfect Dodge, quebra de Stability, aterrissagem, ring-out | **B — Anime** |
+| **Frame de impacto** (flash negativo) | Só em ataque **HIGH/pesado** (magnitude ≥ 0,9) |
+| **Burst de vento (NOVO):** funil espetado e girando, como um mini-furacão de anime, atrás do Bey | Todo avanço brusco: **soltura do Dash** e **acionamento do dodge** |
+
+Regras: todo efeito escala com a magnitude real do evento (GDD 51); VFX observa eventos e não decide resultados (GDD 158); tuning no topo dos arquivos.
+
+**Aguardando revisão do dono:** o visual final do burst de vento (forma, cor e duração), que acabou de ser prototipado.
+
 ## 4. Continua em ABERTO (não decidir sem o dono)
 
 1. **Quais 3 Beys finais**, um por arquétipo, entre os 9 conceitos. Também em aberto: se a versão final mistura peças de conceitos diferentes, o que o sistema de remix permite.

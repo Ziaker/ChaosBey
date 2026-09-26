@@ -86,7 +86,7 @@ export const SCENARIOS: readonly Scenario[] = [
       return [P(ax, 0), b];
     },
     events: [
-      { t: 1.3, fire: (w, m) => w.lang.dashRelease({ pos: w.beyPos(0), dir: V(1, 0, 0), m, slot: 0 }) },
+      { t: 1.3, fire: (w, m) => { w.lang.dashRelease({ pos: w.beyPos(0), dir: V(1, 0, 0), m, slot: 0 }); w.lang.windBurst({ pos: w.beyPos(0), dir: V(1, 0, 0), m, slot: 0 }); } },
       { t: 1.58, fire: (w, m) => w.lang.hit({ pos: contact(w), normal: V(1, 0.3, 0).normalize(), m: Math.min(1, m * 1.15), attacker: 0 }) },
       { t: 2.48, fire: (w, m) => w.lang.landing({ pos: w.beyPos(1), m: m * 0.6, slot: 1 }) },
     ],
@@ -125,10 +125,36 @@ export const SCENARIOS: readonly Scenario[] = [
       const az = t < 0.78 ? 0 : 1.9 * easeOut((t - 0.78) / 0.2);
       return [P(0, az, { tilt: t > 0.78 && t < 1.0 ? 0.25 : 0, tiltDir: Math.PI / 2 }), P(bx, 0, { visible: t < 1.4 })];
     },
-    events: [{ t: 0.78, fire: (w, m) => w.lang.perfectDodge({ pos: w.beyPos(0), dir: V(0, 0, 1), m, slot: 0 }) }],
+    events: [{
+      t: 0.78,
+      fire: (w, m) => {
+        w.lang.windBurst({ pos: w.beyPos(0), dir: V(0, 0, 1), m, slot: 0 });
+        w.lang.perfectDodge({ pos: w.beyPos(0), dir: V(0, 0, 1), m, slot: 0 });
+      },
+    }],
     continuous(t, dt, w, m) {
       if (t > 0.4 && t < 1.4) moving(w, 1, m, dt);
       if (t >= 0.78 && t < 1.1) w.lang.dodgeMove({ pos: w.beyPos(0), vel: w.beyVel(0), m, slot: 0 }, dt);
+    },
+  },
+  {
+    id: 'burst',
+    label: 'Wind burst (advance)',
+    duration: 2.8,
+    pose(t, m) {
+      // Two sharp advances: forward, then a sideways cut.
+      const d1 = 3.5 + 1.5 * m;
+      const x = t < 0.5 ? -3.5 : t < 0.72 ? -3.5 + d1 * easeOut((t - 0.5) / 0.22) : -3.5 + d1;
+      const z = t < 1.5 ? 0 : t < 1.7 ? 3 * easeOut((t - 1.5) / 0.2) : 3;
+      const lean = (t > 0.5 && t < 0.8) || (t > 1.5 && t < 1.78) ? 0.22 : 0;
+      return [P(x, z, { tilt: lean, tiltDir: t < 1.5 ? 0 : Math.PI / 2 }), P(4.5, -3.5)];
+    },
+    events: [
+      { t: 0.5, fire: (w, m) => w.lang.windBurst({ pos: w.beyPos(0), dir: V(1, 0, 0), m, slot: 0 }) },
+      { t: 1.5, fire: (w, m) => w.lang.windBurst({ pos: w.beyPos(0), dir: V(0, 0, 1), m, slot: 0 }) },
+    ],
+    continuous(t, dt, w, m) {
+      if ((t > 0.5 && t < 0.72) || (t > 1.5 && t < 1.7)) moving(w, 0, m, dt);
     },
   },
   {

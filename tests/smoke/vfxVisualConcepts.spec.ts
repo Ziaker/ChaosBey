@@ -10,7 +10,7 @@ declare global {
   }
 }
 
-test('vfx language lab loads and plays every effect in both languages', async ({ page }) => {
+test('vfx language lab loads and plays every effect in the compared languages', async ({ page }) => {
   test.setTimeout(240_000); // software WebGL in CI is slow
   const errors: string[] = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -20,9 +20,11 @@ test('vfx language lab loads and plays every effect in both languages', async ({
   await page.goto('/ChaosBey/prototypes/vfx-visual-concepts/');
   await page.waitForFunction(() => Boolean(window.__vfxLab));
   const ids = await page.evaluate(() => window.__vfxLab.scenarios);
-  expect(ids).toHaveLength(8);
-  for (const id of ids) {
-    await page.evaluate((s) => window.__vfxLab.set({ scenario: s, intensity: 'heavy', view: 'split' }), id);
+  expect(ids).toHaveLength(9);
+  for (const [i, id] of ids.entries()) {
+    // Alternate the two compare views so all three languages (A, B, C) run every effect family.
+    const view = i % 2 === 0 ? 'BC' : 'AB';
+    await page.evaluate(({ s, v }) => window.__vfxLab.set({ scenario: s, intensity: 'heavy', view: v }), { s: id, v: view });
     // Run past the main event of every scenario (all fire before t = 1.6 s).
     await page.waitForFunction(() => window.__vfxLab.time().every((t) => t > 1.6), null, { timeout: 60_000 });
   }

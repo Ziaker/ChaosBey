@@ -36,6 +36,7 @@ export const MECHANICAL: VfxLanguage = {
     landing: 'Dust ring pushed outward, pebbles, impact scuff. Shake only.',
     scrape: 'Grinder-style spark stream along the wall + scuffs.',
     ringout: 'Heavy spark/debris burst at the wall crest, dust cloud.',
+    burst: 'Dust kicked up behind the Bey (no stylized wind).',
   },
   create(ctx: FxContext): LanguageRuntime {
     const [hot, cool] = ctx.arenaSparks;
@@ -173,6 +174,12 @@ export const MECHANICAL: VfxLanguage = {
         ctx.sparks.emit(e.pos, { count: Math.round(2 + 5 * e.m), speed: 5 + 5 * e.m, dir, spread: 0.7, life: [0.15, 0.5], hot, cool, stretch: 0.03, upBias: 0.5 });
         if (Math.random() < 0.15) ctx.flash(e.pos, 0xffc27a, 8 + 10 * e.m);
         if (Math.random() < 0.2) scuff(e.pos.clone().addScaledVector(e.normal, 0.3), 0.5, 0.4);
+      },
+      windBurst(e) {
+        // Physical reading of a sudden advance: a dust kick behind the Bey.
+        const back = e.dir.clone().negate();
+        const tip = tipPos(e.pos);
+        for (let i = 0; i < 5 + 5 * e.m; i++) dust(tip.clone().addScaledVector(back, 0.4), 1, 1.5 + 2 * e.m, 0.7 + 0.6 * e.m, 0.9);
       },
       ringOut(e) {
         ctx.sparks.emit(e.pos, { count: 120, speed: 9, dir: e.dir, spread: 2, life: [0.3, 0.9], hot, cool, upBias: 0.6 });

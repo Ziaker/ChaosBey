@@ -17,6 +17,7 @@
         --accent: #ffb347;
         --lang-a: #d8a25a;
         --lang-b: #ff4fa3;
+        --lang-c: #6fd3ff;
         font-family: 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
       }
       * { box-sizing: border-box; }
@@ -40,6 +41,7 @@
       .notes dt { font: 700 11px ui-monospace, Consolas, monospace; margin-top: 6px; }
       .notes dt:nth-of-type(1) { color: var(--lang-a); }
       .notes dt:nth-of-type(2) { color: var(--lang-b); }
+      .notes dt:nth-of-type(3) { color: var(--lang-c); }
       .notes dd { margin: 0; color: #c6cfdb; }
       label { display: block; font-size: 11px; color: var(--muted); margin: 6px 0 4px; }
       select { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 7px 8px; font: 12px inherit; font-family: inherit; }
@@ -57,6 +59,7 @@
       .badge strong { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 5px; color: #0b0d12; font-size: 14px; }
       .badge.lang-A strong { background: var(--lang-a); }
       .badge.lang-B strong { background: var(--lang-b); }
+      .badge.lang-C strong { background: var(--lang-c); }
       .toolbar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; background: rgba(12,16,23,.9); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
       .tool-button { display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: #c5cfdc; padding: 8px 12px; border-radius: 6px; cursor: pointer; font: 600 12px/1 inherit; font-family: inherit; text-transform: uppercase; letter-spacing: 0.08em; }
       .tool-button:hover { background: #182030; }
@@ -74,7 +77,7 @@
         <header>
           <div class="kicker">ChaosBey · Visual prototype</div>
           <h1>VFX Language Lab</h1>
-          <p class="warn">Two complete VFX languages on the same scripted combat moments, in the approved 3.2 m bowl. Exploration only. The motion is choreography, not physics, and nothing in the game changes.</p>
+          <p class="warn">C is the hybrid direction (A's contact/speed sparks + B's everything else + wind bursts). A and B stay for comparison. Same scripted combat moments in the approved 3.2 m bowl. Exploration only. The motion is choreography, not physics, and nothing in the game changes.</p>
         </header>
         <section>
           <h3>LANGUAGE</h3>
@@ -102,7 +105,8 @@
           <select id="bey-2"></select>
         </section>
         <section class="keys" aria-label="Keyboard shortcuts">
-          <kbd>1</kbd>–<kbd>8</kbd> effect · <kbd>A</kbd> <kbd>B</kbd> language · <kbd>V</kbd> compare<br />
+          <kbd>1</kbd>–<kbd>9</kbd> effect · <kbd>H</kbd> hybrid · <kbd>A</kbd> <kbd>B</kbd> language<br />
+          <kbd>W</kbd> compare B | C · <kbd>V</kbd> compare A | B<br />
           <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> light / medium / heavy<br />
           <kbd>R</kbd> replay · <kbd>S</kbd> slow motion · drag to orbit
         </section>

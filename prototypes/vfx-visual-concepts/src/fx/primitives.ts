@@ -201,3 +201,100 @@ export function ghostFx(object: THREE.Object3D, material: THREE.Material & { opa
     },
   };
 }
+
+export interface WindFunnelOpts {
+  /** Funnel apex (at the Bey). */
+  origin: THREE.Vector3;
+  /** Direction the funnel opens toward (usually opposite the movement). */
+  dir: THREE.Vector3;
+  length: number;
+  mouthRadius: number;
+  color: THREE.ColorRepresentation;
+  life: number;
+  spikes?: number;
+  /** Radians of spiral twist along the funnel ("small hurricane"). */
+  twist?: number;
+  /** Rotation speed of the spikes around the axis (rad/s). */
+  spin?: number;
+  opacity?: number;
+}
+
+/**
+ * Anime wind burst: a spiky, twisting funnel of wind blades opening behind
+ * a Bey that suddenly advances (dash / dodge), like a small hurricane.
+ * Built along +X locally, then rotated onto `dir`.
+ */
+export function windFunnelFx(o: WindFunnelOpts): FxItem {
+  const spikes = o.spikes ?? 14;
+  const twist = o.twist ?? 0.9;
+  const steps = 12;
+  const positions: number[] = [];
+  const alphas: number[] = [];
+  for (let s = 0; s < spikes; s++) {
+    const phi = (s / spikes) * Math.PI * 2 + Math.random() * 0.25;
+    const len = o.length * (0.65 + Math.random() * 0.35);
+    const w0 = (Math.PI * 2 / spikes) * (0.35 + Math.random() * 0.2);
+    const edge = (t: number, side: number): [number, number, number] => {
+      const r = 0.25 + (o.mouthRadius - 0.25) * Math.pow(t, 0.75);
+      const w = w0 * (1 - t) * Math.min(1, t * 6);
+      const a = phi + twist * t + side * w * 0.5;
+      return [t * len, Math.cos(a) * r, Math.sin(a) * r];
+    };
+    for (let i = 0; i < steps; i++) {
+      const t0 = i / steps;
+      const t1 = (i + 1) / steps;
+      const a0 = edge(t0, -1), b0 = edge(t0, 1), a1 = edge(t1, -1), b1 = edge(t1, 1);
+      const al = (t: number): number => Math.pow(1 - t, 0.6) * Math.min(1, t * 8);
+      positions.push(...a0, ...b0, ...a1, ...b0, ...b1, ...a1);
+      alphas.push(al(t0), al(t0), al(t1), al(t0), al(t1), al(t1));
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('aAlpha', new THREE.Float32BufferAttribute(alphas, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(o.color) }, uOpacity: { value: o.opacity ?? 0.9 } },
+    vertexShader: 'attribute float aAlpha; varying float vA; void main(){ vA = aAlpha; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: 'uniform vec3 uColor; uniform float uOpacity; varying float vA; void main(){ gl_FragColor = vec4(mix(uColor, vec3(1.0), vA * 0.6), vA * uOpacity); }',
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+  });
+  const blades = new THREE.Mesh(geo, mat);
+
+  // Faint streaked cone shell behind the blades.
+  const shellGeo = new THREE.CylinderGeometry(o.mouthRadius * 0.92, 0.2, o.length * 0.85, 40, 1, true)
+    .translate(0, o.length * 0.425, 0)
+    .rotateZ(-Math.PI / 2);
+  const shellMat = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(o.color) }, uOpacity: { value: 0.5 }, uTime: { value: 0 } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: `uniform vec3 uColor; uniform float uOpacity; uniform float uTime; varying vec2 vUv;
+      void main(){
+        float streak = pow(abs(sin(vUv.x * 42.0 + vUv.y * 5.0 - uTime * 30.0)), 10.0);
+        float fade = smoothstep(0.0, 0.15, 1.0 - vUv.y) * smoothstep(0.0, 0.2, vUv.y);
+        gl_FragColor = vec4(uColor, streak * fade * uOpacity);
+      }`,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+  });
+  const shell = new THREE.Mesh(shellGeo, shellMat);
+
+  const spinner = new THREE.Group();
+  spinner.add(blades, shell);
+  const holder = new THREE.Group();
+  holder.add(spinner);
+  holder.position.copy(o.origin);
+  holder.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), o.dir.clone().normalize());
+  const baseOpacity = o.opacity ?? 0.9;
+  return {
+    object: holder,
+    life: o.life,
+    update(k, dt) {
+      const grow = ease(Math.min(1, k * 2.2));
+      holder.scale.set(0.3 + 0.7 * grow, 0.45 + 0.75 * grow, 0.45 + 0.75 * grow);
+      spinner.rotation.x += (o.spin ?? 11) * dt;
+      const fade = k < 0.35 ? 1 : 1 - (k - 0.35) / 0.65;
+      mat.uniforms.uOpacity!.value = baseOpacity * fade;
+      shellMat.uniforms.uOpacity!.value = 0.5 * fade;
+      shellMat.uniforms.uTime!.value += dt;
+    },
+  };
+}

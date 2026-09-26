@@ -73,6 +73,8 @@ export interface LanguageRuntime {
   landing(e: PointEvent): void;
   /** Scraping along the wall, every frame. */
   scrape(e: ScrapeEvent, dt: number): void;
+  /** Sudden advance (dash / dodge activation): wind burst behind the Bey. `dir` = movement direction. */
+  windBurst(e: DirEvent): void;
   /** Ring-out moment (Bey crosses the boundary). */
   ringOut(e: DirEvent): void;
   /** Ambient per-frame update. */
@@ -80,7 +82,7 @@ export interface LanguageRuntime {
 }
 
 export interface VfxLanguage {
-  readonly id: 'A' | 'B';
+  readonly id: 'A' | 'B' | 'C';
   readonly name: string;
   readonly summary: string;
   /** What this language does for each scenario, shown in the panel. */

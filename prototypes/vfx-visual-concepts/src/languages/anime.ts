@@ -23,6 +23,11 @@ const WHITE = 0xffffff;
 const lerp = (r: readonly [number, number], m: number): number => r[0] + (r[1] - r[0]) * m;
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
 
+export interface AnimeOptions {
+  /** Minimum magnitude that triggers the negative-flash impact frame. */
+  impactFrameMinM: number;
+}
+
 export const ANIME: VfxLanguage = {
   id: 'B',
   name: 'Anime impact',
@@ -36,8 +41,12 @@ export const ANIME: VfxLanguage = {
     landing: 'Double shockwave ring, stylized ground crack, cartoon dust.',
     scrape: 'Long bright spark lines with small star flashes.',
     ringout: 'Impact frame, huge star and a colored beam shooting out of the arena.',
+    burst: 'Flat shockwave ring + light focus lines (no funnel).',
   },
-  create(ctx: FxContext): LanguageRuntime {
+  create: (ctx) => createAnime(ctx, { impactFrameMinM: IMPACT_FRAME_MIN_M }),
+};
+
+export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime {
     let chargeTimer = 0;
     let chargedFlash = false;
     let ghostTimer = 0;
@@ -63,7 +72,7 @@ export const ANIME: VfxLanguage = {
       hit(e) {
         const m = e.m;
         const color = ctx.beyColor(e.attacker);
-        if (m >= IMPACT_FRAME_MIN_M) ctx.impactFrame(0.035 + 0.06 * m);
+        if (m >= opts.impactFrameMinM) ctx.impactFrame(0.035 + 0.06 * m);
         stars(e.pos, color, m);
         shockwave(e.pos, color, 1.5 + 3.5 * m, 0.35 + 0.15 * m);
         lines(e.pos, color, Math.round(16 + 34 * m), 10 + 12 * m, e.normal, 2.4);
@@ -140,7 +149,7 @@ export const ANIME: VfxLanguage = {
       },
       stabilityBreak(e) {
         const color = ctx.beyColor(e.slot);
-        ctx.impactFrame(0.08);
+        if (e.m >= opts.impactFrameMinM) ctx.impactFrame(0.08);
         for (let i = 0; i < 12 + 10 * e.m; i++) {
           const v = new THREE.Vector3(rand(-1, 1), rand(0.5, 1.6), rand(-1, 1)).normalize().multiplyScalar(rand(3, 6 + 3 * e.m));
           ctx.layer.add(debrisFx({ pos: e.pos, vel: v, size: rand(0.06, 0.13), color: color.getHex(), life: rand(0.8, 1.4), floorHeightAt: ctx.floorHeightAt }));
@@ -178,9 +187,13 @@ export const ANIME: VfxLanguage = {
         lines(e.pos, color, Math.round(3 + 5 * e.m), 8 + 7 * e.m, e.tangent.clone().negate().addScaledVector(e.normal, 0.4), 0.7);
         if (Math.random() < 0.12) ctx.layer.add(burstFx({ tex: impactStar(6), color: WHITE, pos: e.pos, size: [0.2, 0.9], life: 0.12 }));
       },
+      windBurst(e) {
+        shockwave(e.pos, 0xdff4ff, 1.6 + 1.2 * e.m, 0.3);
+        ctx.focusLines(e.pos, 0.35 + 0.3 * e.m, 0.2, 'rgba(230,245,255,0.7)');
+      },
       ringOut(e) {
         const color = ctx.beyColor(e.slot);
-        ctx.impactFrame(0.12);
+        if (e.m >= opts.impactFrameMinM) ctx.impactFrame(0.12);
         stars(e.pos, color, 1, 0.4);
         ctx.layer.add(beamFx({ pos: e.pos, dir: e.dir, color, length: 34, width: 1.4, life: 1.0 }));
         ctx.layer.add(beamFx({ pos: e.pos, dir: e.dir, color: WHITE, length: 34, width: 0.5, life: 0.7 }));
@@ -192,5 +205,4 @@ export const ANIME: VfxLanguage = {
       },
       tick() {},
     };
-  },
-};
+}

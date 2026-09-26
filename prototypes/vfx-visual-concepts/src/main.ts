@@ -1,9 +1,9 @@
 // ============================================================
 // VFX LANGUAGE LAB — ENTRY POINT
-// Compares two complete VFX languages (A Mechanical, B Anime) on the same
+// Compares complete VFX languages (A Mechanical, B Anime, C Hybrid) on the same
 // scripted combat moments, in the approved arena. Visual exploration only
 // (GDD 1.6 / 51 / 54 / 98): imports nothing from the game.
-// Keys: 1–8 effect · A / B / V (split) · Z X C intensity · R replay · S slow motion
+// Keys: 1–9 effect · A / B / H (hybrid) / V (A|B) / W (B|C) · Z X C intensity · R replay · S slow motion
 // ============================================================
 
 import { FOUNDRY_PIT } from '../../arena-visual-concepts/src/arenas/foundryPit';
@@ -12,13 +12,14 @@ import { TOURNAMENT_STADIUM } from '../../arena-visual-concepts/src/arenas/tourn
 import type { ArenaConcept } from '../../arena-visual-concepts/src/arenas/types';
 import { CONCEPTS as BEYS } from '../../bey-visual-concepts/src/concepts/conceptDefinitions';
 import { ANIME } from './languages/anime';
+import { HYBRID } from './languages/hybrid';
 import { MECHANICAL } from './languages/mechanical';
 import type { VfxLanguage } from './languages/types';
 import { SCENARIOS } from './scenarios/scenarios';
 import { VfxStage } from './stage/VfxStage';
 import { World } from './stage/World';
 
-const LANGUAGES: readonly VfxLanguage[] = [MECHANICAL, ANIME];
+const LANGUAGES: readonly VfxLanguage[] = [MECHANICAL, ANIME, HYBRID];
 const ARENAS: readonly ArenaConcept[] = [FOUNDRY_PIT, RIFT_CRATER, TOURNAMENT_STADIUM];
 const INTENSITIES = [
   { id: 'light', label: 'Light', m: 0.3, key: 'Z' },
@@ -26,9 +27,12 @@ const INTENSITIES = [
   { id: 'heavy', label: 'Heavy', m: 1, key: 'C' },
 ] as const;
 
-type View = 'A' | 'B' | 'split';
+type View = 'A' | 'B' | 'C' | 'AB' | 'BC';
+/** Which languages each view shows, left to right. */
+const VIEW_LANGS: Record<View, ReadonlyArray<VfxLanguage['id']>> = { A: ['A'], B: ['B'], C: ['C'], AB: ['A', 'B'], BC: ['B', 'C'] };
+const langsFor = (v: View): VfxLanguage[] => VIEW_LANGS[v].map((id) => LANGUAGES.find((l) => l.id === id)!);
 const state = {
-  view: 'split' as View,
+  view: 'C' as View,
   scenario: SCENARIOS[0]!,
   intensity: INTENSITIES[1] as (typeof INTENSITIES)[number],
   arena: ARENAS[0]!,
@@ -44,7 +48,7 @@ const $ = <T extends HTMLElement>(id: string): T => {
 const stage = new VfxStage($<HTMLCanvasElement>('vfx-canvas'), $<HTMLCanvasElement>('vfx-overlay'), $<HTMLCanvasElement>('vfx-invert'), $('stage'));
 
 function rebuild(): void {
-  const langs = state.view === 'split' ? LANGUAGES : LANGUAGES.filter((l) => l.id === state.view);
+  const langs = langsFor(state.view);
   const worlds = langs.map((lang) => {
     const w = new World(lang, state.arena, stage.camera, state.scenario, state.intensity.m);
     state.bey.forEach((id, slot) => w.setBey(slot as 0 | 1, BEYS.find((b) => b.id === id)!));
@@ -79,7 +83,7 @@ const mkButton = (parent: HTMLElement, cls: string, html: string, onClick: () =>
   return b;
 };
 
-for (const [view, label, key] of [['A', 'A · Mechanical', 'A'], ['B', 'B · Anime', 'B'], ['split', 'A | B compare', 'V']] as const) {
+for (const [view, label, key] of [['C', 'C · Hybrid', 'H'], ['A', 'A · Mechanical', 'A'], ['B', 'B · Anime', 'B'], ['BC', 'B | C compare', 'W'], ['AB', 'A | B compare', 'V']] as const) {
   buttons.view.set(view, mkButton($('view-picker'), 'chip', `<span>${label}</span><kbd>${key}</kbd>`, () => { state.view = view; rebuild(); }));
 }
 SCENARIOS.forEach((s, i) => {
@@ -124,7 +128,7 @@ function syncUi(): void {
   }
   const badges = $('badges');
   badges.innerHTML = '';
-  const shown = state.view === 'split' ? LANGUAGES : LANGUAGES.filter((l) => l.id === state.view);
+  const shown = langsFor(state.view);
   badges.dataset.split = String(shown.length > 1);
   for (const lang of shown) {
     const b = document.createElement('div');
@@ -145,7 +149,9 @@ window.addEventListener('keydown', (e) => {
   const actions: Record<string, () => void> = {
     a: () => { state.view = 'A'; rebuild(); },
     b: () => { state.view = 'B'; rebuild(); },
-    v: () => { state.view = 'split'; rebuild(); },
+    h: () => { state.view = 'C'; rebuild(); },
+    v: () => { state.view = 'AB'; rebuild(); },
+    w: () => { state.view = 'BC'; rebuild(); },
     r: replay,
     s: toggleSlow,
   };
