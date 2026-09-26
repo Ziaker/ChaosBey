@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { ARENA_FLOOR_RADIUS, ARENA_WALL_THICKNESS } from '../../src/arena/colliders/ArenaTuning';
 import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { AttackState } from '../../src/combat/attacks/AttackController';
+import { ClashState } from '../../src/combat/clash/ClashController';
 import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { STABILITY_MAX } from '../../src/bey/stability/StabilityTuning';
@@ -264,14 +265,22 @@ describe('ring-out', () => {
 });
 
 describe('simultaneous double-KO', () => {
-  it('resolves a genuinely simultaneous double-KO as a Draw, not tiebroken by hit-loop order', async () => {
+  // Milestone 5 changes this scenario's outcome deliberately: a genuinely
+  // simultaneous double-hit (GDD's "150ms window", same-tick here — see
+  // ClashOrchestration.ts) is no longer resolved by normal knockback/
+  // Stability-damage loop order at all — it is withheld and routed into a
+  // Clash instead, which is an even stronger version of "not tiebroken by
+  // hit-loop order" than the old immediate-Draw behavior this test used to
+  // assert. See clashIntegration.test.ts for the full Clash resolution
+  // (FirstWins/SecondWins/Tie) coverage.
+  it('a genuinely simultaneous double-hit triggers a Clash instead of an immediate, loop-order-dependent double-KO', async () => {
     const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(harness);
 
     // Pre-break both fighters directly (a pure system-level operation —
     // it never touches roundState) so a single further qualifying hit on
-    // each is enough to KO both, without needing a long combat sequence
-    // to reach Broken on both sides first.
+    // each would be enough to KO both, without needing a long combat
+    // sequence to reach Broken on both sides first.
     harness.first.stability.applyDamage(STABILITY_MAX);
     harness.second.stability.applyDamage(STABILITY_MAX);
     expect(harness.first.stability.isBroken).toBe(true);
@@ -289,15 +298,17 @@ describe('simultaneous double-KO', () => {
     const firstAttacker = tapController();
     const secondAttacker = tapController();
 
-    for (let i = 0; i < 60 && !harness.roundState.isOver; i++) {
+    for (let i = 0; i < 60 && harness.clash.controller.getState() === ClashState.Idle; i++) {
       harness.tick(
         firstAttacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
         secondAttacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
       );
     }
 
-    expect(harness.roundState.isOver).toBe(true);
-    expect(harness.roundState.result).toBe(RoundOutcome.Draw);
+    // Neither side was KOed by the simultaneous connect itself — normal
+    // resolution was withheld entirely and a Clash started instead.
+    expect(harness.clash.controller.getState()).toBe(ClashState.Active);
+    expect(harness.roundState.isOver).toBe(false);
   });
 });
 

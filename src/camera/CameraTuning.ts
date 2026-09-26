@@ -84,3 +84,22 @@ export const CAMERA_HIGH_SPEED_BLEND_SMOOTHING_PER_S = 5;
 // after knockback" + M4 "knockback follow" pairing) ---
 export const CAMERA_KNOCKBACK_FOLLOW_BIAS_MAX = 0.4; // 0..1 fraction of the way from the midpoint to the launched Bey.
 export const CAMERA_KNOCKBACK_FOLLOW_DECAY_PER_S = 2.5;
+
+// --- Clash camera (Milestone 5, ClashCameraDirector.ts) — a dedicated
+// cinematic orbit near the clash point while Active, intensity escalating
+// with the contest's progress (0..1 fraction of the ~4s target duration):
+// same "hybrid scalable" profile C direction as the rest of this file, at
+// its own vantage since the two Beys are frozen close together during the
+// contest rather than moving around the arena. Engineering placeholders
+// (GDD section 167) — the owner-approved *shape* (dedicated orbit,
+// escalating with the mash, Z/X/C staying legible) is what's approved,
+// not these exact numbers.
+export const CLASH_CAMERA_ORBIT_BASE_SPEED_RAD_PER_S = 0.6;
+export const CLASH_CAMERA_ORBIT_EXTRA_SPEED_RAD_PER_S = 1.2;
+export const CLASH_CAMERA_BASE_DISTANCE_M = 6;
+export const CLASH_CAMERA_DISTANCE_PULL_IN_M = 1.5;
+export const CLASH_CAMERA_HEIGHT_M = 2.5;
+export const CLASH_CAMERA_FOV_BASE_DEG = 50;
+export const CLASH_CAMERA_FOV_MAX_EXTRA_DEG = 10;
+export const CLASH_CAMERA_SHAKE_MAX_M = 0.2;
+export const CLASH_CAMERA_SHAKE_FREQUENCY_HZ = 14;

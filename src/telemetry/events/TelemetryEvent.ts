@@ -9,6 +9,7 @@
 
 import type { ActiveHitbox } from '../../combat/attacks/AttackController';
 import type { RoundOutcome } from '../../combat/round-rules/RoundState';
+import type { ClashOutcome } from '../../combat/clash/ClashController';
 
 export enum TelemetryEventKind {
   AppBoot = 'AppBoot',
@@ -24,6 +25,10 @@ export enum TelemetryEventKind {
   RoundEnd = 'RoundEnd',
   Dodged = 'Dodged',
   PerfectDodge = 'PerfectDodge',
+  ClashStart = 'ClashStart',
+  ClashMashInput = 'ClashMashInput',
+  ClashResult = 'ClashResult',
+  ClashEnd = 'ClashEnd',
 }
 
 export interface TelemetryEventBase {
@@ -120,6 +125,37 @@ export interface PerfectDodgeEvent extends TelemetryEventBase {
   targetIsFirst: boolean;
 }
 
+/** A Clash (Milestone 5) begins — two attacks connected within the compatible window. */
+export interface ClashStartEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.ClashStart;
+  firstStaminaFraction: number;
+  secondStaminaFraction: number;
+  firstSpeedMps: number;
+  secondSpeedMps: number;
+}
+
+/** One mash event registered for one side during an Active Clash — fired once per side per tick it actually advances (real Z/X/C press or the AI-mash abstraction; see ClashMash.ts's at-most-one-per-tick rule), not once per raw key. */
+export interface ClashMashInputEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.ClashMashInput;
+  isFirst: boolean;
+  mashEventCount: number;
+}
+
+/** A Clash resolved (Active -> Cooldown). */
+export interface ClashResultEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.ClashResult;
+  outcome: ClashOutcome;
+  firstClashPower: number;
+  secondClashPower: number;
+  firstMashEventCount: number;
+  secondMashEventCount: number;
+}
+
+/** A Clash's Cooldown has fully elapsed (Cooldown -> Idle) — normal Clash detection can trigger again. */
+export interface ClashEndEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.ClashEnd;
+}
+
 export type TelemetryEvent =
   | AppBootEvent
   | ErrorEvent
@@ -133,4 +169,8 @@ export type TelemetryEvent =
   | KoEvent
   | RoundEndEvent
   | DodgedEvent
-  | PerfectDodgeEvent;
+  | PerfectDodgeEvent
+  | ClashStartEvent
+  | ClashMashInputEvent
+  | ClashResultEvent
+  | ClashEndEvent;

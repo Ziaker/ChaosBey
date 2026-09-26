@@ -50,6 +50,8 @@ export const RING_OUT_MAGNITUDE = 0.9;
 export const PERFECT_DODGE_MAGNITUDE = 0.55;
 /** A clean whiff-save — some feedback, but subtle; not a moment on its own. */
 export const DODGED_MAGNITUDE = 0.2;
+/** A Clash (Milestone 5) resolving is always a genuine moment, regardless of the exact ClashPower numbers involved — strong enough to trigger camera hitstop/shake before the real physical knockback plays out. */
+export const CLASH_RESOLVED_MAGNITUDE = 0.9;
 
 function easeInMagnitude(rawValue: number, referenceValueForMagnitude1: number, exponent: number): number {
   const t = Math.max(0, Math.min(1, rawValue / referenceValueForMagnitude1));

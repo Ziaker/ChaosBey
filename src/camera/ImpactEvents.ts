@@ -30,7 +30,7 @@ export interface WorldPositionM {
   z: number;
 }
 
-export type ImpactEventKind = 'hit' | 'stabilityBreak' | 'ko' | 'ringOut' | 'perfectDodge' | 'dodged' | 'wallImpact' | 'landing';
+export type ImpactEventKind = 'hit' | 'stabilityBreak' | 'ko' | 'ringOut' | 'perfectDodge' | 'dodged' | 'wallImpact' | 'landing' | 'clashResolved';
 
 export interface ImpactEvent {
   kind: ImpactEventKind;
@@ -39,6 +39,17 @@ export interface ImpactEvent {
   worldPositionM: WorldPositionM;
   /** Which Bey this event is centered on — the defender for a hit/knockback-style event, the Bey itself for a wall impact or landing. */
   isFirst: boolean;
+  /**
+   * Overrides which side (if any) camera "knockback follow" should bias
+   * toward for this specific event — see CombatCameraController's
+   * KNOCKBACK_FOLLOW_EVENT_KINDS consumer. `null` means no unilateral
+   * bias at all (e.g. a Clash Tie's symmetric/central presentation, where
+   * `isFirst` would otherwise have to arbitrarily pick a side it doesn't
+   * mean). Left undefined (the default, for every event this module
+   * itself builds) falls back to `isFirst`, unchanged from before this
+   * field existed.
+   */
+  followTargetIsFirst?: boolean | null;
 }
 
 interface ImpactEventsBeySnapshotSubset {

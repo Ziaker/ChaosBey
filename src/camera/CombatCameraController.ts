@@ -105,7 +105,7 @@ function smoothAngleRad(current: number, target: number, t: number): number {
 }
 
 /** Event kinds that plausibly involve a Bey being launched/thrown — the only ones eligible to bias camera focus via "knockback follow". */
-const KNOCKBACK_FOLLOW_EVENT_KINDS = new Set(['hit', 'stabilityBreak', 'ko', 'ringOut']);
+const KNOCKBACK_FOLLOW_EVENT_KINDS = new Set(['hit', 'stabilityBreak', 'ko', 'ringOut', 'clashResolved']);
 
 export interface CombatCameraTickInput {
   firstPositionM: WorldPositionM;
@@ -172,10 +172,19 @@ export class CombatCameraController {
       }
       this.fovPunchDeg = Math.max(this.fovPunchDeg, event.magnitude * CAMERA_FOV_PUNCH_MAX_DEG);
       if (KNOCKBACK_FOLLOW_EVENT_KINDS.has(event.kind)) {
-        const bias = Math.min(CAMERA_KNOCKBACK_FOLLOW_BIAS_MAX, event.magnitude * CAMERA_KNOCKBACK_FOLLOW_BIAS_MAX);
-        if (bias >= this.knockbackFollowBias) {
-          this.knockbackFollowBias = bias;
-          this.knockbackFollowTargetIsFirst = event.isFirst;
+        // followTargetIsFirst overrides isFirst when the event explicitly
+        // sets it (e.g. a Clash's win/loss vs. Tie presentation, where
+        // isFirst alone can't represent "no side" — see ImpactEvent).
+        // null means this specific event deliberately applies no
+        // unilateral follow bias at all, unlike undefined (not set),
+        // which simply falls back to isFirst as before this field existed.
+        const followTarget = event.followTargetIsFirst !== undefined ? event.followTargetIsFirst : event.isFirst;
+        if (followTarget !== null) {
+          const bias = Math.min(CAMERA_KNOCKBACK_FOLLOW_BIAS_MAX, event.magnitude * CAMERA_KNOCKBACK_FOLLOW_BIAS_MAX);
+          if (bias >= this.knockbackFollowBias) {
+            this.knockbackFollowBias = bias;
+            this.knockbackFollowTargetIsFirst = followTarget;
+          }
         }
       }
     }

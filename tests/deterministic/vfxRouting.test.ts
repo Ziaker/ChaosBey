@@ -36,4 +36,8 @@ describe('routeImpactEventToVfx', () => {
     expect(routeImpactEventToVfx(eventOf('ko'))).toBe('none');
     expect(routeImpactEventToVfx(eventOf('ringOut'))).toBe('none');
   });
+
+  it('routes a Clash resolution to a spark, same as any other genuine-contact moment', () => {
+    expect(routeImpactEventToVfx(eventOf('clashResolved'))).toBe('spark');
+  });
 });

@@ -35,6 +35,8 @@ import type { DodgeState } from '../../dodge/DodgeController';
 import { isGrounded } from '../../physics/collision/GroundCheck';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { normalize, subtract, type Vec2 } from '../../physics/Vec2';
+import { ClashState, type ClashResult } from '../../combat/clash/ClashController';
+import { ClashOrchestration, type HitSnapshotInput, type ResolvedHitToApply } from './ClashOrchestration';
 
 export interface BeySnapshot {
   movement: MovementSnapshot;
@@ -83,6 +85,8 @@ export interface MatchTickResult {
   combatEvents: CombatEvent[];
   ringOutFirst: boolean;
   ringOutSecond: boolean;
+  /** Non-null on exactly the tick a Clash's Active -> Cooldown transition happened this call — main.ts uses this single edge to fire ClashResult telemetry and the resolution's presentation beat. Null every other tick, including throughout Active itself (poll the ClashOrchestration passed into this call directly for live state/mash counts — see ClashController.getState()/getElapsedS()/getFirstMashEventCount() etc.). */
+  clashResolvedThisTick: ClashResult | null;
 }
 
 function positionXZ(body: Bey['body']): Vec2 {
@@ -120,6 +124,7 @@ export function tickMatch(
   secondActions: ControllerActions,
   fixedDeltaSeconds: number,
   roundState: RoundState,
+  clash: ClashOrchestration,
 ): MatchTickResult {
   if (roundState.isOver) {
     return {
@@ -129,8 +134,57 @@ export function tickMatch(
       combatEvents: [],
       ringOutFirst: false,
       ringOutSecond: false,
+      clashResolvedThisTick: null,
     };
   }
+
+  // Clash (Milestone 5): while Active, the entire normal simulation is
+  // frozen for the ~4s mash-contest presentation — no physics step, no
+  // movement/attack/resource ticking — mirroring Milestone 4's hitstop
+  // freeze pattern, just for the whole contest instead of a few frames.
+  // Real Z/X/C mash input is still sampled live every tick (it is NOT
+  // gated by hitstop's simulationFrozen flag — see main.ts). The instant
+  // the contest resolves (Active -> Cooldown), the real physical
+  // consequence (knockback for FirstWins/SecondWins, symmetric repulsion
+  // for Tie) is applied immediately; physics.step() on a later, normal
+  // tick then decides everything from there, including any ring-out —
+  // Clash itself never declares one.
+  if (clash.controller.getState() === ClashState.Active) {
+    const { resolution } = clash.tickActive(fixedDeltaSeconds, firstActions, secondActions);
+    const combatEvents: CombatEvent[] = [];
+    let firstKoed = false;
+    let secondKoed = false;
+
+    if (resolution) {
+      const applied = clash.applyResolution(resolution, physics, first, second);
+      if (applied.loserIsFirst !== undefined) {
+        combatEvents.push({ kind: 'knockback', targetIsFirst: applied.loserIsFirst, force: applied.knockbackForce! });
+        combatEvents.push({ kind: 'stabilityDamage', targetIsFirst: applied.loserIsFirst, amount: applied.stabilityDamageAmount! });
+        if (applied.causedBreak) combatEvents.push({ kind: 'stabilityBreak', targetIsFirst: applied.loserIsFirst });
+        if (applied.isQualifyingKoHit) {
+          combatEvents.push({ kind: 'ko', targetIsFirst: applied.loserIsFirst });
+          if (applied.loserIsFirst) firstKoed = true;
+          else secondKoed = true;
+        }
+      }
+      roundState.resolveTick({ firstKoed, secondKoed, firstRingOut: false, secondRingOut: false });
+    }
+
+    return {
+      first: buildFrozenSnapshot(physics, first),
+      second: buildFrozenSnapshot(physics, second),
+      hitEvents: [],
+      combatEvents,
+      ringOutFirst: false,
+      ringOutSecond: false,
+      clashResolvedThisTick: resolution ? resolution.result : null,
+    };
+  }
+
+  // Advances Cooldown's countdown (a no-op while Idle) — the Active branch
+  // above already advances the Clash via its own tickActive() call, so
+  // this only needs to run on the normal (non-Active) path.
+  clash.tickIdleOrCooldown(fixedDeltaSeconds);
 
   const firstGrounded = isGrounded(physics, first.collider);
   const secondGrounded = isGrounded(physics, second.collider);
@@ -273,20 +327,50 @@ export function tickMatch(
     }
   }
 
+  // An attack's own recovery timing reacts to landing regardless of what
+  // happens to it downstream (normal knockback or Clash) — fired for
+  // every connecting hit up front, before Clash gets a chance to
+  // intercept the knockback/Stability consequence below.
   for (const hit of hitEvents) {
+    (hit.attackerIsFirst ? first : second).attack.registerHitConfirmed();
+  }
+
+  // Milestone 5: snapshot everything each connecting hit's normal
+  // knockback/Stability resolution would need, then hand them to
+  // ClashOrchestration — a hit connecting while the defender's own attack
+  // is also compatible (active/imminent) within the GDD's 150ms window is
+  // either withheld entirely (a fresh Clash starts) or resolved with the
+  // cooldown "slower suffers more" alternative multiplier instead of a
+  // plain 1x; anything else comes back completely untouched.
+  const hitSnapshots: HitSnapshotInput[] = hitEvents.map((hit) => {
     const attacker = hit.attackerIsFirst ? first : second;
     const defender = hit.attackerIsFirst ? second : first;
-    const defenderIsFirst = !hit.attackerIsFirst;
     const attackerMovement = hit.attackerIsFirst ? firstMovement : secondMovement;
     const defenderMovement = hit.attackerIsFirst ? secondMovement : firstMovement;
-    const attackerPos = hit.attackerIsFirst ? firstPos : secondPos;
-    const defenderPos = hit.attackerIsFirst ? secondPos : firstPos;
+    return {
+      hit,
+      attackerPositionXZ: hit.attackerIsFirst ? firstPos : secondPos,
+      defenderPositionXZ: hit.attackerIsFirst ? secondPos : firstPos,
+      attackerVelocityXZ: attackerMovement.actualVelocityVector,
+      attackerSpeedMps: attackerMovement.speedMps,
+      attackerStaminaFraction: attacker.stamina.resource.fraction,
+      defenderSpeedMps: defenderMovement.speedMps,
+      defenderStabilityFraction: defender.stability.resource.fraction,
+      defenderStaminaPenaltyFraction: 1 - defender.stamina.resource.fraction,
+      defenderAttackState: hit.attackerIsFirst ? secondAttack.state : firstAttack.state,
+    };
+  });
+  const { toResolveNormally } = clash.processTickHits(fixedDeltaSeconds, hitSnapshots);
 
-    attacker.attack.registerHitConfirmed();
+  for (const resolved of toResolveNormally) {
+    const hit = resolved.hit;
+    const defenderIsFirst = !hit.attackerIsFirst;
+    const defender = hit.attackerIsFirst ? second : first;
 
     if (hit.caughtOpponentDashing) {
       // GDD section 23/107: Circular Attack catching an active Dash Attack
       // launches the attacker's *target* upward instead of normal knockback.
+      // Never routed through Clash (see ClashOrchestration.processTickHits).
       const vel = defender.body.linvel();
       defender.body.setLinvel({ x: vel.x, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z }, true);
       // A genuine launch: arm Air Recovery immediately if the defender was
@@ -299,20 +383,20 @@ export function tickMatch(
     }
 
     const knockback = computeKnockback({
-      baseForce: hit.hitbox.knockbackForce,
-      attackerSpeedMps: attackerMovement.speedMps,
-      defenderSpeedMps: defenderMovement.speedMps,
-      defenderStabilityFraction: defender.stability.resource.fraction,
-      defenderStaminaPenaltyFraction: 1 - defender.stamina.resource.fraction,
-      attackerVelocityXZ: attackerMovement.actualVelocityVector,
-      impactDirectionXZ: normalize(subtract(defenderPos, attackerPos)),
+      baseForce: hit.hitbox.knockbackForce * resolved.forceMultiplier,
+      attackerSpeedMps: resolved.attackerSpeedMps,
+      defenderSpeedMps: resolved.defenderSpeedMps,
+      defenderStabilityFraction: resolved.defenderStabilityFraction,
+      defenderStaminaPenaltyFraction: resolved.defenderStaminaPenaltyFraction,
+      attackerVelocityXZ: resolved.attackerVelocityXZ,
+      impactDirectionXZ: normalize(subtract(resolved.defenderPositionXZ, resolved.attackerPositionXZ)),
     });
-    applyKnockback(defender.body, attackerPos, defenderPos, knockback);
+    applyKnockback(defender.body, resolved.attackerPositionXZ, resolved.defenderPositionXZ, knockback);
     // Same immediate-vs-pending arming as the catch-launch path above.
     defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
     combatEvents.push({ kind: 'knockback', targetIsFirst: defenderIsFirst, force: knockback.force });
 
-    applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage));
+    applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage) * resolved.forceMultiplier);
   }
 
   const ringOutFirst = isRingOut(firstPos);
@@ -360,5 +444,6 @@ export function tickMatch(
     combatEvents,
     ringOutFirst,
     ringOutSecond,
+    clashResolvedThisTick: null,
   };
 }
