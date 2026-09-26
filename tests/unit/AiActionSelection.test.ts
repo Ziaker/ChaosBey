@@ -33,6 +33,8 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    dodgeReady: true,
+    airRecoveryAvailable: false,
     ...overrides,
   };
 }
@@ -267,6 +269,22 @@ describe('ActionSelector — steering discipline (M7 Part 2)', () => {
     expect(actions.held.has(Action.MoveBackward)).toBe(false);
     expect(actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight)).toBe(true);
   });
+
+  it('never retreats straight out of the ring at moderate edge risk either (regression: re-normalizing a trimmed outward direction)', () => {
+    const selector = new ActionSelector();
+    // Own at x=10.6 (raw edge risk ~0.34) facing straight out (+X), opponent
+    // on the center side: "away" is straight out. The old trim-and-normalize
+    // gave back exactly that — MoveForward with no steering, out of the ring.
+    const actions = selector.selectActions(
+      AiIntent.Retreat,
+      world({ positionXZ: { x: 10.6, z: 0 }, headingRad: Math.PI / 2 }, { positionXZ: { x: 8, z: 0 } }),
+      ATTACK_AI_PERSONALITY,
+      false,
+      DT,
+    );
+    assertValidContract(actions);
+    expect(actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight), 'turns toward the edge tangent').toBe(true);
+  });
 });
 
 describe('ActionSelector — Dash release (M7 Part 2)', () => {
@@ -352,5 +370,97 @@ describe('ActionSelector — edge pressure (M7 Part 2)', () => {
     );
     assertValidContract(actions);
     expect(actions.pressedThisFrame.has(Action.Attack)).toBe(true);
+  });
+});
+
+// ============================================================
+// M7 Part 2b — dodge direction and JumpEvade execution.
+// The burst direction is recomputed here INDEPENDENTLY from the held keys,
+// the way DodgeController.applyBurst reads them (forward = sin/cos of
+// heading, right = +90°), so these tests check the effective input, not
+// the selector's own arithmetic.
+// ============================================================
+
+function burstFromHeldKeys(held: ReadonlySet<Action>, headingRad: number): { x: number; z: number } {
+  const forwardInput = (held.has(Action.MoveForward) ? 1 : 0) - (held.has(Action.MoveBackward) ? 1 : 0);
+  const lateralInput = (held.has(Action.SteerRight) ? 1 : 0) - (held.has(Action.SteerLeft) ? 1 : 0);
+  const fx = Math.sin(headingRad);
+  const fz = Math.cos(headingRad);
+  let x = fx * forwardInput + fz * lateralInput;
+  let z = fz * forwardInput - fx * lateralInput;
+  if (forwardInput === 0 && lateralInput === 0) {
+    x = fx;
+    z = fz;
+  }
+  const len = Math.hypot(x, z);
+  return { x: x / len, z: z / len };
+}
+
+describe('ActionSelector — dodge direction (M7 Part 2b)', () => {
+  it('near the edge, with the attacker between it and the center, dodges sideways/inward — never outward', () => {
+    for (const headingRad of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 0.7]) {
+      const selector = new ActionSelector();
+      const w = world({ positionXZ: { x: 0, z: 11 }, headingRad }, { positionXZ: { x: 0, z: 9.5 }, attackState: AttackState.CircularActive });
+      const actions = selector.selectActions(AiIntent.DodgeThreat, w, ATTACK_AI_PERSONALITY, true, DT);
+      assertValidContract(actions);
+      expect(actions.pressedThisFrame.has(Action.Dodge)).toBe(true);
+      const burst = burstFromHeldKeys(actions.held, headingRad);
+      // Outward here is +Z. At most slightly outward (cos <= 0.2).
+      expect(burst.z, `heading ${headingRad}`).toBeLessThanOrEqual(0.2);
+    }
+  });
+
+  it('away from the edge, sidesteps off the attack line instead of dodging along it', () => {
+    const selector = new ActionSelector();
+    const w = world({ positionXZ: { x: 0, z: 0 }, headingRad: 0 }, { positionXZ: { x: 0, z: 3 }, attackState: AttackState.DashActive, velocityXZ: { x: 0, z: -15 } });
+    const actions = selector.selectActions(AiIntent.DodgeThreat, w, ATTACK_AI_PERSONALITY, true, DT);
+    const burst = burstFromHeldKeys(actions.held, 0);
+    // Attack line is Z; a sidestep is mostly X.
+    expect(Math.abs(burst.z)).toBeLessThan(0.75);
+    expect(burst.z).toBeLessThanOrEqual(0); // never toward the attacker
+  });
+
+  it('never presses Dodge when Stamina is below the cost (dodgeReady false), even in Idle', () => {
+    const selector = new ActionSelector();
+    const w = world({ dodgeState: DodgeState.Idle, dodgeReady: false }, { positionXZ: { x: 0, z: 1.5 }, attackState: AttackState.CircularActive });
+    const actions = selector.selectActions(AiIntent.DodgeThreat, w, ATTACK_AI_PERSONALITY, true, DT);
+    expect(actions.held.has(Action.Dodge)).toBe(false);
+  });
+});
+
+describe('ActionSelector — JumpEvade (M7 Part 2b)', () => {
+  it('holds JumpDrift with no steering (full-height jump, never a drift) and throttles toward the safe side', () => {
+    const selector = new ActionSelector();
+    // At z=11 facing +Z (outward), attacker from the center side: the safe
+    // side is sideways/inward, so the throttle must not be MoveForward (out).
+    const w = world({ positionXZ: { x: 0, z: 11 }, headingRad: 0 }, { positionXZ: { x: 0.8, z: 9.5 }, attackState: AttackState.CircularActive });
+    const actions = selector.selectActions(AiIntent.JumpEvade, w, ATTACK_AI_PERSONALITY, false, DT);
+    assertValidContract(actions);
+    expect(actions.pressedThisFrame.has(Action.JumpDrift)).toBe(true);
+    expect(actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight)).toBe(false);
+    expect(actions.held.has(Action.MoveForward)).toBe(false);
+  });
+
+  it('does not throttle outward at moderate edge risk either — jumps in place rather than along the attack line or out', () => {
+    const selector = new ActionSelector();
+    // z=10.6 (raw edge risk ~0.34) facing +Z (outward), attacker straight in
+    // from the center: forward is out, backward is into the attack line.
+    const w = world({ positionXZ: { x: 0, z: 10.6 }, headingRad: 0 }, { positionXZ: { x: 0, z: 8 }, attackState: AttackState.DashActive });
+    const actions = selector.selectActions(AiIntent.JumpEvade, w, ATTACK_AI_PERSONALITY, false, DT);
+    expect(actions.pressedThisFrame.has(Action.JumpDrift)).toBe(true);
+    expect(actions.held.has(Action.MoveForward)).toBe(false);
+    expect(actions.held.has(Action.MoveBackward)).toBe(false);
+  });
+
+  it('keeps holding JumpDrift through Hopping (variable-jump height) and does not re-press after landing', () => {
+    const selector = new ActionSelector();
+    const threat = { positionXZ: { x: 0, z: 2 }, attackState: AttackState.CircularActive };
+    const first = selector.selectActions(AiIntent.JumpEvade, world({}, threat), ATTACK_AI_PERSONALITY, false, DT);
+    const hopping = selector.selectActions(AiIntent.JumpEvade, world({ driftState: DriftState.Hopping, grounded: false }, threat), ATTACK_AI_PERSONALITY, false, DT);
+    const landed = selector.selectActions(AiIntent.JumpEvade, world({ driftState: DriftState.Idle, grounded: true }, threat), ATTACK_AI_PERSONALITY, false, DT);
+    expect(first.pressedThisFrame.has(Action.JumpDrift)).toBe(true);
+    expect(hopping.held.has(Action.JumpDrift)).toBe(true);
+    expect(hopping.pressedThisFrame.has(Action.JumpDrift)).toBe(false);
+    expect(landed.pressedThisFrame.has(Action.JumpDrift)).toBe(false);
   });
 });

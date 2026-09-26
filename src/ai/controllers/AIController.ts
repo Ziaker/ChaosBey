@@ -29,6 +29,8 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { ClashState, type ClashController } from '../../combat/clash/ClashController';
+import { DodgeState } from '../../dodge/DodgeController';
+import { DODGE_STAMINA_COST } from '../../dodge/DodgeTuning';
 import { DriftState } from '../../drift/DriftController';
 import { Action, type CombatController, type ControllerActions, type ControllerContext } from '../../input/actions/Action';
 import { isGrounded } from '../../physics/collision/GroundCheck';
@@ -87,10 +89,12 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     stabilityFraction: bey.stability.resource.fraction,
     isBroken: bey.stability.isBroken,
     attackEnergyFraction: bey.attackEnergy.resource.fraction,
+    dodgeReady: bey.dodge.getState() === DodgeState.Idle && bey.stamina.resource.value >= DODGE_STAMINA_COST,
+    airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable(),
   };
 }
 
-const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, punishWindow: false, edgePressure: 0 };
+const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, punishWindow: false, edgePressure: 0, immediateThreat: false };
 
 export class AIController implements CombatController {
   private readonly actionSelector = new ActionSelector();
@@ -205,7 +209,9 @@ export class AIController implements CombatController {
     const ideal = selectIntent(world, adjustedPersonality, risk, {
       counterDash: this.counterRollForOpponentDash === true,
       secondsSinceOwnAttack: world.nowS - this.lastOwnAttackStartS,
-      recoveringFromEdge: this.activeDecision.intent === AiIntent.RecoverFromEdge,
+      // From the ideal decision, so a deliberate-error downgrade can't end
+      // an edge episode early.
+      recoveringFromEdge: this.idealDecision.edgeEpisode === true,
     });
     this.idealDecision = ideal;
 

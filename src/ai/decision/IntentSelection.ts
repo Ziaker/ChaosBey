@@ -33,6 +33,8 @@ import type { WorldState } from './WorldState';
 const EDGE_RISK_OVERRIDE_THRESHOLD = 0.55;
 /** Once recovering, keep recovering until edgeRisk falls below this (hysteresis). Without it the AI stopped the moment it crossed back under the override threshold, turned to re-engage, and drifted straight back into danger. */
 const EDGE_RISK_RELEASE_THRESHOLD = 0.3;
+/** At/above this edgeRisk, every edge-episode decision (recovering, or evading while in edge danger) is critical: IntentionalError.ts never downgrades or delays it. */
+export const CRITICAL_EDGE_RISK = 0.85;
 /** Above this opponentThreat, answering the imminent hitbox overrides normal scoring — with WHICH answer (dodge, jump, or plain spacing) depending on what's actually available right now, never blindly picking dodge regardless of its cooldown. */
 const THREAT_OVERRIDE_THRESHOLD = 0.35;
 
@@ -73,6 +75,10 @@ export interface IntentDecision {
   reason: string;
   /** Best-scoring candidates of the normal scoring pass, highest first; empty when an override decided (the reason says which). */
   consideredScores?: readonly ConsideredScore[];
+  /** Part of an edge-recovery episode: recovering, or evading a hit while in edge danger. The next decision keeps the lower release threshold while this holds, so evading never ends the recovery early. */
+  edgeEpisode?: boolean;
+  /** Must never be downgraded or delayed by a deliberate error (IntentionalError.ts). */
+  critical?: boolean;
 }
 
 /**
@@ -85,7 +91,7 @@ export interface DecisionContext {
   readonly counterDash: boolean;
   /** Seconds since this AI last started an attack (or since the match began) — drives the anti-passivity tempo. */
   readonly secondsSinceOwnAttack: number;
-  /** Whether the intent currently being acted on is RecoverFromEdge — selects the lower release threshold (hysteresis). */
+  /** Whether the previous decision was part of an edge episode (see IntentDecision.edgeEpisode) — selects the lower release threshold (hysteresis). */
   readonly recoveringFromEdge: boolean;
 }
 
@@ -115,6 +121,26 @@ function clamp01(t: number): number {
   return Math.max(0, Math.min(1, t));
 }
 
+/** A Dodge press would start a ground dodge right now (Idle, enough Stamina, grounded) — see PerceivedCombatant.dodgeReady. */
+function canGroundDodge(world: WorldState): boolean {
+  return world.own.dodgeState === DodgeState.Idle && world.own.dodgeReady && world.own.grounded;
+}
+
+/** Edge danger + an immediate hit: the best evasion that is actually available, each carried out toward the safe side by ActionSelection. */
+function edgeSafeEvasion(world: WorldState, risk: RiskAssessment): IntentDecision {
+  const situation = `edge risk ${risk.edgeRisk.toFixed(2)} + immediate ${world.opponent.attackState}`;
+  if (world.own.dodgeState === DodgeState.Dodging) {
+    return { intent: AiIntent.DodgeThreat, reason: `${situation} — already dodging, keeping the i-frames` };
+  }
+  if (canGroundDodge(world)) {
+    return { intent: AiIntent.DodgeThreat, reason: `${situation} — dodging inward/sideways` };
+  }
+  if (world.own.driftState === DriftState.Idle && world.own.grounded) {
+    return { intent: AiIntent.JumpEvade, reason: `${situation} — dodge unavailable, jumping` };
+  }
+  return { intent: AiIntent.Retreat, reason: `${situation} — no dodge or jump, moving to the safest side` };
+}
+
 export function selectIntent(
   world: WorldState,
   personality: AiPersonality,
@@ -123,11 +149,19 @@ export function selectIntent(
 ): IntentDecision {
   const edgeThreshold = context.recoveringFromEdge ? EDGE_RISK_RELEASE_THRESHOLD : EDGE_RISK_OVERRIDE_THRESHOLD;
   if (risk.edgeRisk >= edgeThreshold) {
+    const critical = risk.edgeRisk >= CRITICAL_EDGE_RISK;
+    // Edge danger and an immediate hit at once: evade in a way that keeps
+    // the AI in the ring, then (next decision, same episode) go back to
+    // recovering. A telegraph (charging Dash) is not immediate — getting
+    // away from the edge is the answer to that.
+    if (risk.immediateThreat) return { ...edgeSafeEvasion(world, risk), edgeEpisode: true, critical };
     return {
       intent: AiIntent.RecoverFromEdge,
       reason: context.recoveringFromEdge
         ? `edge risk ${risk.edgeRisk.toFixed(2)} — still recovering (until < ${EDGE_RISK_RELEASE_THRESHOLD})`
         : `edge risk ${risk.edgeRisk.toFixed(2)} over threshold`,
+      edgeEpisode: true,
+      critical,
     };
   }
   if (context.counterDash && isCounterableDash(world)) {
@@ -143,7 +177,12 @@ export function selectIntent(
     // silently falling through to normal scoring just because Dodge is on
     // cooldown (that previously left ActionSelection with nothing to press,
     // since it only ever presses Dodge from DodgeState.Idle).
-    if (world.own.dodgeState === DodgeState.Idle) {
+    // Mid-dodge, the i-frames ARE the evasion — and they only hold while
+    // grounded, so jumping now would throw them away.
+    if (world.own.dodgeState === DodgeState.Dodging) {
+      return { intent: AiIntent.DodgeThreat, reason: `opponent threat ${risk.opponentThreat.toFixed(2)} — already dodging, keeping the i-frames` };
+    }
+    if (canGroundDodge(world)) {
       return { intent: AiIntent.DodgeThreat, reason: `opponent threat ${risk.opponentThreat.toFixed(2)} — dodging` };
     }
     if (world.own.driftState === DriftState.Idle && world.own.grounded) {

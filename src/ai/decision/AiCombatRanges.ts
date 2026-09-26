@@ -19,3 +19,8 @@ export const AI_DEFAULT_CIRCULAR_REACH_M = 1.8;
 export const AI_COUNTER_MAX_LEAD_S = 0.2;
 /** An opponent Dash only counts as "incoming" when it closes on this AI at least this fast (m/s) — a Dash aimed elsewhere isn't something to counter. */
 export const AI_COUNTER_MIN_CLOSING_SPEED_MPS = 4;
+
+// --- Immediate threats (M7 Part 2b) ---
+
+/** Generic opponent Dash reach (m: Dash hitbox radius + averaged body radii) for judging an incoming Dash — the default archetype's 1.0 + 0.6. */
+export const AI_DEFAULT_DASH_REACH_M = 1.6;

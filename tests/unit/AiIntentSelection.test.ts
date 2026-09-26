@@ -32,6 +32,8 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    dodgeReady: true,
+    airRecoveryAvailable: false,
     ...overrides,
   };
 }
@@ -203,5 +205,66 @@ describe('selectIntent — edge recovery hysteresis (M7 Part 2)', () => {
     expect(decide(clear, opponentFarAway, DEFENSE_AI_PERSONALITY, { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true }).intent).not.toBe(
       AiIntent.RecoverFromEdge,
     );
+  });
+});
+
+// ============================================================
+// M7 Part 2b — edge danger + immediate threat at once.
+// Defense edgeCautionMultiplier 1.3: at z=11 raw edge risk ~0.46 -> ~0.59
+// (over the 0.55 entry threshold). Opponent approaches from the center side.
+// ============================================================
+
+describe('selectIntent — edge-safe evasion (M7 Part 2b)', () => {
+  const atEdge = { positionXZ: { x: 0, z: 11 } };
+  const liveCircularFromCenter = { positionXZ: { x: 0, z: 9.5 }, attackState: AttackState.CircularActive };
+  const noErrors = { ...DEFENSE_AI_PERSONALITY, errorRate: 0 };
+
+  it('dodges when Dodge is ready, and marks the decision as part of the edge episode', () => {
+    const decision = decide(atEdge, liveCircularFromCenter, noErrors);
+    expect(decision.intent).toBe(AiIntent.DodgeThreat);
+    expect(decision.edgeEpisode).toBe(true);
+  });
+
+  it('keeps DodgeThreat while already dodging instead of jumping out of its own i-frames', () => {
+    expect(decide({ ...atEdge, dodgeState: DodgeState.Dodging, dodgeReady: false }, liveCircularFromCenter, noErrors).intent).toBe(AiIntent.DodgeThreat);
+  });
+
+  it('jumps (JumpEvade) when Dodge is on cooldown but a jump is available', () => {
+    expect(decide({ ...atEdge, dodgeState: DodgeState.Cooldown, dodgeReady: false }, liveCircularFromCenter, noErrors).intent).toBe(AiIntent.JumpEvade);
+  });
+
+  it('treats Dodge as unavailable when Stamina is below its cost even though the state is Idle', () => {
+    // Regression (source-semantics audit): Idle alone used to count as "can dodge".
+    expect(decide({ ...atEdge, dodgeState: DodgeState.Idle, dodgeReady: false }, liveCircularFromCenter, noErrors).intent).toBe(AiIntent.JumpEvade);
+  });
+
+  it('falls back to the safest movement when neither Dodge nor a jump is available', () => {
+    const decision = decide({ ...atEdge, dodgeState: DodgeState.Cooldown, dodgeReady: false, driftState: DriftState.Hopping }, liveCircularFromCenter, noErrors);
+    expect(decision.intent).toBe(AiIntent.Retreat);
+    expect(decision.edgeEpisode).toBe(true);
+  });
+
+  it('answers a telegraph (charging Dash) by recovering from the edge, not by spending an early dodge', () => {
+    expect(decide(atEdge, { positionXZ: { x: 0, z: 6 }, attackState: AttackState.ChargingDash }, noErrors).intent).toBe(AiIntent.RecoverFromEdge);
+  });
+
+  it('counts an active Dash as immediate only once it can arrive within ~0.4 s', () => {
+    const farDash = { positionXZ: { x: 0, z: 0 }, velocityXZ: { x: 0, z: 15 }, attackState: AttackState.DashActive };
+    const nearDash = { positionXZ: { x: 0, z: 6 }, velocityXZ: { x: 0, z: 15 }, attackState: AttackState.DashActive };
+    expect(decide(atEdge, farDash, noErrors).intent).toBe(AiIntent.RecoverFromEdge);
+    expect(decide(atEdge, nearDash, noErrors).intent).toBe(AiIntent.DodgeThreat);
+  });
+
+  it('resumes edge recovery once the threat is gone, inside the hysteresis band (no evade/recover flip-flop)', () => {
+    // z=10.6: weighted edge risk ~0.45 — below the 0.55 entry threshold, above the 0.30 release.
+    const stillNearEdge = { positionXZ: { x: 0, z: 10.6 } };
+    const threatGone = { positionXZ: { x: 0, z: 7 }, attackState: AttackState.DashRecovery };
+    expect(decide(stillNearEdge, threatGone, noErrors, { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true }).intent).toBe(AiIntent.RecoverFromEdge);
+  });
+
+  it('marks edge-episode decisions critical at critical edge risk, so deliberate errors can never touch them', () => {
+    const almostOut = { positionXZ: { x: 0, z: RINGOUT_RADIUS_M - 0.3 } };
+    expect(decide(almostOut, liveCircularFromCenter, noErrors).critical).toBe(true);
+    expect(decide(atEdge, liveCircularFromCenter, noErrors).critical).toBe(false);
   });
 });

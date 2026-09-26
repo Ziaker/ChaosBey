@@ -19,11 +19,8 @@ import type { SeededRng } from '../../rng/SeededRng';
 import type { AiDifficultyProfile } from '../difficulty/AiDifficultyProfile';
 import type { AiPersonality } from '../personalities/AiPersonality';
 import { AiIntent } from './../decision/Intent';
-import type { IntentDecision } from '../decision/IntentSelection';
+import { CRITICAL_EDGE_RISK, type IntentDecision } from '../decision/IntentSelection';
 import type { RiskAssessment } from '../decision/RiskEvaluation';
-
-/** Above this edge risk, recovery is never downgraded by a deliberate error — GDD section 129's "do not give AI hidden teleport recovery" is about not cheating recovery, not about being allowed to skip it outright at real danger. */
-const CRITICAL_EDGE_RISK = 0.85;
 
 export interface ErrorAppliedResult {
   decision: IntentDecision;
@@ -39,7 +36,11 @@ export function maybeApplyIntentionalError(
   difficulty: AiDifficultyProfile,
   rng: SeededRng,
 ): ErrorAppliedResult {
-  if (decision.intent === AiIntent.RecoverFromEdge && risk.edgeRisk >= CRITICAL_EDGE_RISK) {
+  // Critical decisions (IntentDecision.critical: anything in a critical
+  // edge episode) are never touched — GDD section 129's "do not
+  // give AI hidden teleport recovery" is about not cheating recovery, not
+  // about being allowed to skip it at real danger.
+  if (decision.critical || (decision.intent === AiIntent.RecoverFromEdge && risk.edgeRisk >= CRITICAL_EDGE_RISK)) {
     return { decision, errorApplied: false };
   }
 
