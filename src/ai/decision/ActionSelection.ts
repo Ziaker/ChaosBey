@@ -134,6 +134,14 @@ export class ActionSelector {
       desiredHeld.add(Action.Dodge);
     }
 
+    // Air recovery (GDD section 21) is a one-shot trigger, not gated by
+    // dodgeSkill/dodgeState the way a grounded threat-dodge is — DodgeController
+    // itself only honors this specific press while airRecoveryAvailable is
+    // true, so there is nothing to roll or to check a cooldown against here.
+    if (intent === AiIntent.AirRecover) {
+      desiredHeld.add(Action.Dodge);
+    }
+
     // Sustain JumpDrift through the whole Idle->Hopping->Drifting sequence,
     // not just the tick that starts it — DriftController only transitions
     // Hopping->Drifting if JumpDrift (and steering) are STILL held the

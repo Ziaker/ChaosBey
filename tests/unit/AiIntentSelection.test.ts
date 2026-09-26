@@ -32,6 +32,7 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    airRecoveryAvailable: false,
     ...overrides,
   };
 }
@@ -101,5 +102,48 @@ describe('selectIntent', () => {
     // available — pressing the advantage is GDD section 64's explicit
     // Attack-archetype tendency.
     expect([AiIntent.Retreat, AiIntent.Wait]).not.toContain(attackIntent);
+  });
+
+  it('overrides everything with AirRecover when airborne with an active air-recovery window, even amid high edge/threat risk', () => {
+    const w = world(
+      { positionXZ: { x: 0, z: RINGOUT_RADIUS_M - 0.2 }, grounded: false, airRecoveryAvailable: true },
+      { positionXZ: { x: 0.5, z: RINGOUT_RADIUS_M - 0.3 }, attackState: AttackState.DashActive },
+    );
+    for (const personality of [ATTACK_AI_PERSONALITY, DEFENSE_AI_PERSONALITY, STAMINA_AI_PERSONALITY]) {
+      const risk = evaluateRisk(w, personality);
+      expect(selectIntent(w, personality, risk).intent).toBe(AiIntent.AirRecover);
+    }
+  });
+
+  it('does not select AirRecover when airborne but no recovery window is available', () => {
+    const w = world({ positionXZ: { x: 0, z: 0 }, grounded: false, airRecoveryAvailable: false }, { positionXZ: { x: 3, z: 0 } });
+    const risk = evaluateRisk(w, ATTACK_AI_PERSONALITY);
+    expect(selectIntent(w, ATTACK_AI_PERSONALITY, risk).intent).not.toBe(AiIntent.AirRecover);
+  });
+
+  it('Stamina personality with low Stamina prefers conserving (Retreat/Circle/Wait) over Attack personality with low Stamina, all else equal', () => {
+    const w = world({ positionXZ: { x: 0, z: 0 }, staminaFraction: 0.1 }, { positionXZ: { x: 3, z: 0 } });
+    const staminaRisk = evaluateRisk(w, STAMINA_AI_PERSONALITY);
+    const staminaIntent = selectIntent(w, STAMINA_AI_PERSONALITY, staminaRisk).intent;
+    const conservingIntents = [AiIntent.Retreat, AiIntent.Circle, AiIntent.Wait];
+    expect(conservingIntents).toContain(staminaIntent);
+  });
+
+  it('an aggressive personality keeps attacking when the opponent has an imminent (but not yet override-level) threat; a cautious one backs off', () => {
+    // opponentThreat here must stay below THREAT_OVERRIDE_THRESHOLD (0.35)
+    // so normal scoring (not the hard override) is what's being compared —
+    // a mid-range imminent hitbox, not a close, urgent one.
+    const w = world({ positionXZ: { x: 0, z: 0 } }, { positionXZ: { x: 5, z: 0 }, attackState: AttackState.ChargingDash });
+    const risk = evaluateRisk(w, ATTACK_AI_PERSONALITY);
+    expect(risk.opponentThreat).toBeLessThan(0.35);
+    expect(risk.opponentThreat).toBeGreaterThan(0);
+
+    const attackRisk = evaluateRisk(w, ATTACK_AI_PERSONALITY);
+    const defenseRisk = evaluateRisk(w, DEFENSE_AI_PERSONALITY);
+    const attackIntent = selectIntent(w, ATTACK_AI_PERSONALITY, attackRisk).intent;
+    const defenseIntent = selectIntent(w, DEFENSE_AI_PERSONALITY, defenseRisk).intent;
+    const attackIntents = [AiIntent.AttackCircular, AiIntent.AttackDash, AiIntent.PressAdvantage];
+    expect(attackIntents).toContain(attackIntent);
+    expect(attackIntents).not.toContain(defenseIntent);
   });
 });

@@ -6,13 +6,15 @@
 // scoring, so the "ideal" decision stays inspectable in AiDebugState even
 // when this substitutes a weaker one for humanization.
 //
-// Bounded by design: an error can only ever downgrade to a passive/neutral
-// intent (Wait or Circle) — it can never invent an unsafe action, ignore a
-// critical edge-recovery need, or otherwise behave like a hidden cheat/
-// glitch. A "mistake" here means hesitation/indecision, the kind GDD
-// section 63 describes ("do not let higher difficulty read the player's
-// future input perfectly" implies lower difficulty is allowed to be
-// imperfect, not broken).
+// Two distinct kinds of mistake, each individually bounded and safe:
+// - Intent downgrade: substitutes a passive/neutral intent (Wait or
+//   Circle) for the ideal one — a moment of indecision about WHAT to do.
+// - Extra reaction delay: keeps the ideal intent, but adds a bounded delay
+//   before AIController's next fresh decision — a moment of being slow to
+//   act, GDD section 63's "artificial reaction delay" made variable rather
+//   than a fixed personality constant.
+// Neither can ever invent an unsafe action, ignore a critical edge-recovery
+// or air-recovery need, or otherwise behave like a hidden cheat/glitch.
 // ============================================================
 
 import type { SeededRng } from '../../rng/SeededRng';
@@ -22,12 +24,16 @@ import { AiIntent } from './../decision/Intent';
 import type { IntentDecision } from '../decision/IntentSelection';
 import type { RiskAssessment } from '../decision/RiskEvaluation';
 
-/** Above this edge risk, recovery is never downgraded by a deliberate error — GDD section 129's "do not give AI hidden teleport recovery" is about not cheating recovery, not about being allowed to skip it outright at real danger. */
+/** Above this edge risk, recovery is never downgraded/delayed by a deliberate error — GDD section 129's "do not give AI hidden teleport recovery" is about not cheating recovery, not about being allowed to skip it outright at real danger. */
 const CRITICAL_EDGE_RISK = 0.85;
+/** Maximum extra delay (seconds) an "extra reaction delay" error can add before the next fresh decision — bounded so a mistake reads as human hesitation, not the AI freezing. */
+const MAX_EXTRA_DELAY_S = 0.4;
 
 export interface ErrorAppliedResult {
   decision: IntentDecision;
   errorApplied: boolean;
+  /** Seconds to add to the next decision's timer — 0 unless this specific error variant was rolled. */
+  extraDelaySeconds: number;
 }
 
 const SAFE_DOWNGRADE_INTENTS: readonly AiIntent[] = [AiIntent.Wait, AiIntent.Circle];
@@ -39,22 +45,38 @@ export function maybeApplyIntentionalError(
   difficulty: AiDifficultyProfile,
   rng: SeededRng,
 ): ErrorAppliedResult {
+  // Air recovery (GDD section 21) is never safe to delay or substitute away
+  // from — the window it answers is already short and physically real.
+  if (decision.intent === AiIntent.AirRecover) {
+    return { decision, errorApplied: false, extraDelaySeconds: 0 };
+  }
   if (decision.intent === AiIntent.RecoverFromEdge && risk.edgeRisk >= CRITICAL_EDGE_RISK) {
-    return { decision, errorApplied: false };
+    return { decision, errorApplied: false, extraDelaySeconds: 0 };
   }
 
   const effectiveErrorRate = Math.max(0, Math.min(1, personality.errorRate * difficulty.errorRateMultiplier));
   if (!rng.nextBool(effectiveErrorRate)) {
-    return { decision, errorApplied: false };
+    return { decision, errorApplied: false, extraDelaySeconds: 0 };
+  }
+
+  // Coin flip between the two error kinds — see file header.
+  if (rng.nextBool(0.5)) {
+    const extraDelaySeconds = rng.nextRange(0.05, MAX_EXTRA_DELAY_S);
+    return {
+      decision: { intent: decision.intent, reason: `deliberate error: slow to react (+${extraDelaySeconds.toFixed(2)}s) on "${decision.intent}" (${decision.reason})` },
+      errorApplied: true,
+      extraDelaySeconds,
+    };
   }
 
   const downgrade = SAFE_DOWNGRADE_INTENTS[rng.nextInt(0, SAFE_DOWNGRADE_INTENTS.length - 1)] ?? AiIntent.Wait;
   if (downgrade === decision.intent) {
-    return { decision, errorApplied: false };
+    return { decision, errorApplied: false, extraDelaySeconds: 0 };
   }
 
   return {
     decision: { intent: downgrade, reason: `deliberate error: hesitated instead of "${decision.intent}" (${decision.reason})` },
     errorApplied: true,
+    extraDelaySeconds: 0,
   };
 }

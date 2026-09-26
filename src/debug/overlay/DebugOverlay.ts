@@ -92,6 +92,7 @@ export interface DebugOverlayState {
     opponentThreatFraction: number;
     selfVulnerabilityFraction: number;
     opportunityFraction: number;
+    edgePressureOpportunityFraction: number;
     reactionTimerS: number;
     chosenActionSummary: string;
     observedOpponentAggressionFraction: number;
@@ -192,7 +193,7 @@ export class DebugOverlay {
           `active intent    ${state.aiDebug.activeIntent}${state.aiDebug.deliberateErrorApplied ? ' [DELIBERATE ERROR]' : ''} (${state.aiDebug.activeIntentReason})\n` +
           `dodge roll       ${state.aiDebug.activeIntent === 'DodgeThreat' ? (state.aiDebug.dodgeAttemptSucceeds ? 'succeeds' : 'fails') : '-'}\n` +
           `distance         ${state.aiDebug.distanceToOpponentM.toFixed(2)} m\n` +
-          `risk             edge ${state.aiDebug.edgeRiskFraction.toFixed(2)} opponentThreat ${state.aiDebug.opponentThreatFraction.toFixed(2)} selfVuln ${state.aiDebug.selfVulnerabilityFraction.toFixed(2)} opportunity ${state.aiDebug.opportunityFraction.toFixed(2)}\n` +
+          `risk             edge ${state.aiDebug.edgeRiskFraction.toFixed(2)} opponentThreat ${state.aiDebug.opponentThreatFraction.toFixed(2)} selfVuln ${state.aiDebug.selfVulnerabilityFraction.toFixed(2)} opportunity ${state.aiDebug.opportunityFraction.toFixed(2)} edgePressure ${state.aiDebug.edgePressureOpportunityFraction.toFixed(2)}\n` +
           `reaction timer   ${state.aiDebug.reactionTimerS.toFixed(2)} s\n` +
           `action           ${state.aiDebug.chosenActionSummary}\n` +
           `adaptation       aggression~${state.aiDebug.observedOpponentAggressionFraction.toFixed(2)} dodge~${state.aiDebug.observedOpponentDodgeRate.toFixed(2)} dashPref~${state.aiDebug.observedOpponentDashPreference.toFixed(2)}`

@@ -37,6 +37,8 @@ export interface CombatantRawState {
   stabilityFraction: number;
   isBroken: boolean;
   attackEnergyFraction: number;
+  /** DodgeController.isAirRecoveryAvailable() — whether pressing Dodge right now (while airborne) would trigger air recovery (GDD section 21). */
+  airRecoveryAvailable: boolean;
 }
 
 export interface PerceivedCombatant extends CombatantRawState {

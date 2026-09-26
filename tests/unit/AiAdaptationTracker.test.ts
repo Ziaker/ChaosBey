@@ -28,6 +28,7 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    airRecoveryAvailable: false,
     ...overrides,
   };
 }
@@ -77,8 +78,32 @@ describe('applyAdaptationNudge', () => {
     expect(nudged.caution).toBeGreaterThan(DEFENSE_AI_PERSONALITY.caution);
     expect(nudged.caution).toBeLessThanOrEqual(1);
     expect(nudged.caution - DEFENSE_AI_PERSONALITY.caution).toBeLessThanOrEqual(0.2);
-    // Only caution/aggression are ever nudged — every other tendency stays exactly the archetype's own.
+    // Only caution/aggression/preferredEngageRangeM are ever nudged — every
+    // other tendency stays exactly the archetype's own (this opponent was
+    // Dash-heavy, so engage range is expected to move too — see the
+    // dedicated test below).
     expect(nudged.patience).toBe(DEFENSE_AI_PERSONALITY.patience);
     expect(nudged.dodgeSkill).toBe(DEFENSE_AI_PERSONALITY.dodgeSkill);
+  });
+
+  it('nudges preferredEngageRangeM outward (never inward) against a Dash-heavy, frequently-dodging opponent, bounded', () => {
+    const tracker = new AdaptationTracker();
+    // DashActive drives both observedDashPreference up AND (per
+    // AdaptationTracker.update's isAttacking check) observedAggressionFraction
+    // up — using DodgeState.Dodging alongside it keeps observedDodgeRate
+    // rising too, exercising both signals the range nudge blends.
+    const dashAndDodgeHeavyOpponent = perceiveCombatant(rawState({ attackState: AttackState.DashActive, dodgeState: DodgeState.Dodging }));
+    for (let i = 0; i < 30; i++) tracker.update(dashAndDodgeHeavyOpponent, 0.2);
+    const nudged = applyAdaptationNudge(DEFENSE_AI_PERSONALITY, tracker.getSnapshot(), 1);
+    expect(nudged.preferredEngageRangeM).toBeGreaterThan(DEFENSE_AI_PERSONALITY.preferredEngageRangeM);
+    expect(nudged.preferredEngageRangeM - DEFENSE_AI_PERSONALITY.preferredEngageRangeM).toBeLessThanOrEqual(1.5);
+  });
+
+  it('never nudges preferredEngageRangeM inward, even against a passive, non-dodging opponent', () => {
+    const tracker = new AdaptationTracker();
+    const passiveOpponent = perceiveCombatant(rawState({ attackState: AttackState.Neutral, dodgeState: DodgeState.Idle }));
+    for (let i = 0; i < 30; i++) tracker.update(passiveOpponent, 0.2);
+    const nudged = applyAdaptationNudge(DEFENSE_AI_PERSONALITY, tracker.getSnapshot(), 1);
+    expect(nudged.preferredEngageRangeM).toBeGreaterThanOrEqual(DEFENSE_AI_PERSONALITY.preferredEngageRangeM);
   });
 });

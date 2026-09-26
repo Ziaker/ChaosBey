@@ -32,6 +32,7 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    airRecoveryAvailable: false,
     ...overrides,
   };
 }

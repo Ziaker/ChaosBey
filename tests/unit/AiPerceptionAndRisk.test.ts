@@ -30,6 +30,7 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    airRecoveryAvailable: false,
     ...overrides,
   };
 }
@@ -129,5 +130,34 @@ describe('evaluateRisk', () => {
     expect(evaluateRisk(worldBroken, DEFAULT_AI_PERSONALITY).selfVulnerability).toBeGreaterThan(
       evaluateRisk(worldHealthy, DEFAULT_AI_PERSONALITY).selfVulnerability,
     );
+  });
+
+  it('reports higher opportunity when the opponent is caught in attack recovery (whiff punish window)', () => {
+    const own = perceiveCombatant(rawState());
+    const neutralOpponent = perceiveCombatant(rawState({ positionXZ: { x: 3, z: 0 }, attackState: AttackState.Neutral }));
+    const recoveringOpponent = perceiveCombatant(rawState({ positionXZ: { x: 3, z: 0 }, attackState: AttackState.DashRecovery }));
+    const worldNeutral = buildWorldState(0, own, neutralOpponent, { state: ClashState.Idle, cooldownRemainingS: 0 });
+    const worldRecovering = buildWorldState(0, own, recoveringOpponent, { state: ClashState.Idle, cooldownRemainingS: 0 });
+    expect(evaluateRisk(worldRecovering, DEFAULT_AI_PERSONALITY).opportunity).toBeGreaterThan(
+      evaluateRisk(worldNeutral, DEFAULT_AI_PERSONALITY).opportunity,
+    );
+  });
+
+  it('reports higher edgePressureOpportunity when a reachable opponent is near the boundary than when they are safe at center', () => {
+    const own = perceiveCombatant(rawState({ positionXZ: { x: 0, z: 6 } }));
+    const opponentAtCenter = perceiveCombatant(rawState({ positionXZ: { x: 0, z: 0 } }));
+    const opponentNearEdge = perceiveCombatant(rawState({ positionXZ: { x: 0, z: RINGOUT_RADIUS_M - 0.5 } }));
+    const worldCenter = buildWorldState(0, own, opponentAtCenter, { state: ClashState.Idle, cooldownRemainingS: 0 });
+    const worldEdge = buildWorldState(0, own, opponentNearEdge, { state: ClashState.Idle, cooldownRemainingS: 0 });
+    expect(evaluateRisk(worldEdge, DEFAULT_AI_PERSONALITY).edgePressureOpportunity).toBeGreaterThan(
+      evaluateRisk(worldCenter, DEFAULT_AI_PERSONALITY).edgePressureOpportunity,
+    );
+  });
+
+  it('reports zero edgePressureOpportunity for a boundary-exposed opponent far out of reach', () => {
+    const own = perceiveCombatant(rawState({ positionXZ: { x: 0, z: -RINGOUT_RADIUS_M + 1 } }));
+    const opponentNearEdge = perceiveCombatant(rawState({ positionXZ: { x: 0, z: RINGOUT_RADIUS_M - 0.5 } }));
+    const world = buildWorldState(0, own, opponentNearEdge, { state: ClashState.Idle, cooldownRemainingS: 0 });
+    expect(evaluateRisk(world, DEFAULT_AI_PERSONALITY).edgePressureOpportunity).toBe(0);
   });
 });

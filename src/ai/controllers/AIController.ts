@@ -73,10 +73,11 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     stabilityFraction: bey.stability.resource.fraction,
     isBroken: bey.stability.isBroken,
     attackEnergyFraction: bey.attackEnergy.resource.fraction,
+    airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable(),
   };
 }
 
-const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0 };
+const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, edgePressureOpportunity: 0 };
 
 export class AIController implements CombatController {
   private readonly actionSelector = new ActionSelector();
@@ -165,9 +166,14 @@ export class AIController implements CombatController {
     const ideal = selectIntent(world, adjustedPersonality, risk);
     this.idealDecision = ideal;
 
-    const { decision, errorApplied } = maybeApplyIntentionalError(ideal, risk, adjustedPersonality, this.difficulty, this.rng);
+    const { decision, errorApplied, extraDelaySeconds } = maybeApplyIntentionalError(ideal, risk, adjustedPersonality, this.difficulty, this.rng);
     this.activeDecision = decision;
     this.deliberateErrorApplied = errorApplied;
+    // "Slow to react" error variant: pushes the NEXT fresh decision later
+    // by reducing how far decisionTimerS already is into its cycle,
+    // without touching effectiveReactionDelayS itself (a one-off lapse,
+    // not a permanent change to this personality's reaction speed).
+    if (extraDelaySeconds > 0) this.decisionTimerS -= extraDelaySeconds;
 
     // Rolled exactly once for this fresh decision (see the field's own doc
     // comment) — a no-op (stays false) for every other intent.
@@ -236,6 +242,7 @@ export class AIController implements CombatController {
       opponentThreatFraction: this.lastRisk.opponentThreat,
       selfVulnerabilityFraction: this.lastRisk.selfVulnerability,
       opportunityFraction: this.lastRisk.opportunity,
+      edgePressureOpportunityFraction: this.lastRisk.edgePressureOpportunity,
       reactionTimerS: this.decisionTimerS,
       chosenActionSummary: this.lastActionSummary,
       observedOpponentAggressionFraction: this.adaptation.getSnapshot().observedAggressionFraction,
