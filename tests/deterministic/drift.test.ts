@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Action } from '../../src/input/actions/Action';
 import { LATERAL_GRIP_PER_S } from '../../src/bey/movement/MovementTuning';
 import { ScriptedController } from '../../src/automation/scripted-scenarios/ScriptedController';
-import { DriftState } from '../../src/drift/DriftController';
+import { DriftController, DriftState } from '../../src/drift/DriftController';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { TestBeyHarness } from './physicsHarness';
 
@@ -92,5 +92,53 @@ describe('hop -> hold -> drift -> recover', () => {
       }
     }
     expect(leftDrifting).toBe(true);
+  });
+});
+
+describe('drift grip recovery targets the Bey\'s own archetype grip', () => {
+  // Minimal stand-in for the two RAPIER.RigidBody methods DriftController
+  // touches (the hop impulse) — grip recovery itself never reads the body.
+  function stubBody() {
+    let vel = { x: 0, y: 0, z: 0 };
+    return {
+      linvel: () => vel,
+      setLinvel: (v: { x: number; y: number; z: number }) => {
+        vel = v;
+      },
+    } as unknown as Parameters<DriftController['tick']>[0];
+  }
+  const actions = (held: Action[], pressed: Action[] = []) => ({
+    held: new Set(held),
+    pressedThisFrame: new Set(pressed),
+    attackHoldDurationSeconds: 0,
+    jumpDriftHoldDurationSeconds: 0,
+  });
+
+  // Regression: Recovering used to ease toward the global LATERAL_GRIP_PER_S
+  // even after Milestone 6 made grip per-archetype, so a Defense-type
+  // (higher grip) or Attack-type (lower grip) Bey ended recovery at the
+  // wrong value and then snapped to its real grip on the next tick.
+  it.each([
+    ['higher-grip archetype', LATERAL_GRIP_PER_S * 1.25],
+    ['lower-grip archetype', LATERAL_GRIP_PER_S * 0.9],
+  ])('%s: the last Recovering tick is closer to that Bey\'s own grip than to the global default', (_label, archetypeGrip) => {
+    const drift = new DriftController(archetypeGrip);
+    const body = stubBody();
+    const DT = FIXED_DELTA_SECONDS;
+    const driftHeld = [Action.JumpDrift, Action.SteerRight];
+
+    drift.tick(body, actions(driftHeld, [Action.JumpDrift]), true, DT); // hop
+    for (let i = 0; i < 20; i++) drift.tick(body, actions(driftHeld), false, DT); // airborne
+    expect(drift.tick(body, actions(driftHeld), true, DT).driftState).toBe(DriftState.Drifting); // land into drift
+
+    let lastRecoveringGrip: number | null = null;
+    for (let i = 0; i < 120; i++) {
+      const result = drift.tick(body, actions([]), true, DT);
+      if (result.driftState === DriftState.Recovering) lastRecoveringGrip = result.lateralGripOverridePerS;
+    }
+
+    expect(lastRecoveringGrip).not.toBeNull();
+    expect(drift.getState()).toBe(DriftState.Idle);
+    expect(Math.abs(lastRecoveringGrip! - archetypeGrip)).toBeLessThan(Math.abs(lastRecoveringGrip! - LATERAL_GRIP_PER_S));
   });
 });

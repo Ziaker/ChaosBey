@@ -84,6 +84,17 @@ async function bootstrap(): Promise<void> {
     commitHash: __APP_COMMIT_HASH__,
   });
 
+  // GDD section 117: errors must reach telemetry, not just the console.
+  const recordError = (error: unknown): void => {
+    telemetry.record({
+      kind: TelemetryEventKind.Error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? (error.stack ?? null) : null,
+    });
+  };
+  window.addEventListener('error', (event) => recordError(event.error ?? event.message));
+  window.addEventListener('unhandledrejection', (event) => recordError(event.reason));
+
   let lastPhysicsStepTimeMs = 0;
   let lastFps = 0;
   let lastFirstVisual = { spin: 0, wobble: 0 };
@@ -457,6 +468,11 @@ async function bootstrap(): Promise<void> {
           ...lastOverlayFields,
         });
       }
+    },
+    onFatalError: (error, tickIndex) => {
+      recordError(error);
+      console.error(`ChaosBey simulation halted at tick ${tickIndex}:`, error);
+      debugOverlay.showFatalError(`SIMULATION HALTED at tick ${tickIndex}: ${error instanceof Error ? error.message : String(error)}`);
     },
   });
 

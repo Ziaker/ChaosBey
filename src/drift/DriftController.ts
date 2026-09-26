@@ -63,6 +63,15 @@ export class DriftController {
   private wasGrounded = true;
   private lastAirborneVerticalVelocityMps = 0;
 
+  /**
+   * normalLateralGripPerS: the grip Recovering eases back toward — must be
+   * this Bey's own BeyHandlingProfile.lateralGripPerS (Milestone 6: grip
+   * differs per archetype), not the global MovementTuning default, or the
+   * recovery ends at the wrong value and grip snaps the moment the
+   * override is released.
+   */
+  constructor(private readonly normalLateralGripPerS: number = LATERAL_GRIP_PER_S) {}
+
   /** Current state without advancing anything — for read-only consumers (e.g. a frozen post-round snapshot) that must not progress the state machine. */
   getState(): DriftState {
     return this.state;
@@ -171,7 +180,7 @@ export class DriftController {
     }
     if (this.state === DriftState.Recovering) {
       const t = Math.min(1, this.recoveryTimerS / DRIFT_GRIP_RECOVERY_DURATION_S);
-      return DRIFT_LATERAL_GRIP_PER_S + (LATERAL_GRIP_PER_S - DRIFT_LATERAL_GRIP_PER_S) * t;
+      return DRIFT_LATERAL_GRIP_PER_S + (this.normalLateralGripPerS - DRIFT_LATERAL_GRIP_PER_S) * t;
     }
     return null;
   }

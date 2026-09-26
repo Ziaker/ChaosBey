@@ -12,14 +12,13 @@
 // inside a hitstop window still reaches gameplay exactly once, on the
 // first unfrozen sample afterward — and the hold-duration clock stops
 // advancing entirely, so charge time can't be gained while gameplay isn't
-// actually running. UI actions (Pause, DebugToggle) are exempt from all of
-// this: they flush immediately every sample regardless of freeze, since
-// hitstop is a gameplay-simulation freeze, not an input-readability one.
+// actually running. UI actions (Pause, DebugToggle, SettingsToggle — see
+// UI_ACTIONS) are exempt from all of this: they flush immediately every
+// sample regardless of freeze, since hitstop is a gameplay-simulation
+// freeze, not an input-readability one.
 // ============================================================
 
-import { Action } from '../actions/Action';
-
-const UI_ACTIONS: ReadonlySet<Action> = new Set([Action.Pause, Action.DebugToggle]);
+import { Action, UI_ACTIONS } from '../actions/Action';
 
 export interface ActionSample {
   pressedThisFrame: ReadonlySet<Action>;

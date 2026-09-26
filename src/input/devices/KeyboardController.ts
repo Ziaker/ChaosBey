@@ -11,8 +11,9 @@
 // unit-testable without a real `window`.
 // ============================================================
 
-import { Action, type CombatController, type ControllerActions, type ControllerContext } from '../actions/Action';
+import { Action, UI_ACTIONS, type CombatController, type ControllerActions, type ControllerContext } from '../actions/Action';
 import { ActionSampleBuffer } from './ActionSampleBuffer';
+import { isEditableEventTarget } from './EditableTarget';
 
 const KEY_TO_ACTION: Readonly<Record<string, Action>> = {
   ArrowLeft: Action.SteerLeft,
@@ -34,6 +35,11 @@ export class KeyboardController implements CombatController {
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     const action = KEY_TO_ACTION[event.code];
     if (!action) return;
+    // Typing into a settings field: arrows/Z/X/C belong to the field (and
+    // must not drive the Bey). UI keys (F3/F4/Esc) still work from there.
+    // keyup is deliberately NOT filtered, so a key already held before
+    // focus moved into a field still releases normally.
+    if (!UI_ACTIONS.has(action) && isEditableEventTarget(event.target)) return;
     event.preventDefault();
     if (!this.currentlyDown.has(action)) {
       this.buffer.registerPress(action);
