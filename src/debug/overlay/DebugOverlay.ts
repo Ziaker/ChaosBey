@@ -163,6 +163,18 @@ export class DebugOverlay {
       `impact multiplier ${state.clashImpactMultiplier.toFixed(2)}`;
   }
 
+  /**
+   * A fatal error halted the simulation (GDD section 117: errors must be
+   * visible in the debug overlay, not only the console). Forces the
+   * overlay visible — the loop that would refresh it has stopped — and
+   * keeps the last rendered state below the message for context.
+   */
+  showFatalError(message: string): void {
+    this.visible = true;
+    this.applyVisibility();
+    this.root.textContent = `!! ${message}\n!! (stack in the browser console and telemetry)\n\n${this.root.textContent ?? ''}`;
+  }
+
   private applyVisibility(): void {
     this.root.style.display = this.visible ? 'block' : 'none';
   }
