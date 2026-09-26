@@ -21,7 +21,18 @@ export interface ClashMashInputEdge {
 }
 
 export interface ClashPresentationEvents {
-  /** Idle -> Active this update — fire ClashStart telemetry and enter GameState.Clash. */
+  /**
+   * Entered Active this update, coming from any non-Active state — fire
+   * ClashStart telemetry and enter GameState.Clash. Deliberately NOT
+   * narrowed to "from Idle": a single tickMatch() tick can internally run
+   * Cooldown -> Idle (the countdown finishing) followed immediately by
+   * Idle -> Active (a fresh compatible pair connecting later that same
+   * tick) — this tracker only ever observes the tick's FINAL state, so
+   * that whole sequence reads as "previousState was Cooldown, currentState
+   * is Active." Requiring the previous state to be exactly Idle would
+   * silently miss this real Cooldown -> Active edge and drop ClashStart/
+   * GameState.Clash/the camera reset for that second Clash.
+   */
   clashStarted: boolean;
   /** Set on the exact tick a Clash resolves (Active -> Cooldown) — fire ClashResult telemetry with this data. Non-null implies clashEnded is also true. */
   clashResult: ClashResult | null;
@@ -45,7 +56,7 @@ export class ClashPresentationTracker {
    */
   update(currentState: ClashState, clashResolvedThisTick: ClashResult | null, currentFirstMashEventCount: number, currentSecondMashEventCount: number): ClashPresentationEvents {
     const events: ClashPresentationEvents = {
-      clashStarted: this.previousState === ClashState.Idle && currentState === ClashState.Active,
+      clashStarted: this.previousState !== ClashState.Active && currentState === ClashState.Active,
       clashResult: clashResolvedThisTick,
       clashEnded: clashResolvedThisTick !== null,
       mashInputEvents: [],

@@ -395,3 +395,56 @@ describe('configurable Clash impact multiplier (MatchConfig, GDD section 152)', 
     expect(high.secondPower).toBeCloseTo(low.secondPower, 10);
   });
 });
+
+describe('Cooldown -> Idle -> Active within the same tick', () => {
+  it('a fresh compatible pair connecting exactly on the tick the cooldown countdown finishes still starts a new Clash immediately, not one tick later', async () => {
+    const harness = await createTriggerReadyHarness();
+    triggerClash(harness, tapController(), tapController());
+
+    // Resolve the first Clash.
+    for (let i = 0; i < DURATION_TICKS && harness.clash.controller.getState() === ClashState.Active; i++) {
+      harness.tick(NO_ACTIONS, NO_ACTIONS);
+    }
+    expect(harness.clash.controller.getState()).toBe(ClashState.Cooldown);
+
+    // CLASH_COOLDOWN_S / FIXED_DELTA_SECONDS divides evenly (verified by
+    // direct repeated-subtraction, the same way ClashController itself
+    // decrements it — no floating-point drift here, unlike the +1 tick
+    // headroom this file's other tests need for less clean durations).
+    // Drain it down to leave exactly 3 ticks' worth remaining.
+    const COOLDOWN_TICKS_EXACT = Math.round(CLASH_COOLDOWN_S / FIXED_DELTA_SECONDS);
+    for (let i = 0; i < COOLDOWN_TICKS_EXACT - 3; i++) {
+      harness.tick(NO_ACTIONS, NO_ACTIONS);
+    }
+    expect(harness.clash.controller.getState()).toBe(ClashState.Cooldown);
+
+    // Clean, close range for the second pair — the first Clash's own
+    // resolution physics may have moved them.
+    harness.first.body.setTranslation(CLOSE_FIRST_SPAWN, true);
+    harness.second.body.setTranslation(CLOSE_SECOND_SPAWN, true);
+    harness.first.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    harness.second.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+
+    // tapController() releases (committing to CircularActive, hitbox live)
+    // on its 3rd sampled tick — pressing now lands that release exactly on
+    // the 3rd tick from here, i.e. the same tick the cooldown countdown
+    // reaches 0. tickMatch() runs tickIdleOrCooldown() (Cooldown -> Idle)
+    // strictly before hit detection/processTickHits() every tick, so that
+    // transition and this tick's fresh compatible connect (Idle -> Active)
+    // both happen inside the exact same tickMatch() call.
+    const secondFirstAttacker = tapController();
+    const secondSecondAttacker = tapController();
+    let decisiveResult;
+    for (let i = 0; i < 3; i++) {
+      decisiveResult = harness.tick(
+        secondFirstAttacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+        secondSecondAttacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+      );
+      if (i < 2) expect(harness.clash.controller.getState()).toBe(ClashState.Cooldown);
+    }
+
+    expect(harness.clash.controller.getState()).toBe(ClashState.Active);
+    // Both hits withheld into the fresh Clash, not resolved as an ordinary cooldown-alternative double-hit.
+    expect(decisiveResult!.combatEvents.some((e) => e.kind === 'knockback' || e.kind === 'stabilityDamage')).toBe(false);
+  });
+});

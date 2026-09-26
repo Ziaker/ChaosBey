@@ -27,6 +27,28 @@ describe('ClashPresentationTracker', () => {
     expect(tracker.update(ClashState.Active, null, 2, 0).clashStarted).toBe(false);
   });
 
+  it('also fires clashStarted on a Cooldown -> Active edge — the tick where Cooldown internally finishes (Cooldown -> Idle) and a fresh compatible pair immediately starts a new Clash (Idle -> Active) later that same tick, which this tracker only ever observes as its final state', () => {
+    const tracker = new ClashPresentationTracker();
+    tracker.update(ClashState.Idle, null, 0, 0);
+    tracker.update(ClashState.Active, null, 3, 1);
+    tracker.update(ClashState.Cooldown, SAMPLE_RESULT, 3, 1); // the first Clash resolves.
+
+    // Many ordinary Cooldown ticks — no start here.
+    for (let i = 0; i < 50; i++) {
+      expect(tracker.update(ClashState.Cooldown, null, 3, 1).clashStarted).toBe(false);
+    }
+
+    // The tick the countdown finishes AND a new compatible pair connects
+    // later that same tick: this tracker never sees the intermediate Idle,
+    // only Cooldown (last update) -> Active (this one).
+    const secondClashStart = tracker.update(ClashState.Active, null, 0, 0);
+    expect(secondClashStart.clashStarted).toBe(true);
+
+    // Exactly one start per Clash — later Active ticks don't repeat it.
+    expect(tracker.update(ClashState.Active, null, 1, 0).clashStarted).toBe(false);
+    expect(tracker.update(ClashState.Active, null, 2, 0).clashStarted).toBe(false);
+  });
+
   it('clashResult and clashEnded fire on the SAME update as the resolution — while the state is already Cooldown, not Idle', () => {
     const tracker = new ClashPresentationTracker();
     tracker.update(ClashState.Idle, null, 0, 0);
