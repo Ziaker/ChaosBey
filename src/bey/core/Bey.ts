@@ -57,7 +57,7 @@ export function createBey(
     collider,
     movement: new MovementController(definition.handling),
     spin: new SpinController(),
-    drift: new DriftController(),
+    drift: new DriftController(definition.handling.lateralGripPerS),
     dodge: new DodgeController(),
     stamina: new StaminaSystem(stats.stamina),
     stability: new StabilitySystem(),
