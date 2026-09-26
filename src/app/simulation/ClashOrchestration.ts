@@ -8,27 +8,24 @@
 // combat system.
 //
 // Compatible-attack detection (GDD: two attacks connecting within 150ms
-// can Clash): implemented as both sides' attacks connecting in the SAME
-// fixed tick (delta = 0, always inside the window — see
-// isWithinClashWindow). This is the only case reachable in current
-// gameplay: the simulation is fixed-tick and the current opponent
-// stand-in (IdleController, Milestone 7's real AI not built yet) never
-// attacks with timing that could stagger a hit across ticks. It is also
-// the exact scenario HitDetection.ts's own module comment already calls
-// out as "possible right now... expected until Clash exists to specially
-// resolve simultaneous attacks." isWithinClashWindow() stays the single
-// source of truth for "compatible" (called with the real delta, 0 here),
-// so widening this later to genuinely cross-tick pairs — once real attack
-// timing varies enough for that to matter — only means feeding it a
-// nonzero delta, not a formula change.
+// can Clash): a connecting hit is resolved immediately, at zero added
+// latency, UNLESS the defender's own attack is currently "engaged"
+// (Buffering/ChargingDash/CircularActive/DashActive — i.e. genuinely
+// capable of landing its own hit soon) at that exact moment. Only then is
+// the hit briefly held (`pendingHit`) awaiting a possible compatible
+// connect from that other side, for at most CLASH_WINDOW_S — the ONLY
+// case this can ever add latency to. isWithinClashWindow() (fed the real
+// elapsed-seconds delta between the two hits' connect times) stays the
+// single source of truth for "compatible"; a solo hit (opponent not
+// engaged at all) is completely untouched, exactly as before Milestone 5
+// existed.
 //
-// A tick where only one side connects is completely untouched: it
-// resolves with its own normal knockback/Stability damage exactly as
-// before Milestone 5 existed, at zero added latency. Only a same-tick
-// double connect is intercepted: Idle -> starts a Clash and withholds
-// both hits from normal resolution entirely; Cooldown -> both hits still
-// resolve normally, just through the "slower suffers more" cooldown
-// alternative multiplier instead of a fresh Clash (GDD requirement).
+// A same-tick double connect is just the delta=0 case of the same
+// mechanism — no special-casing needed. Idle -> starts a Clash and
+// withholds both hits from normal resolution entirely; Cooldown -> both
+// hits still resolve normally, just through the "slower suffers more"
+// cooldown alternative multiplier instead of a fresh Clash (GDD
+// requirement).
 //
 // While the ClashController is Active, tickMatch() freezes the entire
 // normal simulation for the ~4s presentation (no physics step, no
@@ -43,6 +40,7 @@
 
 import type { Bey } from '../../bey/core/Bey';
 import { Action, type ControllerActions } from '../../input/actions/Action';
+import { AttackState } from '../../combat/attacks/AttackController';
 import { applyKnockback, computeKnockback, computeStabilityDamage } from '../../combat/knockback/Knockback';
 import { KNOCKBACK_IMPULSE_PER_FORCE_UNIT, KNOCKBACK_UPWARD_LAUNCH_FRACTION } from '../../combat/knockback/KnockbackTuning';
 import type { HitEvent } from '../../combat/hit-detection/HitDetection';
@@ -52,8 +50,9 @@ import { normalize, scale, subtract, type Vec2 } from '../../physics/Vec2';
 import { ClashController, ClashOutcome, ClashState, type ClashCombatantInputTick, type ClashResult } from '../../combat/clash/ClashController';
 import { isWithinClashWindow } from '../../combat/clash/ClashWindow';
 import { FixedIntervalAiMashSource } from '../../combat/clash/ClashMash';
-import { CLASH_AI_MASH_INTERVAL_TICKS, CLASH_IMPACT_MULTIPLIER, CLASH_TIE_REPULSION_BASE_FORCE } from '../../combat/clash/ClashTuning';
+import { CLASH_AI_MASH_INTERVAL_TICKS, CLASH_TIE_REPULSION_BASE_FORCE } from '../../combat/clash/ClashTuning';
 import { computeCooldownAlternativeMultiplier } from '../../combat/clash/ClashCooldownResolution';
+import type { MatchConfig } from '../../config/match/MatchConfig';
 
 /** Only Z/X/C (Attack/JumpDrift/Dodge) count as Clash mash input — see ClashMash.ts's simultaneous-presses-count-as-one rule, which this Set naturally preserves. */
 const CLASH_MASH_ACTIONS: ReadonlySet<Action> = new Set([Action.Attack, Action.JumpDrift, Action.Dodge]);
@@ -66,6 +65,14 @@ export function buildMashActionSet(actions: ControllerActions): ReadonlySet<stri
   return pressed;
 }
 
+/** Attack states with a live or imminent hitbox — a defender in one of these could still land their own compatible hit soon, so a connecting hit against them is worth briefly holding for a possible Clash pair. Deliberately excludes Recovery states: by then that attack's hitbox is already gone, so it cannot itself become the "other side" of a fresh compatible pair. */
+const ENGAGED_ATTACK_STATES: ReadonlySet<AttackState> = new Set([
+  AttackState.Buffering,
+  AttackState.ChargingDash,
+  AttackState.CircularActive,
+  AttackState.DashActive,
+]);
+
 /** Everything a connecting hit's normal knockback/Stability resolution needs, captured at the moment it connected this tick. */
 export interface HitSnapshotInput {
   hit: HitEvent;
@@ -77,6 +84,8 @@ export interface HitSnapshotInput {
   defenderSpeedMps: number;
   defenderStabilityFraction: number;
   defenderStaminaPenaltyFraction: number;
+  /** The defender's own AttackState at the moment this hit connected — whether they, too, currently have a live/imminent hitbox that could make this pair "compatible" within the window. */
+  defenderAttackState: AttackState;
 }
 
 export interface ResolvedHitToApply extends HitSnapshotInput {
@@ -105,57 +114,108 @@ export interface ClashResolutionOutcome {
   isQualifyingKoHit?: boolean;
 }
 
+function order(a: HitSnapshotInput, b: HitSnapshotInput): ClashPair {
+  return a.hit.attackerIsFirst ? { firstAttackerHit: a, secondAttackerHit: b } : { firstAttackerHit: b, secondAttackerHit: a };
+}
+
 export class ClashOrchestration {
   readonly controller = new ClashController();
   private readonly aiMashSource = new FixedIntervalAiMashSource(CLASH_AI_MASH_INTERVAL_TICKS);
   private activeClashLocalTickIndex = 0;
   private activeClashPair: ClashPair | null = null;
+  private matchElapsedS = 0;
+  private pendingHit: { hit: HitSnapshotInput; atS: number } | null = null;
+
+  constructor(private readonly matchConfig: MatchConfig) {}
 
   /**
-   * Call once per tick with this tick's post-i-frame connecting hits,
-   * only while the Clash state is Idle or Cooldown — tickMatch() skips
+   * Call once per normal (non-Active) tickMatch() tick with this tick's
+   * post-i-frame connecting hits (0, 1, or 2 of them) — tickMatch() skips
    * this (and the whole normal hit-resolution path) entirely while
-   * Active; see tickActive() below for that branch.
+   * Active; see tickActive() below for that branch. Also advances the
+   * match clock the compatible-window check is measured against.
    */
-  processTickHits(hits: HitSnapshotInput[]): { toResolveNormally: ResolvedHitToApply[] } {
+  processTickHits(fixedDeltaSeconds: number, hits: HitSnapshotInput[]): { toResolveNormally: ResolvedHitToApply[] } {
+    this.matchElapsedS += fixedDeltaSeconds;
+    const results: ResolvedHitToApply[] = [];
+
+    // Catches (Circular-catches-Dash) never participate in Clash — always immediate, unchanged.
     const catches = hits.filter((h) => h.hit.caughtOpponentDashing);
-    const normalHits = hits.filter((h) => !h.hit.caughtOpponentDashing);
-    const passthrough: ResolvedHitToApply[] = catches.map((h) => ({ ...h, forceMultiplier: 1 }));
+    results.push(...catches.map((h) => ({ ...h, forceMultiplier: 1 })));
+    const newHits = hits.filter((h) => !h.hit.caughtOpponentDashing);
 
-    const firstAttackerHit = normalHits.find((h) => h.hit.attackerIsFirst) ?? null;
-    const secondAttackerHit = normalHits.find((h) => !h.hit.attackerIsFirst) ?? null;
-
-    // Same-tick delta is 0 — always within the window; isWithinClashWindow
-    // stays the single source of truth for "compatible" (see module
-    // comment above for why cross-tick detection isn't implemented yet).
-    if (!firstAttackerHit || !secondAttackerHit || !isWithinClashWindow(0)) {
-      return { toResolveNormally: [...passthrough, ...normalHits.map((h) => ({ ...h, forceMultiplier: 1 }))] };
+    // A stale pending hit (no compatible partner arrived within the window) resolves belated, exactly as if Clash didn't exist. Same isWithinClashWindow() used for the actual match below — its negation is exactly "the window has closed".
+    if (this.pendingHit && !isWithinClashWindow(this.matchElapsedS - this.pendingHit.atS)) {
+      results.push({ ...this.pendingHit.hit, forceMultiplier: 1 });
+      this.pendingHit = null;
     }
 
+    const firstHit = newHits.find((h) => h.hit.attackerIsFirst) ?? null;
+    const secondHit = newHits.find((h) => !h.hit.attackerIsFirst) ?? null;
+
+    if (firstHit && secondHit) {
+      // Same-tick double connect — delta 0, always compatible. Any unrelated pending hit is a different exchange by now; flush it normally first.
+      if (this.pendingHit) {
+        results.push({ ...this.pendingHit.hit, forceMultiplier: 1 });
+        this.pendingHit = null;
+      }
+      results.push(...this.resolvePair(order(firstHit, secondHit)));
+      return { toResolveNormally: results };
+    }
+
+    const newHit = firstHit ?? secondHit;
+    if (!newHit) return { toResolveNormally: results };
+
+    if (this.pendingHit && this.pendingHit.hit.hit.attackerIsFirst !== newHit.hit.attackerIsFirst && isWithinClashWindow(this.matchElapsedS - this.pendingHit.atS)) {
+      // Cross-tick compatible pair found.
+      const pair = order(this.pendingHit.hit, newHit);
+      this.pendingHit = null;
+      results.push(...this.resolvePair(pair));
+      return { toResolveNormally: results };
+    }
+
+    // No match — this new hit is fresh. Any pending hit left over (same side, or a window mismatch) belongs to a different exchange; flush it normally.
+    if (this.pendingHit) {
+      results.push({ ...this.pendingHit.hit, forceMultiplier: 1 });
+      this.pendingHit = null;
+    }
+
+    if (ENGAGED_ATTACK_STATES.has(newHit.defenderAttackState)) {
+      // The defender could still land their own compatible hit shortly — hold this one instead of resolving immediately.
+      this.pendingHit = { hit: newHit, atS: this.matchElapsedS };
+    } else {
+      results.push({ ...newHit, forceMultiplier: 1 });
+    }
+
+    return { toResolveNormally: results };
+  }
+
+  /** Routes a matched compatible pair into a fresh Clash (Idle) or the cooldown alternative (Cooldown) — never both hits resolving normally at once. */
+  private resolvePair(pair: ClashPair): ResolvedHitToApply[] {
     if (this.controller.isOnCooldown()) {
-      return {
-        toResolveNormally: [
-          ...passthrough,
-          { ...firstAttackerHit, forceMultiplier: computeCooldownAlternativeMultiplier(firstAttackerHit.defenderSpeedMps, firstAttackerHit.attackerSpeedMps) },
-          { ...secondAttackerHit, forceMultiplier: computeCooldownAlternativeMultiplier(secondAttackerHit.defenderSpeedMps, secondAttackerHit.attackerSpeedMps) },
-        ],
-      };
+      return [
+        { ...pair.firstAttackerHit, forceMultiplier: computeCooldownAlternativeMultiplier(pair.firstAttackerHit.defenderSpeedMps, pair.firstAttackerHit.attackerSpeedMps) },
+        { ...pair.secondAttackerHit, forceMultiplier: computeCooldownAlternativeMultiplier(pair.secondAttackerHit.defenderSpeedMps, pair.secondAttackerHit.attackerSpeedMps) },
+      ];
     }
 
     if (this.controller.getState() === ClashState.Idle) {
-      this.activeClashPair = { firstAttackerHit, secondAttackerHit };
+      this.activeClashPair = pair;
       this.activeClashLocalTickIndex = 0;
       this.controller.tryStart({
-        firstStaminaFraction: firstAttackerHit.attackerStaminaFraction,
-        secondStaminaFraction: secondAttackerHit.attackerStaminaFraction,
-        firstSpeedMps: firstAttackerHit.attackerSpeedMps,
-        secondSpeedMps: secondAttackerHit.attackerSpeedMps,
+        firstStaminaFraction: pair.firstAttackerHit.attackerStaminaFraction,
+        secondStaminaFraction: pair.secondAttackerHit.attackerStaminaFraction,
+        firstSpeedMps: pair.firstAttackerHit.attackerSpeedMps,
+        secondSpeedMps: pair.secondAttackerHit.attackerSpeedMps,
       });
-      return { toResolveNormally: passthrough }; // Both hits consumed into the Clash — no normal knockback for either.
+      return []; // Both hits consumed into the Clash — no normal knockback for either.
     }
 
-    // Active — unreachable in practice (tickMatch() never calls this method while Active), kept as a safe fallback rather than silently dropping the hits.
-    return { toResolveNormally: [...passthrough, { ...firstAttackerHit, forceMultiplier: 1 }, { ...secondAttackerHit, forceMultiplier: 1 }] };
+    // Active — unreachable in practice (tickMatch() never calls processTickHits while Active), kept as a safe fallback rather than silently dropping the hits.
+    return [
+      { ...pair.firstAttackerHit, forceMultiplier: 1 },
+      { ...pair.secondAttackerHit, forceMultiplier: 1 },
+    ];
   }
 
   /** Advances the Clash by one tick while it is Idle (a no-op) or Cooldown (decrements the countdown, returning to Idle at 0) — call this once per normal (non-Active) tickMatch() tick so Cooldown actually elapses; ClashController.tick() ignores its input parameters entirely outside of Active, so an empty input is exactly equivalent to a real one here. */
@@ -198,7 +258,7 @@ export class ClashOrchestration {
     const loserIsFirst = !winnerIsFirst;
 
     const knockback = computeKnockback({
-      baseForce: winningHit.hit.hitbox.knockbackForce * CLASH_IMPACT_MULTIPLIER,
+      baseForce: winningHit.hit.hitbox.knockbackForce * this.matchConfig.clashImpactMultiplier,
       attackerSpeedMps: winningHit.attackerSpeedMps,
       defenderSpeedMps: winningHit.defenderSpeedMps,
       defenderStabilityFraction: winningHit.defenderStabilityFraction,
@@ -209,7 +269,7 @@ export class ClashOrchestration {
     applyKnockback(loser.body, winningHit.attackerPositionXZ, winningHit.defenderPositionXZ, knockback);
     loser.dodge.registerLaunch(!isGrounded(physics, loser.collider));
 
-    const stabilityDamageAmount = computeStabilityDamage(winningHit.hit.hitbox.stabilityDamage) * CLASH_IMPACT_MULTIPLIER;
+    const stabilityDamageAmount = computeStabilityDamage(winningHit.hit.hitbox.stabilityDamage) * this.matchConfig.clashImpactMultiplier;
     const { causedBreak, isQualifyingKoHit } = loser.stability.applyDamage(stabilityDamageAmount);
 
     return {
@@ -227,7 +287,7 @@ export class ClashOrchestration {
     const firstPositionXZ: Vec2 = { x: first.body.translation().x, z: first.body.translation().z };
     const secondPositionXZ: Vec2 = { x: second.body.translation().x, z: second.body.translation().z };
     const direction = normalize(subtract(secondPositionXZ, firstPositionXZ));
-    const impulseMagnitude = CLASH_TIE_REPULSION_BASE_FORCE * CLASH_IMPACT_MULTIPLIER * KNOCKBACK_IMPULSE_PER_FORCE_UNIT;
+    const impulseMagnitude = CLASH_TIE_REPULSION_BASE_FORCE * this.matchConfig.clashImpactMultiplier * KNOCKBACK_IMPULSE_PER_FORCE_UNIT;
     const horizontal = scale(direction, impulseMagnitude);
     const upward = impulseMagnitude * KNOCKBACK_UPWARD_LAUNCH_FRACTION;
 

@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { ClashOutcome, ClashState } from '../../src/combat/clash/ClashController';
-import { CLASH_COOLDOWN_S, CLASH_IMPACT_MULTIPLIER, CLASH_TARGET_DURATION_S } from '../../src/combat/clash/ClashTuning';
+import { CLASH_COOLDOWN_S, CLASH_TARGET_DURATION_S } from '../../src/combat/clash/ClashTuning';
 import { ScriptedController, type ScriptedFrame } from '../../src/automation/scripted-scenarios/ScriptedController';
 import { Action, type ControllerActions } from '../../src/input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
@@ -78,7 +78,7 @@ function triggerClash(harness: CombatHarness, firstMash: ScriptedController, sec
   expect(harness.clash.controller.getState()).toBe(ClashState.Active);
 }
 
-describe('compatible-attack detection (same-tick window)', () => {
+describe('compatible-attack detection (150ms window)', () => {
   it('a same-tick double connect starts a Clash and withholds normal knockback/Stability damage from both hits entirely', async () => {
     const harness = await createTriggerReadyHarness();
     const firstAttacker = tapController();
@@ -115,6 +115,33 @@ describe('compatible-attack detection (same-tick window)', () => {
     expect(sawKnockback).toBe(true);
     expect(harness.clash.controller.getState()).toBe(ClashState.Idle);
     expect(harness.second.stability.resource.fraction).toBeLessThan(1);
+  });
+
+  it('a genuinely cross-tick compatible pair (a quick Circular connects first, a barely-charged Dash the opponent was already winding up connects a few ticks later) still starts a Clash through the real attack/hit pipeline, not just the same-tick case', async () => {
+    const harness = await createTriggerReadyHarness();
+    const quickCircular = tapController();
+    // Held just past TAP_MAX_HOLD_S (commits to Dash) and just past
+    // DASH_MIN_CHARGE_S (a real, if minimal, charge) — released as early
+    // as possible so DashActive (and its hit) lands only a handful of
+    // ticks after the Circular's, well inside the 150ms/9-tick window.
+    const barelyChargedDash = new ScriptedController([
+      { fromTick: 0, held: [Action.Attack] },
+      { fromTick: 9, held: [] },
+    ]);
+
+    let sawKnockbackOrStabilityDamage = false;
+    for (let i = 0; i < 60 && harness.clash.controller.getState() === ClashState.Idle; i++) {
+      const result = harness.tick(
+        quickCircular.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+        barelyChargedDash.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+      );
+      if (result.combatEvents.some((e) => e.kind === 'knockback' || e.kind === 'stabilityDamage')) {
+        sawKnockbackOrStabilityDamage = true;
+      }
+    }
+
+    expect(harness.clash.controller.getState()).toBe(ClashState.Active);
+    expect(sawKnockbackOrStabilityDamage).toBe(false);
   });
 });
 
@@ -181,7 +208,6 @@ describe('resolution — FirstWins applies real physical knockback', () => {
     expect(resolvedResult!.combatEvents.some((e) => e.kind === 'knockback' && e.targetIsFirst === false)).toBe(true);
     expect(resolvedResult!.combatEvents.some((e) => e.kind === 'stabilityDamage' && e.targetIsFirst === false)).toBe(true);
     expect(harness.second.stability.resource.fraction).toBeLessThan(secondStabilityBefore);
-    expect(CLASH_IMPACT_MULTIPLIER).toBeGreaterThan(0); // sanity: the multiplier this resolution applied is a real, positive scale factor.
 
     // physics.step() resumes on the next (Cooldown) tick — the impulse from resolution only becomes visible motion then.
     const nextResult = harness.tick(NO_ACTIONS, NO_ACTIONS);
@@ -331,5 +357,41 @@ describe('Clash never artificially declares a ring-out', () => {
     }
     expect(sawNaturalRingOut).toBe(true);
     expect(harness.roundState.isOver).toBe(true);
+  });
+});
+
+describe('configurable Clash impact multiplier (MatchConfig, GDD section 152)', () => {
+  async function runFirstWinsAndCaptureKnockback(clashImpactMultiplier: number): Promise<{ force: number; firstPower: number; secondPower: number }> {
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN, { clashImpactMultiplier });
+    settle(harness);
+    // Unambiguous ClashPower advantage for "first" regardless of how mash saturates for either side — Stamina alone decides it, same as the plain FirstWins test above.
+    harness.second.stamina.resource.subtract(harness.second.stamina.resource.max * 0.9);
+    triggerClash(harness, tapController(), tapController());
+
+    const firstMasher = new ScriptedController(mashFrames(3, DURATION_TICKS, Action.Dodge));
+    const secondMasher = new ScriptedController(mashFrames(3, DURATION_TICKS, Action.JumpDrift));
+    let resolvedResult;
+    for (let i = 0; i < DURATION_TICKS && !resolvedResult; i++) {
+      const result = harness.tick(
+        firstMasher.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+        secondMasher.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }),
+      );
+      if (result.clashResolvedThisTick) resolvedResult = result;
+    }
+
+    const knockbackEvent = resolvedResult!.combatEvents.find((e) => e.kind === 'knockback');
+    if (!knockbackEvent || knockbackEvent.kind !== 'knockback') throw new Error('expected a knockback combat event on the resolution tick');
+    const clashResult = resolvedResult!.clashResolvedThisTick!;
+    return { force: knockbackEvent.force, firstPower: clashResult.firstClashPower, secondPower: clashResult.secondClashPower };
+  }
+
+  it('two different pre-match-configured multipliers produce different knockback force for an otherwise identical resolution, without changing ClashPower', async () => {
+    const low = await runFirstWinsAndCaptureKnockback(1);
+    const high = await runFirstWinsAndCaptureKnockback(3);
+
+    expect(high.force).toBeGreaterThan(low.force);
+    // The Mash x Stamina x Velocity formula itself never sees the impact multiplier — same inputs, same ClashPower either way.
+    expect(high.firstPower).toBeCloseTo(low.firstPower, 10);
+    expect(high.secondPower).toBeCloseTo(low.secondPower, 10);
   });
 });

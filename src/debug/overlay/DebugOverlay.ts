@@ -72,6 +72,8 @@ export interface DebugOverlayState {
   secondClashStaminaFactor: number;
   secondClashVelocityFactor: number;
   secondClashPower: number;
+  /** MatchConfig's resolved value (default, or a pre-match override) — never ClashTuning's default constant directly, so this always reflects what orchestration is actually using. */
+  clashImpactMultiplier: number;
 }
 
 const RAD_TO_DEG = 180 / Math.PI;
@@ -157,7 +159,8 @@ export class DebugOverlay {
       `last outcome     ${state.clashOutcome}\n` +
       `mash counts      first ${state.firstClashMashEventCount} / second ${state.secondClashMashEventCount}\n` +
       `first factors    mash ${state.firstClashMashPerformance.toFixed(2)} stamina ${state.firstClashStaminaFactor.toFixed(2)} velocity ${state.firstClashVelocityFactor.toFixed(2)} -> power ${state.firstClashPower.toFixed(3)}\n` +
-      `second factors   mash ${state.secondClashMashPerformance.toFixed(2)} stamina ${state.secondClashStaminaFactor.toFixed(2)} velocity ${state.secondClashVelocityFactor.toFixed(2)} -> power ${state.secondClashPower.toFixed(3)}`;
+      `second factors   mash ${state.secondClashMashPerformance.toFixed(2)} stamina ${state.secondClashStaminaFactor.toFixed(2)} velocity ${state.secondClashVelocityFactor.toFixed(2)} -> power ${state.secondClashPower.toFixed(3)}\n` +
+      `impact multiplier ${state.clashImpactMultiplier.toFixed(2)}`;
   }
 
   private applyVisibility(): void {

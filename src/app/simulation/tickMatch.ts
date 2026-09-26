@@ -337,11 +337,11 @@ export function tickMatch(
 
   // Milestone 5: snapshot everything each connecting hit's normal
   // knockback/Stability resolution would need, then hand them to
-  // ClashOrchestration — a same-tick double connect (both sides landing
-  // within the same fixed tick, GDD's "150ms window") is either withheld
-  // entirely (a fresh Clash starts) or resolved with the cooldown
-  // "slower suffers more" alternative multiplier instead of a plain 1x;
-  // anything else comes back completely untouched.
+  // ClashOrchestration — a hit connecting while the defender's own attack
+  // is also compatible (active/imminent) within the GDD's 150ms window is
+  // either withheld entirely (a fresh Clash starts) or resolved with the
+  // cooldown "slower suffers more" alternative multiplier instead of a
+  // plain 1x; anything else comes back completely untouched.
   const hitSnapshots: HitSnapshotInput[] = hitEvents.map((hit) => {
     const attacker = hit.attackerIsFirst ? first : second;
     const defender = hit.attackerIsFirst ? second : first;
@@ -357,9 +357,10 @@ export function tickMatch(
       defenderSpeedMps: defenderMovement.speedMps,
       defenderStabilityFraction: defender.stability.resource.fraction,
       defenderStaminaPenaltyFraction: 1 - defender.stamina.resource.fraction,
+      defenderAttackState: hit.attackerIsFirst ? secondAttack.state : firstAttack.state,
     };
   });
-  const { toResolveNormally } = clash.processTickHits(hitSnapshots);
+  const { toResolveNormally } = clash.processTickHits(fixedDeltaSeconds, hitSnapshots);
 
   for (const resolved of toResolveNormally) {
     const hit = resolved.hit;

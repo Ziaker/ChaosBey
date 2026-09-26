@@ -347,3 +347,44 @@ describe('knockback follow', () => {
     expect(settled.focusPositionM.z).toBeCloseTo(0, 1);
   });
 });
+
+describe('knockback follow — followTargetIsFirst override (Milestone 5, clashResolved)', () => {
+  const first = { x: 0, y: 0, z: -20 };
+  const second = { x: 0, y: 0, z: 20 };
+
+  function settledThenImpact(event: ImpactEvent): CombatCameraOutput {
+    const controller = new CombatCameraController();
+    tickMany(controller, 300, { firstPositionM: first, secondPositionM: second });
+    return controller.tick({
+      firstPositionM: first,
+      secondPositionM: second,
+      firstSpeedMps: 0,
+      secondSpeedMps: 0,
+      firstVelocityXZ: { x: 0, z: 0 },
+      impactEvents: [event],
+      fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+    });
+  }
+
+  it('followTargetIsFirst: false biases toward "second" (e.g. FirstWins — second is the loser), even though isFirst on the event reads true', () => {
+    const output = settledThenImpact({ kind: 'clashResolved', magnitude: 1, worldPositionM: STATIONARY, isFirst: true, followTargetIsFirst: false });
+    // "second" sits at positive z — biasing toward it pulls focus.z up, above the midpoint (0).
+    expect(output.focusPositionM.z).toBeGreaterThan(0.01);
+  });
+
+  it('followTargetIsFirst: true biases toward "first" (e.g. SecondWins — first is the loser), even though isFirst on the event reads false', () => {
+    const output = settledThenImpact({ kind: 'clashResolved', magnitude: 1, worldPositionM: STATIONARY, isFirst: false, followTargetIsFirst: true });
+    // "first" sits at negative z — biasing toward it pulls focus.z down, below the midpoint (0).
+    expect(output.focusPositionM.z).toBeLessThan(-0.01);
+  });
+
+  it('followTargetIsFirst: null applies no unilateral bias at all (a Clash Tie) — focus stays at the midpoint regardless of isFirst', () => {
+    const output = settledThenImpact({ kind: 'clashResolved', magnitude: 1, worldPositionM: STATIONARY, isFirst: true, followTargetIsFirst: null });
+    expect(output.focusPositionM.z).toBeCloseTo(0, 5);
+  });
+
+  it('an event that never sets followTargetIsFirst (every pre-Milestone-5 event kind) falls back to isFirst unchanged', () => {
+    const output = settledThenImpact({ kind: 'hit', magnitude: 1, worldPositionM: first, isFirst: true });
+    expect(output.focusPositionM.z).toBeLessThan(-0.01); // biases toward "first", exactly as before this field existed.
+  });
+});

@@ -12,6 +12,7 @@ import { createRenderer } from './app/bootstrap/createRenderer';
 import { GameState, GameStateMachine } from './app/lifecycle/GameState';
 import { tickMatch, type MatchTickResult } from './app/simulation/tickMatch';
 import { ClashOrchestration } from './app/simulation/ClashOrchestration';
+import { ClashPresentationTracker } from './app/simulation/ClashPresentationTracker';
 import { RoundState } from './combat/round-rules/RoundState';
 import { ClashOutcome, ClashState } from './combat/clash/ClashController';
 import { computeClashPower, computeMashPerformance, computeStaminaFactor, computeVelocityFactor } from './combat/clash/ClashFormula';
@@ -21,6 +22,7 @@ import { ClashCameraDirector } from './camera/ClashCameraDirector';
 import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from './camera/ImpactEvents';
 import { CLASH_RESOLVED_MAGNITUDE } from './camera/ImpactMagnitude';
 import { createDefaultRuntimeConfig } from './config/runtime/RuntimeConfig';
+import { resolveMatchConfig } from './config/match/MatchConfig';
 import { DebugOverlay, type DebugOverlayState } from './debug/overlay/DebugOverlay';
 import { Action } from './input/actions/Action';
 import { KeyboardController } from './input/devices/KeyboardController';
@@ -42,10 +44,16 @@ async function bootstrap(): Promise<void> {
   }
 
   const runtimeConfig = createDefaultRuntimeConfig();
+  // No pre-match UI to source overrides from yet (GDD section 152's
+  // "configurable pre-match" — Milestone 10's pregame setup is where a
+  // real UI would collect this); resolveMatchConfig() with no overrides
+  // still routes through the single resolved-value path everything else
+  // (ClashOrchestration, the debug overlay) reads from.
+  const matchConfig = resolveMatchConfig();
   const telemetry = new TelemetryRecorder();
   const stateMachine = new GameStateMachine();
   const roundState = new RoundState();
-  const clash = new ClashOrchestration();
+  const clash = new ClashOrchestration(matchConfig);
 
   const seedText = generateRandomSeedText();
   const rngStreams = createRngStreams(seedText);
@@ -78,9 +86,7 @@ async function bootstrap(): Promise<void> {
   const vfxManager = new VfxManager(appRenderer.scene, appRenderer.camera);
   let lastMatchResult: MatchTickResult | null = null;
   let lastCameraOutput: CombatCameraOutput | null = null;
-  let previousClashState: ClashState = ClashState.Idle;
-  let previousFirstClashMashEventCount = 0;
-  let previousSecondClashMashEventCount = 0;
+  const clashPresentationTracker = new ClashPresentationTracker();
 
   const loop = new FixedTimestepLoop({
     onFixedTick: (tickIndex, fixedDeltaSeconds) => {
@@ -180,18 +186,26 @@ async function bootstrap(): Promise<void> {
       }
 
       // Clash (Milestone 5) state-edge telemetry + GameState transitions —
-      // safe to check every tick, including a hitstop-frozen one where
-      // nothing changed and this is a no-op: the pure ClashController's
-      // state only actually advances inside a real tickMatch() call.
-      //
-      // clashResolvedThisTick must NOT be read directly off a reused,
-      // hitstop-frozen `result` — that's the exact same cached object the
-      // resolution tick itself returned, so its clashResolvedThisTick
-      // would otherwise still read non-null on every later frozen tick,
-      // re-triggering the resolution beat (and thus hitstop) forever.
+      // ClashPresentationTracker (a separate, unit-tested module) owns the
+      // edge detection itself; safe to call every tick, including a
+      // hitstop-frozen one where nothing changed and every edge reads
+      // false. clashResolvedThisTick must NOT be read directly off a
+      // reused, hitstop-frozen `result` — that's the exact same cached
+      // object the resolution tick itself returned, so it would otherwise
+      // still read non-null on every later frozen tick, re-triggering the
+      // resolution beat (and thus hitstop) forever.
       const currentClashState = clash.controller.getState();
       const clashResolvedThisTick = isFrozenByHitstop ? null : result.clashResolvedThisTick;
-      if (previousClashState === ClashState.Idle && currentClashState === ClashState.Active) {
+      const currentFirstClashMashEventCount = clash.controller.getFirstMashEventCount();
+      const currentSecondClashMashEventCount = clash.controller.getSecondMashEventCount();
+      const presentationEvents = clashPresentationTracker.update(
+        currentClashState,
+        clashResolvedThisTick,
+        currentFirstClashMashEventCount,
+        currentSecondClashMashEventCount,
+      );
+
+      if (presentationEvents.clashStarted) {
         telemetry.record({
           kind: TelemetryEventKind.ClashStart,
           firstStaminaFraction: result.first.staminaFraction,
@@ -202,8 +216,8 @@ async function bootstrap(): Promise<void> {
         stateMachine.transitionTo(GameState.Clash);
         clashCameraDirector.reset();
       }
-      if (clashResolvedThisTick) {
-        const clashResult = clashResolvedThisTick;
+      if (presentationEvents.clashResult) {
+        const clashResult = presentationEvents.clashResult;
         telemetry.record({
           kind: TelemetryEventKind.ClashResult,
           outcome: clashResult.outcome,
@@ -213,23 +227,24 @@ async function bootstrap(): Promise<void> {
           secondMashEventCount: clashResult.secondMashEventCount,
         });
       }
-      if (previousClashState === ClashState.Cooldown && currentClashState === ClashState.Idle) {
+      if (presentationEvents.clashEnded) {
+        // GDD lifecycle: resolution -> knockback -> normal game state
+        // resumes immediately. GameState.Clash covers only the Active
+        // presentation itself — the 10s Cooldown that follows is purely
+        // an internal restriction against starting a new Clash, not a
+        // presentation state; gameplay/camera/controls are already back
+        // to normal from the very next tick (see the `else` camera/VFX
+        // branch below, which Cooldown falls into like any other normal
+        // tick). ClashEnd fires here, on the same tick as ClashResult —
+        // never delayed until a later Cooldown -> Idle transition.
         telemetry.record({ kind: TelemetryEventKind.ClashEnd });
-        // The round may have ended during Cooldown via ordinary physics
-        // (a natural ring-out/KO) — don't clobber that with Combat.
+        // The round may have ended this same tick via the resolution's own
+        // KO — don't clobber that with Combat.
         if (stateMachine.getCurrentState() === GameState.Clash) stateMachine.transitionTo(GameState.Combat);
       }
-      const currentFirstClashMashEventCount = clash.controller.getFirstMashEventCount();
-      const currentSecondClashMashEventCount = clash.controller.getSecondMashEventCount();
-      if (currentFirstClashMashEventCount > previousFirstClashMashEventCount) {
-        telemetry.record({ kind: TelemetryEventKind.ClashMashInput, isFirst: true, mashEventCount: currentFirstClashMashEventCount });
+      for (const mashEvent of presentationEvents.mashInputEvents) {
+        telemetry.record({ kind: TelemetryEventKind.ClashMashInput, isFirst: mashEvent.isFirst, mashEventCount: mashEvent.mashEventCount });
       }
-      if (currentSecondClashMashEventCount > previousSecondClashMashEventCount) {
-        telemetry.record({ kind: TelemetryEventKind.ClashMashInput, isFirst: false, mashEventCount: currentSecondClashMashEventCount });
-      }
-      previousFirstClashMashEventCount = currentFirstClashMashEventCount;
-      previousSecondClashMashEventCount = currentSecondClashMashEventCount;
-      previousClashState = currentClashState;
 
       lastFirstVisual = { spin: result.first.spin.visualSpinAngleRad, wobble: result.first.spin.wobbleOffsetRad };
       lastSecondVisual = { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad };
@@ -253,17 +268,29 @@ async function bootstrap(): Promise<void> {
         // moment — the freeze holds the already-applied knockback impulse
         // in place for a beat, then physics.step() (resuming next tick,
         // no longer frozen) plays out the real physical result. The normal
-        // CombatCameraController resumes driving the camera from here
-        // (its knockback-follow bias will naturally settle on the loser,
-        // or hold center for a Tie — see 'clashResolved' in
-        // KNOCKBACK_FOLLOW_EVENT_KINDS). Only fires once, the instant
-        // resolution happens — see clashResolvedThisTick's own definition
-        // above for why it must not be read off a hitstop-reused `result`.
+        // CombatCameraController resumes driving the camera from here —
+        // follow biases toward whichever side actually got launched
+        // (FirstWins -> second was the loser; SecondWins -> first was)
+        // via followTargetIsFirst, not the generic `isFirst` field (which
+        // KNOCKBACK_FOLLOW_EVENT_KINDS' default reading would otherwise
+        // get backwards for exactly one of the two win outcomes). A Tie
+        // has no loser at all — null means no unilateral follow bias, so
+        // the framing stays central/symmetric as approved. Only fires
+        // once, the instant resolution happens — see
+        // clashResolvedThisTick's own definition above for why it must
+        // not be read off a hitstop-reused `result`.
+        const loserIsFirst =
+          clashResolvedThisTick.outcome === ClashOutcome.FirstWins
+            ? false
+            : clashResolvedThisTick.outcome === ClashOutcome.SecondWins
+              ? true
+              : null;
         const resolutionEvent: ImpactEvent = {
           kind: 'clashResolved',
           magnitude: CLASH_RESOLVED_MAGNITUDE,
           worldPositionM: midpointM,
-          isFirst: clashResolvedThisTick.outcome !== ClashOutcome.SecondWins,
+          isFirst: loserIsFirst ?? true,
+          followTargetIsFirst: loserIsFirst,
         };
         vfxManager.onImpactEvents([resolutionEvent]);
         lastCameraOutput = cameraDirector.tick({
@@ -368,6 +395,7 @@ async function bootstrap(): Promise<void> {
         secondClashStaminaFactor: computeStaminaFactor(result.second.staminaFraction),
         secondClashVelocityFactor: computeVelocityFactor(result.second.movement.speedMps),
         secondClashPower: computeClashPower(currentSecondClashMashEventCount, result.second.staminaFraction, result.second.movement.speedMps),
+        clashImpactMultiplier: matchConfig.clashImpactMultiplier,
       };
     },
     onRenderFrame: (frameDeltaSeconds) => {

@@ -45,8 +45,16 @@ export const CLASH_VELOCITY_FACTOR_MAX = 1.0;
 export const CLASH_TIE_EPSILON = 1e-6;
 
 // --- Downstream integration (data only — not applied by this package) ---
-/** Configurable multiplier the eventual knockback/stability resolution (Milestone 5 integration, not yet implemented here) applies to the Clash's outcome. Present now so tuning has a home; unused until that integration lands. */
-export const CLASH_IMPACT_MULTIPLIER = 1;
+/**
+ * Central default for the Clash impact multiplier — NOT the value
+ * orchestration actually uses. GDD section 152 requires this multiplier
+ * to be configurable pre-match, so the single resolved value lives in
+ * MatchConfig (src/config/match/MatchConfig.ts), which starts from this
+ * default and applies any pre-match override; ClashOrchestration only
+ * ever reads that resolved value, never this constant directly, so there
+ * is exactly one source of truth at runtime.
+ */
+export const CLASH_IMPACT_MULTIPLIER_DEFAULT = 1;
 
 // --- AI mash (Milestone 7 placeholder — see ClashMash.ts's FixedIntervalAiMashSource) ---
 /** How often (in fixed ticks) the placeholder AI contributes a mash event during an Active Clash — NOT real AI behavior, just enough for the integration/self-tests to exercise the AI-mash pathway before Milestone 7 exists. ~10 events/second at 60Hz. */
@@ -65,7 +73,7 @@ export const CLASH_COOLDOWN_ALT_SLOWER_PENALTY_MAX = 0.5;
 // --- Tie resolution (owner decision: both Beys receive symmetric physical
 // repulsion, no winner, no Stability damage — normal physics decides the
 // rest, a ring-out is never declared by the Clash system itself). ---
-/** Base "force" (same units as a hitbox's knockbackForce — see combat/knockback/Knockback.ts) used for the symmetric repulsion impulse applied to both Beys on a Tie. Engineering placeholder (GDD section 167); scaled by CLASH_IMPACT_MULTIPLIER like every other Clash-driven knockback. */
+/** Base "force" (same units as a hitbox's knockbackForce — see combat/knockback/Knockback.ts) used for the symmetric repulsion impulse applied to both Beys on a Tie. Engineering placeholder (GDD section 167); scaled by MatchConfig's resolved clashImpactMultiplier like every other Clash-driven knockback. */
 export const CLASH_TIE_REPULSION_BASE_FORCE = 10;
 
 // --- Presentation cadence (main.ts) ---
