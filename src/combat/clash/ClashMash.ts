@@ -55,3 +55,18 @@ export class FixedIntervalAiMashSource implements ClashAiMashSource {
     return this.intervalTicks > 0 && tickIndex % this.intervalTicks === 0;
   }
 }
+
+/**
+ * Milestone 7: a no-op ClashAiMashSource for when a real AIController (or
+ * any other CombatController) already contributes mash events through its
+ * own real Z/X/C presses (ClashOrchestration.tickActive's
+ * buildMashActionSet(secondActions) path) — using this alongside a real
+ * controller avoids silently adding the FixedIntervalAiMashSource
+ * placeholder's contribution on top of (and thus masking tuning
+ * differences from) the controller's own personality-driven mash rate.
+ */
+export class NullAiMashSource implements ClashAiMashSource {
+  sampleTick(_tickIndex: number, _clashElapsedS: number): boolean {
+    return false;
+  }
+}

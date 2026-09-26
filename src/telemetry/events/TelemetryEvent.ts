@@ -29,6 +29,7 @@ export enum TelemetryEventKind {
   ClashMashInput = 'ClashMashInput',
   ClashResult = 'ClashResult',
   ClashEnd = 'ClashEnd',
+  AiDecision = 'AiDecision',
 }
 
 export interface TelemetryEventBase {
@@ -156,6 +157,22 @@ export interface ClashEndEvent extends TelemetryEventBase {
   kind: TelemetryEventKind.ClashEnd;
 }
 
+/**
+ * Milestone 7: an AIController made a fresh intent decision (GDD section
+ * 65/74 — AI decisions are debug/telemetry-visible, not a black box).
+ * Fired only on an actual reaction-delay-gated decision, not every fixed
+ * tick — see AIController.ts's reaction-delay cadence.
+ */
+export interface AiDecisionEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.AiDecision;
+  personalityId: string;
+  intent: string;
+  reason: string;
+  deliberateErrorApplied: boolean;
+  edgeRiskFraction: number;
+  opponentThreatFraction: number;
+}
+
 export type TelemetryEvent =
   | AppBootEvent
   | ErrorEvent
@@ -173,4 +190,5 @@ export type TelemetryEvent =
   | ClashStartEvent
   | ClashMashInputEvent
   | ClashResultEvent
-  | ClashEndEvent;
+  | ClashEndEvent
+  | AiDecisionEvent;

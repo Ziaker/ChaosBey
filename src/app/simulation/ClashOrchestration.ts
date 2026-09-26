@@ -49,7 +49,7 @@ import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { normalize, scale, subtract, type Vec2 } from '../../physics/Vec2';
 import { ClashController, ClashOutcome, ClashState, type ClashCombatantInputTick, type ClashResult } from '../../combat/clash/ClashController';
 import { isWithinClashWindow } from '../../combat/clash/ClashWindow';
-import { FixedIntervalAiMashSource } from '../../combat/clash/ClashMash';
+import { FixedIntervalAiMashSource, type ClashAiMashSource } from '../../combat/clash/ClashMash';
 import { CLASH_AI_MASH_INTERVAL_TICKS, CLASH_TIE_REPULSION_BASE_FORCE } from '../../combat/clash/ClashTuning';
 import { computeCooldownAlternativeMultiplier } from '../../combat/clash/ClashCooldownResolution';
 import type { MatchConfig } from '../../config/match/MatchConfig';
@@ -120,13 +120,26 @@ function order(a: HitSnapshotInput, b: HitSnapshotInput): ClashPair {
 
 export class ClashOrchestration {
   readonly controller = new ClashController();
-  private readonly aiMashSource = new FixedIntervalAiMashSource(CLASH_AI_MASH_INTERVAL_TICKS);
   private activeClashLocalTickIndex = 0;
   private activeClashPair: ClashPair | null = null;
   private matchElapsedS = 0;
   private pendingHit: { hit: HitSnapshotInput; atS: number } | null = null;
 
-  constructor(private readonly matchConfig: MatchConfig) {}
+  /**
+   * `secondAiMashSource` defaults to the Milestone 5 placeholder
+   * (FixedIntervalAiMashSource) unchanged — every pre-M7 caller that
+   * constructs this with just a MatchConfig keeps its exact prior
+   * behavior. Milestone 7 passes a real AIController-driven controller
+   * for "second" instead of relying on this at all — see AIController.ts's
+   * Clash-mash path and main.ts's wiring, which passes NullAiMashSource
+   * here in that case (the AI mashes through real Z/X/C presses, not this
+   * separate channel — see ClashMash.ts's NullAiMashSource doc comment for
+   * why keeping both active would double up rather than combine).
+   */
+  constructor(
+    private readonly matchConfig: MatchConfig,
+    private readonly aiMashSource: ClashAiMashSource = new FixedIntervalAiMashSource(CLASH_AI_MASH_INTERVAL_TICKS),
+  ) {}
 
   /**
    * Call once per normal (non-Active) tickMatch() tick with this tick's

@@ -74,6 +74,29 @@ export interface DebugOverlayState {
   secondClashPower: number;
   /** MatchConfig's resolved value (default, or a pre-match override) — never ClashTuning's default constant directly, so this always reflects what orchestration is actually using. */
   clashImpactMultiplier: number;
+
+  // AI (Milestone 7, GDD section 65/69) — the "second" combatant's
+  // AIController, when one is driving it. Null fields mean no AI is
+  // currently attached (e.g. self-tests driving both sides by hand).
+  aiDebug: {
+    personalityId: string;
+    difficultyProfileId: string;
+    idealIntent: string;
+    idealIntentReason: string;
+    activeIntent: string;
+    activeIntentReason: string;
+    deliberateErrorApplied: boolean;
+    distanceToOpponentM: number;
+    edgeRiskFraction: number;
+    opponentThreatFraction: number;
+    selfVulnerabilityFraction: number;
+    opportunityFraction: number;
+    reactionTimerS: number;
+    chosenActionSummary: string;
+    observedOpponentAggressionFraction: number;
+    observedOpponentDodgeRate: number;
+    observedOpponentDashPreference: number;
+  } | null;
 }
 
 const RAD_TO_DEG = 180 / Math.PI;
@@ -160,7 +183,18 @@ export class DebugOverlay {
       `mash counts      first ${state.firstClashMashEventCount} / second ${state.secondClashMashEventCount}\n` +
       `first factors    mash ${state.firstClashMashPerformance.toFixed(2)} stamina ${state.firstClashStaminaFactor.toFixed(2)} velocity ${state.firstClashVelocityFactor.toFixed(2)} -> power ${state.firstClashPower.toFixed(3)}\n` +
       `second factors   mash ${state.secondClashMashPerformance.toFixed(2)} stamina ${state.secondClashStaminaFactor.toFixed(2)} velocity ${state.secondClashVelocityFactor.toFixed(2)} -> power ${state.secondClashPower.toFixed(3)}\n` +
-      `impact multiplier ${state.clashImpactMultiplier.toFixed(2)}`;
+      `impact multiplier ${state.clashImpactMultiplier.toFixed(2)}\n` +
+      (state.aiDebug
+        ? `-- ai (second, M7) --\n` +
+          `personality      ${state.aiDebug.personalityId} / difficulty ${state.aiDebug.difficultyProfileId}\n` +
+          `ideal intent     ${state.aiDebug.idealIntent} (${state.aiDebug.idealIntentReason})\n` +
+          `active intent    ${state.aiDebug.activeIntent}${state.aiDebug.deliberateErrorApplied ? ' [DELIBERATE ERROR]' : ''} (${state.aiDebug.activeIntentReason})\n` +
+          `distance         ${state.aiDebug.distanceToOpponentM.toFixed(2)} m\n` +
+          `risk             edge ${state.aiDebug.edgeRiskFraction.toFixed(2)} opponentThreat ${state.aiDebug.opponentThreatFraction.toFixed(2)} selfVuln ${state.aiDebug.selfVulnerabilityFraction.toFixed(2)} opportunity ${state.aiDebug.opportunityFraction.toFixed(2)}\n` +
+          `reaction timer   ${state.aiDebug.reactionTimerS.toFixed(2)} s\n` +
+          `action           ${state.aiDebug.chosenActionSummary}\n` +
+          `adaptation       aggression~${state.aiDebug.observedOpponentAggressionFraction.toFixed(2)} dodge~${state.aiDebug.observedOpponentDodgeRate.toFixed(2)} dashPref~${state.aiDebug.observedOpponentDashPreference.toFixed(2)}`
+        : `-- ai (second, M7) --\n(no AIController attached)`);
   }
 
   private applyVisibility(): void {
