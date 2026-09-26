@@ -87,6 +87,8 @@ export interface DebugOverlayState {
     activeIntent: string;
     activeIntentReason: string;
     deliberateErrorApplied: boolean;
+    pendingIntent: string | null;
+    pendingRemainingS: number;
     dodgeAttemptSucceeds: boolean;
     distanceToOpponentM: number;
     edgeRiskFraction: number;
@@ -192,6 +194,7 @@ export class DebugOverlay {
           `ideal intent     ${state.aiDebug.idealIntent} (${state.aiDebug.idealIntentReason})\n` +
           `scores           ${state.aiDebug.consideredScoresSummary}\n` +
           `active intent    ${state.aiDebug.activeIntent}${state.aiDebug.deliberateErrorApplied ? ' [DELIBERATE ERROR]' : ''} (${state.aiDebug.activeIntentReason})\n` +
+          `slow to react    ${state.aiDebug.pendingIntent ? `${state.aiDebug.pendingIntent} lands in ${state.aiDebug.pendingRemainingS.toFixed(2)} s` : '-'}\n` +
           `dodge roll       ${state.aiDebug.activeIntent === 'DodgeThreat' ? (state.aiDebug.dodgeAttemptSucceeds ? 'succeeds' : 'fails') : '-'}\n` +
           `distance         ${state.aiDebug.distanceToOpponentM.toFixed(2)} m\n` +
           `risk             edge ${state.aiDebug.edgeRiskFraction.toFixed(2)} opponentThreat ${state.aiDebug.opponentThreatFraction.toFixed(2)} selfVuln ${state.aiDebug.selfVulnerabilityFraction.toFixed(2)} opportunity ${state.aiDebug.opportunityFraction.toFixed(2)}\n` +

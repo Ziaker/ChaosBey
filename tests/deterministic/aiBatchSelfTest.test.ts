@@ -83,6 +83,16 @@ function assertFinite(value: number, label: string): void {
 }
 
 /**
+ * Attack states whose next tick reads the Attack input: Neutral starts an
+ * attack; Buffering and ChargingDash read whether it is held (tap vs Dash,
+ * keep charging vs release). A fresh press there is a re-hold across a
+ * freeze (Clash, where the AI mashes) — outside a freeze, releasing for one
+ * tick would already have ended Buffering/ChargingDash. Every other state
+ * ignores Attack.
+ */
+const ATTACK_INPUT_STATES: ReadonlySet<AttackState> = new Set([AttackState.Neutral, AttackState.Buffering, AttackState.ChargingDash]);
+
+/**
  * What DodgeController would do with a Dodge press on the coming tick
  * (same grounded value tickMatch passes it): start a ground dodge (Idle,
  * grounded, Stamina >= cost) or trigger air recovery (window open while
@@ -140,7 +150,7 @@ async function runMatch(pairing: [ArchetypeKey, ArchetypeKey], seed: string, tot
       assertContract(actions[i]!, `${label} side ${i} tick ${tick}`);
       // Outside a Clash mash, a press that the system will ignore is spam.
       if (!clashActive) {
-        if (actions[i]!.pressedThisFrame.has(Action.Attack) && beys[i]!.attack.getState() !== AttackState.Neutral) wastedPresses++;
+        if (actions[i]!.pressedThisFrame.has(Action.Attack) && !ATTACK_INPUT_STATES.has(beys[i]!.attack.getState())) wastedPresses++;
         if (actions[i]!.pressedThisFrame.has(Action.Dodge) && !dodgePressWouldDoSomething(physics, beys[i]!)) wastedPresses++;
       }
     }

@@ -119,6 +119,15 @@ export class AIController implements CombatController {
   /** Simulated time this AI last started an attack (own attackState left Neutral) — feeds the anti-passivity tempo (see IntentSelection.passivityTempo). */
   private lastOwnAttackStartS = 0;
   private lastOwnAttackState: AttackState = AttackState.Neutral;
+  /**
+   * A decision held back by a slow-to-react deliberate error (see
+   * IntentionalError.ts): it becomes the active decision once remainingS
+   * runs out (and no commitment is in flight); until then the current
+   * decision keeps acting and non-critical fresh decisions are skipped, so
+   * the late reaction lands as the one that was decided. A critical
+   * decision replaces it at once.
+   */
+  private pendingDecision: { decision: IntentDecision; remainingS: number; dodgeAttemptSucceeds: boolean } | null = null;
 
   constructor(
     private readonly physics: PhysicsWorld,
@@ -198,6 +207,18 @@ export class AIController implements CombatController {
 
     const effectiveReactionDelayS = Math.max(0, this.personality.reactionDelaySeconds * this.difficulty.reactionDelayMultiplier);
     this.decisionTimerS += context.fixedDeltaSeconds;
+    if (this.pendingDecision) {
+      this.pendingDecision.remainingS -= context.fixedDeltaSeconds;
+      if (this.pendingDecision.remainingS <= 0 && !committed) {
+        // The late reaction lands now; it gets a full reaction period
+        // before anything replaces it, like any fresh decision.
+        this.activeDecision = this.pendingDecision.decision;
+        this.dodgeAttemptSucceeds = this.pendingDecision.dodgeAttemptSucceeds;
+        this.deliberateErrorApplied = true;
+        this.pendingDecision = null;
+        this.decisionTimerS = 0;
+      }
+    }
     if (!committed && this.decisionTimerS >= effectiveReactionDelayS) {
       this.decisionTimerS = 0;
       this.makeFreshDecision(world);
@@ -222,15 +243,30 @@ export class AIController implements CombatController {
       // an edge episode early.
       recoveringFromEdge: this.idealDecision.edgeEpisode === true,
     });
+    // Still reacting late to a held-back decision: it lands first, unless
+    // this one is critical (air recovery, critical edge) — never delayed.
+    if (this.pendingDecision && !ideal.critical) return;
+    this.pendingDecision = null;
     this.idealDecision = ideal;
 
-    const { decision, errorApplied } = maybeApplyIntentionalError(ideal, risk, adjustedPersonality, this.difficulty, this.rng);
-    this.activeDecision = decision;
-    this.deliberateErrorApplied = errorApplied;
-
+    const { decision, errorApplied, reactionDelayS } = maybeApplyIntentionalError(
+      ideal,
+      risk,
+      adjustedPersonality,
+      this.difficulty,
+      this.rng,
+      this.activeDecision.intent,
+    );
     // Rolled exactly once for this fresh decision (see the field's own doc
     // comment) — a no-op (stays false) for every other intent.
-    this.dodgeAttemptSucceeds = decision.intent === AiIntent.DodgeThreat ? this.rng.nextBool(adjustedPersonality.dodgeSkill) : false;
+    const dodgeAttemptSucceeds = decision.intent === AiIntent.DodgeThreat ? this.rng.nextBool(adjustedPersonality.dodgeSkill) : false;
+    if (reactionDelayS > 0) {
+      this.pendingDecision = { decision, remainingS: reactionDelayS, dodgeAttemptSucceeds };
+    } else {
+      this.activeDecision = decision;
+      this.dodgeAttemptSucceeds = dodgeAttemptSucceeds;
+      this.deliberateErrorApplied = errorApplied;
+    }
 
     if (this.telemetry) {
       this.telemetry.record({
@@ -297,6 +333,8 @@ export class AIController implements CombatController {
       activeIntent: this.activeDecision.intent,
       activeIntentReason: this.activeDecision.reason,
       deliberateErrorApplied: this.deliberateErrorApplied,
+      pendingIntent: this.pendingDecision ? this.pendingDecision.decision.intent : null,
+      pendingRemainingS: this.pendingDecision ? Math.max(0, this.pendingDecision.remainingS) : 0,
       dodgeAttemptSucceeds: this.dodgeAttemptSucceeds,
       targetPositionXZ: world ? world.opponent.positionXZ : { x: 0, z: 0 },
       distanceToOpponentM: world ? world.distanceToOpponentM : 0,
