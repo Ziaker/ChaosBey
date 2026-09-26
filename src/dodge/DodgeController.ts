@@ -67,12 +67,18 @@ export class DodgeController {
 
   /**
    * Whether pressing Dodge right now (while airborne) would trigger air
-   * recovery — the same public state (GDD/owner rule: AI plays by the same
-   * rules as a player, so nothing it reads may be hidden/privileged) a
-   * player already signals through by having just been launched. Milestone
-   * 7's AIController uses this to recognize "I was just knocked airborne
-   * and should try to recover" as its own distinct situation, rather than
-   * only ever reacting to an opponent's imminent hitbox.
+   * recovery. Read by Milestone 7's AIController for its OWN Bey only.
+   *
+   * Why this is not privileged information (GDD section 63/129 — the AI
+   * plays by the player's rules): the flag is true exactly when "I was hit
+   * by a knockback/launch, I am airborne because of it, and I have not
+   * used recovery yet" — all three are things a player sees about their
+   * own Bey (the hit, the launch, their own C press). The one edge case (a
+   * launch that only lifts off after LAUNCH_PENDING_WINDOW_S does not arm
+   * recovery) gives no advantage either: an airborne Dodge press with no
+   * recovery armed is a no-op with no Stamina cost and no cooldown (see
+   * tick()), so a player who simply presses C whenever launched gets the
+   * same outcome the AI gets from reading this flag.
    */
   isAirRecoveryAvailable(): boolean {
     return this.airRecoveryAvailable;

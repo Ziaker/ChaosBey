@@ -28,6 +28,7 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Bey } from '../../bey/core/Bey';
 import { ClashState, type ClashController } from '../../combat/clash/ClashController';
+import { DODGE_STAMINA_COST } from '../../dodge/DodgeTuning';
 import { DriftState } from '../../drift/DriftController';
 import { Action, type CombatController, type ControllerActions, type ControllerContext } from '../../input/actions/Action';
 import { isGrounded } from '../../physics/collision/GroundCheck';
@@ -38,7 +39,7 @@ import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecor
 import { applyAdaptationNudge, AdaptationTracker } from '../adaptation/AdaptationTracker';
 import { ActionSelector } from '../decision/ActionSelection';
 import { AiIntent } from '../decision/Intent';
-import { selectIntent, type IntentDecision } from '../decision/IntentSelection';
+import { selectIntent, type IntentDecision, type IntentScore } from '../decision/IntentSelection';
 import { evaluateRisk, type RiskAssessment } from '../decision/RiskEvaluation';
 import { buildWorldState, type WorldState } from '../decision/WorldState';
 import type { AiDebugState } from '../debug/AiDebugState';
@@ -74,6 +75,7 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     isBroken: bey.stability.isBroken,
     attackEnergyFraction: bey.attackEnergy.resource.fraction,
     airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable(),
+    canAffordDodge: bey.stamina.resource.value >= DODGE_STAMINA_COST,
   };
 }
 
@@ -93,6 +95,22 @@ export class AIController implements CombatController {
   private lastActionSummary = 'none yet';
   /** Rolled exactly once per fresh DodgeThreat decision (see makeFreshDecision) — ActionSelection reads this instead of rolling AiPersonality.dodgeSkill itself every fixed tick, which would otherwise let a moderate skill converge toward near-certain success over a multi-tick threat window. */
   private dodgeAttemptSucceeds = false;
+  /**
+   * "Slow to react" deliberate error (IntentionalError.ts): a fresh decision
+   * that has been made but not yet acted on. Until pendingDelayRemainingS
+   * of simulated time passes, the AI keeps acting on its PREVIOUS
+   * activeDecision — the reaction itself is late, not the decision after
+   * it. No new fresh decision is taken while one is pending (otherwise a
+   * normal reaction-delay cycle could silently supersede the lapse and
+   * turn it into a skipped decision instead of a late one).
+   */
+  private pendingDecision: IntentDecision | null = null;
+  private pendingDelayRemainingS = 0;
+  private pendingDodgeAttemptSucceeds = false;
+  /** Simulated seconds since either Bey was last in an engaged attack state — feeds WorldState.secondsSinceEngagement (standoff impatience, see IntentSelection). */
+  private secondsSinceEngagement = 0;
+  /** True from the first tick this Bey is seen airborne with an air-recovery window (i.e. just launched) until that window closes — see sampleActions. */
+  private reactingToLaunch = false;
 
   constructor(
     private readonly physics: PhysicsWorld,
@@ -120,12 +138,17 @@ export class AIController implements CombatController {
     const opponentRaw = extractRawState(this.physics, this.opponentBey.body, this.opponentBey);
     const ownPerceived = perceiveCombatant(ownRaw);
     const opponentPerceived = perceiveCombatant(opponentRaw);
+    this.secondsSinceEngagement =
+      ENGAGED_ATTACK_STATES.has(ownRaw.attackState) || ENGAGED_ATTACK_STATES.has(opponentRaw.attackState)
+        ? 0
+        : this.secondsSinceEngagement + context.fixedDeltaSeconds;
     const world = buildWorldState(
       this.nowS,
       ownPerceived,
       opponentPerceived,
       { state: this.clashController.getState(), cooldownRemainingS: this.clashController.getCooldownRemainingS() },
       { horizonSeconds: PREDICTION_HORIZON_S, strength: this.difficulty.predictionStrength },
+      this.secondsSinceEngagement,
     );
     this.lastWorld = world;
 
@@ -142,13 +165,37 @@ export class AIController implements CombatController {
     const committedToAttack = ENGAGED_ATTACK_STATES.has(ownRaw.attackState) && isAttackIntent(this.activeDecision.intent);
     const committedToDrift =
       (ownRaw.driftState === DriftState.Hopping || ownRaw.driftState === DriftState.Drifting) && this.activeDecision.intent === AiIntent.UseJumpDrift;
-    const committed = committedToAttack || committedToDrift;
+    // Being launched (GDD section 21) is a new situation that overrides
+    // any commitment or late reaction still in flight — otherwise an AI
+    // knocked airborne mid-Dash-charge kept charging in the air and never
+    // recovered. The reaction to it still takes a full reaction delay,
+    // counted from the launch itself (not from the last decision, which
+    // could make it instant), so it stays a human-speed reaction.
+    const launched = !ownRaw.grounded && ownRaw.airRecoveryAvailable;
+    if (launched && !this.reactingToLaunch) {
+      this.reactingToLaunch = true;
+      this.pendingDecision = null;
+      this.decisionTimerS = 0;
+    } else if (!launched) {
+      this.reactingToLaunch = false;
+    }
+    const committed = !launched && (committedToAttack || committedToDrift);
 
     const effectiveReactionDelayS = Math.max(0, this.personality.reactionDelaySeconds * this.difficulty.reactionDelayMultiplier);
-    this.decisionTimerS += context.fixedDeltaSeconds;
-    if (!committed && this.decisionTimerS >= effectiveReactionDelayS) {
-      this.decisionTimerS = 0;
-      this.makeFreshDecision(world);
+    if (this.pendingDecision) {
+      // A late reaction (see pendingDecision): count down on simulated time
+      // only, and never swap intent under an in-flight commitment of the
+      // previous one — same rule fresh decisions already follow.
+      this.pendingDelayRemainingS -= context.fixedDeltaSeconds;
+      if (!committed && this.pendingDelayRemainingS <= 0) {
+        this.activatePendingDecision();
+      }
+    } else {
+      this.decisionTimerS += context.fixedDeltaSeconds;
+      if (!committed && this.decisionTimerS >= effectiveReactionDelayS) {
+        this.decisionTimerS = 0;
+        this.makeFreshDecision(world);
+      }
     }
 
     const actions = this.actionSelector.selectActions(this.activeDecision.intent, world, this.personality, this.dodgeAttemptSucceeds, context.fixedDeltaSeconds);
@@ -167,17 +214,22 @@ export class AIController implements CombatController {
     this.idealDecision = ideal;
 
     const { decision, errorApplied, extraDelaySeconds } = maybeApplyIntentionalError(ideal, risk, adjustedPersonality, this.difficulty, this.rng);
-    this.activeDecision = decision;
     this.deliberateErrorApplied = errorApplied;
-    // "Slow to react" error variant: pushes the NEXT fresh decision later
-    // by reducing how far decisionTimerS already is into its cycle,
-    // without touching effectiveReactionDelayS itself (a one-off lapse,
-    // not a permanent change to this personality's reaction speed).
-    if (extraDelaySeconds > 0) this.decisionTimerS -= extraDelaySeconds;
 
     // Rolled exactly once for this fresh decision (see the field's own doc
     // comment) — a no-op (stays false) for every other intent.
-    this.dodgeAttemptSucceeds = decision.intent === AiIntent.DodgeThreat ? this.rng.nextBool(adjustedPersonality.dodgeSkill) : false;
+    const dodgeAttemptSucceeds = decision.intent === AiIntent.DodgeThreat ? this.rng.nextBool(adjustedPersonality.dodgeSkill) : false;
+
+    if (extraDelaySeconds > 0) {
+      // "Slow to react": the decision exists but the AI keeps doing what it
+      // was doing until the delay elapses (see pendingDecision).
+      this.pendingDecision = decision;
+      this.pendingDelayRemainingS = extraDelaySeconds;
+      this.pendingDodgeAttemptSucceeds = dodgeAttemptSucceeds;
+    } else {
+      this.activeDecision = decision;
+      this.dodgeAttemptSucceeds = dodgeAttemptSucceeds;
+    }
 
     if (this.telemetry) {
       this.telemetry.record({
@@ -188,8 +240,20 @@ export class AIController implements CombatController {
         deliberateErrorApplied: errorApplied,
         edgeRiskFraction: risk.edgeRisk,
         opponentThreatFraction: risk.opponentThreat,
+        extraReactionDelayS: extraDelaySeconds,
+        consideredScores: formatIntentScores(ideal.scores ?? [], TELEMETRY_SCORE_COUNT),
       });
     }
+  }
+
+  private activatePendingDecision(): void {
+    if (!this.pendingDecision) return;
+    this.activeDecision = this.pendingDecision;
+    this.dodgeAttemptSucceeds = this.pendingDodgeAttemptSucceeds;
+    this.pendingDecision = null;
+    this.pendingDelayRemainingS = 0;
+    // The reaction cycle restarts from the moment the late reaction lands.
+    this.decisionTimerS = 0;
   }
 
   private clampedAdaptationRate(): number {
@@ -232,11 +296,13 @@ export class AIController implements CombatController {
       difficultyProfileId: this.difficulty.id,
       idealIntent: this.idealDecision.intent,
       idealIntentReason: this.idealDecision.reason,
+      consideredScores: this.idealDecision.scores ?? [],
       activeIntent: this.activeDecision.intent,
       activeIntentReason: this.activeDecision.reason,
       deliberateErrorApplied: this.deliberateErrorApplied,
       dodgeAttemptSucceeds: this.dodgeAttemptSucceeds,
       targetPositionXZ: world ? world.opponent.positionXZ : { x: 0, z: 0 },
+      aimPositionXZ: world ? world.aimPositionXZ : { x: 0, z: 0 },
       distanceToOpponentM: world ? world.distanceToOpponentM : 0,
       edgeRiskFraction: this.lastRisk.edgeRisk,
       opponentThreatFraction: this.lastRisk.opponentThreat,
@@ -244,12 +310,25 @@ export class AIController implements CombatController {
       opportunityFraction: this.lastRisk.opportunity,
       edgePressureOpportunityFraction: this.lastRisk.edgePressureOpportunity,
       reactionTimerS: this.decisionTimerS,
+      pendingIntent: this.pendingDecision ? this.pendingDecision.intent : null,
+      pendingDelayRemainingS: this.pendingDecision ? Math.max(0, this.pendingDelayRemainingS) : 0,
       chosenActionSummary: this.lastActionSummary,
       observedOpponentAggressionFraction: this.adaptation.getSnapshot().observedAggressionFraction,
       observedOpponentDodgeRate: this.adaptation.getSnapshot().observedDodgeRate,
       observedOpponentDashPreference: this.adaptation.getSnapshot().observedDashPreference,
     };
   }
+}
+
+/** How many top-ranked intent scores an AiDecision telemetry event carries — enough to see what lost narrowly without bloating every event. */
+const TELEMETRY_SCORE_COUNT = 4;
+
+/** "Circle 0.52, Approach 0.31, ..." — the compact form AiDecision telemetry carries. */
+export function formatIntentScores(scores: readonly IntentScore[], count: number): string {
+  return scores
+    .slice(0, count)
+    .map((entry) => `${entry.intent} ${entry.score.toFixed(2)}`)
+    .join(', ');
 }
 
 function summarizeActions(actions: ControllerActions): string {

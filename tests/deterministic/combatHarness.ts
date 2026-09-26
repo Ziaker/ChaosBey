@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { createArenaColliders } from '../../src/arena/colliders/createArenaColliders';
+import type { BeyDefinition } from '../../src/bey/archetype/BeyDefinition';
 import { createBey, type Bey } from '../../src/bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { tickMatch, type MatchTickResult } from '../../src/app/simulation/tickMatch';
@@ -43,12 +44,13 @@ export class CombatHarness {
     secondSpawn: { x: number; y: number; z: number } = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 2 },
     matchConfigOverrides: Partial<MatchConfig> = {},
     aiMashSource?: ClashAiMashSource,
+    definitions: { first?: BeyDefinition; second?: BeyDefinition } = {},
   ): Promise<CombatHarness> {
     const physics = await PhysicsWorld.create();
     const scene = new THREE.Scene(); // no renderer involved — safe headless.
     createArenaColliders(scene, physics);
-    const first = createBey(physics, firstSpawn);
-    const second = createBey(physics, secondSpawn);
+    const first = createBey(physics, firstSpawn, definitions.first);
+    const second = createBey(physics, secondSpawn, definitions.second);
     const clash =
       aiMashSource !== undefined
         ? new ClashOrchestration(resolveMatchConfig(matchConfigOverrides), aiMashSource)

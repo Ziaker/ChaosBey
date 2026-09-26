@@ -43,4 +43,19 @@ export interface AiPersonality {
 
   /** Preferred distance (m) from the opponent this personality tries to hold outside of an active engagement — Attack tends low, Defense/Stamina higher. */
   readonly preferredEngageRangeM: number;
+
+  /** 0..1. How much an opponent caught in its own attack's Recovery (a committed whiff) is worth punishing — GDD section 64 Defense: "uses counter opportunities ... punishes commitment". */
+  readonly counterAttackBias: number;
+
+  /** 0..1. Preference for holding the middle of the arena instead of drifting outward between exchanges — GDD section 64 Defense: "uses wall/arena positioning" (the center is the position a ring-out has to travel furthest from). */
+  readonly centerControl: number;
+
+  /** 0..1. Reluctance to start heavy collisions (Dash commitments, closing in) unless the opponent is actually open — GDD section 64 Stamina: "avoids unnecessary heavy collisions". */
+  readonly collisionAvoidance: number;
+
+  /** 0..1. How much a tired opponent (low Stamina) counts as an opening — GDD section 64 Stamina: "exploits fatigue". */
+  readonly fatigueExploitation: number;
+
+  /** 0..1. Preference for stepping off the attack line over spending Stamina on a Dodge while a threat is not yet close — GDD section 64 Stamina: "preserves resources". A threat at point-blank range is always dodged regardless. */
+  readonly dodgeThrift: number;
 }

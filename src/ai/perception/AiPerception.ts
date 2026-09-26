@@ -24,6 +24,9 @@ import { directionTowardCenter, distanceToEdgeM, edgeRiskFraction } from './Edge
 /** How far from the ring-out boundary edge-risk starts ramping up (GDD section 129 — must give the AI enough room to actually attempt recovery, not just notice the edge a tick before falling off it). */
 export const EDGE_RISK_MARGIN_M = 3.5;
 
+/** Seconds ahead a combatant's own velocity is projected for projectedEdgeRiskFraction — a Bey already sliding/flying outward is in danger before its current position says so (an evasive dodge or hop toward the wall used to read as zero risk until it was too late to recover). */
+export const EDGE_PROJECTION_HORIZON_S = 0.5;
+
 export interface CombatantRawState {
   positionXZ: Vec2;
   velocityXZ: Vec2;
@@ -39,6 +42,8 @@ export interface CombatantRawState {
   attackEnergyFraction: number;
   /** DodgeController.isAirRecoveryAvailable() — whether pressing Dodge right now (while airborne) would trigger air recovery (GDD section 21). */
   airRecoveryAvailable: boolean;
+  /** Whether this Bey's current Stamina covers a Dodge's cost — its own resource bar, the same thing a player reads off the HUD. DodgeController silently ignores a Dodge press it cannot pay for. */
+  canAffordDodge: boolean;
 }
 
 export interface PerceivedCombatant extends CombatantRawState {
@@ -46,6 +51,8 @@ export interface PerceivedCombatant extends CombatantRawState {
   distanceToEdgeM: number;
   directionTowardCenter: Vec2;
   edgeRiskFraction: number;
+  /** edgeRiskFraction of where current velocity carries this combatant in EDGE_PROJECTION_HORIZON_S — only ever read from public position/velocity, same as edgeRiskFraction itself. */
+  projectedEdgeRiskFraction: number;
   /** True while this combatant currently has a live/imminent hitbox that could land soon — mirrors ClashOrchestration's ENGAGED_ATTACK_STATES notion of "threatening", reused here for the AI's own read of danger rather than duplicating the list. */
   hasImminentHitbox: boolean;
 }
@@ -66,10 +73,23 @@ export const ENGAGED_ATTACK_STATES: ReadonlySet<AttackState> = new Set([
 export function perceiveCombatant(raw: CombatantRawState): PerceivedCombatant {
   return {
     ...raw,
+    // AttackController.getChargeFraction() keeps reporting the LAST Dash's
+    // charge after that Dash is over (its timer only resets when a new
+    // charge starts). A charge only exists while ChargingDash — reading the
+    // stale value made ActionSelection believe a fresh Dash was already
+    // charged and never press Attack again after the first Dash.
+    dashChargeFraction: raw.attackState === AttackState.ChargingDash ? raw.dashChargeFraction : 0,
     speedMps: length(raw.velocityXZ),
     distanceToEdgeM: distanceToEdgeM(raw.positionXZ),
     directionTowardCenter: directionTowardCenter(raw.positionXZ),
     edgeRiskFraction: edgeRiskFraction(raw.positionXZ, EDGE_RISK_MARGIN_M),
+    projectedEdgeRiskFraction: edgeRiskFraction(
+      {
+        x: raw.positionXZ.x + raw.velocityXZ.x * EDGE_PROJECTION_HORIZON_S,
+        z: raw.positionXZ.z + raw.velocityXZ.z * EDGE_PROJECTION_HORIZON_S,
+      },
+      EDGE_RISK_MARGIN_M,
+    ),
     hasImminentHitbox: ENGAGED_ATTACK_STATES.has(raw.attackState),
   };
 }

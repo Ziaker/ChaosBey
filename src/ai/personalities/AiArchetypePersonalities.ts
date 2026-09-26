@@ -24,6 +24,11 @@ export const ATTACK_AI_PERSONALITY: AiPersonality = {
   clashMashRatePerSecond: 6,
   adaptationRate: 0.3,
   preferredEngageRangeM: 2.5,
+  counterAttackBias: 0.3,
+  centerControl: 0.1,
+  collisionAvoidance: 0.0,
+  fatigueExploitation: 0.2,
+  dodgeThrift: 0.1,
 };
 
 /** Defense AI (GDD section 64): more reactive — uses counter opportunities, manages spacing, uses wall/arena positioning, punishes commitment. */
@@ -39,6 +44,11 @@ export const DEFENSE_AI_PERSONALITY: AiPersonality = {
   clashMashRatePerSecond: 5,
   adaptationRate: 0.45,
   preferredEngageRangeM: 4.5,
+  counterAttackBias: 0.9,
+  centerControl: 0.8,
+  collisionAvoidance: 0.3,
+  fatigueExploitation: 0.3,
+  dodgeThrift: 0.2,
 };
 
 /** Stamina AI (GDD section 64): more evasive — preserves resources, encourages long battles, avoids unnecessary heavy collisions, exploits fatigue. */
@@ -54,6 +64,11 @@ export const STAMINA_AI_PERSONALITY: AiPersonality = {
   clashMashRatePerSecond: 5.5,
   adaptationRate: 0.5,
   preferredEngageRangeM: 5,
+  counterAttackBias: 0.5,
+  centerControl: 0.4,
+  collisionAvoidance: 0.75,
+  fatigueExploitation: 0.9,
+  dodgeThrift: 0.7,
 };
 
 /** Neutral fallback for any BeyDefinition that isn't one of the three known archetypes (mirrors DEFAULT_BEY_DEFINITION's role in BeyArchetypes.ts). */
@@ -69,6 +84,11 @@ export const DEFAULT_AI_PERSONALITY: AiPersonality = {
   clashMashRatePerSecond: 5.5,
   adaptationRate: 0.35,
   preferredEngageRangeM: 3.5,
+  counterAttackBias: 0.5,
+  centerControl: 0.4,
+  collisionAvoidance: 0.3,
+  fatigueExploitation: 0.4,
+  dodgeThrift: 0.3,
 };
 
 /** Looked up by BeyDefinition.id — the same key AttackProfileSettings.ts matches archetypes by. */

@@ -9,10 +9,11 @@
 // Two distinct kinds of mistake, each individually bounded and safe:
 // - Intent downgrade: substitutes a passive/neutral intent (Wait or
 //   Circle) for the ideal one — a moment of indecision about WHAT to do.
-// - Extra reaction delay: keeps the ideal intent, but adds a bounded delay
-//   before AIController's next fresh decision — a moment of being slow to
-//   act, GDD section 63's "artificial reaction delay" made variable rather
-//   than a fixed personality constant.
+// - Extra reaction delay: keeps the ideal intent, but AIController only
+//   starts acting on it after a bounded extra delay, continuing its
+//   previous intent meanwhile — a moment of being slow to act, GDD section
+//   63's "artificial reaction delay" made variable rather than a fixed
+//   personality constant (see AIController.pendingDecision).
 // Neither can ever invent an unsafe action, ignore a critical edge-recovery
 // or air-recovery need, or otherwise behave like a hidden cheat/glitch.
 // ============================================================
@@ -26,13 +27,13 @@ import type { RiskAssessment } from '../decision/RiskEvaluation';
 
 /** Above this edge risk, recovery is never downgraded/delayed by a deliberate error — GDD section 129's "do not give AI hidden teleport recovery" is about not cheating recovery, not about being allowed to skip it outright at real danger. */
 const CRITICAL_EDGE_RISK = 0.85;
-/** Maximum extra delay (seconds) an "extra reaction delay" error can add before the next fresh decision — bounded so a mistake reads as human hesitation, not the AI freezing. */
+/** Maximum extra delay (seconds) an "extra reaction delay" error can add before the decision is acted on — bounded so a mistake reads as human hesitation, not the AI freezing. */
 const MAX_EXTRA_DELAY_S = 0.4;
 
 export interface ErrorAppliedResult {
   decision: IntentDecision;
   errorApplied: boolean;
-  /** Seconds to add to the next decision's timer — 0 unless this specific error variant was rolled. */
+  /** Seconds before AIController starts acting on `decision` (it keeps its previous intent meanwhile) — 0 unless this specific error variant was rolled. */
   extraDelaySeconds: number;
 }
 

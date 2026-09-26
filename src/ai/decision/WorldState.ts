@@ -43,8 +43,12 @@ export interface WorldState {
   readonly distanceToOpponentM: number;
   /** Unit vector from own position toward the opponent's targeting position — a strength-weighted blend of their current and short-horizon-predicted position (see PredictionConfig); equals the plain current-position direction when no PredictionConfig is supplied or strength is 0. Zero vector only in the degenerate case of identical positions. */
   readonly directionToOpponent: Vec2;
+  /** The point directionToOpponent aims at — the opponent's current position blended toward its short-horizon predicted one (see PredictionConfig). */
+  readonly aimPositionXZ: Vec2;
   /** Own speed relative to the opponent's — positive means own is faster (used by RiskEvaluation for "a slower defender is more vulnerable", GDD section 27, from the AI's own perspective as a potential defender). */
   readonly relativeSpeedAdvantageMps: number;
+  /** Simulated seconds since either Bey was last seen in an engaged attack state (see AiPerception.ENGAGED_ATTACK_STATES) — how long the fight has been a standoff. 0 when not tracked. */
+  readonly secondsSinceEngagement: number;
 }
 
 export function buildWorldState(
@@ -53,6 +57,7 @@ export function buildWorldState(
   opponent: PerceivedCombatant,
   clash: ClashContext,
   prediction?: PredictionConfig,
+  secondsSinceEngagement = 0,
 ): WorldState {
   const targetPositionXZ =
     prediction && prediction.strength > 0
@@ -67,7 +72,9 @@ export function buildWorldState(
     clash,
     distanceToOpponentM: distanceBetweenM(own, opponent),
     directionToOpponent: dist > 1e-6 ? { x: toTarget.x / dist, z: toTarget.z / dist } : { x: 0, z: 0 },
+    aimPositionXZ: targetPositionXZ,
     relativeSpeedAdvantageMps: own.speedMps - opponent.speedMps,
+    secondsSinceEngagement,
   };
 }
 

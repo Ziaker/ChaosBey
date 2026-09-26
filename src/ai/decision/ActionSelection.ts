@@ -23,7 +23,8 @@ import { AttackState } from '../../combat/attacks/AttackController';
 import { DodgeState } from '../../dodge/DodgeController';
 import { DriftState } from '../../drift/DriftController';
 import { Action, type ControllerActions } from '../../input/actions/Action';
-import { fromYaw, perpendicular, scale, signedAngleBetween, type Vec2 } from '../../physics/Vec2';
+import { add, dot, fromYaw, normalize, perpendicular, scale, signedAngleBetween, type Vec2 } from '../../physics/Vec2';
+import { RINGOUT_RADIUS_M } from '../../arena/ringout/RingOutTuning';
 import type { AiPersonality } from '../personalities/AiPersonality';
 import { AI_CIRCULAR_ATTACK_RANGE_M, AI_DASH_ATTACK_MAX_RANGE_M } from './AiCombatRanges';
 import { AiIntent } from './Intent';
@@ -45,28 +46,86 @@ function computeSteering(currentForward: Vec2, desiredDirection: Vec2): { steerL
   return { steerLeft: false, steerRight: false };
 }
 
+/** Weight of the inward pull added to Circle's sideways direction at the ring edge for centerControl 1 (scaled down linearly toward the center). */
+const CIRCLE_CENTER_PULL = 1.5;
+
+/** Component (of a unit direction) along a Bey-relative axis above which a Dodge direction key is held — cos(67.5°), so the 8 possible key combinations each cover a 45° sector, the same 8 directions a player can press (see DodgeController.applyBurst). */
+const DODGE_KEY_COMPONENT_THRESHOLD = 0.38;
+
+/**
+ * Direction to take when getting out of the way of the opponent: sideways
+ * off the line between the two Beys (a Dash homes in with a limited turn
+ * rate, so leaving its line is what makes it miss), on whichever side
+ * points more toward the arena center. Backing straight away from an
+ * attacker used to walk the AI down the attack line into the wall — and
+ * any Dodge burst taken along that line carried it out of the ring.
+ */
+export function evasionDirection(world: WorldState): Vec2 {
+  if (world.distanceToOpponentM <= 1e-3) return world.own.directionTowardCenter;
+  const rightPerp = perpendicular(world.directionToOpponent);
+  const towardCenterSign = dot(rightPerp, world.own.directionTowardCenter) >= 0 ? 1 : -1;
+  return scale(rightPerp, towardCenterSign);
+}
+
+/**
+ * Circle: sideways relative to the opponent, on the side that moves toward
+ * the center (evasionDirection) — circling must not casually drift the AI
+ * toward the ring boundary. A personality that values the middle
+ * (AiPersonality.centerControl, GDD section 64 Defense "uses wall/arena
+ * positioning") spirals inward the further out it is.
+ */
+export function circleDirection(world: WorldState, personality: AiPersonality): Vec2 {
+  const sideways = evasionDirection(world);
+  const radiusFraction = Math.max(0, Math.min(1, 1 - world.own.distanceToEdgeM / RINGOUT_RADIUS_M));
+  const inwardWeight = personality.centerControl * radiusFraction * CIRCLE_CENTER_PULL;
+  if (inwardWeight <= 0) return sideways;
+  const blended = normalize(add(sideways, scale(world.own.directionTowardCenter, inwardWeight)));
+  return blended.x === 0 && blended.z === 0 ? sideways : blended;
+}
+
+/** Retreat: straight away from the opponent in open space, bending toward the center as ring-out danger grows (the same edge risk RiskEvaluation reads). */
+export function retreatDirection(world: WorldState): Vec2 {
+  if (world.distanceToOpponentM <= 1e-3) return world.own.directionTowardCenter;
+  const away = scale(world.directionToOpponent, -1);
+  const edgeWeight = Math.max(world.own.edgeRiskFraction, world.own.projectedEdgeRiskFraction);
+  const blended = normalize(add(scale(away, 1 - edgeWeight), scale(world.own.directionTowardCenter, edgeWeight * 1.5)));
+  return blended.x === 0 && blended.z === 0 ? world.own.directionTowardCenter : blended;
+}
+
+/** The Bey-relative direction keys (forward/back/left/right, diagonals allowed) that point a Dodge burst closest to `direction` — the same inputs a player would press. */
+export function dodgeDirectionKeys(headingRad: number, direction: Vec2): Action[] {
+  const forward = fromYaw(headingRad);
+  const right = perpendicular(forward);
+  const forwardComponent = dot(forward, direction);
+  const rightComponent = dot(right, direction);
+  const keys: Action[] = [];
+  if (forwardComponent > DODGE_KEY_COMPONENT_THRESHOLD) keys.push(Action.MoveForward);
+  if (forwardComponent < -DODGE_KEY_COMPONENT_THRESHOLD) keys.push(Action.MoveBackward);
+  if (rightComponent > DODGE_KEY_COMPONENT_THRESHOLD) keys.push(Action.SteerRight);
+  if (rightComponent < -DODGE_KEY_COMPONENT_THRESHOLD) keys.push(Action.SteerLeft);
+  return keys;
+}
+
 /** null means "no movement intent this tick" (e.g. Wait, or an attack/dodge that doesn't call for repositioning). */
-function computeDesiredMoveDirection(intent: AiIntent, world: WorldState): Vec2 | null {
+function computeDesiredMoveDirection(intent: AiIntent, world: WorldState, personality: AiPersonality): Vec2 | null {
   switch (intent) {
     case AiIntent.Approach:
     case AiIntent.PressAdvantage:
     case AiIntent.AttackDash:
     case AiIntent.AttackCircular:
-    case AiIntent.UseJumpDrift:
       return world.distanceToOpponentM > 1e-3 ? world.directionToOpponent : null;
+    case AiIntent.UseJumpDrift:
+      // Only ever chosen as an answer to a threat (IntentSelection) — hop
+      // off the attack line like a dodge would, not into the attacker.
+      return evasionDirection(world);
     case AiIntent.Retreat:
+      return retreatDirection(world);
     case AiIntent.DodgeThreat:
-      return world.distanceToOpponentM > 1e-3 ? scale(world.directionToOpponent, -1) : null;
+      return evasionDirection(world);
     case AiIntent.RecoverFromEdge:
       return world.own.directionTowardCenter;
-    case AiIntent.Circle: {
-      const rightPerp = perpendicular(world.directionToOpponent);
-      // Prefer whichever perpendicular side actually moves toward the
-      // center (dot with directionTowardCenter positive) — circling must
-      // not casually drift the AI toward the ring boundary.
-      const towardCenterSign = rightPerp.x * world.own.directionTowardCenter.x + rightPerp.z * world.own.directionTowardCenter.z >= 0 ? 1 : -1;
-      return scale(rightPerp, towardCenterSign);
-    }
+    case AiIntent.Circle:
+      return circleDirection(world, personality);
     case AiIntent.Wait:
       return null;
     default:
@@ -97,7 +156,7 @@ export class ActionSelector {
   ): ControllerActions {
     const desiredHeld = new Set<Action>();
 
-    const moveDirection = computeDesiredMoveDirection(intent, world);
+    const moveDirection = computeDesiredMoveDirection(intent, world, personality);
     if (moveDirection) {
       const currentForward = fromYaw(world.own.headingRad);
       const { steerLeft, steerRight } = computeSteering(currentForward, moveDirection);
@@ -130,7 +189,25 @@ export class ActionSelector {
       desiredHeld.add(Action.Attack);
     }
 
-    if (intent === AiIntent.DodgeThreat && world.own.dodgeState === DodgeState.Idle && dodgeAttemptSucceeds) {
+    // A Dodge only starts from a fresh press while grounded (DodgeController)
+    // — pressing airborne is silently ignored, and HOLDING the button
+    // afterwards never produces another press, so a single early press
+    // used to swallow the whole dodge. Press only when it can take, and
+    // release for a tick between attempts so a retry is a real new press.
+    if (
+      intent === AiIntent.DodgeThreat &&
+      world.own.dodgeState === DodgeState.Idle &&
+      world.own.grounded &&
+      world.own.canAffordDodge &&
+      !this.previousHeld.has(Action.Dodge) &&
+      dodgeAttemptSucceeds
+    ) {
+      // The burst goes wherever the direction keys held on the press tick
+      // point (DodgeController.applyBurst) — replace this tick's movement
+      // keys with the ones aiming it along evasionDirection, instead of
+      // letting "MoveForward toward wherever I was steering" decide it.
+      for (const key of [Action.MoveForward, Action.MoveBackward, Action.SteerLeft, Action.SteerRight]) desiredHeld.delete(key);
+      for (const key of dodgeDirectionKeys(world.own.headingRad, evasionDirection(world))) desiredHeld.add(key);
       desiredHeld.add(Action.Dodge);
     }
 

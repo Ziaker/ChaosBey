@@ -83,17 +83,22 @@ export interface DebugOverlayState {
     difficultyProfileId: string;
     idealIntent: string;
     idealIntentReason: string;
+    consideredScores: readonly { intent: string; score: number }[];
     activeIntent: string;
     activeIntentReason: string;
     deliberateErrorApplied: boolean;
     dodgeAttemptSucceeds: boolean;
     distanceToOpponentM: number;
+    targetPositionXZ: { x: number; z: number };
+    aimPositionXZ: { x: number; z: number };
     edgeRiskFraction: number;
     opponentThreatFraction: number;
     selfVulnerabilityFraction: number;
     opportunityFraction: number;
     edgePressureOpportunityFraction: number;
     reactionTimerS: number;
+    pendingIntent: string | null;
+    pendingDelayRemainingS: number;
     chosenActionSummary: string;
     observedOpponentAggressionFraction: number;
     observedOpponentDodgeRate: number;
@@ -190,11 +195,14 @@ export class DebugOverlay {
         ? `-- ai (second, M7) --\n` +
           `personality      ${state.aiDebug.personalityId} / difficulty ${state.aiDebug.difficultyProfileId}\n` +
           `ideal intent     ${state.aiDebug.idealIntent} (${state.aiDebug.idealIntentReason})\n` +
+          `scores           ${state.aiDebug.consideredScores.length > 0 ? state.aiDebug.consideredScores.slice(0, 5).map((entry) => `${entry.intent} ${entry.score.toFixed(2)}`).join(' · ') : '(hard override — not scored)'}\n` +
           `active intent    ${state.aiDebug.activeIntent}${state.aiDebug.deliberateErrorApplied ? ' [DELIBERATE ERROR]' : ''} (${state.aiDebug.activeIntentReason})\n` +
           `dodge roll       ${state.aiDebug.activeIntent === 'DodgeThreat' ? (state.aiDebug.dodgeAttemptSucceeds ? 'succeeds' : 'fails') : '-'}\n` +
           `distance         ${state.aiDebug.distanceToOpponentM.toFixed(2)} m\n` +
+          `target / aim     (${state.aiDebug.targetPositionXZ.x.toFixed(1)}, ${state.aiDebug.targetPositionXZ.z.toFixed(1)}) -> predicted (${state.aiDebug.aimPositionXZ.x.toFixed(1)}, ${state.aiDebug.aimPositionXZ.z.toFixed(1)})\n` +
           `risk             edge ${state.aiDebug.edgeRiskFraction.toFixed(2)} opponentThreat ${state.aiDebug.opponentThreatFraction.toFixed(2)} selfVuln ${state.aiDebug.selfVulnerabilityFraction.toFixed(2)} opportunity ${state.aiDebug.opportunityFraction.toFixed(2)} edgePressure ${state.aiDebug.edgePressureOpportunityFraction.toFixed(2)}\n` +
           `reaction timer   ${state.aiDebug.reactionTimerS.toFixed(2)} s\n` +
+          `late reaction    ${state.aiDebug.pendingIntent ? `${state.aiDebug.pendingIntent} in ${state.aiDebug.pendingDelayRemainingS.toFixed(2)} s` : '-'}\n` +
           `action           ${state.aiDebug.chosenActionSummary}\n` +
           `adaptation       aggression~${state.aiDebug.observedOpponentAggressionFraction.toFixed(2)} dodge~${state.aiDebug.observedOpponentDodgeRate.toFixed(2)} dashPref~${state.aiDebug.observedOpponentDashPreference.toFixed(2)}`
         : `-- ai (second, M7) --\n(no AIController attached)`);
