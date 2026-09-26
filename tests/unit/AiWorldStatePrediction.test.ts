@@ -32,6 +32,8 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    airRecoveryAvailable: false,
+    canAffordDodge: true,
     ...overrides,
   };
 }
@@ -81,5 +83,19 @@ describe('buildWorldState prediction blending', () => {
 
     expect(noPrediction.distanceToOpponentM).toBeCloseTo(5, 5);
     expect(fullPrediction.distanceToOpponentM).toBeCloseTo(5, 5);
+  });
+
+  it('keeps the observed opponent position and the predicted aim point separate (M7 Part 2b debug)', () => {
+    const own = perceiveCombatant(rawState({ positionXZ: { x: 0, z: 0 } }));
+    const movingOpponent = perceiveCombatant(rawState({ positionXZ: { x: 5, z: 0 }, velocityXZ: { x: 0, z: 20 } }));
+    const world = buildWorldState(0, own, movingOpponent, { state: ClashState.Idle, cooldownRemainingS: 0 }, { horizonSeconds: 0.5, strength: 0.5 });
+    // Observed: exactly where the opponent is.
+    expect(world.opponent.positionXZ).toEqual({ x: 5, z: 0 });
+    // Aim: halfway to the 0.5 s extrapolation (5, 10) -> (5, 5).
+    expect(world.aimPositionXZ.x).toBeCloseTo(5, 6);
+    expect(world.aimPositionXZ.z).toBeCloseTo(5, 6);
+    // No prediction: aim == observed.
+    const plain = buildWorldState(0, own, movingOpponent, { state: ClashState.Idle, cooldownRemainingS: 0 });
+    expect(plain.aimPositionXZ).toEqual(plain.opponent.positionXZ);
   });
 });

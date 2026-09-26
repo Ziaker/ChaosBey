@@ -44,6 +44,8 @@ export interface WorldState {
   readonly distanceToOpponentM: number;
   /** Unit vector from own position toward the opponent's targeting position — a strength-weighted blend of their current and short-horizon-predicted position (see PredictionConfig); equals the plain current-position direction when no PredictionConfig is supplied or strength is 0. Zero vector only in the degenerate case of identical positions. */
   readonly directionToOpponent: Vec2;
+  /** The point directionToOpponent aims at: the opponent's OBSERVED position blended toward its short-horizon predicted one (see PredictionConfig). Never used for range checks — opponent.positionXZ is the observed position. */
+  readonly aimPositionXZ: Vec2;
   /** Own speed relative to the opponent's — positive means own is faster (used by RiskEvaluation for "a slower defender is more vulnerable", GDD section 27, from the AI's own perspective as a potential defender). */
   readonly relativeSpeedAdvantageMps: number;
   /** How fast (m/s) the gap between the two is shrinking right now (relative velocity along the line between them); negative while separating. From real current positions/velocities only. */
@@ -82,6 +84,7 @@ export function buildWorldState(
     clash,
     distanceToOpponentM: distanceBetweenM(own, opponent),
     directionToOpponent: dist > 1e-6 ? { x: toTarget.x / dist, z: toTarget.z / dist } : { x: 0, z: 0 },
+    aimPositionXZ: targetPositionXZ,
     relativeSpeedAdvantageMps: own.speedMps - opponent.speedMps,
     closingSpeedMps,
     ownCircularReachM: self?.circularReachM ?? AI_DEFAULT_CIRCULAR_REACH_M,

@@ -41,14 +41,46 @@ describe('maybeApplyIntentionalError', () => {
     }
   });
 
-  it('only ever downgrades to Wait or Circle when an error is applied', () => {
+  it('when an error is applied, either downgrades to Wait/Circle OR keeps the ideal intent with a bounded extra delay — never anything else', () => {
     const alwaysErrorPersonality = { ...ATTACK_AI_PERSONALITY, errorRate: 1 };
     const rng = SeededRng.fromSeedText('always-error');
+    let sawDowngrade = false;
+    let sawExtraDelay = false;
     for (let i = 0; i < 50; i++) {
       const result = maybeApplyIntentionalError(decision, NO_RISK, alwaysErrorPersonality, DEFAULT_AI_DIFFICULTY_PROFILE, rng);
-      if (result.errorApplied) {
+      if (!result.errorApplied) continue;
+      if (result.decision.intent === decision.intent) {
+        // "Slow to react": same intent, acted on later (AIController.pendingDecision).
+        expect(result.extraDelaySeconds).toBeGreaterThanOrEqual(0.05);
+        expect(result.extraDelaySeconds).toBeLessThanOrEqual(0.4);
+        sawExtraDelay = true;
+      } else {
         expect([AiIntent.Wait, AiIntent.Circle]).toContain(result.decision.intent);
+        expect(result.extraDelaySeconds).toBe(0);
+        sawDowngrade = true;
       }
+    }
+    // Both kinds show up over 50 rolls at errorRate 1 (a coin flip each).
+    expect(sawDowngrade).toBe(true);
+    expect(sawExtraDelay).toBe(true);
+  });
+
+  it('never applies an error of either kind to AirRecover, or to an edge-safe evasion at critical edge risk', () => {
+    const alwaysErrorPersonality = { ...ATTACK_AI_PERSONALITY, errorRate: 1 };
+    const rng = SeededRng.fromSeedText('immune');
+    const critical = { ...NO_RISK, edgeRisk: 0.95 };
+    for (let i = 0; i < 20; i++) {
+      const air = maybeApplyIntentionalError({ intent: AiIntent.AirRecover, reason: 'airborne' }, NO_RISK, alwaysErrorPersonality, DEFAULT_AI_DIFFICULTY_PROFILE, rng);
+      expect(air.errorApplied).toBe(false);
+      expect(air.extraDelaySeconds).toBe(0);
+      const evade = maybeApplyIntentionalError(
+        { intent: AiIntent.DodgeThreat, reason: 'edge-safe dodge', edgeRecovery: true },
+        critical,
+        alwaysErrorPersonality,
+        DEFAULT_AI_DIFFICULTY_PROFILE,
+        rng,
+      );
+      expect(evade.errorApplied).toBe(false);
     }
   });
 

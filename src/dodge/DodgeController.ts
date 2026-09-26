@@ -66,6 +66,26 @@ export class DodgeController {
   }
 
   /**
+   * Whether pressing Dodge right now (while airborne) would trigger air
+   * recovery. Read by Milestone 7's AIController for its OWN Bey only.
+   *
+   * Why this is not privileged information (GDD section 63/129 — the AI
+   * plays by the player's rules): it is true exactly while "I was hit by a
+   * knockback/launch, I am airborne because of it, and I have not used
+   * recovery yet" — all things a player sees about their own Bey (the hit,
+   * the launch, their own C press). It is current state, one-shot (cleared
+   * by the recovery press in tick()), and never turns a normal jump into
+   * an air dodge. The one edge case (a launch that only lifts off after
+   * LAUNCH_PENDING_WINDOW_S does not arm recovery) gives no advantage
+   * either: an airborne Dodge press with no recovery armed is a no-op with
+   * no Stamina cost and no cooldown, so a player who presses C whenever
+   * launched gets the same outcome the AI gets from reading this.
+   */
+  isAirRecoveryAvailable(): boolean {
+    return this.airRecoveryAvailable;
+  }
+
+  /**
    * Call when a knockback/launch impulse (normal knockback or the
    * Circular-catches-Dash upward launch) is applied to this Bey — arms Air
    * Recovery for the airborne period the launch causes (GDD section 21). A

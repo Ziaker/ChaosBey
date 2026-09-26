@@ -32,6 +32,8 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    airRecoveryAvailable: false,
+    canAffordDodge: true,
     ...overrides,
   };
 }
@@ -173,13 +175,13 @@ describe('selectIntent — anti-passivity tempo (M7 Part 2)', () => {
 });
 
 describe('selectIntent — considered scores (M7 Part 2, GDD section 65)', () => {
-  it('reports up to 3 candidates, best first, with the winner on top', () => {
+  it('reports every scored candidate, best first, with the winner on top (M7 Part 2b: all, not just the top 3)', () => {
     const decision = decide({}, { positionXZ: { x: 0, z: 4.5 } }, DEFENSE_AI_PERSONALITY);
     const scores = decision.consideredScores ?? [];
-    expect(scores.length).toBe(3);
+    expect(scores.length).toBe(8);
+    expect(new Set(scores.map((entry) => entry.intent)).size).toBe(scores.length);
     expect(scores[0]!.intent).toBe(decision.intent);
-    expect(scores[0]!.score).toBeGreaterThanOrEqual(scores[1]!.score);
-    expect(scores[1]!.score).toBeGreaterThanOrEqual(scores[2]!.score);
+    for (let i = 1; i < scores.length; i++) expect(scores[i - 1]!.score).toBeGreaterThanOrEqual(scores[i]!.score);
   });
 
   it('reports no scores when an override decided', () => {

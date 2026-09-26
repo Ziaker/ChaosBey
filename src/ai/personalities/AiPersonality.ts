@@ -52,4 +52,16 @@ export interface AiPersonality {
 
   /** 0..1. How strongly an opponent near the ring-out boundary pulls this AI into pressing them toward it from the center side (GDD section 63/129: "AI exploits opponents near the edge"). */
   readonly edgePressureAffinity: number;
+
+  /** 0..1. Preference for holding the middle of the arena while circling instead of drifting outward between exchanges (GDD section 64 Defense: "uses wall/arena positioning" — the center is where a ring-out has the furthest to travel). */
+  readonly centerControl: number;
+
+  /** 0..1. Reluctance to start heavy collisions (Dash commitments, closing in) unless the opponent is actually open (GDD section 64 Stamina: "avoids unnecessary heavy collisions"). */
+  readonly collisionAvoidance: number;
+
+  /** 0..1. How much a tired opponent (low Stamina) counts as an opening (GDD section 64 Stamina: "exploits fatigue"). */
+  readonly fatigueExploitation: number;
+
+  /** 0..1. Preference for stepping off the attack line over spending Stamina on a Dodge while a threat is not yet close (GDD section 64 Stamina: "preserves resources"). Never applies in edge danger, and a point-blank threat is always dodged. */
+  readonly dodgeThrift: number;
 }

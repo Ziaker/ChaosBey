@@ -171,6 +171,10 @@ export interface AiDecisionEvent extends TelemetryEventBase {
   deliberateErrorApplied: boolean;
   edgeRiskFraction: number;
   opponentThreatFraction: number;
+  /** Seconds this decision's reaction is delayed by a "slow to react" deliberate error (0 = acted on immediately). */
+  extraReactionDelayS: number;
+  /** Every candidate intent and its score, best first, e.g. "AttackCircular 0.72 / Circle 0.41 / ..." — or "override (see reason)". */
+  consideredScores: string;
 }
 
 export type TelemetryEvent =

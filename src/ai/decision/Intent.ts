@@ -28,6 +28,8 @@ export enum AiIntent {
   DodgeThreat = 'DodgeThreat',
   /** Hold ground against a telegraphed/incoming Dash Attack and tap a Circular Attack timed to catch it (GDD section 23/107: the Circular-catches-Dash counter launches the dasher upward). Timing must still land — this is a read, not a guaranteed win. */
   CounterAttack = 'CounterAttack',
+  /** Use Dodge specifically to trigger air recovery after being knocked airborne (GDD section 21) — distinct from DodgeThreat, which answers an opponent's hitbox rather than the AI's own launched state. */
+  AirRecover = 'AirRecover',
   /** Do nothing meaningful this tick (used sparingly — patience/whiff-recovery windows, not a default). */
   Wait = 'Wait',
 }
