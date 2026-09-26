@@ -89,8 +89,11 @@ export interface DebugOverlayState {
     deliberateErrorApplied: boolean;
     dodgeAttemptSucceeds: boolean;
     distanceToOpponentM: number;
-    targetPositionXZ: { x: number; z: number };
+    observedOpponentXZ: { x: number; z: number };
+    predictedOpponentXZ: { x: number; z: number } | null;
     aimPositionXZ: { x: number; z: number };
+    predictionHorizonS: number;
+    predictionStrength: number;
     edgeRiskFraction: number;
     opponentThreatFraction: number;
     selfVulnerabilityFraction: number;
@@ -198,7 +201,8 @@ export class DebugOverlay {
           `active intent    ${state.aiDebug.activeIntent}${state.aiDebug.deliberateErrorApplied ? ' [DELIBERATE ERROR]' : ''} (${state.aiDebug.activeIntentReason})\n` +
           `dodge roll       ${state.aiDebug.activeIntent === 'DodgeThreat' ? (state.aiDebug.dodgeAttemptSucceeds ? 'succeeds' : 'fails') : '-'}\n` +
           `distance         ${state.aiDebug.distanceToOpponentM.toFixed(2)} m\n` +
-          `target / aim     observed (${state.aiDebug.targetPositionXZ.x.toFixed(1)}, ${state.aiDebug.targetPositionXZ.z.toFixed(1)}) -> aim (${state.aiDebug.aimPositionXZ.x.toFixed(1)}, ${state.aiDebug.aimPositionXZ.z.toFixed(1)})\n` +
+          `target / aim     observed (${state.aiDebug.observedOpponentXZ.x.toFixed(1)}, ${state.aiDebug.observedOpponentXZ.z.toFixed(1)}) -> aim (${state.aiDebug.aimPositionXZ.x.toFixed(1)}, ${state.aiDebug.aimPositionXZ.z.toFixed(1)})\n` +
+          `prediction       ${state.aiDebug.predictedOpponentXZ ? `(${state.aiDebug.predictedOpponentXZ.x.toFixed(1)}, ${state.aiDebug.predictedOpponentXZ.z.toFixed(1)}) in ${state.aiDebug.predictionHorizonS.toFixed(2)} s, trusted x${state.aiDebug.predictionStrength.toFixed(2)}` : 'off (aims at the observed position)'}\n` +
           `risk             edge ${state.aiDebug.edgeRiskFraction.toFixed(2)} opponentThreat ${state.aiDebug.opponentThreatFraction.toFixed(2)} selfVuln ${state.aiDebug.selfVulnerabilityFraction.toFixed(2)} opportunity ${state.aiDebug.opportunityFraction.toFixed(2)}\n` +
           `reaction timer   ${state.aiDebug.reactionTimerS.toFixed(2)} s\n` +
           `late reaction    ${state.aiDebug.pendingIntent ? `${state.aiDebug.pendingIntent} in ${state.aiDebug.pendingDelayRemainingS.toFixed(2)} s` : '-'}\n` +

@@ -31,10 +31,16 @@ export interface AiDebugState {
   deliberateErrorApplied: boolean;
   /** The outcome of AiPersonality.dodgeSkill's single pre-roll for the current decision (see AIController.makeFreshDecision) — only meaningful while activeIntent is DodgeThreat. Exposed for GDD section 65's "why a dodge/jump was chosen" and to make the once-per-decision (not once-per-tick) rolling semantics independently observable. */
   dodgeAttemptSucceeds: boolean;
-  /** The opponent's OBSERVED position (what range checks use). */
-  targetPositionXZ: Vec2;
-  /** Where the AI actually steers: the observed position blended toward the predicted one by the difficulty's predictionStrength (GDD section 65 "predicted path"). Kept separate from targetPositionXZ on purpose. */
+  /** The opponent's OBSERVED position right now (what range checks use) — see WorldState.TargetingInfo. */
+  observedOpponentXZ: Vec2;
+  /** The opponent's position linearly extrapolated predictionHorizonS ahead; null when prediction is off — never the observed position relabeled. */
+  predictedOpponentXZ: Vec2 | null;
+  /** Where the AI actually aims/steers: observedOpponentXZ pulled toward predictedOpponentXZ by predictionStrength (GDD section 65 "predicted path"); equals observedOpponentXZ when prediction is off. */
   aimPositionXZ: Vec2;
+  /** Seconds ahead the prediction looks; 0 when prediction is off. */
+  predictionHorizonS: number;
+  /** 0..1 how much the aim point trusts the prediction (the difficulty's predictionStrength); 0 when prediction is off. */
+  predictionStrength: number;
   distanceToOpponentM: number;
   edgeRiskFraction: number;
   opponentThreatFraction: number;

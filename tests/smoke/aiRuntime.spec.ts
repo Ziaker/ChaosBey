@@ -225,6 +225,9 @@ test('AI opponent decides, explains and acts over 600 simulated ticks — intent
   // Explains: considered scores and the observed/aim target are rendered (GDD section 65).
   expect(scoredLines.length).toBeGreaterThan(0);
   expect(aiSections.every((text) => field(text, 'target / aim')?.startsWith('observed (') ?? false)).toBe(true);
+  // Prediction is its own line: a real predicted position at the default difficulty, never folded into observed/aim.
+  expect(aiSections.every((text) => field(text, 'prediction') !== null)).toBe(true);
+  expect(aiSections.some((text) => /^\(-?\d+\.\d, -?\d+\.\d\) in \d\.\d\d s, trusted x\d\.\d\d$/.test(field(text, 'prediction') ?? ''))).toBe(true);
   expect(aiSections.every((text) => field(text, 'late reaction') !== null)).toBe(true);
   // Never renders a broken number.
   expect(reactionTimers.every((value) => Number.isFinite(value))).toBe(true);
