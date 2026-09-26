@@ -10,13 +10,11 @@ import { dot, normalize, scale, subtract, type Vec2 } from '../../physics/Vec2';
 import { INTENDED_MAX_SPEED_MPS } from '../../bey/movement/MovementTuning';
 import {
   ATTACKER_SPEED_KNOCKBACK_WEIGHT,
-  ATTACK_STAT_MULTIPLIER_PLACEHOLDER,
   COLLISION_ANGLE_MAX_FACTOR,
   COLLISION_ANGLE_MIN_FACTOR,
   DEFENDER_MAX_VULNERABILITY_AT_ZERO_SPEED,
   DEFENDER_MIN_VULNERABILITY_AT_REFERENCE_SPEED,
   DEFENDER_VULNERABILITY_REFERENCE_SPEED_MPS,
-  DEFENSE_STAT_MULTIPLIER_PLACEHOLDER,
   KNOCKBACK_IMPULSE_PER_FORCE_UNIT,
   KNOCKBACK_UPWARD_LAUNCH_FRACTION,
   STABILITY_KNOCKBACK_REDUCTION_AT_FULL,
@@ -29,6 +27,10 @@ export interface KnockbackInput {
   defenderSpeedMps: number;
   defenderStabilityFraction: number; // 0..1
   defenderStaminaPenaltyFraction: number; // 0 = full stamina, 1 = fully depleted
+  /** Attacker's archetype Attack stat (BeyStats.attack) — 1 = neutral. Multiplies force directly. */
+  attackStat: number;
+  /** Defender's archetype Defense stat (BeyStats.defense) — 1 = neutral. Divides force (higher Defense means less taken). */
+  defenseStat: number;
   /** Attacker's horizontal velocity at the moment of the hit — used only for the collision-angle factor below; a zero/near-zero vector (stationary attacker) is handled safely. */
   attackerVelocityXZ: Vec2;
   /** Unit-ish vector from attacker to defender at the moment of the hit (need not be pre-normalized). */
@@ -68,9 +70,7 @@ export function computeKnockback(input: KnockbackInput): KnockbackResult {
   const angleFactor = lerp(COLLISION_ANGLE_MIN_FACTOR, COLLISION_ANGLE_MAX_FACTOR, (alignment + 1) / 2);
 
   const force =
-    input.baseForce *
-    ATTACK_STAT_MULTIPLIER_PLACEHOLDER *
-    DEFENSE_STAT_MULTIPLIER_PLACEHOLDER *
+    (input.baseForce * input.attackStat / input.defenseStat) *
     attackerSpeedFactor *
     defenderVulnerability *
     stabilityReduction *
@@ -86,13 +86,14 @@ export function computeKnockback(input: KnockbackInput): KnockbackResult {
 }
 
 /**
- * Defense stat integration is Milestone 6 (archetype balance) — until
- * then DEFENSE_STAT_MULTIPLIER_PLACEHOLDER is 1 and this is a passthrough.
- * STABILITY_DAMAGE_DEFENSE_REDUCTION_AT_FULL is declared now so the real
- * Defense-based reduction drops in later without redesigning this call site.
+ * attackStat: attacker's archetype Attack stat — 1 = neutral, higher deals more Stability damage.
+ * defenseStat: defender's archetype Defense stat — 1 = neutral, higher takes less Stability damage.
+ * GDD section 6/31: Attack is explicitly responsible for Stability damage too, not knockback alone.
+ * Never fed into ClashController's own ClashPower/mash formula — that stays Attack-independent
+ * (see ClashOrchestration.ts: only the post-resolution physical consequence reads these stats).
  */
-export function computeStabilityDamage(baseDamage: number): number {
-  return baseDamage * DEFENSE_STAT_MULTIPLIER_PLACEHOLDER;
+export function computeStabilityDamage(baseDamage: number, attackStat: number, defenseStat: number): number {
+  return (baseDamage * attackStat) / defenseStat;
 }
 
 /** Applies a horizontal + upward knockback impulse to the defender, directed away from the attacker. */

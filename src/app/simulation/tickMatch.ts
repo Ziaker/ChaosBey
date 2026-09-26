@@ -284,8 +284,8 @@ export function tickMatch(
   const firstYM = first.body.translation().y;
   const secondYM = second.body.translation().y;
   const rawHitEvents = detectHits(
-    { positionXZ: firstPos, positionYM: firstYM, hitbox: firstAttack.activeHitbox, state: firstAttack.state },
-    { positionXZ: secondPos, positionYM: secondYM, hitbox: secondAttack.activeHitbox, state: secondAttack.state },
+    { positionXZ: firstPos, positionYM: firstYM, hitbox: firstAttack.activeHitbox, state: firstAttack.state, colliderRadiusM: first.definition.physical.colliderRadiusM },
+    { positionXZ: secondPos, positionYM: secondYM, hitbox: secondAttack.activeHitbox, state: secondAttack.state, colliderRadiusM: second.definition.physical.colliderRadiusM },
   );
 
   let firstKoed = false;
@@ -365,6 +365,7 @@ export function tickMatch(
   for (const resolved of toResolveNormally) {
     const hit = resolved.hit;
     const defenderIsFirst = !hit.attackerIsFirst;
+    const attacker = hit.attackerIsFirst ? first : second;
     const defender = hit.attackerIsFirst ? second : first;
 
     if (hit.caughtOpponentDashing) {
@@ -378,7 +379,11 @@ export function tickMatch(
       // ever come this period), otherwise arm the short pending window
       // until it actually leaves the ground.
       defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
-      applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage));
+      applyStabilityDamageAndTrackKo(
+        defenderIsFirst,
+        defender,
+        computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense),
+      );
       continue;
     }
 
@@ -388,6 +393,8 @@ export function tickMatch(
       defenderSpeedMps: resolved.defenderSpeedMps,
       defenderStabilityFraction: resolved.defenderStabilityFraction,
       defenderStaminaPenaltyFraction: resolved.defenderStaminaPenaltyFraction,
+      attackStat: attacker.stats.attack,
+      defenseStat: defender.stats.defense,
       attackerVelocityXZ: resolved.attackerVelocityXZ,
       impactDirectionXZ: normalize(subtract(resolved.defenderPositionXZ, resolved.attackerPositionXZ)),
     });
@@ -396,7 +403,11 @@ export function tickMatch(
     defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
     combatEvents.push({ kind: 'knockback', targetIsFirst: defenderIsFirst, force: knockback.force });
 
-    applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage) * resolved.forceMultiplier);
+    applyStabilityDamageAndTrackKo(
+      defenderIsFirst,
+      defender,
+      computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense) * resolved.forceMultiplier,
+    );
   }
 
   const ringOutFirst = isRingOut(firstPos);

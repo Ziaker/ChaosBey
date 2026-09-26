@@ -9,7 +9,8 @@ import * as THREE from 'three';
 import { createArenaColliders } from '../../arena/colliders/createArenaColliders';
 import { createBey, type Bey } from '../../bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../bey/core/BeyTuning';
-import { createBeyMesh, type BeyVisual } from '../../bey/procedural-model/createBeyMesh';
+import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
+import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 
 // Opposite starting positions, facing each other — arbitrary, generous
@@ -43,23 +44,19 @@ function createSyncFn(body: Bey['body'], visual: BeyVisual) {
   };
 }
 
+// Milestone 6 (GDD section 6/31): an arbitrary prototype pairing for this
+// scene, not a final roster choice — the third archetype (Stamina, see
+// BeyArchetypes.ts) exists too and can be swapped in just as easily, since
+// all three are equally unapproved prototypes pending the owner's visual
+// approval gate (GDD section 96/97).
 export function createMatchScene(scene: THREE.Scene, physics: PhysicsWorld): MatchScene {
   createArenaColliders(scene, physics);
 
-  const first = createBey(physics, FIRST_SPAWN);
-  const second = createBey(physics, SECOND_SPAWN);
+  const first = createBey(physics, FIRST_SPAWN, ATTACK_ARCHETYPE);
+  const second = createBey(physics, SECOND_SPAWN, DEFENSE_ARCHETYPE);
 
-  const firstVisual = createBeyMesh();
-  const secondVisual = createBeyMesh();
-  // Distinguishable at a glance for testing — not the approved archetype
-  // visual identity (GDD section 96/97), purely a temporary debug cue.
-  secondVisual.group.traverse((obj) => {
-    if (obj instanceof THREE.Mesh && obj.material instanceof THREE.MeshStandardMaterial && obj.material.color.getHex() === 0x4fd1ff) {
-      obj.material = obj.material.clone();
-      obj.material.color.setHex(0xff6b6b);
-      obj.material.emissive.setHex(0x4a0b0b);
-    }
-  });
+  const firstVisual = first.definition.appearance.createVisual();
+  const secondVisual = second.definition.appearance.createVisual();
   scene.add(firstVisual.group);
   scene.add(secondVisual.group);
 

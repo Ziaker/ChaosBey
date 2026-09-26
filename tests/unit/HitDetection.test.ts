@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { AttackState, type ActiveHitbox } from '../../src/combat/attacks/AttackController';
 import { detectHits, type HitDetectionSide } from '../../src/combat/hit-detection/HitDetection';
+import { BEY_COLLIDER_RADIUS_M } from '../../src/bey/core/BeyTuning';
+import { ATTACK_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 
 const CIRCULAR_HITBOX: ActiveHitbox = { kind: 'circular', radiusM: 1, knockbackForce: 5, stabilityDamage: 10 };
 const DASH_HITBOX: ActiveHitbox = { kind: 'dash', radiusM: 1, knockbackForce: 5, stabilityDamage: 10 };
 
 function side(overrides: Partial<HitDetectionSide> = {}): HitDetectionSide {
-  return { positionXZ: { x: 0, z: 0 }, positionYM: 0, hitbox: null, state: AttackState.Neutral, ...overrides };
+  return { positionXZ: { x: 0, z: 0 }, positionYM: 0, hitbox: null, state: AttackState.Neutral, colliderRadiusM: BEY_COLLIDER_RADIUS_M, ...overrides };
 }
 
 describe('detectHits', () => {
@@ -93,5 +95,60 @@ describe('detectHits', () => {
 
     expect(events).toHaveLength(1);
     expect(events[0]?.caughtOpponentDashing).toBe(false);
+  });
+});
+
+describe('detectHits — per-Bey collider radius (Milestone 6, GDD section 6/31)', () => {
+  // CIRCULAR_HITBOX.radiusM = 1. Default colliderRadiusM = 0.6, so the
+  // reach allowance (average of both sides' own radii) is 0.6 by default —
+  // reproducing the exact pre-Milestone-6 threshold of 1.6.
+  const attackRadius = ATTACK_ARCHETYPE.physical.colliderRadiusM; // 0.65
+  const staminaRadius = STAMINA_ARCHETYPE.physical.colliderRadiusM; // 0.58
+
+  it('default-vs-default reach is unchanged from M1-M5 (threshold exactly 1.6)', () => {
+    const atThreshold = detectHits(
+      side({ hitbox: CIRCULAR_HITBOX, state: AttackState.CircularActive }),
+      side({ positionXZ: { x: 1.6, z: 0 } }),
+    );
+    expect(atThreshold).toHaveLength(1);
+
+    const justBeyond = detectHits(
+      side({ hitbox: CIRCULAR_HITBOX, state: AttackState.CircularActive }),
+      side({ positionXZ: { x: 1.61, z: 0 } }),
+    );
+    expect(justBeyond).toHaveLength(0);
+  });
+
+  it('an Attack-archetype attacker (0.65) gets real extra reach against a default defender, beyond the old fixed 1.6', () => {
+    const events = detectHits(
+      side({ hitbox: CIRCULAR_HITBOX, state: AttackState.CircularActive, colliderRadiusM: attackRadius }),
+      side({ positionXZ: { x: 1.61, z: 0 } }), // beyond the default-vs-default threshold (1.6)
+    );
+    // allowance = (0.65 + 0.6) / 2 = 0.625 -> threshold 1.625, so 1.61 connects.
+    expect(events).toHaveLength(1);
+  });
+
+  it('a Stamina-archetype defender (0.58) does not get the phantom default reach of 0.6', () => {
+    const events = detectHits(
+      side({ hitbox: CIRCULAR_HITBOX, state: AttackState.CircularActive }),
+      side({ positionXZ: { x: 1.6, z: 0 }, colliderRadiusM: staminaRadius }),
+    );
+    // allowance = (0.6 + 0.58) / 2 = 0.59 -> threshold 1.59, so exactly 1.6 (the old default threshold) now misses.
+    expect(events).toHaveLength(0);
+  });
+
+  it('two differently-sized Beys combine both their own envelopes (average), not either one alone', () => {
+    const justInside = detectHits(
+      side({ hitbox: CIRCULAR_HITBOX, state: AttackState.CircularActive, colliderRadiusM: attackRadius }),
+      side({ positionXZ: { x: 1.614, z: 0 }, colliderRadiusM: staminaRadius }),
+    );
+    // allowance = (0.65 + 0.58) / 2 = 0.615 -> threshold 1.615.
+    expect(justInside).toHaveLength(1);
+
+    const justOutside = detectHits(
+      side({ hitbox: CIRCULAR_HITBOX, state: AttackState.CircularActive, colliderRadiusM: attackRadius }),
+      side({ positionXZ: { x: 1.616, z: 0 }, colliderRadiusM: staminaRadius }),
+    );
+    expect(justOutside).toHaveLength(0);
   });
 });

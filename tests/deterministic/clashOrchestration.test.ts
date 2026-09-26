@@ -11,9 +11,12 @@ import { buildMashActionSet, ClashOrchestration, type HitSnapshotInput } from '.
 import { Action, type ControllerActions } from '../../src/input/actions/Action';
 import { AttackState, type ActiveHitbox } from '../../src/combat/attacks/AttackController';
 import type { HitEvent } from '../../src/combat/hit-detection/HitDetection';
-import { ClashState } from '../../src/combat/clash/ClashController';
+import { ClashOutcome, ClashState, type ClashResult } from '../../src/combat/clash/ClashController';
 import { CLASH_WINDOW_S } from '../../src/combat/clash/ClashTuning';
 import { resolveMatchConfig } from '../../src/config/match/MatchConfig';
+import { createBey } from '../../src/bey/core/Bey';
+import { DEFAULT_BEY_DEFINITION } from '../../src/bey/archetype/BeyDefinition';
+import { PhysicsWorld } from '../../src/physics/world/PhysicsWorld';
 
 function actionsWith(pressedThisFrame: Action[]): ControllerActions {
   return {
@@ -130,5 +133,43 @@ describe('processTickHits — compatible-attack window', () => {
     const clash = new ClashOrchestration(resolveMatchConfig());
     const result = clash.processTickHits(FIXED_DELTA_SECONDS, [makeHit(true, AttackState.CircularRecovery)]);
     expect(result.toResolveNormally).toHaveLength(1);
+  });
+});
+
+describe('applyResolution — Attack/Defense archetype stats (Milestone 6, GDD section 6/31)', () => {
+  it('a Clash outcome/loser never depends on Attack — only the post-resolution knockback/Stability damage does', async () => {
+    async function resolveWithWinnerAttack(attackRating: number) {
+      const physics = await PhysicsWorld.create();
+      const clash = new ClashOrchestration(resolveMatchConfig());
+      const winnerDefinition = { ...DEFAULT_BEY_DEFINITION, ratings: { ...DEFAULT_BEY_DEFINITION.ratings, attack: attackRating } };
+      const first = createBey(physics, { x: 0, y: 1, z: -1 }, winnerDefinition);
+      const second = createBey(physics, { x: 0, y: 1, z: 1 }, DEFAULT_BEY_DEFINITION);
+
+      // Synthetic result — ClashController's own ClashPower/mash formula
+      // (which actually decides FirstWins/SecondWins/Tie) never reads Bey
+      // stats at all; this fixes the outcome so the test isolates what
+      // applyResolution() does with it.
+      const result: ClashResult = {
+        outcome: ClashOutcome.FirstWins,
+        firstClashPower: 10,
+        secondClashPower: 5,
+        firstMashEventCount: 3,
+        secondMashEventCount: 1,
+      };
+      const pair = { firstAttackerHit: makeHit(true, AttackState.Neutral), secondAttackerHit: makeHit(false, AttackState.Neutral) };
+      return clash.applyResolution({ result, pair }, physics, first, second);
+    }
+
+    const lowAttack = await resolveWithWinnerAttack(1);
+    const highAttack = await resolveWithWinnerAttack(10);
+
+    // The outcome/loser are identical regardless of Attack — Attack only scales the physical consequence.
+    expect(lowAttack.outcome).toBe(ClashOutcome.FirstWins);
+    expect(highAttack.outcome).toBe(ClashOutcome.FirstWins);
+    expect(lowAttack.loserIsFirst).toBe(false);
+    expect(highAttack.loserIsFirst).toBe(false);
+
+    expect(highAttack.knockbackForce).toBeGreaterThan(lowAttack.knockbackForce as number);
+    expect(highAttack.stabilityDamageAmount).toBeGreaterThan(lowAttack.stabilityDamageAmount as number);
   });
 });

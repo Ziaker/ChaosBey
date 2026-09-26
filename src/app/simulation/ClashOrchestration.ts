@@ -254,6 +254,7 @@ export class ClashOrchestration {
 
     const winnerIsFirst = result.outcome === ClashOutcome.FirstWins;
     const winningHit = winnerIsFirst ? pair.firstAttackerHit : pair.secondAttackerHit;
+    const winner = winnerIsFirst ? first : second;
     const loser = winnerIsFirst ? second : first;
     const loserIsFirst = !winnerIsFirst;
 
@@ -263,13 +264,16 @@ export class ClashOrchestration {
       defenderSpeedMps: winningHit.defenderSpeedMps,
       defenderStabilityFraction: winningHit.defenderStabilityFraction,
       defenderStaminaPenaltyFraction: winningHit.defenderStaminaPenaltyFraction,
+      attackStat: winner.stats.attack,
+      defenseStat: loser.stats.defense,
       attackerVelocityXZ: winningHit.attackerVelocityXZ,
       impactDirectionXZ: normalize(subtract(winningHit.defenderPositionXZ, winningHit.attackerPositionXZ)),
     });
     applyKnockback(loser.body, winningHit.attackerPositionXZ, winningHit.defenderPositionXZ, knockback);
     loser.dodge.registerLaunch(!isGrounded(physics, loser.collider));
 
-    const stabilityDamageAmount = computeStabilityDamage(winningHit.hit.hitbox.stabilityDamage) * this.matchConfig.clashImpactMultiplier;
+    const stabilityDamageAmount =
+      computeStabilityDamage(winningHit.hit.hitbox.stabilityDamage, winner.stats.attack, loser.stats.defense) * this.matchConfig.clashImpactMultiplier;
     const { causedBreak, isQualifyingKoHit } = loser.stability.applyDamage(stabilityDamageAmount);
 
     return {
