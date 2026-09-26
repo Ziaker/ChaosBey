@@ -14,7 +14,7 @@ import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { perceiveCombatant, type CombatantRawState } from '../../src/ai/perception/AiPerception';
 import { buildWorldState, type WorldState } from '../../src/ai/decision/WorldState';
 import { evaluateRisk } from '../../src/ai/decision/RiskEvaluation';
-import { NEUTRAL_DECISION_CONTEXT, selectIntent, type DecisionContext } from '../../src/ai/decision/IntentSelection';
+import { clashWillingness, NEUTRAL_DECISION_CONTEXT, selectIntent, staminaConservation, type DecisionContext } from '../../src/ai/decision/IntentSelection';
 import { AiIntent } from '../../src/ai/decision/Intent';
 import { ATTACK_AI_PERSONALITY, DEFENSE_AI_PERSONALITY, STAMINA_AI_PERSONALITY } from '../../src/ai/personalities/AiArchetypePersonalities';
 
@@ -292,5 +292,77 @@ describe('selectIntent — air recovery (M7 Part 2b)', () => {
     const context = { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true };
     expect(decide({ ...launched, positionXZ: { x: 0, z: 11 } }, {}, noErrors, context).edgeEpisode).toBe(true);
     expect(decide({ ...launched, positionXZ: { x: 0, z: 11 } }, {}, noErrors).edgeEpisode).toBeFalsy();
+  });
+});
+
+// ============================================================
+// M7 Part 2b — Clash willingness and Stamina conservation (ported from
+// PR #13, reconciled with the Part 2 scoring).
+// ============================================================
+
+function scoreOf(decision: ReturnType<typeof selectIntent>, intent: AiIntent): number | undefined {
+  return decision.consideredScores?.find((entry) => entry.intent === intent)?.score;
+}
+
+describe('clashWillingness (M7 Part 2b)', () => {
+  const opponentCharging = { positionXZ: { x: 0, z: 6 }, attackState: AttackState.ChargingDash };
+
+  it('is 1 (attack as usual) when the opponent is not attacking', () => {
+    expect(clashWillingness(world({}, { positionXZ: { x: 0, z: 6 } }), DEFENSE_AI_PERSONALITY)).toBe(1);
+  });
+
+  it('is 1 while the Clash system is on Cooldown — a contested swing is then a plain trade, not a Clash to accept', () => {
+    const w = world({}, opponentCharging);
+    expect(clashWillingness({ ...w, clash: { state: ClashState.Cooldown, cooldownRemainingS: 2 } }, DEFENSE_AI_PERSONALITY)).toBe(1);
+  });
+
+  it('leans in with aggression, away with caution, and toward a Stamina edge (Clash power scales with it)', () => {
+    const w = world({}, opponentCharging);
+    expect(clashWillingness(w, ATTACK_AI_PERSONALITY)).toBeGreaterThan(clashWillingness(w, DEFENSE_AI_PERSONALITY));
+    const ahead = clashWillingness(world({ staminaFraction: 1 }, { ...opponentCharging, staminaFraction: 0.2 }), DEFENSE_AI_PERSONALITY);
+    const behind = clashWillingness(world({ staminaFraction: 0.2 }, { ...opponentCharging, staminaFraction: 1 }), DEFENSE_AI_PERSONALITY);
+    expect(ahead).toBeGreaterThan(behind);
+    for (const value of [ahead, behind]) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('scales the attack score in real scoring: a cautious AI Dashing into a charging opponent scores exactly willingness x the idle-opponent score', () => {
+    const intoCharging = decide({}, opponentCharging, DEFENSE_AI_PERSONALITY);
+    const intoIdle = decide({}, { positionXZ: { x: 0, z: 6 } }, DEFENSE_AI_PERSONALITY);
+    const willingness = intoCharging.scoreModifiers!.clashWillingness;
+    expect(willingness).toBeLessThan(1);
+    expect(scoreOf(intoCharging, AiIntent.AttackDash)!).toBeCloseTo(scoreOf(intoIdle, AiIntent.AttackDash)! * willingness, 9);
+  });
+});
+
+describe('staminaConservation (M7 Part 2b)', () => {
+  it('is 0 at full Stamina and grows with missing Stamina x patience', () => {
+    expect(staminaConservation(world({ staminaFraction: 1 }, {}), STAMINA_AI_PERSONALITY, 0)).toBe(0);
+    const low = staminaConservation(world({ staminaFraction: 0.2 }, {}), STAMINA_AI_PERSONALITY, 0);
+    expect(low).toBeGreaterThan(0);
+    expect(low).toBeGreaterThan(staminaConservation(world({ staminaFraction: 0.2 }, {}), ATTACK_AI_PERSONALITY, 0));
+  });
+
+  it('is faded out by the anti-passivity tempo, so conserving can never become circling forever', () => {
+    const lowStamina = { staminaFraction: 0.1 };
+    const opponent = { positionXZ: { x: 0, z: 6 } };
+    expect(staminaConservation(world(lowStamina, opponent), STAMINA_AI_PERSONALITY, 1)).toBe(0);
+
+    const fresh = { ...NEUTRAL_DECISION_CONTEXT, secondsSinceOwnAttack: 0 };
+    const worn = { ...NEUTRAL_DECISION_CONTEXT, secondsSinceOwnAttack: 60 };
+    const lowFresh = decide(lowStamina, opponent, STAMINA_AI_PERSONALITY, fresh);
+    const fullFresh = decide({}, opponent, STAMINA_AI_PERSONALITY, fresh);
+    const lowWorn = decide(lowStamina, opponent, STAMINA_AI_PERSONALITY, worn);
+    const fullWorn = decide({}, opponent, STAMINA_AI_PERSONALITY, worn);
+
+    // Right after an attack, low Stamina damps the Dash...
+    expect(lowFresh.scoreModifiers!.staminaConservation).toBeGreaterThan(0);
+    expect(scoreOf(lowFresh, AiIntent.AttackDash)!).toBeLessThan(scoreOf(fullFresh, AiIntent.AttackDash)!);
+    // ...but once the tempo has worn down, it scores exactly as at full Stamina, and the AI engages.
+    expect(lowWorn.scoreModifiers!.staminaConservation).toBe(0);
+    expect(scoreOf(lowWorn, AiIntent.AttackDash)!).toBeCloseTo(scoreOf(fullWorn, AiIntent.AttackDash)!, 9);
+    expect(lowWorn.intent).toBe(AiIntent.AttackDash);
   });
 });

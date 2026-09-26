@@ -32,6 +32,16 @@ const INITIAL_DASH_PREFERENCE_ESTIMATE = 0.5;
 /** Small, bounded nudge caps — adaptation biases the personality it's given, it never overrides it (GDD section 64's tendencies stay tendencies). */
 const MAX_CAUTION_NUDGE = 0.15;
 const MAX_AGGRESSION_NUDGE = 0.1;
+/**
+ * Meters (ported from PR #13): how far a Dash-heavy and/or dodge-happy
+ * opponent can push preferredEngageRangeM outward — a Dash reaches farther
+ * and a close-range Circular is more likely to be dodged, so hold a little
+ * more distance. Outward only: adaptation never makes the AI crowd closer.
+ * The weights split the nudge between the two signals.
+ */
+const MAX_ENGAGE_RANGE_NUDGE_M = 1.5;
+const ENGAGE_RANGE_DASH_PREFERENCE_WEIGHT = 0.6;
+const ENGAGE_RANGE_DODGE_RATE_WEIGHT = 0.4;
 
 function clamp01(t: number): number {
   return Math.max(0, Math.min(1, t));
@@ -74,8 +84,9 @@ export class AdaptationTracker {
  * disables this entirely — GDD section 111's "Adaptation: none / partial /
  * strong" axis). A highly aggressive opponent nudges caution up (play
  * safer against pressure); a highly passive opponent nudges aggression up
- * (press the advantage) — never enough to override the archetype's own
- * identity, only to lean it slightly.
+ * (press the advantage); a Dash-heavy or dodge-happy one nudges the
+ * preferred engage range outward — never enough to override the
+ * archetype's own identity, only to lean it slightly.
  */
 export function applyAdaptationNudge(
   personality: AiPersonality,
@@ -92,9 +103,17 @@ export function applyAdaptationNudge(
   const cautionNudge = (snapshot.observedAggressionFraction - INITIAL_AGGRESSION_ESTIMATE) * MAX_CAUTION_NUDGE * rate;
   const aggressionNudge = (INITIAL_AGGRESSION_ESTIMATE - snapshot.observedAggressionFraction) * MAX_AGGRESSION_NUDGE * rate;
 
+  // Only how far ABOVE baseline each signal reads counts, so the nudge is
+  // outward-only and bounded by MAX_ENGAGE_RANGE_NUDGE_M.
+  const dashPreferenceAboveBaseline = Math.max(0, snapshot.observedDashPreference - INITIAL_DASH_PREFERENCE_ESTIMATE) / (1 - INITIAL_DASH_PREFERENCE_ESTIMATE);
+  const dodgeRateAboveBaseline = Math.max(0, snapshot.observedDodgeRate - INITIAL_DODGE_ESTIMATE) / (1 - INITIAL_DODGE_ESTIMATE);
+  const engageRangeNudgeM =
+    (dashPreferenceAboveBaseline * ENGAGE_RANGE_DASH_PREFERENCE_WEIGHT + dodgeRateAboveBaseline * ENGAGE_RANGE_DODGE_RATE_WEIGHT) * MAX_ENGAGE_RANGE_NUDGE_M * rate;
+
   return {
     ...personality,
     caution: clamp01(personality.caution + cautionNudge),
     aggression: clamp01(personality.aggression + aggressionNudge),
+    preferredEngageRangeM: personality.preferredEngageRangeM + engageRangeNudgeM,
   };
 }

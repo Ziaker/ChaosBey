@@ -83,4 +83,27 @@ describe('applyAdaptationNudge', () => {
     expect(nudged.patience).toBe(DEFENSE_AI_PERSONALITY.patience);
     expect(nudged.dodgeSkill).toBe(DEFENSE_AI_PERSONALITY.dodgeSkill);
   });
+
+  it('nudges preferredEngageRangeM outward, bounded, against a Dash-heavy, frequently dodging opponent (ported from PR #13)', () => {
+    const tracker = new AdaptationTracker();
+    const dashAndDodgeHeavyOpponent = perceiveCombatant(rawState({ attackState: AttackState.DashActive, dodgeState: DodgeState.Dodging }));
+    for (let i = 0; i < 60; i++) tracker.update(dashAndDodgeHeavyOpponent, 0.2);
+    const nudged = applyAdaptationNudge(DEFENSE_AI_PERSONALITY, tracker.getSnapshot(), 1);
+    expect(nudged.preferredEngageRangeM).toBeGreaterThan(DEFENSE_AI_PERSONALITY.preferredEngageRangeM);
+    expect(nudged.preferredEngageRangeM - DEFENSE_AI_PERSONALITY.preferredEngageRangeM).toBeLessThanOrEqual(1.5 + 1e-9);
+  });
+
+  it('never nudges preferredEngageRangeM inward, even against a passive, never-dodging, Circular-only opponent', () => {
+    const tracker = new AdaptationTracker();
+    for (let i = 0; i < 60; i++) tracker.update(perceiveCombatant(rawState({ attackState: AttackState.CircularActive })), 0.2);
+    for (let i = 0; i < 60; i++) tracker.update(perceiveCombatant(rawState()), 0.2);
+    const nudged = applyAdaptationNudge(DEFENSE_AI_PERSONALITY, tracker.getSnapshot(), 1);
+    expect(nudged.preferredEngageRangeM).toBe(DEFENSE_AI_PERSONALITY.preferredEngageRangeM);
+  });
+
+  it('applies no engage-range nudge at all when adaptation is disabled (rate 0)', () => {
+    const tracker = new AdaptationTracker();
+    for (let i = 0; i < 60; i++) tracker.update(perceiveCombatant(rawState({ attackState: AttackState.DashActive })), 0.2);
+    expect(applyAdaptationNudge(DEFENSE_AI_PERSONALITY, tracker.getSnapshot(), 0).preferredEngageRangeM).toBe(DEFENSE_AI_PERSONALITY.preferredEngageRangeM);
+  });
 });

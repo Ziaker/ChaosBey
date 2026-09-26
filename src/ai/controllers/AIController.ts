@@ -68,9 +68,18 @@ function isAttackIntent(intent: AiIntent): boolean {
 /** An opponent Dash in progress — from its visible charge through its active lunge. */
 const OPPONENT_DASH_STATES: ReadonlySet<AttackState> = new Set([AttackState.ChargingDash, AttackState.DashActive]);
 
-function summarizeScores(scores: readonly ConsideredScore[] | undefined): string {
+function summarizeScores(decision: IntentDecision): string {
+  const scores = decision.consideredScores;
   if (!scores || scores.length === 0) return 'override (see reason)';
-  return scores.map((entry) => `${entry.intent} ${entry.score.toFixed(2)}`).join(' / ');
+  const summary = scores.map((entry: ConsideredScore) => `${entry.intent} ${entry.score.toFixed(2)}`).join(' / ');
+  const modifiers = decision.scoreModifiers;
+  if (!modifiers) return summary;
+  // Only the ones actually shaping this decision, so the line stays short.
+  const notes = [
+    modifiers.clashWillingness < 1 ? `clash x${modifiers.clashWillingness.toFixed(2)}` : '',
+    modifiers.staminaConservation > 0 ? `conserve ${modifiers.staminaConservation.toFixed(2)}` : '',
+  ].filter((note) => note !== '');
+  return notes.length > 0 ? `${summary} (${notes.join(', ')})` : summary;
 }
 
 function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey): CombatantRawState {
@@ -329,7 +338,7 @@ export class AIController implements CombatController {
       difficultyProfileId: this.difficulty.id,
       idealIntent: this.idealDecision.intent,
       idealIntentReason: this.idealDecision.reason,
-      consideredScoresSummary: summarizeScores(this.idealDecision.consideredScores),
+      consideredScoresSummary: summarizeScores(this.idealDecision),
       activeIntent: this.activeDecision.intent,
       activeIntentReason: this.activeDecision.reason,
       deliberateErrorApplied: this.deliberateErrorApplied,
