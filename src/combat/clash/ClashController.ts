@@ -104,6 +104,35 @@ export class ClashController {
   }
 
   /**
+   * The Stamina/Velocity inputs actually captured at tryStart() and held
+   * frozen for this Clash's entire Active + Cooldown lifetime — exactly
+   * what resolve() uses, not whatever the live simulation's current
+   * values happen to be right now. For a cross-tick compatible pair, each
+   * side's own hit can be captured on a different tick, so its live
+   * current value may have already drifted from what was captured by the
+   * time both sides are known — display/debug consumers wanting to show
+   * the actual factors behind a result (GDD section 152's Debug Lab
+   * requirement) should read these, not a live recomputation. All 0
+   * outside of Active/Cooldown (Idle, or before the first Clash ever
+   * starts).
+   */
+  getFirstStaminaFractionAtStart(): number {
+    return this.firstStaminaFraction;
+  }
+
+  getSecondStaminaFractionAtStart(): number {
+    return this.secondStaminaFraction;
+  }
+
+  getFirstSpeedMpsAtStart(): number {
+    return this.firstSpeedMps;
+  }
+
+  getSecondSpeedMpsAtStart(): number {
+    return this.secondSpeedMps;
+  }
+
+  /**
    * Attempts to start a Clash. No-ops (returns false) if a Clash is
    * already Active or its Cooldown hasn't elapsed yet — a Clash can never
    * retrigger itself recursively or stack with another. The caller is

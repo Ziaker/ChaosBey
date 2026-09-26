@@ -387,14 +387,23 @@ async function bootstrap(): Promise<void> {
         clashOutcome: clash.controller.getLastResult()?.outcome ?? '-',
         firstClashMashEventCount: currentFirstClashMashEventCount,
         secondClashMashEventCount: currentSecondClashMashEventCount,
+        // Stamina/Velocity read the values actually captured at tryStart()
+        // (frozen for this Clash's whole Active + Cooldown lifetime), not
+        // a live recomputation from the current simulation state — for a
+        // cross-tick compatible pair, each side's own hit can be captured
+        // on a different tick, so its live current value may have already
+        // drifted from what the real formula used by the time both sides
+        // are known. This is what actually decided (or is deciding) the
+        // outcome (GDD section 152's Debug Lab requirement: mash score,
+        // Stamina factor, Velocity factor and final score visible).
         firstClashMashPerformance: computeMashPerformance(currentFirstClashMashEventCount),
-        firstClashStaminaFactor: computeStaminaFactor(result.first.staminaFraction),
-        firstClashVelocityFactor: computeVelocityFactor(result.first.movement.speedMps),
-        firstClashPower: computeClashPower(currentFirstClashMashEventCount, result.first.staminaFraction, result.first.movement.speedMps),
+        firstClashStaminaFactor: computeStaminaFactor(clash.controller.getFirstStaminaFractionAtStart()),
+        firstClashVelocityFactor: computeVelocityFactor(clash.controller.getFirstSpeedMpsAtStart()),
+        firstClashPower: computeClashPower(currentFirstClashMashEventCount, clash.controller.getFirstStaminaFractionAtStart(), clash.controller.getFirstSpeedMpsAtStart()),
         secondClashMashPerformance: computeMashPerformance(currentSecondClashMashEventCount),
-        secondClashStaminaFactor: computeStaminaFactor(result.second.staminaFraction),
-        secondClashVelocityFactor: computeVelocityFactor(result.second.movement.speedMps),
-        secondClashPower: computeClashPower(currentSecondClashMashEventCount, result.second.staminaFraction, result.second.movement.speedMps),
+        secondClashStaminaFactor: computeStaminaFactor(clash.controller.getSecondStaminaFractionAtStart()),
+        secondClashVelocityFactor: computeVelocityFactor(clash.controller.getSecondSpeedMpsAtStart()),
+        secondClashPower: computeClashPower(currentSecondClashMashEventCount, clash.controller.getSecondStaminaFractionAtStart(), clash.controller.getSecondSpeedMpsAtStart()),
         clashImpactMultiplier: matchConfig.clashImpactMultiplier,
       };
     },

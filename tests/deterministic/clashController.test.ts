@@ -150,3 +150,29 @@ describe('deterministic timers under fixed timestep', () => {
     expect(first).toEqual(second);
   });
 });
+
+describe('Stamina/speed captured at tryStart(), exposed for debug/HUD display', () => {
+  it('are 0 before any Clash has ever started', () => {
+    const controller = new ClashController();
+    expect(controller.getFirstStaminaFractionAtStart()).toBe(0);
+    expect(controller.getSecondStaminaFractionAtStart()).toBe(0);
+    expect(controller.getFirstSpeedMpsAtStart()).toBe(0);
+    expect(controller.getSecondSpeedMpsAtStart()).toBe(0);
+  });
+
+  it('reflect exactly what was passed to tryStart(), unaffected by anything happening afterward', () => {
+    const controller = new ClashController();
+    controller.tryStart({ firstStaminaFraction: 0.42, secondStaminaFraction: 0.77, firstSpeedMps: 4, secondSpeedMps: 9 });
+
+    expect(controller.getFirstStaminaFractionAtStart()).toBeCloseTo(0.42, 10);
+    expect(controller.getSecondStaminaFractionAtStart()).toBeCloseTo(0.77, 10);
+    expect(controller.getFirstSpeedMpsAtStart()).toBe(4);
+    expect(controller.getSecondSpeedMpsAtStart()).toBe(9);
+
+    // Stay frozen at those values for the whole Active + Cooldown lifetime — a later tryStart() attempt (blocked, already Active) must not overwrite them.
+    runTicks(controller, 30, pressInput('Attack'), NO_INPUT);
+    controller.tryStart({ firstStaminaFraction: 0.1, secondStaminaFraction: 0.1, firstSpeedMps: 1, secondSpeedMps: 1 });
+    expect(controller.getFirstStaminaFractionAtStart()).toBeCloseTo(0.42, 10);
+    expect(controller.getSecondSpeedMpsAtStart()).toBe(9);
+  });
+});
