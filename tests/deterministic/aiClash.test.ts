@@ -173,4 +173,48 @@ describe('AI Clash participation', () => {
     expect(clashBFirstActions.pressedThisFrame.has(Action.Attack)).toBe(true);
     expect(buildMashActionSet(clashBFirstActions).has(Action.Attack)).toBe(true);
   });
+
+  it('regression: three consecutive successful mash rolls on the same action count as three separate events, not one (M7 audit round 3)', async () => {
+    // Same forced-RNG pattern as the Clash-to-Clash regression above:
+    // every roll succeeds and always picks Action.Attack (options[0]).
+    // Before this fix, AIController.sampleClashMashActions reported
+    // pressedThisFrame from ActionSelector.commit()'s held/previousHeld
+    // diff — built to model a real player's physical press/release — so a
+    // second, third, ... consecutive tick choosing the same action read as
+    // the button still being held, not a fresh press, and
+    // ClashMash.ts's nextMashEventCount (which counts a real press per
+    // tick) silently dropped that tick's genuine mash contribution.
+    function alwaysAttackRng(): SeededRng {
+      const base = SeededRng.fromSeedText('three-consecutive-attack-mash-regression');
+      const rng = Object.create(base) as SeededRng;
+      rng.nextBool = () => true;
+      rng.nextInt = () => 0; // options[0] === Action.Attack in sampleClashMashActions.
+      return rng;
+    }
+
+    const harness = await CombatHarness.create(undefined, undefined, {}, new NullAiMashSource());
+    const ai = new AIController(
+      harness.physics,
+      harness.second,
+      harness.first,
+      harness.clash.controller,
+      ATTACK_AI_PERSONALITY,
+      DEFAULT_AI_DIFFICULTY_PROFILE,
+      alwaysAttackRng(),
+    );
+    const noInput: ClashCombatantInputTick = { pressedActionIds: new Set(), aiMashEventThisTick: false };
+
+    expect(harness.clash.controller.tryStart({ firstStaminaFraction: 1, secondStaminaFraction: 1, firstSpeedMps: 3, secondSpeedMps: 3 })).toBe(true);
+
+    for (let i = 0; i < 3; i++) {
+      const actions = ai.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
+      // Attack -> Attack -> Attack: each tick is its own fresh mash tap,
+      // never merged with the identical action the tick before it.
+      expect(actions.held.has(Action.Attack), `tick ${i}: forced RNG always mashes Attack`).toBe(true);
+      expect(actions.pressedThisFrame.has(Action.Attack), `tick ${i}: must be a fresh event, not a continued hold`).toBe(true);
+      harness.clash.controller.tick(FIXED_DELTA_SECONDS, noInput, { pressedActionIds: buildMashActionSet(actions), aiMashEventThisTick: false });
+    }
+
+    expect(harness.clash.controller.getSecondMashEventCount()).toBe(3);
+  });
 });

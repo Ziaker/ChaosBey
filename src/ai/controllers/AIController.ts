@@ -381,10 +381,22 @@ export class AIController implements CombatController {
    * action as a player controller"). Each tick independently rolls whether
    * a mash event happens (probability = personality's per-second rate
    * scaled by this tick's duration and the difficulty's multiplier), and
-   * if so picks one of the three mash-eligible actions — see
-   * ClashMash.ts's nextMashEventCount for why holding the same action
-   * across consecutive ticks would under-count versus a fresh press each
-   * time.
+   * if so picks one of the three mash-eligible actions.
+   *
+   * Each successful roll is its own discrete mash tap, never a continuous
+   * hold: ClashMash.ts's nextMashEventCount counts a real *press*
+   * (pressedThisFrame) per tick, one event per tick with any qualifying
+   * action. `commit()`'s held/previousHeld diffing exists to model a real
+   * player's physical press/release (GDD section 113's shared controller
+   * contract) — reusing its `pressedThisFrame` output here would silently
+   * merge two consecutive rolls that happen to land on the same action
+   * (~1/3 of the time, uniform over 3 options) into a single "hold",
+   * under-counting the AI's genuine mash contribution against
+   * personality.clashMashRatePerSecond (M7 audit regression). So
+   * pressedThisFrame below always mirrors this tick's own `held` set —
+   * this tick's roll, not a diff against the previous one — while `held`/
+   * hold-duration bookkeeping still goes through clashMashActionSelector
+   * for contract consistency.
    */
   private sampleClashMashActions(fixedDeltaSeconds: number): ControllerActions {
     const effectiveRate = Math.max(0, this.personality.clashMashRatePerSecond * this.difficulty.clashMashRateMultiplier);
@@ -395,8 +407,9 @@ export class AIController implements CombatController {
       held.add(options[this.rng.nextInt(0, options.length - 1)] ?? Action.Attack);
     }
     const actions = this.clashMashActionSelector.commit(held, fixedDeltaSeconds);
-    this.lastActionSummary = actions.pressedThisFrame.size > 0 ? 'clash mash' : 'clash — no mash this tick';
-    return actions;
+    const mashActions: ControllerActions = { ...actions, pressedThisFrame: held };
+    this.lastActionSummary = mashActions.pressedThisFrame.size > 0 ? 'clash mash' : 'clash — no mash this tick';
+    return mashActions;
   }
 
   getDebugState(): AiDebugState {

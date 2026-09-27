@@ -155,7 +155,7 @@ present at audit start):
 | Command | Result |
 |---|---|
 | `npm run typecheck` | **PASS** — 0 errors |
-| `npm test` (Vitest, full suite) | **PASS** — 591 passed, 1 skipped (592) after both fixes and all 5 new regression-test cases (586 before this audit's changes) |
+| `npm test` (Vitest, full suite) | **PASS** — 592 passed, 1 skipped (593) after all three fix rounds and 6 new regression-test cases (586 before this audit's changes) |
 | `npm run build` | **PASS** |
 | `npm run test:smoke` | **12 failed on this container** — every failure is `browserType.launch: Executable doesn't exist at .../chromium_headless_shell-1243/...`, i.e. this sandbox's pre-installed Chromium revision doesn't match what this `@playwright/test` version expects by default. This is exactly the documented escape hatch in `tests/smoke/playwright.config.ts` (`CHAOSBEY_PW_CHROMIUM_PATH`). Re-running the full suite with `CHAOSBEY_PW_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` got **11/12 passing**, including both `tests/smoke/aiRuntime.spec.ts` cases (one observed a real Clash go Active → resolve → back to normal: `"Clash exercised (Active seen, then left Active)"`) — a sandbox/CI infrastructure characteristic, not an AI bug, left alone per scope (Loft's lane). The one remaining failure, `repeatedMatchStability.spec.ts` ("run 0: should reach RoundEnd within the budget"), did **not** reproduce in two isolated re-runs — one against this fix, one against the pre-fix `AIController.ts` (temporarily checked out via `git checkout HEAD~1 -- src/ai/controllers/AIController.ts`, then restored) — both passed cleanly. That test races a real match against a **wall-clock** budget (25s of real time per run) while software-rendering (SwiftShader) under this sandbox's shared CPU; a one-off slow tick during the full-suite run (heavy WebGL labs running back-to-back) is consistent with the config's own documented CPU-contention note, not a code regression from this fix. |
 | `AI_STABILITY_BATCH=1 npx vitest run tests/deterministic/aiStabilityBatchExtended.test.ts` | **PASS** — 360/360 matches (40 seeds × 9 archetype pairings), 47 known-physics notes logged (not failures — see §12), 0 unresolved rounds beyond the 5% budget, 0 stalled-attack/press-spam/mutual-idle regressions. |
@@ -165,7 +165,7 @@ Also ran individually: `aiArchetypeMatrix`, `aiArchetypeBehavior`,
 `aiClashWillingness`, `aiHitstopFreeze`, and (via the corrected chromium
 path) `aiRuntime` (smoke) — all pass. Every other `tests/unit` and
 `tests/deterministic` AI file is included in the full `npm test` run
-above (591 passed covers all of them, including
+above (592 passed covers all of them, including
 `AiAdaptationTracker`, `AiIntentionalError`, `AiWorldStatePrediction`,
 `AiEdgeThreat`, `AiEdgeRecoveryBlocked`, `AiEvasionAndDodge`,
 `AiArchetypeTraits`, `AiIntentSelection`, `AiPerceptionAndRisk`).
@@ -223,6 +223,57 @@ to "fix" them.
 | Difficulty stays internal-only | `AiDifficultyProfile.ts` | Source read (own header is explicit) | PASS (respected as out of scope) | `src/ai/difficulty/AiDifficultyProfile.ts` |
 | Required test commands | — | See §10 | PASS (smoke needs `CHAOSBEY_PW_CHROMIUM_PATH` on this sandbox — infra, not AI) | — |
 | Wall wedge / launch physics | — | Extended batch, seeds logged above | GAP (physics lane, documented, not fixed here) | n/a (for the physics lane) |
+
+## Bug fixed (follow-up round 3, from PR review): consecutive same-action mash rolls under-counted within one Clash
+
+A third review round, on HEAD `ffdb339`, found a deeper instance of the
+same root cause as rounds 1 and 2: even within **one** Clash,
+`sampleClashMashActions` reported `pressedThisFrame` from
+`ActionSelector.commit()`'s held/previousHeld diff. That diffing exists
+to model a real player's physical press/release. But each tick's mash
+roll is conceptually a discrete tap — a fresh, independent decision to
+mash, not a continued hold — and `ClashMash.ts`'s `nextMashEventCount`
+counts a real press per tick (its own doc comment already said so: "the
+same combatant mashing across separate ticks counts once per tick").
+Reusing the held/previousHeld diff meant two (or more) consecutive ticks
+that happened to roll the *same* action (uniformly 1-in-3 per pair, given
+both rolled at all) were merged into a single "hold", silently dropping
+every tick after the first from the count — systematically under-counting
+the AI's real mash contribution against `personality.clashMashRatePerSecond`
+and `difficulty.clashMashRateMultiplier` (GDD section 59's "Clash mash
+performance" axis), not just an edge case.
+
+Notably, the code already carried a comment flagging this exact risk
+("see ClashMash.ts's nextMashEventCount for why holding the same action
+across consecutive ticks would under-count versus a fresh press each
+time") without actually fixing it — this audit closes that gap.
+
+**Fix.** `sampleClashMashActions` now always reports `pressedThisFrame`
+as this tick's own `held` set (the roll just made), never the diff
+against the previous tick's — each successful roll is its own event,
+whether or not it repeats the previous tick's choice. `held` and
+hold-duration bookkeeping still flow through `clashMashActionSelector`
+for contract consistency, only `pressedThisFrame` changed.
+
+**Regression test.** `tests/deterministic/aiClash.test.ts`, new "three
+consecutive successful mash rolls on the same action count as three
+separate events, not one (M7 audit round 3)": forces every roll to
+succeed and always pick `Action.Attack`, runs 3 real Clash-Active ticks
+through a real `AIController`, and asserts each one presses Attack fresh
+and the real `ClashController.getSecondMashEventCount()` reaches exactly
+3. Verified non-vacuous the same way as the other two: with the fix
+disabled, tick 2 fails (`expected false to be true`); restored, it
+passes and the count is exactly 3.
+
+**Re-validated:** `npm run typecheck`, `npm test` (592 passed/1 skipped),
+`npm run build`, `aiClash.test.ts`/`aiClashWillingness.test.ts`/
+`aiHitstopFreeze.test.ts`, and the extended 360-match sweep
+(`AI_STABILITY_BATCH=1`) all pass — no button-spam, stalled-attack, or
+mutual-idle regression from the AI now genuinely mashing at closer to its
+configured rate.
+
+**Files changed (this round):** `src/ai/controllers/AIController.ts`,
+`tests/deterministic/aiClash.test.ts`.
 
 ## Bug fixed (follow-up, from PR review): the dedicated Clash-mash selector must reset between separate Clashes
 
