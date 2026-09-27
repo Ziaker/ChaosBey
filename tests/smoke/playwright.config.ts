@@ -10,6 +10,11 @@ export default defineConfig({
   testDir: './',
   timeout: 30_000,
   retries: 0,
+  // One page at a time. The prototype labs render with software WebGL in CI
+  // and take minutes each; run in parallel they starve each other of CPU
+  // (the Bey and VFX lab smokes timed out side by side), and the AI runtime
+  // smoke is timing-sensitive too.
+  workers: 1,
   use: {
     baseURL: `http://localhost:${PORT}/ChaosBey/`,
     // Some sandboxed dev containers pin a pre-installed Chromium revision
