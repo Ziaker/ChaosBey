@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { ROUND_WALL_TIMEOUT_MS, describeRun, playRoundToEnd } from './support/playRoundToEnd';
 
 // ============================================================
 // REPEATED-MATCH STABILITY (M7 ALPHA-READINESS HARDENING)
@@ -12,13 +13,13 @@ import { expect, test } from '@playwright/test';
 // ============================================================
 
 const RUNS = 3;
-const MAX_RUN_MS = 25_000;
+const BOOT_TIMEOUT_MS = 15_000;
 
 test('several fresh boot -> Combat -> RoundEnd cycles in a row stay clean and stable', async ({ page }) => {
-  // RUNS cycles, each budgeted up to MAX_RUN_MS, comfortably exceed the
-  // config's default per-test timeout (30s) — this is one test doing
-  // several full match cycles, not several short ones.
-  test.setTimeout(RUNS * MAX_RUN_MS + 30_000);
+  // One test doing several full rounds, each budgeted in simulated time
+  // (see playRoundToEnd.ts): typical rounds take seconds, but the timeout
+  // has to cover RUNS worst-case rounds plus their boots.
+  test.setTimeout(RUNS * (ROUND_WALL_TIMEOUT_MS + BOOT_TIMEOUT_MS) + 30_000);
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
@@ -31,27 +32,12 @@ test('several fresh boot -> Combat -> RoundEnd cycles in a row stay clean and st
   for (let run = 0; run < RUNS; run++) {
     await page.goto('/ChaosBey/');
     const overlay = page.locator('#debug-overlay-root pre');
-    await expect(overlay, `run ${run}: boot`).toContainText('Combat', { timeout: 15_000 });
+    await expect(overlay, `run ${run}: boot`).toContainText('Combat', { timeout: BOOT_TIMEOUT_MS });
 
-    const startedAt = Date.now();
-    let reachedRoundEnd = false;
-    while (Date.now() - startedAt < MAX_RUN_MS) {
-      await page.keyboard.down('ArrowUp');
-      await page.keyboard.down('z');
-      await page.waitForTimeout(50);
-      await page.keyboard.up('z');
-      await page.waitForTimeout(250);
-
-      const text = (await overlay.textContent()) ?? '';
-      if (/^state\s+RoundEnd/m.test(text)) {
-        reachedRoundEnd = true;
-        const line = text.split('\n').find((l) => l.startsWith('round'));
-        outcomes.push(line ? line.slice('round'.length).trim() : 'unknown');
-        break;
-      }
-    }
-    await page.keyboard.up('ArrowUp');
-    expect(reachedRoundEnd, `run ${run}: should reach RoundEnd within the budget`).toBe(true);
+    const round = await playRoundToEnd(page, overlay);
+    console.log(`[repeatedMatchStability smoke] run ${run}: ${describeRun(round)}`);
+    expect(round.reachedRoundEnd, `run ${run}: should reach RoundEnd within the budget (${describeRun(round)})`).toBe(true);
+    outcomes.push(round.outcome ?? 'unknown');
 
     const heapBytes = await page.evaluate(() => (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? null);
     heapSamplesBytes.push(heapBytes);
