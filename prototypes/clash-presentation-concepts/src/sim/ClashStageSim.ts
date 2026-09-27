@@ -128,19 +128,6 @@ export class ClashStageSim {
     this.syncVisuals();
   }
 
-  /** Re-arms the same scenario from scratch (a "restart"/"repeat exactly" request) without re-touching Rapier. */
-  restart(): void {
-    this.harness.reset();
-    this.physicsRunning = false;
-    this.ringOutInfo = null;
-    this.first.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    this.first.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
-    this.second.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    this.second.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
-    this.placeBeys(this.approachFrom);
-    this.beginApproach();
-  }
-
   beginApproach(): void {
     this.harness.beginApproach({
       firstStaminaFraction: this.scenario.first.staminaFraction,

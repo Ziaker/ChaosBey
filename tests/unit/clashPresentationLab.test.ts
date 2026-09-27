@@ -15,6 +15,7 @@ import { APPROACH_DURATION_S, ClashHarness, RESOLUTION_BURST_DURATION_S } from '
 import { ScriptedMashDriver } from '../../prototypes/clash-presentation-concepts/src/harness/mash';
 import { SCENARIOS, mashSourceFor, scenarioById } from '../../prototypes/clash-presentation-concepts/src/harness/scenarios';
 import { ClashStageSim } from '../../prototypes/clash-presentation-concepts/src/sim/ClashStageSim';
+import { createFxRng } from '../../prototypes/clash-presentation-concepts/src/fx/rng';
 
 const DT = 1 / 60;
 
@@ -215,6 +216,32 @@ describe('ClashStageSim — physical resolution (real Rapier physics, no declare
     expect(finalSeparationM).toBeGreaterThan(initialSeparationM);
     sim.dispose();
   }, 20000);
+});
+
+describe('determinism — stage and FX (shot-for-shot A/B/C comparison)', () => {
+  // The lab's restart (R / loop) builds a fresh stage exactly like this, because
+  // re-using a Rapier world after a resolution does not replay identically.
+  it('a freshly built Rapier stage replays a scenario identically (restart = fresh build)', async () => {
+    for (const id of ['balanced', 'resolution-ring-out', 'tie']) {
+      const a = await runStageScenario(id);
+      const b = await runStageScenario(id);
+      expect(JSON.stringify(b.sim.frame)).toBe(JSON.stringify(a.sim.frame));
+      a.sim.dispose();
+      b.sim.dispose();
+    }
+  }, 40000);
+
+  it('the FX spark scatter is seeded (no Math.random): the same seed yields the same sequence', () => {
+    const a = createFxRng();
+    const b = createFxRng();
+    const seqA = Array.from({ length: 64 }, a);
+    expect(Array.from({ length: 64 }, b)).toEqual(seqA);
+    for (const v of seqA) {
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(1);
+    }
+    expect(new Set(seqA).size).toBe(seqA.length);
+  });
 });
 
 describe('cooldown', () => {

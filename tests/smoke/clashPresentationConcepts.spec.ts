@@ -34,13 +34,31 @@ test('clash presentation lab loads, runs scenarios through A/B/C to resolution, 
 
   await page.evaluate(() => window.__clashLab.setPaused(true));
 
-  // A normal, close Clash reaches resolution on all three directions.
+  // A normal, close Clash reaches resolution on all three directions, and
+  // the direction only changes the presentation: the Clash result and the
+  // physical continuation are identical shot for shot.
+  const fingerprints: string[] = [];
   for (const direction of ['A', 'B', 'C'] as const) {
     await page.evaluate((d) => window.__clashLab.setDirection(d), direction);
     await page.evaluate(() => window.__clashLab.loadScenario('balanced'));
     await page.evaluate(() => window.__clashLab.advance(5.5));
-    expect((await state()).phase).toBe('Cooldown');
+    const s = await state();
+    expect(s.phase).toBe('Cooldown');
+    fingerprints.push(s.simFingerprint);
   }
+  expect(fingerprints[0]).not.toBe('');
+  expect(new Set(fingerprints).size).toBe(1);
+
+  // Restart (R) mid-resolution replays from the top at normal speed: no
+  // hitstop/slow-mo carried over, and the same run reproduces exactly.
+  const firstRun = fingerprints[0];
+  await page.keyboard.press('r');
+  await page.waitForFunction(() => window.__clashLab.state().phase === 'Approach' && window.__clashLab.state().ticks === 1, null, { timeout: 30_000 });
+  const s = await state();
+  expect(s.hitstopRemainingS).toBe(0);
+  expect(s.slowMoRemainingS).toBe(0);
+  await page.evaluate(() => window.__clashLab.advance(5.5));
+  expect((await state()).simFingerprint).toBe(firstRun);
 
   // The dedicated Tie scenario really reaches Cooldown with the Tie presentation wired up (no console error along the way).
   await page.evaluate(() => window.__clashLab.loadScenario('tie'));

@@ -13,6 +13,7 @@
 // ============================================================
 
 import * as THREE from 'three';
+import { createFxRng } from './rng';
 
 function softDisc(): THREE.CanvasTexture {
   const size = 64;
@@ -48,6 +49,8 @@ export class ClashFx {
   private readonly transient: LifetimeObject[] = [];
   private beam: THREE.Mesh | null = null;
   private beamMaterial: THREE.MeshBasicMaterial | null = null;
+  /** Seeded scatter for sparks; reseeded on clear() so a restarted scenario replays the same bursts. */
+  private random = createFxRng();
 
   /** Persistent energy visual between the two Beys, shown for the whole Approach+Active beat. Call every tick; `advantage` is -1 (second fully ahead) .. +1 (first fully ahead), `pulse01` a 0..1 wobble driven by the current mash rate. */
   updateEnergyBeam(a: THREE.Vector3, b: THREE.Vector3, colorFirst: THREE.Color, colorSecond: THREE.Color, opts: { visible: boolean; radius: number; segments: number; advantage: number; pulse01: number; twist: number }): void {
@@ -105,14 +108,14 @@ export class ClashFx {
       positions[i * 3] = at.x;
       positions[i * 3 + 1] = at.y;
       positions[i * 3 + 2] = at.z;
-      velocities.push(new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.6 + 0.1, Math.random() - 0.5).normalize().multiplyScalar(speed * (0.4 + Math.random() * 0.8)));
+      velocities.push(new THREE.Vector3(this.random() - 0.5, this.random() * 0.6 + 0.1, this.random() - 0.5).normalize().multiplyScalar(speed * (0.4 + this.random() * 0.8)));
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const mat = new THREE.PointsMaterial({ color, size: 0.12, map: this.sprite, transparent: true, alphaTest: 0.01, blending: THREE.AdditiveBlending, depthWrite: false });
     const points = new THREE.Points(geo, mat);
     this.group.add(points);
-    const lifeS = 0.35 + Math.random() * 0.3;
+    const lifeS = 0.35 + this.random() * 0.3;
     this.transient.push({
       object: points,
       ageS: 0,
@@ -200,6 +203,7 @@ export class ClashFx {
       disposeObject(t.object);
     }
     this.hideEnergyBeam();
+    this.random = createFxRng();
   }
 
   dispose(): void {

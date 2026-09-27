@@ -106,7 +106,7 @@ The Tie **rule** is closed (symmetric physical repulsion, no winner, no Stabilit
 2. **Sobrecarga Estática (Static Overload)** — both Beys flicker red like an electrical fault; no big banner, the read stays in the instrumentation HUD.
 3. **Nocaute Duplo (Double Knockdown)** — both Beys are thrown back symmetrically in slow motion, with a shared shockwave ring and two "EMPATE" banners meeting in the middle.
 
-## The 10 scenarios (reproducible: fixed 60Hz tick + scripted mash rates, no unseeded randomness)
+## The 10 scenarios (reproducible: fixed 60Hz tick + scripted mash rates, seeded FX scatter, fresh Rapier stage on every restart)
 
 | Scenario | What it shows |
 |---|---|
@@ -156,10 +156,10 @@ None of this simplifies the **rules** — only the inputs this lab has no other 
   - a tick with any mash contribution (keyboard or scripted) counts as exactly one event, never more — including when both sides mash the same tick;
   - the formula never exceeds its caps under extreme inputs, and the lab's live score is proven equal to `computeClashPower()` with the exact captured start inputs — never a re-derived copy;
   - the `tie` scenario really produces `ClashOutcome.Tie`;
-  - running the same scenario twice is byte-identical (determinism);
+  - running the same scenario twice is byte-identical (determinism), including the physical continuation on a freshly built Rapier stage (what `R`/loop does), and the FX spark scatter comes from a seeded RNG, not `Math.random()`;
   - the Cooldown really counts down `CLASH_COOLDOWN_S` and refuses a new Clash before it reaches zero;
   - `ClashStageSim` integration: a normal-knockback scenario never crosses the ring-out radius, a wall-adjacent strong knockback crosses it on its own (physics decides, Clash never declares it), and a Tie visibly separates both Beys.
-- `tests/smoke/clashPresentationConcepts.spec.ts`: loads the production page, exercises all three directions to a full resolution, the Tie scenario, the ring-out scenario, and the Cooldown scenario, with no console errors.
+- `tests/smoke/clashPresentationConcepts.spec.ts`: loads the production page, exercises all three directions to a full resolution and checks the Clash result and physical continuation are identical across A/B/C (the direction only changes presentation), checks `R` mid-resolution replays the same run at normal speed (no hitstop/slow-mo carried over), the Tie scenario, the ring-out scenario, and the Cooldown scenario, with no console errors.
 
 Run with `CHAOSBEY_PW_CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test -c tests/smoke/playwright.config.ts tests/smoke/clashPresentationConcepts.spec.ts` if the container's pre-installed Chromium needs pointing to explicitly.
 

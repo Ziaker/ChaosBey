@@ -114,18 +114,41 @@ const host: PresentationHost = {
   },
 };
 
+/** Drops any hitstop/slow-mo/flash still running from the previous run, so a restart or scenario switch mid-resolution starts at normal speed. */
+function resetPresentationTimers(): void {
+  hitstopRemainingS = 0;
+  slowMoRemainingS = 0;
+  slowMoFactor = 1;
+  flashRemainingS = 0;
+}
+
 const presenter = new ClashPresenter(DIRECTIONS[lab.directionId], lab.tieStyleId, view.fx, host);
 
 // ---------------- Scenario lifecycle ----------------
-async function loadScenario(id: string): Promise<void> {
-  lab.scenarioId = id;
-  currentScenario = structuredClone(scenarioById(id));
+// Every (re)start builds a fresh Rapier world: re-using one after a
+// resolution keeps Rapier's contact/solver state around and the next run
+// drifts (the loser lands a few cm elsewhere), which breaks "repeat
+// exactly". The new stage is built before the old one is freed, so the
+// frame loop never ticks a disposed world, and a stale build (another
+// load/restart requested meanwhile) is discarded.
+let stageGeneration = 0;
+let stagePending = false;
+async function startStage(): Promise<void> {
+  const generation = ++stageGeneration;
+  stagePending = true;
+  const fresh = await ClashStageSim.create(currentScenario, FIRST_CONCEPTS[lab.firstConceptLetter], SECOND_CONCEPTS[lab.secondConceptLetter]);
+  if (generation !== stageGeneration) {
+    fresh.dispose();
+    return;
+  }
+  stagePending = false;
   sim?.dispose();
-  sim = await ClashStageSim.create(currentScenario, FIRST_CONCEPTS[lab.firstConceptLetter], SECOND_CONCEPTS[lab.secondConceptLetter]);
+  sim = fresh;
   view.setArena(currentScenario.arena);
   view.setBeyVisuals(sim.visuals);
   for (const pid of PRESET_IDS) directors[pid].reset();
   presenter.reset();
+  resetPresentationTimers();
   driver = new ScriptedMashDriver(mashSourceFor(currentScenario.first.mash), mashSourceFor(currentScenario.second.mash));
   mashLog.length = 0;
   lab.ticks = 0;
@@ -134,25 +157,23 @@ async function loadScenario(id: string): Promise<void> {
   sim.beginApproach();
   tick();
   copyPose(prevPose, curPose);
+}
+
+async function loadScenario(id: string): Promise<void> {
+  lab.scenarioId = id;
+  currentScenario = structuredClone(scenarioById(id));
+  await startStage();
   syncSideRatePanel();
   syncPanel();
 }
 
-function restart(): void {
-  if (!sim) return;
-  sim.restart();
-  presenter.reset();
-  driver = new ScriptedMashDriver(mashSourceFor(currentScenario.first.mash), mashSourceFor(currentScenario.second.mash));
-  mashLog.length = 0;
-  lab.ticks = 0;
-  lab.simTimeS = 0;
-  accumulator = 0;
-  tick();
-  copyPose(prevPose, curPose);
+/** Replays the current scenario from the top, keeping any slider edits and the chosen Bey models. */
+function restart(): Promise<void> {
+  return startStage();
 }
 
 function onScenarioEnd(): void {
-  if (lab.loop) restart();
+  if (lab.loop) void restart();
   else {
     lab.paused = true;
     syncPanel();
@@ -234,7 +255,7 @@ function frameLoop(): void {
 
   if (hitstopRemainingS > 0) {
     hitstopRemainingS = Math.max(0, hitstopRemainingS - realDt);
-  } else if (sim && !lab.paused) {
+  } else if (sim && !lab.paused && !stagePending) {
     const speed = SPEEDS[lab.speedIndex]!;
     const effectiveFactor = slowMoRemainingS > 0 ? slowMoFactor : 1;
     if (slowMoRemainingS > 0) slowMoRemainingS = Math.max(0, slowMoRemainingS - realDt);
@@ -471,7 +492,7 @@ function syncSideRatePanel(): void {
 
 // ---------------- Transport ----------------
 $<HTMLButtonElement>('pause').addEventListener('click', () => { lab.paused = !lab.paused; syncPanel(); });
-$<HTMLButtonElement>('restart').addEventListener('click', restart);
+$<HTMLButtonElement>('restart').addEventListener('click', () => void restart());
 $<HTMLButtonElement>('speed').addEventListener('click', () => { lab.speedIndex = (lab.speedIndex + 1) % SPEEDS.length; syncPanel(); });
 $<HTMLButtonElement>('loop').addEventListener('click', () => { lab.loop = !lab.loop; syncPanel(); });
 $<HTMLButtonElement>('mash-mode-first').addEventListener('click', () => {
@@ -501,7 +522,7 @@ window.addEventListener('keydown', (e) => {
   const idx = SCENARIOS.findIndex((s) => s.id === lab.scenarioId);
   if (k === '1' || k === '2' || k === '3') setDirection(DIRECTION_IDS[Number(k) - 1]!);
   else if (k === ' ') { lab.paused = !lab.paused; syncPanel(); e.preventDefault(); }
-  else if (k === 'r') restart();
+  else if (k === 'r') void restart();
   else if (k === 's') { lab.speedIndex = (lab.speedIndex + 1) % SPEEDS.length; syncPanel(); }
   else if (k === 'l') { lab.loop = !lab.loop; syncPanel(); }
   else if (k === 'm') { lab.firstMashMode = lab.firstMashMode === 'scripted' ? 'keyboard' : 'scripted'; syncPanel(); }
@@ -523,7 +544,20 @@ void loadScenario(startScenarioFromHash()).then(() => view.renderer.setAnimation
 declare global {
   interface Window {
     __clashLab: {
-      state(): { scenario: string; direction: DirectionId; tieStyle: TieStyleId; cameraPreset: PresetId; phase: string; beat: string; paused: boolean; ticks: number };
+      state(): {
+        scenario: string;
+        direction: DirectionId;
+        tieStyle: TieStyleId;
+        cameraPreset: PresetId;
+        phase: string;
+        beat: string;
+        paused: boolean;
+        ticks: number;
+        /** Clash result + both Beys' final positions: must be identical across directions (presentation never changes the sim). */
+        simFingerprint: string;
+        hitstopRemainingS: number;
+        slowMoRemainingS: number;
+      };
       scenarios: string[];
       directions: DirectionId[];
       loadScenario(id: string): Promise<void>;
@@ -543,6 +577,9 @@ window.__clashLab = {
     beat: sim?.harness.beat ?? 'idle',
     paused: lab.paused,
     ticks: lab.ticks,
+    simFingerprint: sim ? JSON.stringify({ result: sim.harness.controller.getLastResult(), first: sim.frame.first.position, second: sim.frame.second.position, ringOut: sim.frame.ringOutIsFirst }) : '',
+    hitstopRemainingS,
+    slowMoRemainingS,
   }),
   scenarios: SCENARIOS.map((s) => s.id),
   directions: [...DIRECTION_IDS],
