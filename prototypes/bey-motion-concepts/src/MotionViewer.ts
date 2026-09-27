@@ -109,6 +109,9 @@ export class MotionViewer {
     blur: false,
   };
 
+  /** Rendering is suspended while the other lab section is shown. */
+  active = true;
+
   private slots: Slot[] = [];
   private time = 0;
   private lastMs = performance.now();
@@ -341,6 +344,7 @@ export class MotionViewer {
     const now = performance.now();
     const realDt = Math.min(0.1, (now - this.lastMs) / 1000);
     this.lastMs = now;
+    if (!this.active) return;
     const dt = this.params.paused ? 0 : realDt * this.params.timeScale;
     this.time += dt;
     if (this.spinDownT !== null) this.spinDownT += dt;
@@ -456,7 +460,7 @@ export class MotionViewer {
     this.updateCamera(10);
   }
 
-  private resize(): void {
+  resize(): void {
     const w = Math.max(1, this.stage.clientWidth);
     const h = Math.max(1, this.stage.clientHeight);
     this.renderer.setSize(w, h, false);
