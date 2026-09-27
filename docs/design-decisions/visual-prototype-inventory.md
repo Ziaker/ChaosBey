@@ -2,9 +2,9 @@
 
 **Data:** 26 de setembro de 2026  
 **Status:** inventário canônico para preservação e integração futura  
-**Escopo:** Bey Visual Lab, Arena Visual Lab, VFX Language Lab, Stamina & Stability Lab e decisões visuais aprovadas
+**Escopo:** Bey Visual Lab, Arena Visual Lab, VFX Language Lab, Stamina & Stability Lab, Camera Lab e decisões visuais aprovadas
 
-> **Atualização (27/09/2026):** o PR #17 foi mergeado, então Arena Lab, VFX Lab e os documentos de decisão já estão na `main`. O **Stamina & Stability Lab** (`prototypes/condition-visual-concepts/`) está aprovado (`docs/design-decisions/condition-visual-approval.md`) e entra na `main` pelo PR da branch `claude/sleepy-johnson-4i6io4`. As seções abaixo que ainda dizem "PR #17 ainda não mergeado" descrevem o estado de 26/09.
+> **Atualização (27/09/2026):** o PR #17 foi mergeado, então Arena Lab, VFX Lab e os documentos de decisão já estão na `main`. O **Stamina & Stability Lab** (`prototypes/condition-visual-concepts/`) está aprovado (`docs/design-decisions/condition-visual-approval.md`) e entra na `main` pelo PR da branch `claude/sleepy-johnson-4i6io4`. As seções abaixo que ainda dizem "PR #17 ainda não mergeado" descrevem o estado de 26/09. O **Camera Lab** (`prototypes/camera-concepts/`) entra pelo mesmo PR como protótipo **em aprovação**: três direções de câmera (A, B, C) sobre lutas reais da simulação; a câmera do jogo não muda até o dono escolher.
 
 ## 1. Resumo e onde está cada coisa
 
@@ -46,6 +46,7 @@ O motivo de a `main` não mostrar esse material é histórico: o PR #9 mergeou a
 | Wind burst Cel Cyclone | **APROVADO e tunado** | `prototypes/vfx-visual-concepts/` |
 | 36 valores finais de tuning | **APROVADO** | `prototypes/vfx-visual-concepts/src/tuning.ts` (`APPROVED`) |
 | Condição do Bey: Stamina, Stability e Quebrado — 3 direções (Desgaste Mecânico, Aura de Espírito, Instrumento no Chão) | **APROVADO** como opções selecionáveis nas Configurações (1, 2 ou 3); 49 valores finais | `prototypes/condition-visual-concepts/` · `docs/design-decisions/condition-visual-approval.md` |
+| Câmera de combate — 3 direções (A Arena Fighter, B Cinematic Hybrid, C Hyper Dynamic) com modos Combat Follow, High Speed, Close Combat, Knockback Follow, Clash, Ring-Out e Finisher | **PROTOTIPADO, AGUARDANDO ESCOLHA DO DONO**; valores de protótipo; nada integrado | `prototypes/camera-concepts/` |
 | Clash completo entre os Beys — energia, pulsos, mash e explosão final | **NÃO PROTOTIPADO** | — |
 | Bloom / aberração cromática | **DECISÃO VISUAL AINDA NÃO TOMADA; não prototipado** | — |
 | Sparks, speed lines, trail, landing burst, shake, hitstop e FOV do jogo atual | **INTEGRADO NA MAIN, placeholder M4** | `src/vfx/`, `src/camera/` |
@@ -343,7 +344,7 @@ Uma auditoria que leia apenas `main@47a6deb` vê corretamente o que **está inte
 | Stability Break | “Não existe” | Prototipado e aprovado |
 | Landing | “Não existe” | Prototipado e aprovado |
 | Wall scrape / skid | “Não existe” | Prototipado e aprovado |
-| Ring-out | “Não existe” | VFX prototipado e aprovado; câmera dedicada ainda não |
+| Ring-out | “Não existe” | VFX prototipado e aprovado; câmera dedicada prototipada no Camera Lab, aguardando escolha |
 | Wind burst Dash/Dodge | “Não existe” | Cel Cyclone aprovado e tunado |
 | Arena | “Não existe” | Lab + decisões aprovadas: 3,2 m, 12 m, 3 perfis, 3 direções |
 | Luz de Clash da arena | “Não existe” | Definida individualmente por arena |
@@ -407,6 +408,7 @@ Quando o jogo estiver estável para receber arte final, a ordem recomendada é:
 | Arena Concept Lab | `prototypes/arena-visual-concepts/` | `claude/tender-turing-3k7o8v` e PR #17 (canonização, ainda não mergeado) |
 | VFX Language Lab | `prototypes/vfx-visual-concepts/` | `claude/tender-turing-3k7o8v` e PR #17 (canonização, ainda não mergeado) |
 | Stamina & Stability Lab | `prototypes/condition-visual-concepts/` | `claude/sleepy-johnson-4i6io4` e o PR dessa branch |
+| Camera Lab | `prototypes/camera-concepts/` | `claude/sleepy-johnson-4i6io4` e o PR dessa branch (em aprovação) |
 
 Documento de decisões aprovado relacionado: `docs/design-decisions/visual-prototypes-approval.md`.
 

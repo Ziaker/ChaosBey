@@ -28,8 +28,9 @@ export default defineConfig(({ command, isPreview }) => ({
     target: 'es2022',
     sourcemap: true,
     // Multi-page build: the game plus isolated visual prototypes. Prototype
-    // pages import nothing from the game and ship under their own path
-    // (e.g. /ChaosBey/prototypes/bey-visual-concepts/).
+    // pages never change the game and ship under their own path (e.g.
+    // /ChaosBey/prototypes/bey-visual-concepts/). Most import nothing from
+    // it; the Camera Lab reads the game's simulation to run real fights.
     rolldownOptions: {
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
@@ -38,6 +39,7 @@ export default defineConfig(({ command, isPreview }) => ({
         arenaVisualConcepts: fileURLToPath(new URL('./prototypes/arena-visual-concepts/index.html', import.meta.url)),
         vfxVisualConcepts: fileURLToPath(new URL('./prototypes/vfx-visual-concepts/index.html', import.meta.url)),
         conditionVisualConcepts: fileURLToPath(new URL('./prototypes/condition-visual-concepts/index.html', import.meta.url)),
+        cameraConcepts: fileURLToPath(new URL('./prototypes/camera-concepts/index.html', import.meta.url)),
       },
     },
   },

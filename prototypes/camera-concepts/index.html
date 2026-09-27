@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChaosBey Camera Lab</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #05050a;
+        --panel: #0c1017;
+        --panel-2: #121823;
+        --line: #1f2835;
+        --text: #e9eef5;
+        --muted: #8894a6;
+        --soft: #c6cfdb;
+        --accent: #ffb347;
+        --preset-a: #6fd3ff;
+        --preset-b: #ffb347;
+        --preset-c: #ff4fa3;
+        --danger: #ff3b4e;
+        font-family: 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+      .lab { display: grid; grid-template-columns: 320px 1fr 330px; height: 100%; min-height: 600px; }
+      .lab.no-tuning { grid-template-columns: 320px 1fr; }
+      .lab.no-tuning .tuning { display: none; }
+      .panel, .tuning { background: var(--panel); padding: 16px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+      .panel { border-right: 1px solid var(--line); }
+      .tuning { border-left: 1px solid var(--line); gap: 10px; }
+      .kicker { font: 600 11px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+      h1 { margin: 6px 0 8px; font-size: 21px; text-wrap: balance; }
+      h2 { margin: 0; font-size: 16px; }
+      h3 { margin: 0 0 8px; font: 700 11px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--muted); text-transform: uppercase; }
+      .warn { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+      .hint { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+      kbd { font: 10px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--muted); background: var(--bg); }
+      :is(button, select, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+      .presets { display: grid; gap: 6px; }
+      .preset { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 8px 10px; cursor: pointer; font: 12.5px inherit; font-family: inherit; }
+      .preset strong { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; color: #0b0d12; font-size: 14px; }
+      .preset[data-id='A'] strong { background: var(--preset-a); }
+      .preset[data-id='B'] strong { background: var(--preset-b); }
+      .preset[data-id='C'] strong { background: var(--preset-c); }
+      .preset span small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; line-height: 1.35; }
+      .preset[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, var(--panel-2)); }
+
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip { display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; cursor: pointer; font: 12px inherit; font-family: inherit; padding: 6px 9px; }
+      .chip:hover, .preset:hover, .scenario:hover { border-color: #3a4658; }
+      .chip[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+
+      .scenarios { display: grid; gap: 4px; }
+      .scenario { display: grid; gap: 2px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 7px 9px; cursor: pointer; font: 12.5px inherit; font-family: inherit; }
+      .scenario small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+      .scenario .ctx { color: #9fb1c8; font: 10px ui-monospace, Consolas, monospace; }
+      .scenario[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); }
+
+      .debug { margin: 0; font: 11px/1.55 ui-monospace, Consolas, monospace; color: var(--soft); white-space: pre-wrap; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-height: 120px; font-variant-numeric: tabular-nums; }
+      .keys { font-size: 11.5px; color: var(--muted); line-height: 1.8; }
+
+      .stage { position: relative; overflow: hidden; background: #000; min-height: 0; }
+      .stage canvas#lab-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+      .overlay { position: absolute; inset: 0; pointer-events: none; }
+      .vp-hud { position: absolute; display: grid; gap: 4px; font: 11.5px/1.35 ui-monospace, Consolas, monospace; color: #e6edf5; text-shadow: 0 1px 3px #000; font-variant-numeric: tabular-nums; }
+      .vp-hud .top { display: flex; gap: 8px; align-items: center; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 12.5px; }
+      .vp-hud .top strong { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 5px; color: #0b0d12; font-size: 12px; }
+      .vp-hud[data-id='A'] .top strong { background: var(--preset-a); }
+      .vp-hud[data-id='B'] .top strong { background: var(--preset-b); }
+      .vp-hud[data-id='C'] .top strong { background: var(--preset-c); }
+      .mode { font: 700 10.5px ui-monospace, Consolas, monospace; letter-spacing: 0.06em; padding: 3px 6px; border-radius: 4px; background: rgba(12,16,23,.8); border: 1px solid var(--line); }
+      .mode[data-mode='HighSpeed'] { border-color: #6fd3ff; color: #bfeaff; }
+      .mode[data-mode='CloseCombat'] { border-color: #7fe07f; color: #c9f5c9; }
+      .mode[data-mode='KnockbackFollow'] { border-color: #ffb347; color: #ffe0b3; }
+      .mode[data-mode='Clash'] { border-color: #ff4fa3; color: #ffc6e3; }
+      .mode[data-mode='RingOut'] { border-color: #ff3b4e; color: #ffc9ce; }
+      .mode[data-mode='Finisher'] { border-color: #ffe066; color: #fff3c2; }
+      .vp-hud .mods { color: #b8c4d4; font-size: 10.5px; }
+      .vp-hud .read { color: #9fb1c8; font-size: 10.5px; }
+      .divider { position: absolute; background: #1f2835; }
+      .banner { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); font: 600 12px 'Segoe UI', system-ui, sans-serif; background: rgba(12,16,23,.9); border: 1px solid var(--accent); color: #ffe0b3; border-radius: 6px; padding: 5px 10px; }
+      .banner.temp { border-color: #8894a6; color: #c6cfdb; top: auto; bottom: 64px; }
+      #minimap { position: absolute; right: 12px; bottom: 58px; width: 210px; height: 210px; border: 1px solid var(--line); border-radius: 8px; pointer-events: none; }
+      .bottom { position: absolute; left: 12px; right: 12px; bottom: 12px; display: grid; gap: 6px; }
+      .timeline { position: relative; height: 22px; background: rgba(12,16,23,.88); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+      .timeline .fill { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 16%, transparent); }
+      .timeline .mark { position: absolute; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; transform: translateX(-50%); background: #c9d2de; }
+      .timeline .mark.wallImpact { background: #8fb8ff; }
+      .timeline .mark.clash { background: #ff4fa3; width: 5px; }
+      .timeline .mark.ringOut, .timeline .mark.ko { background: #ff3b4e; width: 5px; }
+      .timeline .label { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font: 10.5px ui-monospace, Consolas, monospace; color: var(--muted); }
+
+      .tune-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      .tune-actions button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 7px 8px; font: 600 11.5px/1.2 inherit; font-family: inherit; cursor: pointer; }
+      .tune-actions button.primary { grid-column: 1 / -1; background: color-mix(in srgb, var(--accent) 28%, var(--panel-2)); border-color: var(--accent); }
+      .tune-status { font-size: 11.5px; color: var(--soft); min-height: 1.4em; margin: 0; }
+      .editing { font-size: 12px; color: var(--soft); }
+      .editing b { color: var(--accent); }
+      .tune-group { border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+      .tune-group summary { cursor: pointer; padding: 8px 10px; font: 700 11px ui-monospace, Consolas, monospace; letter-spacing: 0.06em; text-transform: uppercase; color: #c9d2de; }
+      .tune-body { display: grid; gap: 8px; padding: 2px 10px 10px; }
+      .tune-row { display: grid; grid-template-columns: 1fr 44px 24px; gap: 2px 6px; align-items: center; }
+      .tune-row label { grid-column: 1 / -1; margin: 0; font-size: 11.5px; color: var(--muted); }
+      .tune-row input { width: 100%; accent-color: var(--accent); }
+      .tune-row output { font: 600 11.5px ui-monospace, Consolas, monospace; text-align: right; font-variant-numeric: tabular-nums; }
+      .tune-row .mini { border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 4px; cursor: pointer; font-size: 11px; padding: 1px 0; }
+      .tune-row .range { grid-column: 1 / -1; color: #5d6878; font: 10px ui-monospace, Consolas, monospace; margin-top: -2px; }
+      .tune-row.changed label { color: var(--accent); }
+      .tune-row.changed label::after { content: ' •'; }
+
+      @media (max-width: 980px) {
+        .lab, .lab.no-tuning { grid-template-columns: 1fr; grid-template-rows: auto minmax(480px, 72vh) auto; height: auto; }
+        .panel { border-right: 0; border-bottom: 1px solid var(--line); }
+        .tuning { border-left: 0; border-top: 1px solid var(--line); }
+        .keys { display: none; }
+        #minimap { width: 150px; height: 150px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="lab" id="lab">
+      <aside class="panel">
+        <header>
+          <div class="kicker">ChaosBey · Protótipo de câmera</div>
+          <h1>Camera Lab</h1>
+          <p class="warn">Três direções de câmera para aprovação, rodando sobre a luta real do jogo (física, tickMatch e IA de verdade, com roteiros reproduzíveis). Os valores são de protótipo. A câmera do jogo não muda: nada aqui foi integrado.</p>
+        </header>
+        <section>
+          <h3>Direção</h3>
+          <div class="presets" id="presets"></div>
+        </section>
+        <section>
+          <h3>Vista e reprodução</h3>
+          <div class="chips">
+            <button type="button" class="chip" id="view-single">Uma câmera</button>
+            <button type="button" class="chip" id="view-compare">A | B | C <kbd>Q</kbd></button>
+            <button type="button" class="chip" id="seq">Sequência A→B→C <kbd>T</kbd></button>
+          </div>
+          <div class="chips" style="margin-top: 6px">
+            <button type="button" class="chip" id="pause">Pausar <kbd>Espaço</kbd></button>
+            <button type="button" class="chip" id="restart">Reiniciar <kbd>R</kbd></button>
+            <button type="button" class="chip" id="speed">1× <kbd>S</kbd></button>
+            <button type="button" class="chip" id="loop">Repetir <kbd>L</kbd></button>
+          </div>
+        </section>
+        <section>
+          <h3>Cenário <kbd>[</kbd> <kbd>]</kbd></h3>
+          <div class="scenarios" id="scenarios"></div>
+        </section>
+        <section>
+          <h3>Debug</h3>
+          <div class="chips">
+            <button type="button" class="chip" id="toggle-markers">Marcadores 3D <kbd>D</kbd></button>
+            <button type="button" class="chip" id="toggle-minimap">Minimapa <kbd>M</kbd></button>
+            <button type="button" class="chip" id="toggle-hud">Texto na tela <kbd>H</kbd></button>
+          </div>
+          <p class="hint" style="margin-top: 6px">Losango = ponto seguido · anel azul = meio entre os Beys · seta rosa = look-ahead · setas verde/vermelha = velocidade · losango laranja = encontro previsto.</p>
+          <pre class="debug" id="debug" aria-live="off"></pre>
+        </section>
+        <section class="keys" aria-label="Atalhos">
+          <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> direção · <kbd>Q</kbd> comparar · <kbd>T</kbd> sequência<br />
+          <kbd>Espaço</kbd> pausa · <kbd>R</kbd> reinicia · <kbd>S</kbd> velocidade · <kbd>L</kbd> repetir<br />
+          <kbd>[</kbd> <kbd>]</kbd> cenário · <kbd>D</kbd> <kbd>M</kbd> <kbd>H</kbd> debug · <kbd>P</kbd> painel
+        </section>
+      </aside>
+      <main class="stage" id="stage">
+        <canvas id="lab-canvas" aria-label="Visão da câmera"></canvas>
+        <div class="overlay" id="overlay"></div>
+        <canvas id="minimap" aria-label="Minimapa visto de cima"></canvas>
+        <div class="bottom">
+          <div class="timeline" id="timeline" aria-hidden="true"><div class="fill" id="timeline-fill"></div><span class="label" id="timeline-label"></span></div>
+        </div>
+      </main>
+      <aside class="tuning" id="tuning" aria-label="Ajuste da câmera">
+        <h2>Ajuste</h2>
+        <p class="editing" id="editing"></p>
+        <p class="hint">Tudo muda na hora. Passe o mouse num slider para ver o que ele faz e a faixa. ↺ volta aquele valor ao do preset. Rótulos em laranja diferem do preset original.</p>
+        <div class="tune-actions">
+          <button type="button" class="primary" id="save">Salvar configurações</button>
+          <button type="button" id="copy">Copiar JSON</button>
+          <button type="button" id="reset-preset">Resetar preset</button>
+        </div>
+        <p class="tune-status" id="tune-status" aria-live="polite"></p>
+        <div id="params"></div>
+      </aside>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
