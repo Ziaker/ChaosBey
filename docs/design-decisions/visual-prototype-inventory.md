@@ -2,9 +2,11 @@
 
 **Data:** 26 de setembro de 2026  
 **Status:** inventário canônico para preservação e integração futura  
-**Escopo:** Bey Visual Lab, Arena Visual Lab, VFX Language Lab, Stamina & Stability Lab, Camera Lab e decisões visuais aprovadas
+**Escopo:** Bey Visual Lab, Arena Visual Lab, VFX Language Lab, Stamina & Stability Lab, Camera Lab, Bey Motion Lab e decisões visuais aprovadas
 
 > **Atualização (27/09/2026):** o PR #17 foi mergeado, então Arena Lab, VFX Lab e os documentos de decisão já estão na `main`. O **Stamina & Stability Lab** (`prototypes/condition-visual-concepts/`) está aprovado (`docs/design-decisions/condition-visual-approval.md`) e entra na `main` pelo PR da branch `claude/sleepy-johnson-4i6io4`. As seções abaixo que ainda dizem "PR #17 ainda não mergeado" descrevem o estado de 26/09. O **Camera Lab** (`prototypes/camera-concepts/`) entra pelo mesmo PR. As três direções de câmera (A, B, C) foram **aprovadas sem alterações** como opções selecionáveis nas Configurações (`docs/design-decisions/camera-approval.md`); a câmera do jogo ainda não foi trocada.
+>
+> **Atualização (27/09/2026, Motion):** o **Bey Motion Lab** (`prototypes/bey-motion-concepts/`) entrou pela branch `claude/bey-motion-lab`. Suas três direções de movimento (A Stable Arcade, B Physical Hybrid, C Wild Mechanical) e a linguagem física geral foram **aprovadas como direções-base e como ferramenta**, mas os 33 valores numéricos atuais **não** foram aprovados como tuning final de produção — ver `docs/design-decisions/motion-approval.md` para a distinção exata (diferente da câmera, aqui não há confirmação de valores exatos). Movimento do jogo ainda não foi alterado.
 
 ## 1. Resumo e onde está cada coisa
 
@@ -36,7 +38,8 @@ O motivo de a `main` não mostrar esse material é histórico: o PR #9 mergeou a
 |---|---|---|
 | Anatomia de 4 peças dos Beys | **APROVADO** | `prototypes/bey-visual-concepts/` (também na `main`) |
 | 9 conceitos de Bey | **APROVADO como catálogo; 3 finais em aberto** | `prototypes/bey-visual-concepts/` |
-| Bey girando / em movimento real | **NÃO PROTOTIPADO** | — |
+| Bey girando / em movimento real: linguagem física (momentum, tilt, wobble, grip/slip, precessão, tumble, bounce, ricochete) | **APROVADO** como direções-base A/B/C e ferramenta; valores numéricos de produção em aberto | `prototypes/bey-motion-concepts/` · `docs/design-decisions/motion-approval.md` |
+| Spin readability dos 9 conceitos em velocidade de jogo | **PROTOTIPADO, achado registrado; nenhuma solução escolhida** | `prototypes/bey-motion-concepts/` · `docs/design-decisions/motion-approval.md` |
 | Bowl com 3,2 m de profundidade e raio de 12 m | **APROVADO** | `prototypes/arena-visual-concepts/` |
 | Perfis de concavidade A/B/C | **APROVADO** | `prototypes/arena-visual-concepts/` |
 | Foundry Pit, Rift Crater e Tournament Stadium | **APROVADAS como direções válidas; arena inicial em aberto** | `prototypes/arena-visual-concepts/` |
@@ -109,8 +112,9 @@ Os códigos são provisórios e **não são nomes finais**.
 
 - Escolher os 3 Beys finais, um por arquétipo.
 - Definir nomes finais.
-- Ver **os 9 conceitos do catálogo, cada um com sua anatomia de 4 peças**, girando em velocidade de jogo, com tilt, wobble e câmera de combate. O laboratório atual é uma inspeção estática/turntable lento; essa é a maior lacuna visual restante.
 - Definir paletas finais; as atuais continuam temporárias por arquétipo.
+
+> **Atualização (27/09/2026):** ver os 9 conceitos girando em velocidade de jogo, com tilt, wobble e câmera de combate deixou de ser lacuna: o **Bey Motion Lab** (`prototypes/bey-motion-concepts/`, aba "Spin readability") cobre exatamente isso. Achado registrado em `docs/design-decisions/motion-approval.md` §11: na taxa atual do jogo (22 rad/s), Defense A/B/C e Stamina B podem apresentar ambiguidade visual de sentido de rotação. Nenhuma solução foi escolhida ainda.
 
 # 5. Arena Visual Lab
 
@@ -335,7 +339,7 @@ Uma auditoria que leia apenas `main@47a6deb` vê corretamente o que **está inte
 
 | Área | Leitura olhando só a `main` | Situação real |
 |---|---|---|
-| Bey girando / movimento real | Lacuna | **Lacuna real:** nenhum lab mostra velocidade de jogo + wobble |
+| Bey girando / movimento real | Lacuna | **Fechada em 27/09/2026:** Bey Motion Lab prototipa a linguagem física (aprovada como direção) e a spin readability em velocidade de jogo (achado registrado, sem solução escolhida) |
 | VFX de impacto | “Não existe” | Prototipado, aprovado e tunado na Híbrida |
 | VFX de ataques | “Não existe” | Dash e Circular já prototipados e aprovados |
 | Dash charge + release | “Não existe” | Aura 1,95×, trail fino/longo e Cel Cyclone no release |
@@ -351,7 +355,7 @@ Uma auditoria que leia apenas `main@47a6deb` vê corretamente o que **está inte
 | Clash completo entre Beys | “Não existe” | **Correto:** não prototipado; só a reação da arena existe |
 | Bloom / chromatic aberration | “Não existe” | **Correto como ausência:** não prototipado e nenhuma decisão foi tomada sobre usar ou não |
 
-Dos laboratórios inicialmente sugeridos como novos, VFX de impacto, VFX de ataque, Arena e luz de Clash já foram feitos. As lacunas reais restantes são **Bey em movimento real**, **VFX completo do Clash** e uma **decisão futura sobre pós-processamento** caso se deseje testar bloom/aberração cromática.
+Dos laboratórios inicialmente sugeridos como novos, VFX de impacto, VFX de ataque, Arena, luz de Clash e Bey em movimento real (Motion Lab, 27/09/2026) já foram feitos. As lacunas reais restantes são **VFX completo do Clash** e uma **decisão futura sobre pós-processamento** caso se deseje testar bloom/aberração cromática.
 
 # 10. O que falta e ordem recomendada
 
@@ -375,9 +379,10 @@ A canonização acima **não autoriza** implementar essas decisões dentro de `s
 
 ## 10.2 Protótipos que ainda não existem
 
-1. **Bey em movimento real:** testar os 9 conceitos de Bey, cada um com suas 4 peças, em velocidade de jogo, com tilt, wobble e distância real da câmera de combate. É a maior lacuna visual.
-2. **VFX completo do Clash:** energia entre os Beys, pulsos durante mash, explosão de resolução, vencedor e apresentação de empate. Hoje existe apenas a reação de luz das arenas.
-3. **Pós-processamento:** bloom e aberração cromática **não são requisitos aprovados**. Antes de implementar, deve haver uma decisão visual explícita sobre se entram no estilo final; só depois faria sentido criar presets Low/Medium/High.
+1. **VFX completo do Clash:** energia entre os Beys, pulsos durante mash, explosão de resolução, vencedor e apresentação de empate. Hoje existe apenas a reação de luz das arenas.
+2. **Pós-processamento:** bloom e aberração cromática **não são requisitos aprovados**. Antes de implementar, deve haver uma decisão visual explícita sobre se entram no estilo final; só depois faria sentido criar presets Low/Medium/High.
+
+> Bey em movimento real (9 conceitos em velocidade de jogo, tilt, wobble, câmera de combate) deixou de faltar: coberto pelo Bey Motion Lab em 27/09/2026 (seção 1, tabela de status, e `docs/design-decisions/motion-approval.md`).
 
 ## 10.3 Decisões em aberto — somente o dono decide
 
@@ -408,9 +413,10 @@ Quando o jogo estiver estável para receber arte final, a ordem recomendada é:
 | Arena Concept Lab | `prototypes/arena-visual-concepts/` | `claude/tender-turing-3k7o8v` e PR #17 (canonização, ainda não mergeado) |
 | VFX Language Lab | `prototypes/vfx-visual-concepts/` | `claude/tender-turing-3k7o8v` e PR #17 (canonização, ainda não mergeado) |
 | Stamina & Stability Lab | `prototypes/condition-visual-concepts/` | `claude/sleepy-johnson-4i6io4` e o PR dessa branch |
-| Camera Lab | `prototypes/camera-concepts/` | `claude/sleepy-johnson-4i6io4` e o PR dessa branch (aprovado) |
+| Camera Lab | `prototypes/camera-concepts/` | `claude/sleepy-johnson-4i6io4` e o PR dessa branch (aprovado, valores exatos) |
+| Bey Motion Lab | `prototypes/bey-motion-concepts/` | `claude/bey-motion-lab` (aprovado como direções A/B/C + ferramenta; valores numéricos ainda não) |
 
-Documentos de decisões aprovados relacionados: `docs/design-decisions/visual-prototypes-approval.md`, `docs/design-decisions/condition-visual-approval.md` e `docs/design-decisions/camera-approval.md`.
+Documentos de decisões aprovados relacionados: `docs/design-decisions/visual-prototypes-approval.md`, `docs/design-decisions/condition-visual-approval.md`, `docs/design-decisions/camera-approval.md` e `docs/design-decisions/motion-approval.md`.
 
 Para rodar localmente (a branch do PR #17, ou a `main` depois do merge dele):
 
