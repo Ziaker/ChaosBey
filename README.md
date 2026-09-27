@@ -33,6 +33,11 @@ npm run preview    # serve the production build locally, under /ChaosBey/
 npm run test:smoke # Playwright smoke test against the production build
 ```
 
+Smoke-test environment variables:
+
+- `CHAOSBEY_PW_CHROMIUM_PATH=/path/to/chrome` runs the smoke tests with an existing Chromium binary. Use it when a sandboxed container ships a Chromium revision that doesn't match what `@playwright/test` expects and can't download another one. CI leaves it unset and installs its own browser.
+- `CHAOSBEY_PW_INCLUDE_FIREFOX=1` adds the Firefox project, which runs only the game's smoke specs; the prototype labs stay Chromium-only. Run it with `npx playwright install firefox` first, then `CHAOSBEY_PW_INCLUDE_FIREFOX=1 npx playwright test -c tests/smoke/playwright.config.ts --project=firefox`. CI runs it as its own parallel job.
+
 ## Keyboard bindings
 
 - Arrow keys — steer / move (connected — drives the Milestone 1 movement prototype)
