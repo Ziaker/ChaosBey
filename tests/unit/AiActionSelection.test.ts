@@ -356,3 +356,59 @@ describe('ActionSelector — edge pressure (M7 Part 2)', () => {
     expect(actions.pressedThisFrame.has(Action.Attack)).toBe(true);
   });
 });
+
+describe('ActionSelector — Clash-mash held state must not leak into normal combat (M7 audit regression)', () => {
+  // AIController.sampleClashMashActions holds a raw Set of Clash-mash
+  // actions (Attack/JumpDrift/Dodge) through this exact same
+  // ActionSelector.commit() bookkeeping — see ClashOrchestration/ClashMash.
+  // If that commit() call shares an ActionSelector instance with the one
+  // driving normal-combat selectActions(), an Attack the mash happened to
+  // be holding right up to the Clash's resolution stays in "already
+  // held" bookkeeping, so the very next real AttackCircular decision
+  // produces no fresh pressedThisFrame press — AttackController.tick()
+  // only starts an attack from Neutral on a real press, never from held
+  // alone (see AttackController.ts), so the attack is silently swallowed.
+  it('a shared selector swallows the next real Attack press right after a Clash-mash Attack hold (documents the bug)', () => {
+    const shared = new ActionSelector();
+    shared.commit(new Set([Action.Attack]), DT); // last Clash-mash tick happened to hold Attack.
+    const postClash = shared.selectActions(AiIntent.AttackCircular, world({ attackState: AttackState.Neutral }), ATTACK_AI_PERSONALITY, false, DT);
+    expect(postClash.held.has(Action.Attack)).toBe(true);
+    expect(postClash.pressedThisFrame.has(Action.Attack)).toBe(false); // the bug: no fresh press reaches AttackController.
+  });
+
+  it('separate selectors (the fix) let the same post-Clash decision press Attack for real', () => {
+    const mashSelector = new ActionSelector();
+    mashSelector.commit(new Set([Action.Attack]), DT); // same Clash-mash Attack hold as above, on its own selector.
+    const normalSelector = new ActionSelector();
+    const postClash = normalSelector.selectActions(AiIntent.AttackCircular, world({ attackState: AttackState.Neutral }), ATTACK_AI_PERSONALITY, false, DT);
+    expect(postClash.pressedThisFrame.has(Action.Attack)).toBe(true);
+  });
+});
+
+describe('ActionSelector — dedicated Clash-mash selector must reset between separate Clashes (M7 audit follow-up)', () => {
+  // Review finding on the fix above: giving the Clash-mash path its own
+  // ActionSelector stops it leaking into normal combat, but nothing calls
+  // commit() on that dedicated selector between Clashes (Cooldown/Idle,
+  // normal combat) to clear it on its own. If Clash A's last mash tick
+  // held Attack and Clash B's first mash tick also picks Attack, the
+  // unreset selector still reads Attack as "already held" and swallows
+  // that first mash event of Clash B — the same leak, just Clash-to-Clash
+  // instead of Clash-to-normal-combat.
+  it("without a reset, a repeated Attack mash across two Clashes loses the second Clash's first event (documents the gap)", () => {
+    const mashSelector = new ActionSelector();
+    mashSelector.commit(new Set([Action.Attack]), DT); // Clash A's last mash tick.
+    // ... Clash A resolves, Cooldown elapses, Clash B starts — nothing
+    // touches mashSelector in between (mirrors AIController's real flow
+    // before the fix below).
+    const clashBFirstMash = mashSelector.commit(new Set([Action.Attack]), DT); // Clash B's first mash tick, same action.
+    expect(clashBFirstMash.pressedThisFrame.has(Action.Attack)).toBe(false); // the gap: Clash B's first mash event is lost.
+  });
+
+  it('reset() at the start of a new Clash (the fix) lets the same repeated Attack mash land as a fresh event', () => {
+    const mashSelector = new ActionSelector();
+    mashSelector.commit(new Set([Action.Attack]), DT); // Clash A's last mash tick.
+    mashSelector.reset(); // AIController calls this on the Idle/Cooldown -> Active edge for the next Clash.
+    const clashBFirstMash = mashSelector.commit(new Set([Action.Attack]), DT); // Clash B's first mash tick, same action.
+    expect(clashBFirstMash.pressedThisFrame.has(Action.Attack)).toBe(true);
+  });
+});

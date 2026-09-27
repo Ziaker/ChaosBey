@@ -105,6 +105,18 @@ const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerab
 
 export class AIController implements CombatController {
   private readonly actionSelector = new ActionSelector();
+  /**
+   * A separate ActionSelector for the Clash-mash path (sampleClashMashActions)
+   * so its held/pressedThisFrame bookkeeping never shares state with
+   * actionSelector's normal-combat one. Without this, an Attack the mash
+   * happened to hold right up to the Clash's Active -> Cooldown resolution
+   * stayed in the shared selector's "already held" bookkeeping, so the very
+   * next real AttackCircular/AttackDash decision after the Clash produced no
+   * fresh pressedThisFrame press — AttackController.tick() only starts an
+   * attack from Neutral on a real press, never from held alone — silently
+   * swallowing that attack (M7 audit regression).
+   */
+  private readonly clashMashActionSelector = new ActionSelector();
   private readonly adaptation = new AdaptationTracker();
   private nowS = 0;
   /** Forces an immediate first decision on the very first non-frozen tick. */
@@ -139,6 +151,8 @@ export class AIController implements CombatController {
   private pendingDodgeAttemptSucceeds = false;
   /** True from the first tick this Bey is seen airborne with an air-recovery window (just launched) until that window closes — see sampleActions. */
   private reactingToLaunch = false;
+  /** Tracks ClashState.Active across ticks so the Idle/Cooldown -> Active edge can be detected — see sampleActions's clashMashActionSelector.reset() call. */
+  private wasClashActive = false;
 
   constructor(
     private readonly physics: PhysicsWorld,
@@ -156,9 +170,18 @@ export class AIController implements CombatController {
       return this.actionSelector.repeatFrozenActions(context.fixedDeltaSeconds);
     }
 
-    if (this.clashController.getState() === ClashState.Active) {
+    const clashActive = this.clashController.getState() === ClashState.Active;
+    if (clashActive) {
+      // A fresh Clash: the dedicated selector must not carry an "already
+      // held" action over from whatever the previous Clash's last mash
+      // tick held (see ActionSelector.reset()'s own doc comment) — nothing
+      // else ever calls commit() on this selector between Clashes to
+      // clear it on its own.
+      if (!this.wasClashActive) this.clashMashActionSelector.reset();
+      this.wasClashActive = true;
       return this.sampleClashMashActions(context.fixedDeltaSeconds);
     }
+    this.wasClashActive = false;
 
     this.nowS += context.fixedDeltaSeconds;
 
@@ -358,10 +381,22 @@ export class AIController implements CombatController {
    * action as a player controller"). Each tick independently rolls whether
    * a mash event happens (probability = personality's per-second rate
    * scaled by this tick's duration and the difficulty's multiplier), and
-   * if so picks one of the three mash-eligible actions — see
-   * ClashMash.ts's nextMashEventCount for why holding the same action
-   * across consecutive ticks would under-count versus a fresh press each
-   * time.
+   * if so picks one of the three mash-eligible actions.
+   *
+   * Each successful roll is its own discrete mash tap, never a continuous
+   * hold: ClashMash.ts's nextMashEventCount counts a real *press*
+   * (pressedThisFrame) per tick, one event per tick with any qualifying
+   * action. `commit()`'s held/previousHeld diffing exists to model a real
+   * player's physical press/release (GDD section 113's shared controller
+   * contract) — reusing its `pressedThisFrame` output here would silently
+   * merge two consecutive rolls that happen to land on the same action
+   * (~1/3 of the time, uniform over 3 options) into a single "hold",
+   * under-counting the AI's genuine mash contribution against
+   * personality.clashMashRatePerSecond (M7 audit regression). So
+   * pressedThisFrame below always mirrors this tick's own `held` set —
+   * this tick's roll, not a diff against the previous one — while `held`/
+   * hold-duration bookkeeping still goes through clashMashActionSelector
+   * for contract consistency.
    */
   private sampleClashMashActions(fixedDeltaSeconds: number): ControllerActions {
     const effectiveRate = Math.max(0, this.personality.clashMashRatePerSecond * this.difficulty.clashMashRateMultiplier);
@@ -371,9 +406,10 @@ export class AIController implements CombatController {
       const options = [Action.Attack, Action.JumpDrift, Action.Dodge];
       held.add(options[this.rng.nextInt(0, options.length - 1)] ?? Action.Attack);
     }
-    const actions = this.actionSelector.commit(held, fixedDeltaSeconds);
-    this.lastActionSummary = actions.pressedThisFrame.size > 0 ? 'clash mash' : 'clash — no mash this tick';
-    return actions;
+    const actions = this.clashMashActionSelector.commit(held, fixedDeltaSeconds);
+    const mashActions: ControllerActions = { ...actions, pressedThisFrame: held };
+    this.lastActionSummary = mashActions.pressedThisFrame.size > 0 ? 'clash mash' : 'clash — no mash this tick';
+    return mashActions;
   }
 
   getDebugState(): AiDebugState {
