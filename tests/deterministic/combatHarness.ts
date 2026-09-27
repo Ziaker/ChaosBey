@@ -3,32 +3,22 @@
 // Two Beys driven through the exact same tickMatch() orchestration
 // main.ts uses, headless — Milestone 2's combat self-tests (GDD section
 // 151) exercise the real controllers, not a simplified stand-in (GDD
-// section 114).
+// section 114). The match itself is built by the runtime self-test core
+// (src/self-test/SelfTestMatchWorld.ts); this keeps the tests' own
+// positional create() signature and their closer default spawns.
 // ============================================================
 
-import * as THREE from 'three';
-import { createArenaColliders } from '../../src/arena/colliders/createArenaColliders';
 import type { BeyDefinition } from '../../src/bey/archetype/BeyDefinition';
-import { createBey, type Bey } from '../../src/bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
-import { tickMatch, type MatchTickResult } from '../../src/app/simulation/tickMatch';
-import { ClashOrchestration } from '../../src/app/simulation/ClashOrchestration';
 import type { ClashAiMashSource } from '../../src/combat/clash/ClashMash';
-import { RoundState } from '../../src/combat/round-rules/RoundState';
-import { resolveMatchConfig, type MatchConfig } from '../../src/config/match/MatchConfig';
-import type { ControllerActions } from '../../src/input/actions/Action';
-import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
-import { PhysicsWorld } from '../../src/physics/world/PhysicsWorld';
+import type { MatchConfig } from '../../src/config/match/MatchConfig';
+import { SelfTestMatchWorld } from '../../src/self-test/SelfTestMatchWorld';
 
-export class CombatHarness {
-  private constructor(
-    readonly physics: PhysicsWorld,
-    readonly first: Bey,
-    readonly second: Bey,
-    readonly roundState: RoundState,
-    readonly clash: ClashOrchestration,
-  ) {}
+/** The test suite's default spawns: closer than the live game's (±4 m), so scripted scenarios reach contact quickly. */
+export const HARNESS_FIRST_SPAWN = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: -2 };
+export const HARNESS_SECOND_SPAWN = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 2 };
 
+export class CombatHarness extends SelfTestMatchWorld {
   /**
    * `aiMashSource` defaults to ClashOrchestration's own default
    * (FixedIntervalAiMashSource, unchanged prior behavior for every existing
@@ -40,25 +30,20 @@ export class CombatHarness {
    * of the AI's own (see ClashMash.ts's NullAiMashSource doc comment).
    */
   static async create(
-    firstSpawn: { x: number; y: number; z: number } = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: -2 },
-    secondSpawn: { x: number; y: number; z: number } = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 2 },
+    firstSpawn: { x: number; y: number; z: number } = HARNESS_FIRST_SPAWN,
+    secondSpawn: { x: number; y: number; z: number } = HARNESS_SECOND_SPAWN,
     matchConfigOverrides: Partial<MatchConfig> = {},
     aiMashSource?: ClashAiMashSource,
     definitions: { first?: BeyDefinition; second?: BeyDefinition } = {},
   ): Promise<CombatHarness> {
-    const physics = await PhysicsWorld.create();
-    const scene = new THREE.Scene(); // no renderer involved — safe headless.
-    createArenaColliders(scene, physics);
-    const first = createBey(physics, firstSpawn, definitions.first);
-    const second = createBey(physics, secondSpawn, definitions.second);
-    const clash =
-      aiMashSource !== undefined
-        ? new ClashOrchestration(resolveMatchConfig(matchConfigOverrides), aiMashSource)
-        : new ClashOrchestration(resolveMatchConfig(matchConfigOverrides));
-    return new CombatHarness(physics, first, second, new RoundState(), clash);
-  }
-
-  tick(firstActions: ControllerActions, secondActions: ControllerActions): MatchTickResult {
-    return tickMatch(this.physics, this.first, this.second, firstActions, secondActions, FIXED_DELTA_SECONDS, this.roundState, this.clash);
+    const parts = await SelfTestMatchWorld.buildParts({
+      firstSpawn,
+      secondSpawn,
+      matchConfigOverrides,
+      aiMashSource,
+      firstDefinition: definitions.first,
+      secondDefinition: definitions.second,
+    });
+    return new CombatHarness(parts.physics, parts.first, parts.second, parts.roundState, parts.clash);
   }
 }
