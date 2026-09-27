@@ -36,6 +36,8 @@ A existência de UI de debug, sliders ou readouts dentro de um lab **não** sign
 | VFX principal | **C — Híbrida APROVADA** | `visual-prototypes-approval.md` |
 | Cel Cyclone | **APROVADO** | `visual-prototypes-approval.md` |
 | Tuning VFX | **36 valores finais aprovados** | `visual-prototypes-approval.md` / lab |
+| VFX de pulo / ataque aéreo / air recovery | **AINDA NÃO PROTOTIPADOS/APROVADOS como pacote próprio** | GDD §§20, 21, 25 + este arquivo |
+| Identidade de partículas/trails por Bey | **AINDA NÃO PROTOTIPADA/APROVADA** | GDD §§32, 98 + este arquivo |
 | Condição Stamina/Stability/Quebrado | **A/B/C aprovadas, combináveis 1–3** | `condition-visual-approval.md` |
 | Tuning de condição | **49 valores finais aprovados** | `condition-visual-approval.md` |
 | Câmera de combate | **A/B/C aprovadas, uma por vez** | `camera-approval.md` |
@@ -152,7 +154,9 @@ A aprovação visual do bowl não decide automaticamente:
 - quanto a gravidade/inclinação puxa os Beys para o centro;
 - posição final do volume de ring-out;
 - aberturas finais de parede;
-- qual arena é o default inicial ou como a seleção aparece no pregame, se isso ainda estiver sem owner override posterior.
+- como a seleção de arena aparece no pregame.
+
+**A escolha da arena inicial/default permanece ABERTA. Não existe owner override posterior registrado que escolha uma arena inicial final.**
 
 Esses pontos têm impacto de gameplay e precisam seguir o fluxo próprio de playtest/aprovação.
 
@@ -467,8 +471,10 @@ Com base nas decisões registradas até 2026-09-27, os grandes buracos visuais r
 2. **UI/Menu/Character Select/Pregame/Pause/Results/Settings visual package**;
 3. **Match Intro / Countdown / Launch presentation**;
 4. **Camera treatment dedicado de Perfect Dodge / Intro / momentos decisivos**, conforme `camera-approval.md`;
-5. **Post-FX**, somente se o owner decidir explorar bloom/chromatic aberration;
-6. **integração/showcase final** combinando sistemas aprovados para validar legibilidade em conjunto.
+5. **VFX específico de pulo, ataque aéreo e air recovery**, ainda não coberto pelo pacote aprovado do VFX Lab (GDD §§20, 21 e 25);
+6. **identidade visual individual de partículas e trails por Bey**, para diferenciar os nove Beys sem confundir isso com o trail genérico/tuning já aprovado (GDD §§32 e 98);
+7. **Post-FX**, somente se o owner decidir explorar bloom/chromatic aberration;
+8. **integração/showcase final** combinando sistemas aprovados para validar legibilidade em conjunto.
 
 Movimento possui lab e linguagem aprovados, mas ainda requer tuning de produção/playtest; isso é diferente de “não ter protótipo”.
 
