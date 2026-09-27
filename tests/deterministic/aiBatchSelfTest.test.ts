@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { AIController } from '../../src/ai/controllers/AIController';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../src/ai/difficulty/AiDifficultyProfile';
+import { AI_CIRCULAR_ATTACK_RANGE_M, AI_DASH_ATTACK_MAX_RANGE_M } from '../../src/ai/decision/AiCombatRanges';
 import { personalityForBeyDefinitionId } from '../../src/ai/personalities/AiArchetypePersonalities';
 import { ClashOrchestration } from '../../src/app/simulation/ClashOrchestration';
 import { tickMatch } from '../../src/app/simulation/tickMatch';
@@ -30,6 +31,7 @@ import { RoundState } from '../../src/combat/round-rules/RoundState';
 import { resolveMatchConfig } from '../../src/config/match/MatchConfig';
 import { DodgeState } from '../../src/dodge/DodgeController';
 import { Action, type ControllerActions } from '../../src/input/actions/Action';
+import { isGrounded } from '../../src/physics/collision/GroundCheck';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { PhysicsWorld } from '../../src/physics/world/PhysicsWorld';
 import { SeededRng } from '../../src/rng/SeededRng';
@@ -44,8 +46,19 @@ const MAX_MATCH_S = 90;
 const MAX_NO_ATTACK_GAP_S = 12;
 /** Longest time one side may stay in a single non-Neutral attack state outside an Active Clash (charging auto-releases when Attack Energy runs out). */
 const MAX_SINGLE_ATTACK_STATE_S = 4;
-/** In a match lasting at least this long, someone must have dashed more than once (regression: every AI dashed exactly once per match). */
-const DASH_REARM_MIN_MATCH_S = 10;
+/**
+ * Regression guard for "every AI dashed exactly once per match" (a stale
+ * Dash charge made the AI believe it was already charged): a side that,
+ * after its first Dash, spends at least this long (s, outside an Active
+ * Clash) wanting another one — AttackDash intent, attack Neutral, in Dash
+ * range, with Attack Energy — must actually Dash again. Conditioned on the
+ * AI wanting it, so a patient personality that simply prefers other moves
+ * later in a match is not flagged (an unconditional "two Dashes per 10 s"
+ * check tripped on legitimate Stamina mirrors).
+ */
+const DASH_REARM_WANT_S = 1;
+/** Longest the AI may want to attack (attack intent, Neutral, target in range, energy available) without pressing Attack — the direct symptom of the stale-charge bug. */
+const MAX_STALLED_ATTACK_S = 0.5;
 
 const ARCHETYPES = { attack: ATTACK_ARCHETYPE, defense: DEFENSE_ARCHETYPE, stamina: STAMINA_ARCHETYPE } as const;
 type ArchetypeKey = keyof typeof ARCHETYPES;
@@ -70,7 +83,13 @@ interface MatchReport {
   label: string;
   result: string;
   seconds: number;
+  /** Seconds outside an Active Clash. */
+  playSeconds: number;
   dashes: [number, number];
+  /** Seconds each side spent wanting another Dash after its first one (see DASH_REARM_WANT_S). */
+  wantedDashAgainS: [number, number];
+  /** Longest stretch either side wanted to attack without pressing Attack. */
+  longestStalledAttackS: number;
   maxNoAttackGapS: number;
   longestSingleAttackStateS: number;
   wastedPresses: number;
@@ -118,6 +137,10 @@ async function runMatch(pairing: [ArchetypeKey, ArchetypeKey], seed: string, tot
   let longestSingleAttackStateTicks = 0;
   let wastedPresses = 0;
   let tick = 0;
+  let playTicks = 0;
+  const wantedDashAgainTicks: [number, number] = [0, 0];
+  const stalledAttackTicks = [0, 0];
+  let longestStalledAttackTicks = 0;
 
   for (tick = 0; tick < MAX_MATCH_S * 60 && !round.isOver; tick++) {
     const clashActive = clash.controller.getState() === ClashState.Active;
@@ -127,7 +150,11 @@ async function runMatch(pairing: [ArchetypeKey, ArchetypeKey], seed: string, tot
       // Outside a Clash mash, a press that the system will ignore is spam.
       if (!clashActive) {
         if (actions[i]!.pressedThisFrame.has(Action.Attack) && beys[i]!.attack.getState() !== AttackState.Neutral) wastedPresses++;
-        if (actions[i]!.pressedThisFrame.has(Action.Dodge) && beys[i]!.dodge.getState() !== DodgeState.Idle) wastedPresses++;
+        // An airborne Dodge press with an open air-recovery window is honored
+        // by DodgeController regardless of the ground dodge's own state
+        // (GDD section 21) — not spam.
+        const airRecoveryPress = !isGrounded(physics, beys[i]!.collider) && beys[i]!.dodge.isAirRecoveryAvailable();
+        if (actions[i]!.pressedThisFrame.has(Action.Dodge) && beys[i]!.dodge.getState() !== DodgeState.Idle && !airRecoveryPress) wastedPresses++;
       }
     }
 
@@ -160,9 +187,21 @@ async function runMatch(pairing: [ArchetypeKey, ArchetypeKey], seed: string, tot
         longestSingleAttackStateTicks = Math.max(longestSingleAttackStateTicks, ticksInAttackState[i]!);
       }
       previousAttackState[i] = snapshot.attackState;
+
+      if (!clashActive) {
+        const debug = ais[i]!.getDebugState();
+        const inDashRange = debug.distanceToOpponentM > AI_CIRCULAR_ATTACK_RANGE_M && debug.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M;
+        const canAttack = snapshot.attackState === AttackState.Neutral && snapshot.attackEnergyFraction > 0.25;
+        if (dashes[i as 0 | 1] >= 1 && debug.activeIntent === 'AttackDash' && canAttack && inDashRange) wantedDashAgainTicks[i as 0 | 1]++;
+        const wantsToAttack = debug.activeIntent === 'AttackDash' || debug.activeIntent === 'AttackCircular';
+        const stalled = wantsToAttack && canAttack && debug.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M && !actions[i]!.held.has(Action.Attack);
+        stalledAttackTicks[i] = stalled ? stalledAttackTicks[i]! + 1 : 0;
+        longestStalledAttackTicks = Math.max(longestStalledAttackTicks, stalledAttackTicks[i]!);
+      }
     }
     // A Clash freezes the whole simulation for its presentation — not passivity.
     if (clashActive) lastAttackStartTick = tick;
+    if (!clashActive) playTicks++;
     maxNoAttackGapTicks = Math.max(maxNoAttackGapTicks, tick - lastAttackStartTick);
   }
 
@@ -170,7 +209,10 @@ async function runMatch(pairing: [ArchetypeKey, ArchetypeKey], seed: string, tot
     label,
     result: round.result,
     seconds: tick / 60,
+    playSeconds: playTicks / 60,
     dashes,
+    wantedDashAgainS: [wantedDashAgainTicks[0] / 60, wantedDashAgainTicks[1] / 60],
+    longestStalledAttackS: longestStalledAttackTicks / 60,
     maxNoAttackGapS: maxNoAttackGapTicks / 60,
     longestSingleAttackStateS: longestSingleAttackStateTicks / 60,
     wastedPresses,
@@ -206,9 +248,12 @@ describe('AI vs AI batch self-test (M7 Part 2)', () => {
       expect(r.maxNoAttackGapS, `${r.label}: passivity`).toBeLessThanOrEqual(MAX_NO_ATTACK_GAP_S);
       expect(r.longestSingleAttackStateS, `${r.label}: stuck attack state`).toBeLessThanOrEqual(MAX_SINGLE_ATTACK_STATE_S);
       expect(r.wastedPresses, `${r.label}: presses the system ignores (spam)`).toBe(0);
-      if (r.seconds >= DASH_REARM_MIN_MATCH_S) {
-        expect(Math.max(...r.dashes), `${r.label}: someone dashes more than once in a ${r.seconds.toFixed(1)}s match`).toBeGreaterThanOrEqual(2);
+      for (const i of [0, 1] as const) {
+        if (r.wantedDashAgainS[i] >= DASH_REARM_WANT_S) {
+          expect(r.dashes[i], `${r.label} side ${i}: wanted another Dash for ${r.wantedDashAgainS[i].toFixed(1)}s but dashed only once`).toBeGreaterThanOrEqual(2);
+        }
       }
+      expect(r.longestStalledAttackS, `${r.label}: wanted to attack for ${r.longestStalledAttackS.toFixed(2)}s without pressing Attack`).toBeLessThanOrEqual(MAX_STALLED_ATTACK_S);
     }
 
     // GDD section 64: Attack seeks engagement / uses charge; Defense uses
