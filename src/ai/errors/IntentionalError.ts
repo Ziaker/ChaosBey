@@ -42,6 +42,19 @@ export interface ErrorAppliedResult {
 
 const SAFE_DOWNGRADE_INTENTS: readonly AiIntent[] = [AiIntent.Wait, AiIntent.Circle];
 
+/**
+ * The decisions no deliberate error may touch: air recovery (GDD section
+ * 21 answers a short, physically real window) and a critical edge
+ * recovery — including an edge-safe evasion inside one — which must still
+ * be attempted (GDD section 129). AIController also lets these replace a
+ * late ("slow to react") decision still pending, so a humanization delay
+ * can't make the AI sit out a survival situation that arose after it.
+ */
+export function isCriticalDecision(decision: IntentDecision, risk: RiskAssessment): boolean {
+  if (decision.intent === AiIntent.AirRecover) return true;
+  return (decision.intent === AiIntent.RecoverFromEdge || decision.edgeRecovery === true) && risk.edgeRisk >= CRITICAL_EDGE_RISK;
+}
+
 export function maybeApplyIntentionalError(
   decision: IntentDecision,
   risk: RiskAssessment,
@@ -49,13 +62,7 @@ export function maybeApplyIntentionalError(
   difficulty: AiDifficultyProfile,
   rng: SeededRng,
 ): ErrorAppliedResult {
-  // Air recovery (GDD section 21) answers a short, physically real window;
-  // a critical edge recovery — including an edge-safe evasion inside one —
-  // must still be attempted (GDD section 129).
-  if (decision.intent === AiIntent.AirRecover) {
-    return { decision, errorApplied: false, extraDelaySeconds: 0 };
-  }
-  if ((decision.intent === AiIntent.RecoverFromEdge || decision.edgeRecovery === true) && risk.edgeRisk >= CRITICAL_EDGE_RISK) {
+  if (isCriticalDecision(decision, risk)) {
     return { decision, errorApplied: false, extraDelaySeconds: 0 };
   }
 

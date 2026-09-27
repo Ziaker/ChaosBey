@@ -10,7 +10,7 @@ import { SeededRng } from '../../src/rng/SeededRng';
 import { AiIntent } from '../../src/ai/decision/Intent';
 import type { IntentDecision } from '../../src/ai/decision/IntentSelection';
 import type { RiskAssessment } from '../../src/ai/decision/RiskEvaluation';
-import { maybeApplyIntentionalError } from '../../src/ai/errors/IntentionalError';
+import { isCriticalDecision, maybeApplyIntentionalError } from '../../src/ai/errors/IntentionalError';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../src/ai/difficulty/AiDifficultyProfile';
 import { ATTACK_AI_PERSONALITY } from '../../src/ai/personalities/AiArchetypePersonalities';
 
@@ -93,6 +93,28 @@ describe('maybeApplyIntentionalError', () => {
       const resultB = maybeApplyIntentionalError(decision, NO_RISK, personality, DEFAULT_AI_DIFFICULTY_PROFILE, rngB);
       expect(resultA.decision.intent).toBe(resultB.decision.intent);
       expect(resultA.errorApplied).toBe(resultB.errorApplied);
+    }
+  });
+});
+
+describe('isCriticalDecision (no deliberate error; replaces a pending late reaction)', () => {
+  const risk = (edgeRisk: number, opponentThreat = 0): RiskAssessment => ({ ...NO_RISK, edgeRisk, opponentThreat });
+
+  it('air recovery is always critical', () => {
+    expect(isCriticalDecision({ intent: AiIntent.AirRecover, reason: 't' }, NO_RISK)).toBe(true);
+  });
+
+  it('edge recovery and edge-safe evasion are critical only at/above the critical edge risk', () => {
+    expect(isCriticalDecision(edgeDecision, risk(0.85))).toBe(true);
+    expect(isCriticalDecision(edgeDecision, risk(0.84))).toBe(false);
+    const edgeSafeDodge: IntentDecision = { intent: AiIntent.DodgeThreat, reason: 't', edgeRecovery: true };
+    expect(isCriticalDecision(edgeSafeDodge, risk(0.9, 1))).toBe(true);
+    expect(isCriticalDecision(edgeSafeDodge, risk(0.6, 1))).toBe(false);
+  });
+
+  it('a normal threat response, attacks and everything else are not — even with a live threat', () => {
+    for (const intent of [AiIntent.DodgeThreat, AiIntent.Retreat, AiIntent.AttackDash, AiIntent.AttackCircular, AiIntent.CounterAttack, AiIntent.PressAdvantage, AiIntent.Approach, AiIntent.Circle, AiIntent.Wait]) {
+      expect(isCriticalDecision({ intent, reason: 't' }, risk(0.95, 1)), intent).toBe(false);
     }
   });
 });

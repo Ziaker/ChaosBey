@@ -45,7 +45,7 @@ import { evaluateRisk, type RiskAssessment } from '../decision/RiskEvaluation';
 import { buildWorldState, type WorldState } from '../decision/WorldState';
 import type { AiDebugState } from '../debug/AiDebugState';
 import type { AiDifficultyProfile } from '../difficulty/AiDifficultyProfile';
-import { maybeApplyIntentionalError } from '../errors/IntentionalError';
+import { isCriticalDecision, maybeApplyIntentionalError } from '../errors/IntentionalError';
 import { ENGAGED_ATTACK_STATES, perceiveCombatant, type CombatantRawState } from '../perception/AiPerception';
 import type { AiPersonality } from '../personalities/AiPersonality';
 
@@ -127,9 +127,12 @@ export class AIController implements CombatController {
    * decision already made but not yet acted on. Until pendingDelayRemainingS
    * of simulated time has passed, the AI keeps acting on its PREVIOUS
    * activeDecision — the reaction itself is late, not the decision after
-   * it. No new fresh decision is taken meanwhile (a normal reaction cycle
-   * would otherwise silently replace the late decision, turning a late
-   * reaction into a skipped one).
+   * it. No new fresh decision replaces it meanwhile (a normal reaction
+   * cycle would otherwise silently replace the late decision, turning a
+   * late reaction into a skipped one) — except a critical one: the
+   * situation is still re-read at the reaction cadence, and air recovery
+   * or a critical edge recovery takes over at once (see
+   * preemptPendingIfCritical). A launch also clears it.
    */
   private pendingDecision: IntentDecision | null = null;
   private pendingDelayRemainingS = 0;
@@ -228,7 +231,16 @@ export class AIController implements CombatController {
       // intent under an in-flight commitment of the previous one — the same
       // rule fresh decisions follow.
       this.pendingDelayRemainingS -= context.fixedDeltaSeconds;
-      if (!committed && this.pendingDelayRemainingS <= 0) this.activatePendingDecision();
+      this.decisionTimerS += context.fixedDeltaSeconds;
+      if (!committed && this.pendingDelayRemainingS <= 0) {
+        this.activatePendingDecision();
+      } else if (!committed && this.decisionTimerS >= effectiveReactionDelayS) {
+        // The situation is still re-read at the normal reaction cadence;
+        // only a critical decision (see isCriticalDecision) takes over from
+        // the late one — anything else leaves it pending, untouched.
+        this.decisionTimerS = 0;
+        this.preemptPendingIfCritical(world);
+      }
     } else {
       this.decisionTimerS += context.fixedDeltaSeconds;
       if (!committed && this.decisionTimerS >= effectiveReactionDelayS) {
@@ -244,11 +256,29 @@ export class AIController implements CombatController {
 
   private makeFreshDecision(world: WorldState): void {
     this.adaptation.update(world.opponent, ADAPTATION_BASE_ALPHA * this.clampedAdaptationRate());
+    const { adjustedPersonality, risk, ideal } = this.evaluateIdeal(world);
+    this.adoptDecision(ideal, risk, adjustedPersonality);
+  }
+
+  /**
+   * A late ("slow to react") decision is pending: re-read the situation and,
+   * only if what it calls for now is critical (air recovery, critical edge
+   * recovery or edge-safe evasion — the same decisions no deliberate error
+   * may touch), drop the late decision and act on the critical one. A
+   * non-critical read changes nothing (no adaptation update, no RNG, no
+   * telemetry): the late reaction still lands as it was decided.
+   */
+  private preemptPendingIfCritical(world: WorldState): void {
+    const { adjustedPersonality, risk, ideal } = this.evaluateIdeal(world);
+    if (!isCriticalDecision(ideal, risk)) return;
+    this.pendingDecision = null;
+    this.pendingDelayRemainingS = 0;
+    this.adoptDecision(ideal, risk, adjustedPersonality);
+  }
+
+  private evaluateIdeal(world: WorldState): { adjustedPersonality: AiPersonality; risk: RiskAssessment; ideal: IntentDecision } {
     const adjustedPersonality = applyAdaptationNudge(this.personality, this.adaptation.getSnapshot(), this.clampedAdaptationRate());
-
     const risk = evaluateRisk(world, adjustedPersonality);
-    this.lastRisk = risk;
-
     const ideal = selectIntent(world, adjustedPersonality, risk, {
       counterDash: this.counterRollForOpponentDash === true,
       secondsSinceOwnAttack: world.nowS - this.lastOwnAttackStartS,
@@ -257,6 +287,11 @@ export class AIController implements CombatController {
       // otherwise be lost and recovery restarted from the entry threshold).
       recoveringFromEdge: this.idealDecision.edgeRecovery === true,
     });
+    return { adjustedPersonality, risk, ideal };
+  }
+
+  private adoptDecision(ideal: IntentDecision, risk: RiskAssessment, adjustedPersonality: AiPersonality): void {
+    this.lastRisk = risk;
     this.idealDecision = ideal;
 
     const { decision, errorApplied, extraDelaySeconds } = maybeApplyIntentionalError(ideal, risk, adjustedPersonality, this.difficulty, this.rng);

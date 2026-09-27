@@ -37,6 +37,8 @@ interface TickRecord {
   ownGrounded: boolean;
   /** Launched airborne with an air-recovery window this tick — AIController drops a late reaction then (the launch is a new situation). */
   ownLaunched: boolean;
+  /** Edge risk behind the decision currently in effect (AiDebugState.edgeRiskFraction). */
+  decisionEdgeRisk: number;
 }
 
 /** A scripted attacker that keeps re-starting attacks so DodgeThreat decisions keep coming up. */
@@ -79,6 +81,7 @@ async function run(personality: AiPersonality, seed: string): Promise<TickRecord
       ownDodgeState,
       ownGrounded,
       ownLaunched,
+      decisionEdgeRisk: debug.edgeRiskFraction,
     });
     harness.tick(firstActions, secondActions);
   }
@@ -143,6 +146,7 @@ describe('AI "slow to react" deliberate error', () => {
     let checkedLateDodge = 0;
     let activated = 0;
     let cancelledByLaunch = 0;
+    let preemptedByCritical = 0;
     for (const seed of ['slow-to-react-errors', 'slow-to-react-errors-2', 'slow-to-react-errors-3', 'slow-to-react-errors-4']) {
       const records = await run({ ...surelyDodges, errorRate: 1 }, seed);
       const late = lateReactions(records);
@@ -155,6 +159,14 @@ describe('AI "slow to react" deliberate error', () => {
         if (records[reaction.activatedAtTick]!.ownLaunched) {
           // Dropped, not activated: being launched overrides the lapse.
           cancelledByLaunch++;
+          continue;
+        }
+        if (reaction.activatedAtTick - reaction.decidedAtTick < expectedTicks) {
+          // Ended early: only a critical decision (a critical edge
+          // situation that arose during the lapse — see
+          // aiSlowToReactCriticalPreemption.test.ts) may replace it.
+          expect(records[reaction.activatedAtTick]!.decisionEdgeRisk, `tick ${reaction.activatedAtTick}: replaced early only by a critical edge decision`).toBeGreaterThanOrEqual(0.85);
+          preemptedByCritical++;
           continue;
         }
         activated++;
@@ -194,7 +206,7 @@ describe('AI "slow to react" deliberate error', () => {
     // The runs must actually contain late DodgeThreat presses, or the
     // observable assertion above never ran.
     expect(checkedLateDodge).toBeGreaterThan(0);
-    expect(activated).toBeGreaterThan(cancelledByLaunch);
+    expect(activated).toBeGreaterThan(cancelledByLaunch + preemptedByCritical);
   });
 
   it('is deterministic: the same seed produces the same action sequence', async () => {
