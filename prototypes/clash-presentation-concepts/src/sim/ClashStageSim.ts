@@ -38,6 +38,10 @@ import { createDetailedBeyVisual, type DetailedBeyVisual } from './DetailedBeyVi
 
 /** Presentation harness: this lab has no Stability system of its own, so the loser's Stability fraction is treated as full (1 = no reduction) for the physical knockback formula, same as CIRCULAR_BASE_KNOCKBACK_FORCE-class hits against an undamaged Bey. */
 const ASSUMED_DEFENDER_STABILITY_FRACTION = 1;
+/** Where the two Beys are dropped (±x, m) to measure their resting height before the scenario starts. */
+const SETTLE_X_M = 5;
+/** Physics steps (1/60s) for that drop to settle. */
+const SETTLE_STEPS = 90;
 
 export interface RingOutInfo {
   isFirst: boolean;
@@ -76,6 +80,8 @@ export class ClashStageSim {
   private approachTo: [THREE.Vector3, THREE.Vector3];
   private ringOutInfo: RingOutInfo | null = null;
   private lastFrame: FightFrame;
+  /** Body-origin height (m) at which each Bey actually rests on the floor, measured once in create() (the Attack and Defense colliders differ). */
+  private readonly restY: readonly [number, number];
 
   private constructor(
     readonly scenario: ClashScenario,
@@ -84,9 +90,11 @@ export class ClashStageSim {
     private readonly second: Bey,
     firstConcept: ConceptDefinition,
     secondConcept: ConceptDefinition,
+    restY: readonly [number, number],
   ) {
-    this.firstVisual = createDetailedBeyVisual(firstConcept);
-    this.secondVisual = createDetailedBeyVisual(secondConcept);
+    this.restY = restY;
+    this.firstVisual = createDetailedBeyVisual(firstConcept, restY[0]);
+    this.secondVisual = createDetailedBeyVisual(secondConcept, restY[1]);
     this.visuals.add(this.firstVisual.group, this.secondVisual.group);
 
     const axisAngle = scenario.arena === 'rift' ? Math.PI * 0.15 : 0; // A little visual variety in which direction the clash axis faces per arena, purely cosmetic.
@@ -106,9 +114,19 @@ export class ClashStageSim {
     const physics = await PhysicsWorld.create();
     // Physics colliders only: the game's own placeholder arena mesh this also builds is discarded (this lab shows the approved arena-visual-concepts art in the browser-only view layer instead — see stage/ClashStageView.ts).
     createArenaColliders(new THREE.Scene(), physics);
-    const first = createBey(physics, { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, ATTACK_ARCHETYPE);
-    const second = createBey(physics, { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, DEFENSE_ARCHETYPE);
-    return new ClashStageSim(scenario, physics, first, second, firstConcept, secondConcept);
+    const first = createBey(physics, { x: -SETTLE_X_M, y: BEY_SPAWN_HEIGHT_M, z: 0 }, ATTACK_ARCHETYPE);
+    const second = createBey(physics, { x: SETTLE_X_M, y: BEY_SPAWN_HEIGHT_M, z: 0 }, DEFENSE_ARCHETYPE);
+    // Let both bodies drop onto the floor once, far apart, and record where they come to rest. The
+    // Approach/Active beats author positions directly (no physics step), so without this the Beys
+    // would hover at the 0.6m spawn height for the whole Clash and then drop at resolution.
+    for (let i = 0; i < SETTLE_STEPS; i++) physics.step();
+    const restY: [number, number] = [first.body.translation().y, second.body.translation().y];
+    for (const bey of [first, second]) {
+      bey.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      bey.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      bey.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    }
+    return new ClashStageSim(scenario, physics, first, second, firstConcept, secondConcept, restY);
   }
 
   /**
@@ -122,8 +140,8 @@ export class ClashStageSim {
     this.visuals.remove(this.firstVisual.group, this.secondVisual.group);
     this.firstVisual.dispose();
     this.secondVisual.dispose();
-    this.firstVisual = createDetailedBeyVisual(firstConcept);
-    this.secondVisual = createDetailedBeyVisual(secondConcept);
+    this.firstVisual = createDetailedBeyVisual(firstConcept, this.restY[0]);
+    this.secondVisual = createDetailedBeyVisual(secondConcept, this.restY[1]);
     this.visuals.add(this.firstVisual.group, this.secondVisual.group);
     this.syncVisuals();
   }
@@ -139,8 +157,8 @@ export class ClashStageSim {
   }
 
   private placeBeys(at: readonly [THREE.Vector3, THREE.Vector3]): void {
-    this.first.body.setTranslation({ x: at[0].x, y: at[0].y, z: at[0].z }, true);
-    this.second.body.setTranslation({ x: at[1].x, y: at[1].y, z: at[1].z }, true);
+    this.first.body.setTranslation({ x: at[0].x, y: this.restY[0], z: at[0].z }, true);
+    this.second.body.setTranslation({ x: at[1].x, y: this.restY[1], z: at[1].z }, true);
   }
 
   tick(dt: number, firstMashed: boolean, secondMashed: boolean): ClashStageTickResult {
@@ -174,11 +192,8 @@ export class ClashStageSim {
       this.physics.step();
       this.checkRingOut(intents);
     }
-    if (events.resolutionBurstEnded) {
-      this.physicsRunning = false;
-      this.first.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      this.second.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    }
+    // Physics keeps running after the resolution burst: the fight carries on from wherever the
+    // knockback left the Beys (no freeze, no reset), exactly like the match would.
 
     this.syncVisuals();
     this.lastFrame = this.describe(intents);
@@ -277,6 +292,11 @@ export class ClashStageSim {
       roundOver: false,
       ringOutIsFirst: this.ringOutInfo?.isFirst ?? null,
     };
+  }
+
+  /** Body-origin height (m) above the floor at which [first, second] rest — also how far below the origin each tip touches the floor. */
+  get restHeights(): readonly [number, number] {
+    return this.restY;
   }
 
   get frame(): FightFrame {

@@ -1,8 +1,23 @@
 # Clash Presentation Lab — prototype
 
-**Status: NOT reviewed yet.** Three complete, clearly different presentation directions for the Clash beat (GDD sections 39–45), for the owner to pick or mix. Nothing here is a decision — see `docs/design-decisions/` for that step, which only happens *after* the owner reviews the artifact (the same order the Camera Lab, Bey Motion Lab and Stamina & Stability Lab followed).
+**Status: revision 2, awaiting the owner's visual review.** Round 1 was not approved; this revision implements the six requirements from that review (see "Revision 2" below). Three complete, clearly different presentation directions for the Clash beat (GDD sections 39–45), for the owner to pick or mix. Nothing here is a decision — see `docs/design-decisions/` for that step, which only happens *after* the owner reviews the artifact (the same order the Camera Lab, Bey Motion Lab and Stamina & Stability Lab followed).
 
-An interactive Three.js page that shows the **full presentation of a Clash** — entry, the energy between the two Beys, mash pulses, the resolution, and the return to combat — running on top of the real, GDD-approved `src/combat/clash/` mechanics package. Nothing in `src/` is changed, no gameplay/physics/AI/balance value moves, and M8 is not started.
+An interactive Three.js page that shows the **full presentation of a Clash** — entry, the two Beys locked in contact, the force HUD between them, speedlines and contact dust, mash pulses, the resolution, and the fight carrying straight on — running on top of the real, GDD-approved `src/combat/clash/` mechanics package. Nothing in `src/` is changed, no gameplay/physics/AI/balance value moves, and M8 is not started.
+
+## Revision 2 — the owner's six requirements
+
+Watch a Clash with no text on screen and you should read: they collided → they are locked against each other → both are pushing → huge speed/energy → who is taking the advantage (HUD) → it can swing → one wins → the physical consequence happens at once → the fight goes on.
+
+1. **Locked contact.** Every scenario places the two Beys exactly in collider contact (`CONTACT_SEPARATION_M` = 1.3 m, 2 × the 0.65 m collider radius), so the rims meet. During the Active beat both lean into the contact point (A 7°, B 11°, C 15°), pivoting on their tips. Each mash adds a short push surge to that side's lean, and the side that is ahead leans a little further in. Both also shudder under the effort. The lean is visual only (`presentation/contactPose.ts`, applied on top of the physics pose); the bodies, the rules and the knockback are untouched.
+2. **Speedlines** (`fx/Speedlines.ts`): screen-space anime focus lines converging on the contact, with a clear zone around the Beys so the contact stays readable. They build with Clash progress and fade out within 0.35 s of the resolution. B and C tint each half of the screen with that side's color, and the side that is ahead reaches further in. They are deterministic (seeded per tick).
+3. **Contact dust** (`ClashFx.emitContactDust`): dust and hot grit scraped off the floor at the contact point, thrown out mostly sideways because both Beys spin against each other. It keeps coming for the whole Active beat, harder as the Clash builds and on every mash surge. It uses the arena's own spark colors, plus a dust tint per arena.
+4. **No result pause, no result text.** There is no banner anywhere (win, loss, tie or ring-out), and the resolution requests no hitstop and no slow motion. The impact plays (flash, rings, sparks, a dust burst in the winner's color) while physics carries on. After the resolution burst, physics keeps running instead of freezing the Beys. The entry slow-mo and the short per-mash hitstop are unchanged. They happen during the Clash, not on the result.
+5. **The Stadium (and every arena) uses its approved bowl.** The lab used to call `build(0)` on purpose to match the game's flat physics floor. It now calls `build()`, which uses each arena's approved 3.2 m default and its own `h(r)` profile (`visual-prototypes-approval.md` §2). The physics floor is still flat, so each Bey's visual is lifted onto `h(r)` and tilted to the local slope, pivoting on its tip, so it sits on the surface.
+6. **Force HUD instead of the rotating geometry.** The helix/vortex/arc cylinder is gone. `presentation/ClashHud.ts` draws a two-color tug-of-war bar, positioned by projecting the two Beys to screen space and placing it just above their midpoint (clamped inside the frame). Each half uses that side's color: the chosen model's approved glow color, so the colors always match the Bey. Each half sits on the same side of the screen as its Bey. The seam follows the real live ClashPower (`hudShare()`, with a ×4 gain on the advantage so small real differences are visible) and animates smoothly. It lands on the real result at the moment of impact. There is no text and there are no numbers. **Camera:** `CameraDirector` gained an opt-in `{ clashOrbit: false }`, used only by this lab. The camera holds its angle through the Clash, and distance/height/FOV framing is unchanged. The Camera Lab keeps its orbit.
+
+**Harness fixes this revision needed (lab-only, documented):**
+- **The Beys used to hover 0.33–0.42 m above the floor through the whole Clash.** Approach/Active placed them at the 0.6 m spawn height, and they only dropped at the resolution. They now rest at the height each collider actually settles at, measured once per stage. The Defense model also floated about 7 cm even at rest, because its visual anchor assumed the Attack collider's height. Each model is now anchored at its own rest height.
+- **The ring-out scenario stopped ringing out once the launch started from the floor.** The old 3× launch only cleared the 2 m wall because it began 0.4 m in the air. A sweep of force 3×–8× against loser position 4–8 m shows a loser at 4–5 m clears the wall cleanly for every force from 3.5× up. From 6 m or further out it hits the wall first, and it can then sink through the wall collider (the M7 ext-32 wedge), which is not a real ring-out. The scenario now uses loser at 4 m and 4× the maximum Dash force, a synthetic harness stand-in as before. A unit test asserts the loser is airborne above the wall height as it crosses the wall radius.
 
 ## What this lab reuses vs. what it explores
 
@@ -21,10 +36,10 @@ The Clash **rules** are already closed (GDD 39–45) and this lab never touches 
 
 The **presentation** is this lab's actual subject, and it is real exploration space, not a foregone conclusion:
 - the entry into the Clash state;
-- what the energy between the two Beys looks like, and how it reads a shifting or swinging advantage;
+- how the two Beys read as physically locked together (lean, shudder, contact dust), and how the force HUD reads a shifting or swinging advantage;
 - the pulse on every valid mash event;
-- how much the arena, the camera and hitstop lean into the moment;
-- the resolution/explosion beat and the winner/loser read;
+- how hard the speedlines, dust, flashes and shake push the moment;
+- the resolution/impact beat and the winner/loser read (shown physically, never written, never paused);
 - the Tie presentation, which the GDD leaves genuinely open (three options here, none marked official);
 - the internal pacing of the ~4 seconds;
 - how "anime" vs. "mechanical" each direction feels.
@@ -60,10 +75,14 @@ src/
   presentation/
     types.ts, directions.ts, tieStyles.ts, ClashPresenter.ts
                       — the three presentation directions (data + the director that turns a
-                         tick's events into concrete FX/camera/arena/banner calls) and the three
-                         Tie styles.
-  fx/ClashFx.ts       — Clash-specific VFX primitives (energy beam, mash pulse, shockwave,
-                         impact star, sparks) in the spirit of the approved Híbrida VFX language
+                         tick's events into FX/arena calls and per-tick levels: contact lean,
+                         HUD share, speedline strength) and the three Tie styles.
+    contactPose.ts    — pure math (Node-tested): the visual pose layer (bowl lift + slope,
+                         locked-contact lean + shudder, tip-pivoted) and hudShare().
+    ClashHud.ts       — the screen-space force HUD (DOM), placed by projecting the two Beys.
+  fx/Speedlines.ts    — screen-space speedlines (2D canvas over the WebGL view).
+  fx/ClashFx.ts       — Clash-specific VFX primitives (pooled contact dust + grit, mash pulse,
+                         shockwave, impact star, sparks) in the spirit of the approved Híbrida VFX language
                          — this lab doesn't invent a fourth visual language, it fills a gap
                          Híbrida never covered (see visual-prototype-inventory.md: "Clash
                          completo... NÃO PROTOTIPADO").
@@ -77,11 +96,11 @@ src/
                          (`window.__clashLab`).
 ```
 
-**Camera:** reuses `CameraDirector` and the three exact approved presets from `prototypes/camera-concepts/src/director/` unchanged, including its existing `Clash` mode. Pick any of the three (A Arena Fighter / B Cinematic Hybrid / C Hyper Dynamic) independently of the presentation direction.
+**Camera:** reuses `CameraDirector` and the three exact approved presets from `prototypes/camera-concepts/src/director/`, including its `Clash` mode's push-in/height/FOV, with the Clash orbit switched off through the director's opt-in `{ clashOrbit: false }` (revision 2, requirement 6). The Camera Lab itself is unchanged. Pick any of the three (A Arena Fighter / B Cinematic Hybrid / C Hyper Dynamic) independently of the presentation direction.
 
-**VFX:** builds on the approved Híbrida language's aesthetic (additive glow, cel-flavored shapes, sparks in the arena's own palette) for the parts Híbrida already covers; the Clash-specific shapes (energy beam, mash pulse, resolution burst) are new, because the Clash beat itself was never prototyped before.
+**VFX:** builds on the approved Híbrida language's aesthetic (additive glow, cel-flavored shapes, sparks in the arena's own palette) for the parts Híbrida already covers; the Clash-specific pieces (contact dust, speedlines, force HUD, mash pulse, resolution burst) are new, because the Clash beat itself was never prototyped before.
 
-**Arena:** reuses the three approved arenas (`prototypes/arena-visual-concepts/src/arenas/`) and their already-approved per-arena Clash light reaction (`arena.update({ time, dt, clash })`), flattened to the lab's flat physics floor (the approved 3.2m bowl isn't integrated into the game's physics yet — same limitation the Camera Lab and Bey Motion Lab already carry).
+**Arena:** reuses the three approved arenas (`prototypes/arena-visual-concepts/src/arenas/`) with their approved 3.2 m bowl and `h(r)` profiles, plus their already-approved per-arena Clash light reaction (`arena.update({ time, dt, clash })`). The game's physics floor is still flat (the bowl isn't integrated into physics yet), so the Beys' visuals are seated on the bowl by the pose layer.
 
 ## The three directions
 
@@ -89,9 +108,12 @@ src/
 |---|---|---|---|
 | **Feel** | Mechanical, tactile, minimal | The dramatic-but-legible middle ground | The spectacle ceiling |
 | **Entry** | Hard snap, no slow-mo | Gentle slow-mo pull-in + flash | Hard slow-mo zoom + full-screen flash |
-| **Energy between Beys** | Thin electric arc | Colored double-helix | Cel-Cyclone-style vortex, swings hard on lead changes |
+| **Contact lean / shudder** | 7° / light | 11° / clear | 15° / violent |
+| **Speedlines** | Thin, sparse, white | Strong, in the two sides' colors | Dense and bright, only the center left clear |
+| **Contact dust** | Dry, light, short metal sparks | Cloud of dust + sparks | Heavy dust + lots of sparks |
+| **Force HUD** | Thin technical bar | Colored, glowing bar | Thick, skewed, glowing bar |
 | **Mash pulse** | Small spark ring, 0.02s hitstop | Impact star + shock ring, proportional hitstop/shake | Big star + shockwave, strong hitstop/shake every event |
-| **Resolution** | One directional burst, quiet banner | Double explosion in the winner's color, bold banner | Multi-ring explosion, long hitstop + slow-mo, dramatic banner |
+| **Resolution** | Short flash + knockback | Flash + burst in the winner's color | Multi-ring explosion — still no pause |
 | **Arena reaction** | Low (≤50%) | Medium-high | Full (100%) |
 | **Default Tie style** | Sobrecarga Estática | Espelho Partido | Nocaute Duplo |
 | **Suggested camera** | A Arena Fighter | B Cinematic Hybrid | C Hyper Dynamic |
@@ -102,9 +124,11 @@ None is marked as the pick. The owner chooses or mixes after reviewing the artif
 
 The Tie **rule** is closed (symmetric physical repulsion, no winner, no Stability damage — `ClashOrchestration.applyTieRepulsion()`), but its presentation is not. Three independent options, selectable regardless of which A/B/C direction is active:
 
-1. **Espelho Partido (Mirror Break)** — a single symmetric white shockwave, both colors flash together, fades to neutral. Neither side reads as "losing the screen".
-2. **Sobrecarga Estática (Static Overload)** — both Beys flicker red like an electrical fault; no big banner, the read stays in the instrumentation HUD.
-3. **Nocaute Duplo (Double Knockdown)** — both Beys are thrown back symmetrically in slow motion, with a shared shockwave ring and two "EMPATE" banners meeting in the middle.
+1. **Espelho Partido (Mirror Break)** — a symmetric white shockwave, both colors flash together. Neither side reads as "losing the screen".
+2. **Sobrecarga Estática (Static Overload)** — a red electrical snap at the contact with sparks flying everywhere, like a fault.
+3. **Nocaute Duplo (Double Knockdown)** — a big shared shockwave ring at the Clash point and a dust cloud as the symmetric repulsion throws both back.
+
+None of the three uses a banner or pauses the fight (revision 2). The HUD bar stays even through a Tie.
 
 ## The 10 scenarios (reproducible: fixed 60Hz tick + scripted mash rates, seeded FX scatter, fresh Rapier stage on every restart)
 
@@ -118,7 +142,7 @@ The Tie **rule** is closed (symmetric physical repulsion, no winner, no Stabilit
 | Mash baixo com velocidade alta | Low MashPerformance, but VelocityFactor caps at 1.0 from a reference-speed connect |
 | Empate | Identical inputs on both sides — exact `ClashOutcome.Tie` |
 | Resolução: knockback normal (sem ring-out) | Decisive win near the arena center; physical knockback stays inside the ring-out radius |
-| Resolução: ring-out natural após o knockback | Same decisive win near the wall; physics alone carries the loser past `RINGOUT_RADIUS_M` — Clash never declares it |
+| Resolução: ring-out natural após o knockback | Same decisive win with a much stronger launch toward the wall; physics alone carries the loser over it and past `RINGOUT_RADIUS_M` — Clash never declares it |
 | Cooldown (10s) em detalhe | A quick resolution, then the real 10s cooldown countdown at high speed |
 
 ## Controls
@@ -146,6 +170,8 @@ This lab has no real attack/hit-detection pipeline, no `AttackController`, no re
 - **The AI's mash** is a scripted/deterministic rate (`ScriptedMashDriver`, reusing the real `ClashAiMashSource` interface), never the real `AIController`.
 - **The physical resolution's `baseForce`** is a scenario constant bracketed by the real Dash Attack's own knockback-force range (`AttackTuning.ts`), standing in for "whichever real attack connected" — this lab has no way to know that.
 - **Defender Stability fraction** is assumed full (1.0) for the knockback formula, since this lab has no Stability system of its own.
+- **Contact placement:** every scenario puts the two Beys in exact collider contact on the clash axis, resting at their measured floor height (a Clash only ever starts from contact).
+- **After the resolution burst** physics keeps running (the lab has no fight AI to resume, so the Beys coast on from wherever the knockback left them).
 
 None of this simplifies the **rules** — only the inputs this lab has no other way to produce.
 
@@ -158,8 +184,12 @@ None of this simplifies the **rules** — only the inputs this lab has no other 
   - the `tie` scenario really produces `ClashOutcome.Tie`;
   - running the same scenario twice is byte-identical (determinism), including the physical continuation on a freshly built Rapier stage (what `R`/loop does), and the FX spark scatter comes from a seeded RNG, not `Math.random()`;
   - the Cooldown really counts down `CLASH_COOLDOWN_S` and refuses a new Clash before it reaches zero;
-  - `ClashStageSim` integration: a normal-knockback scenario never crosses the ring-out radius, a wall-adjacent strong knockback crosses it on its own (physics decides, Clash never declares it), and a Tie visibly separates both Beys.
-- `tests/smoke/clashPresentationConcepts.spec.ts`: loads the production page, exercises all three directions to a full resolution and checks the Clash result and physical continuation are identical across A/B/C (the direction only changes presentation), checks `R` mid-resolution replays the same run at normal speed (no hitstop/slow-mo carried over), the Tie scenario, the ring-out scenario, and the Cooldown scenario, with no console errors.
+  - `ClashStageSim` integration: a normal-knockback scenario never crosses the ring-out radius, a strong knockback crosses it on its own (physics decides, Clash never declares it) and is airborne above the wall as it crosses, and a Tie visibly separates both Beys;
+  - every scenario holds both Beys in exact contact, resting on the floor, for the whole Active beat;
+  - the pose layer leans each Bey into the contact by the configured angle pivoting on the tip (tip stays on the floor, rims keep meeting), shudders only in contact, and seats a Bey on the approved bowl at `h(r)` tilted to the slope;
+  - `hudShare()` is even when even, grows toward the leader and flips exactly when the lead flips;
+  - A/B/C × every Tie style: no hitstop or slow-mo request from the resolution on; contact/HUD/speedlines let go within 0.12/0.25/0.35 s; during Active contact=1, HUD=1, speedlines on; the bar lands on the real winner; the comeback scenario's bar surges from <10% to >35% in the last second.
+- `tests/smoke/clashPresentationConcepts.spec.ts`: loads the production page, exercises all three directions to a full resolution and checks the Clash result and physical continuation are identical across A/B/C (the direction only changes presentation), checks `R` mid-resolution replays the same run at normal speed (no hitstop/slow-mo carried over), the Tie scenario, the ring-out scenario, and the Cooldown scenario, with no console errors. A second test measures the 15-point revision checklist in the real page for A, B and C: rims in contact, both leaning, speedlines drawn, dust alive, bowl depth 3.2 m with the tips on the surface, no cylinder geometry, the HUD over the Beys' projected midpoint and following the lead, camera yaw still after it settles, no result text and no hitstop/slow-mo requests after the result, physics moving straight after it, Tie, physical ring-out, and live model swaps staying seated and in contact.
 
 Run with `CHAOSBEY_PW_CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test -c tests/smoke/playwright.config.ts tests/smoke/clashPresentationConcepts.spec.ts` if the container's pre-installed Chromium needs pointing to explicitly.
 
@@ -168,6 +198,7 @@ Open with `npm run dev` → `/prototypes/clash-presentation-concepts/`, or the p
 ## Known limits
 
 - No real attack/hit-detection, Stamina/Stability system, or `AIController` — see "Presentation-harness simplifications" above.
-- The arena is flattened to match the game's current flat physics floor; the approved 3.2m bowl isn't integrated into physics yet.
+- The approved 3.2 m bowl is **visual only** here: the game's physics floor is still flat, so the Beys move on a flat plane and their visuals are lifted onto the bowl. Slope-driven motion (sliding toward the center) is not simulated. The ring-out flight is computed on the flat floor/2 m wall of the real colliders.
+- With the approved cameras sitting behind the player on the fight axis, the two Beys partly overlap on screen during the Clash. The camera framing is the approved Camera Lab's; this lab doesn't change it.
 - The Beys render the approved round-2 concepts (`assembleConcept()` from `prototypes/bey-visual-concepts`, the same models the Stamina & Stability Lab's `BeyRig` uses) instead of the game's current crude placeholder mesh, scaled and anchored to match the real Bey collider — but no specific concept is treated as final; the picker exists so the owner isn't stuck reviewing the Clash presentation on a stand-in that doesn't look like a Bey at all.
 - Single active view (no A|B|C side-by-side compare like the Camera Lab) — switching direction is instant since the underlying sim keeps running regardless.

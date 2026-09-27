@@ -9,6 +9,7 @@
 // directions. Automation hook for the smoke test: window.__clashLab.
 // ============================================================
 
+import * as THREE from 'three';
 import { CameraDirector, type DirectorOutput } from '../../camera-concepts/src/director/CameraDirector';
 import { PRESETS, PRESET_IDS, cloneParams, type CameraParams, type PresetId } from '../../camera-concepts/src/director/CameraParams';
 import type { FightFrame, Vec3 } from '../../camera-concepts/src/fight/FightFrame';
@@ -17,10 +18,13 @@ import type { ConceptDefinition } from '../../bey-visual-concepts/src/model/type
 import { ClashHarness } from './harness/ClashHarness';
 import { KeyboardMashCapture, ScriptedMashDriver, type MashLogEntry } from './harness/mash';
 import { SCENARIOS, mashSourceFor, scenarioById, type ClashScenario } from './harness/scenarios';
-import { ClashPresenter, type PresentationHost } from './presentation/ClashPresenter';
+import { ClashPresenter, type PresentationHost, type PresentationSpace } from './presentation/ClashPresenter';
+import { ClashHud } from './presentation/ClashHud';
+import { computeVisualPose } from './presentation/contactPose';
+import { Speedlines } from './fx/Speedlines';
 import { DIRECTIONS, DIRECTION_IDS } from './presentation/directions';
 import { TIE_STYLES, TIE_STYLE_IDS } from './presentation/tieStyles';
-import type { BannerStyle, DirectionId, TieStyleId } from './presentation/types';
+import type { DirectionId, TieStyleId } from './presentation/types';
 import { ClashStageSim } from './sim/ClashStageSim';
 import { ClashStageView } from './stage/ClashStageView';
 
@@ -33,7 +37,10 @@ const DT = 1 / 60;
 const MAX_TICKS_PER_FRAME = 8;
 const SPEEDS = [1, 0.5, 0.25, 2, 4];
 const FLASH_DURATION_S = 0.35;
-const BANNER_HOLD_EXTRA_S = 0.4;
+/** Screen-space clear zone around the contact that speedlines never enter: half the Beys' on-screen span plus this many Bey diameters. */
+const SPEEDLINE_CLEAR_EXTRA_BEYS = 0.9;
+/** Speedline "drawing" changes every N ticks (hand-drawn flicker, deterministic). */
+const SPEEDLINE_FRAME_TICKS = 3;
 // ------------------------------------------------
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -66,7 +73,12 @@ const mashLog: MashLogEntry[] = [];
 
 const view = new ClashStageView($<HTMLCanvasElement>('lab-canvas'), $<HTMLElement>('stage'));
 const cameraParams: Record<PresetId, CameraParams> = { A: cloneParams(PRESETS.A), B: cloneParams(PRESETS.B), C: cloneParams(PRESETS.C) };
-const directors: Record<PresetId, CameraDirector> = { A: new CameraDirector(cameraParams.A), B: new CameraDirector(cameraParams.B), C: new CameraDirector(cameraParams.C) };
+// clashOrbit: false — the camera holds its angle through the Clash (no orbit around the Beys); the HUD is projected into whatever the camera shows.
+const directors: Record<PresetId, CameraDirector> = {
+  A: new CameraDirector(cameraParams.A, 16 / 9, { clashOrbit: false }),
+  B: new CameraDirector(cameraParams.B, 16 / 9, { clashOrbit: false }),
+  C: new CameraDirector(cameraParams.C, 16 / 9, { clashOrbit: false }),
+};
 const lastOut: Partial<Record<PresetId, DirectorOutput>> = {};
 
 const newPose = () => ({ eye: { x: 0, y: 8, z: 12 } as Vec3, focus: { x: 0, y: 0, z: 0 } as Vec3, fov: 60, shake: { x: 0, y: 0, z: 0 } as Vec3 });
@@ -74,39 +86,38 @@ const prevPose = newPose();
 const curPose = newPose();
 const drawPose = newPose();
 
-// ---------------- Presentation host (hitstop/slow-mo/banner/flash) ----------------
+// ---------------- Presentation host (hitstop/slow-mo/flash — no banners: show, don't tell) ----------------
 let hitstopRemainingS = 0;
 let slowMoRemainingS = 0;
 let slowMoFactor = 1;
 let arenaIntensity = 0;
 let flashRemainingS = 0;
 let flashColorHex = '#ffffff';
-let bannerHideAtS = -1;
 
 const flashEl = $<HTMLElement>('flash');
-const bannerEl = $<HTMLElement>('banner');
+const overlayEl = $<HTMLElement>('overlay');
+const hud = new ClashHud(overlayEl);
+const speedlines = new Speedlines($<HTMLCanvasElement>('speedlines'));
+view.onResize = (w, h, pr) => speedlines.resize(w, h, pr);
+speedlines.resize($<HTMLElement>('stage').clientWidth, $<HTMLElement>('stage').clientHeight, view.renderer.getPixelRatio());
 const hex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
+
+/** Tick of the current Clash's resolution, and every hitstop/slow-mo request made since then (must stay empty: the result never pauses the fight). */
+let resolvedAtTick = -1;
+const pauseRequestsSinceResolution: string[] = [];
 
 const host: PresentationHost = {
   requestHitstop(s) {
+    if (resolvedAtTick >= 0) pauseRequestsSinceResolution.push(`hitstop ${s}s @${lab.ticks}`);
     hitstopRemainingS = Math.max(hitstopRemainingS, s);
   },
   requestSlowMo(factor, s) {
+    if (resolvedAtTick >= 0) pauseRequestsSinceResolution.push(`slowmo ${factor}x ${s}s @${lab.ticks}`);
     slowMoFactor = factor;
     slowMoRemainingS = Math.max(slowMoRemainingS, s);
   },
   setArenaClashIntensity(v) {
     arenaIntensity = v;
-  },
-  showBanner(text: string, color: number, style: BannerStyle) {
-    bannerEl.textContent = text;
-    bannerEl.style.color = hex(color);
-    bannerEl.className = `banner show ${style === 'quiet' ? 'quiet' : style === 'dramatic' ? 'dramatic' : 'bold'}`;
-    bannerHideAtS = lab.simTimeS + BANNER_HOLD_EXTRA_S;
-  },
-  hideBanner() {
-    bannerEl.classList.remove('show');
-    bannerHideAtS = -1;
   },
   flashScreen(strength, color = 0xffffff) {
     flashRemainingS = FLASH_DURATION_S * Math.max(0.1, strength);
@@ -123,6 +134,12 @@ function resetPresentationTimers(): void {
 }
 
 const presenter = new ClashPresenter(DIRECTIONS[lab.directionId], lab.tieStyleId, view.fx, host);
+function syncSideColors(): void {
+  presenter.sideColors = [FIRST_CONCEPTS[lab.firstConceptLetter]!.palette.glow, SECOND_CONCEPTS[lab.secondConceptLetter]!.palette.glow];
+  document.documentElement.style.setProperty('--first', hex(presenter.sideColors[0]));
+  document.documentElement.style.setProperty('--second', hex(presenter.sideColors[1]));
+}
+syncSideColors();
 
 // ---------------- Scenario lifecycle ----------------
 // Every (re)start builds a fresh Rapier world: re-using one after a
@@ -148,7 +165,11 @@ async function startStage(): Promise<void> {
   view.setBeyVisuals(sim.visuals);
   for (const pid of PRESET_IDS) directors[pid].reset();
   presenter.reset();
+  hud.reset();
+  speedlines.clear();
   resetPresentationTimers();
+  resolvedAtTick = -1;
+  pauseRequestsSinceResolution.length = 0;
   driver = new ScriptedMashDriver(mashSourceFor(currentScenario.first.mash), mashSourceFor(currentScenario.second.mash));
   mashLog.length = 0;
   lab.ticks = 0;
@@ -211,14 +232,19 @@ function tick(): void {
     secondMashed = scripted.second;
   }
   const result = sim.tick(DT, firstMashed, secondMashed);
-  presenter.handleTick(DT, sim, result);
-  view.fx.tick(DT);
   lab.simTimeS += DT;
+  if (result.resolution) resolvedAtTick = lab.ticks;
+  const space = presentationSpace(result.fightFrame);
+  presenter.handleTick(DT, sim, result, space);
+  applyVisualPose();
+  view.fx.tick(DT);
   view.updateArena(lab.simTimeS, DT, arenaIntensity);
+  // The camera frames the Beys where they are drawn (on the bowl), not at the flat physics floor.
+  const shown = liftedFrame(result.fightFrame);
   const aspect = view.aspect;
   for (const pid of PRESET_IDS) {
     directors[pid].setAspect(aspect);
-    lastOut[pid] = directors[pid].tick(result.fightFrame, DT);
+    lastOut[pid] = directors[pid].tick(shown, DT);
   }
   copyPose(prevPose, curPose);
   const out = lastOut[lab.cameraPresetId]!;
@@ -226,7 +252,100 @@ function tick(): void {
   lab.ticks++;
   updateSidePanel(result.fightFrame);
   renderMashLog();
-  if (bannerHideAtS >= 0 && lab.simTimeS >= bannerHideAtS && sim.harness.beat !== 'resolutionBurst') host.hideBanner();
+}
+
+// ---------------- Visual pose: bowl + locked contact (visual only; physics untouched) ----------------
+const lift = (p: Vec3): THREE.Vector3 => new THREE.Vector3(p.x, p.y + view.floorHeightAt(Math.hypot(p.x, p.z)), p.z);
+
+function presentationSpace(frame: FightFrame): PresentationSpace {
+  return {
+    first: lift(frame.first.position),
+    second: lift(frame.second.position),
+    floorHeightAt: (r) => view.floorHeightAt(r),
+    dustColor: new THREE.Color(view.dustColor),
+    sparkColor: new THREE.Color(view.sparkColors[0]),
+  };
+}
+
+function liftedFrame(frame: FightFrame): FightFrame {
+  const up = (p: Vec3): Vec3 => ({ x: p.x, y: p.y + view.floorHeightAt(Math.hypot(p.x, p.z)), z: p.z });
+  return { ...frame, first: { ...frame.first, position: up(frame.first.position) }, second: { ...frame.second, position: up(frame.second.position) } };
+}
+
+/** Last applied visual pose, for the automation hook. */
+const poseDebug = { contactGapM: 0, tiltDeg: [0, 0] as [number, number], tipAboveFloorM: [0, 0] as [number, number] };
+
+/**
+ * Re-seats both visuals: onto the bowl surface, tilted to its slope, and — while the Clash holds
+ * them — leaning into the contact with a shudder. Must run right after ClashStageSim synced the
+ * visuals to the physics bodies (every tick, and after a model swap).
+ */
+function applyVisualPose(): void {
+  if (!sim) return;
+  const d = presenter.config;
+  const visuals = [sim.firstVisual, sim.secondVisual] as const;
+  const bodyPos = visuals.map((v) => v.group.position.clone());
+  const bodyQuat = visuals.map((v) => v.group.quaternion.clone());
+  const toward = new THREE.Vector2(bodyPos[1]!.x - bodyPos[0]!.x, bodyPos[1]!.z - bodyPos[0]!.z);
+  const hasAxis = toward.lengthSq() > 1e-9;
+  if (hasAxis) toward.normalize();
+  for (const i of [0, 1] as const) {
+    const pose = computeVisualPose({
+      bodyPosition: bodyPos[i]!,
+      bodyQuaternion: bodyQuat[i]!,
+      tipDropM: sim.restHeights[i],
+      towardOpponent: hasAxis ? (i === 0 ? toward.clone() : toward.clone().negate()) : null,
+      contactWeight: presenter.contactWeight,
+      leanScale: presenter.leanScale[i],
+      params: { leanRad: THREE.MathUtils.degToRad(d.contact.leanDeg), wobbleRad: THREE.MathUtils.degToRad(d.contact.wobbleDeg), wobbleHz: d.contact.wobbleHz },
+      timeS: lab.simTimeS,
+      phase: i * 2.1,
+      floorHeightAt: (r) => view.floorHeightAt(r),
+    });
+    visuals[i].group.position.copy(pose.position);
+    visuals[i].group.quaternion.copy(pose.quaternion);
+    poseDebug.tiltDeg[i] = THREE.MathUtils.radToDeg(pose.extraTiltRad);
+    const tip = new THREE.Vector3(0, -sim.restHeights[i], 0).applyQuaternion(pose.quaternion).add(pose.position);
+    poseDebug.tipAboveFloorM[i] = tip.y - view.floorHeightAt(Math.hypot(tip.x, tip.z));
+  }
+  const a = visuals[0].group.position;
+  const b = visuals[1].group.position;
+  poseDebug.contactGapM = Math.hypot(a.x - b.x, a.z - b.z);
+}
+
+// ---------------- Clash overlay: force HUD + speedlines (screen space, over the current camera) ----------------
+function renderClashOverlay(): void {
+  if (!sim) return;
+  const d = presenter.config;
+  const a = sim.firstVisual.group.position;
+  const b = sim.secondVisual.group.position;
+  hud.update(view.camera, { first: a, second: b, shareFirst: presenter.hudShareFirst, opacity: presenter.hudOpacity, colorFirst: presenter.sideColors[0], colorSecond: presenter.sideColors[1], style: d.hud.style });
+  const stage = $<HTMLElement>('stage');
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  if (presenter.speedlineLevel <= 0.01) {
+    speedlines.clear();
+    return;
+  }
+  const toScreen = (p: THREE.Vector3): THREE.Vector2 => {
+    const v = p.clone().project(view.camera);
+    return new THREE.Vector2((v.x * 0.5 + 0.5) * w, (-v.y * 0.5 + 0.5) * h);
+  };
+  const mid = a.clone().lerp(b, 0.5);
+  const c = toScreen(mid.clone().setY(mid.y + 0.2));
+  const beyPx = c.distanceTo(toScreen(mid.clone().setY(mid.y + 1.5)));
+  const span = toScreen(a).distanceTo(toScreen(b));
+  const firstOnLeft = hud.state.visible ? hud.state.firstOnLeft : toScreen(a).x <= toScreen(b).x;
+  speedlines.draw(w, h, {
+    cx: c.x,
+    cy: c.y,
+    clearRadius: Math.max(60, span * 0.5 + beyPx * SPEEDLINE_CLEAR_EXTRA_BEYS),
+    intensity: presenter.speedlineLevel,
+    count: d.speedlines.count,
+    tint: d.speedlines.tintWithSides ? { left: hex(presenter.sideColors[firstOnLeft ? 0 : 1]), right: hex(presenter.sideColors[firstOnLeft ? 1 : 0]) } : null,
+    leftShare: firstOnLeft ? presenter.hudShareFirst : 1 - presenter.hudShareFirst,
+    seed: Math.floor(lab.ticks / SPEEDLINE_FRAME_TICKS),
+  });
 }
 
 // ---------------- Render ----------------
@@ -237,6 +356,7 @@ function render(alpha: number): void {
   const fov = lerp(prevPose.fov, curPose.fov, alpha);
   view.applyCamera(eye, focus, fov, curPose.shake);
   view.render();
+  renderClashOverlay();
 
   if (flashRemainingS > 0) {
     flashEl.style.background = flashColorHex;
@@ -415,7 +535,9 @@ buildConceptButtons(conceptsSecondEl, ['A', 'B', 'C'], (letter) => setConcept('s
 function setConcept(side: 'first' | 'second', letter: 'A' | 'B' | 'C'): void {
   if (side === 'first') lab.firstConceptLetter = letter;
   else lab.secondConceptLetter = letter;
+  syncSideColors();
   sim?.setConcepts(FIRST_CONCEPTS[lab.firstConceptLetter]!, SECOND_CONCEPTS[lab.secondConceptLetter]!);
+  applyVisualPose(); // the new models start from the physics pose; re-seat them on the bowl / in the contact
   syncPanel();
 }
 
@@ -541,6 +663,14 @@ syncPanel();
 void loadScenario(startScenarioFromHash()).then(() => view.renderer.setAnimationLoop(frameLoop));
 
 // ---------------- Automation hook (smoke test) ----------------
+function countCylinders(root: THREE.Object3D): number {
+  let n = 0;
+  root.traverse((o) => {
+    if (o instanceof THREE.Mesh && o.geometry instanceof THREE.CylinderGeometry) n++;
+  });
+  return n;
+}
+
 declare global {
   interface Window {
     __clashLab: {
@@ -557,6 +687,27 @@ declare global {
         simFingerprint: string;
         hitstopRemainingS: number;
         slowMoRemainingS: number;
+        /** Presentation readouts for the smoke test. */
+        presentation: {
+          contactGapM: number;
+          tiltDeg: [number, number];
+          tipAboveFloorM: [number, number];
+          contactWeight: number;
+          speedlineLevel: number;
+          speedlinesDrawn: number;
+          dust: { dust: number; grit: number };
+          hud: { visible: boolean; x: number; y: number; leftShare: number; firstOnLeft: boolean; midX: number; midY: number };
+          hudShareFirst: number;
+          arenaDepthM: number;
+          /** Cylinder meshes in the Clash FX group — the old rotating energy beam/helix/vortex was one. */
+          fxCylinderMeshes: number;
+          cameraYawDeg: number;
+          firstConcept: string;
+          secondConcept: string;
+          flashOpacity: number;
+          resolvedAtTick: number;
+          pauseRequestsSinceResolution: string[];
+        };
       };
       scenarios: string[];
       directions: DirectionId[];
@@ -580,6 +731,25 @@ window.__clashLab = {
     simFingerprint: sim ? JSON.stringify({ result: sim.harness.controller.getLastResult(), first: sim.frame.first.position, second: sim.frame.second.position, ringOut: sim.frame.ringOutIsFirst }) : '',
     hitstopRemainingS,
     slowMoRemainingS,
+    presentation: {
+      contactGapM: poseDebug.contactGapM,
+      tiltDeg: [...poseDebug.tiltDeg],
+      tipAboveFloorM: [...poseDebug.tipAboveFloorM],
+      contactWeight: presenter.contactWeight,
+      speedlineLevel: presenter.speedlineLevel,
+      speedlinesDrawn: speedlines.lastDrawn,
+      dust: view.fx.particleCounts,
+      hud: { ...hud.state },
+      hudShareFirst: presenter.hudShareFirst,
+      arenaDepthM: view.arenaDepth,
+      fxCylinderMeshes: countCylinders(view.fx.group),
+      cameraYawDeg: THREE.MathUtils.radToDeg(Math.atan2(curPose.eye.x - curPose.focus.x, curPose.eye.z - curPose.focus.z)),
+      firstConcept: lab.firstConceptLetter,
+      secondConcept: lab.secondConceptLetter,
+      flashOpacity: Number(flashEl.style.opacity || 0),
+      resolvedAtTick,
+      pauseRequestsSinceResolution: [...pauseRequestsSinceResolution],
+    },
   }),
   scenarios: SCENARIOS.map((s) => s.id),
   directions: [...DIRECTION_IDS],

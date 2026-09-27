@@ -48,7 +48,21 @@ export interface ClashScenario {
 
 // Bracket the real Dash Attack's own knockback force range (AttackTuning.ts) so the physical beat lands in a believable place, without pretending this lab knows which real attack connected.
 const MODEST_FORCE = DASH_MIN_KNOCKBACK_FORCE; // 8 — a clear but contained knockback.
-const RING_OUT_FORCE = DASH_MAX_KNOCKBACK_FORCE * 3; // presentation harness: exaggerated well past a real Dash so scenario 9 reliably clears RINGOUT_RADIUS_M from a wall-adjacent clash point.
+// Presentation harness: exaggerated well past a real Dash so scenario 9 clears RINGOUT_RADIUS_M on its own,
+// airborne over the 2m wall. 4× (was 3×) with the loser 4m from the center (was 6m) since the Beys
+// now start the resolution resting on the floor instead of hovering at the 0.6m spawn height: from the
+// floor, a launch that starts 6m out hits the side of the wall first (and can then sink through the
+// wall collider — the M7 ext-32 wedge, not a real ring-out). Swept force 3×–8× × loser 4–8m: loser
+// at 4–5m clears the wall cleanly for every force from 3.5× up, so 4× @ 4m sits inside that margin.
+const RING_OUT_FORCE = DASH_MAX_KNOCKBACK_FORCE * 4;
+
+/**
+ * Center-to-center distance (m) at which the two Beys' colliders touch (2 × 0.65 m collider radius)
+ * — a Clash only ever starts from contact, so every scenario places the two Beys exactly this far
+ * apart on the clash axis (the symmetric ones use ±0.65 m). The resolution scenarios keep the
+ * loser's position and put the winner in contact with it, so the physical consequence is unchanged.
+ */
+export const CONTACT_SEPARATION_M = 1.3;
 
 const rate = (eventsPerSecond: number): MashProfile => ({ kind: 'rate', eventsPerSecond });
 const ramp = (beforeEventsPerSecond: number, afterEventsPerSecond: number, switchAtS: number): MashProfile => ({ kind: 'ramp', beforeEventsPerSecond, afterEventsPerSecond, switchAtS });
@@ -139,20 +153,20 @@ export const SCENARIOS: readonly ClashScenario[] = [
     approachSpreadM: 2.5,
     connectDeltaS: 0.04,
     knockbackForce: MODEST_FORCE,
-    first: { staminaFraction: 0.85, speedMps: 9, mash: rate(9), clashRadiusM: 2 },
+    first: { staminaFraction: 0.85, speedMps: 9, mash: rate(9), clashRadiusM: 3 - CONTACT_SEPARATION_M },
     second: { staminaFraction: 0.5, speedMps: 4, mash: rate(0.5), clashRadiusM: 3 },
   },
   {
     id: 'resolution-ring-out',
     label: 'Resolução: ring-out natural após o knockback',
-    description: 'Mesma vitória clara, mas o Clash acontece perto da parede e o perdedor já está do lado de fora — o knockback físico manda ele para fora sozinho; o Clash nunca declara o ring-out.',
+    description: 'Mesma vitória clara, mas com um knockback bem mais forte na direção da parede — a física arremessa o perdedor por cima dela sozinha; o Clash nunca declara o ring-out.',
     arena: 'rift',
     approachSpreadM: 2.5,
     connectDeltaS: 0.04,
     knockbackForce: RING_OUT_FORCE,
-    // 6m of open floor between the loser and the wall (ARENA_FLOOR_RADIUS=12) gives the launch enough time to arc up over the 2m wall before reaching it — a knockback that starts right on top of the wall would just slam into its side instead of clearing it (see RingOutTuning.ts: the only way out is airborne, over the wall).
-    first: { staminaFraction: 0.85, speedMps: 9, mash: rate(9), clashRadiusM: 3 },
-    second: { staminaFraction: 0.5, speedMps: 4, mash: rate(0.5), clashRadiusM: 6 },
+    // 8m of open floor between the loser and the wall (ARENA_FLOOR_RADIUS=12) gives the launch time to arc up over the 2m wall before reaching it — a knockback that starts close to the wall slams into its side instead of clearing it (see RingOutTuning.ts: the only way out is airborne, over the wall).
+    first: { staminaFraction: 0.85, speedMps: 9, mash: rate(9), clashRadiusM: 4 - CONTACT_SEPARATION_M },
+    second: { staminaFraction: 0.5, speedMps: 4, mash: rate(0.5), clashRadiusM: 4 },
   },
   {
     id: 'cooldown-watch',

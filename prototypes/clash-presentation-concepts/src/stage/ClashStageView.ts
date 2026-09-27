@@ -22,8 +22,11 @@ import type { ArenaId } from '../harness/scenarios';
 import type { Vec3 } from '../../../camera-concepts/src/fight/FightFrame';
 
 const ARENA_CONCEPTS: Readonly<Record<ArenaId, ArenaConcept>> = { foundry: FOUNDRY_PIT, rift: RIFT_CRATER, stadium: TOURNAMENT_STADIUM };
-/** Flat depth so the visual bowl matches the lab's flat physics floor exactly — see ClashStageSim.ts's own note on the same limitation (the approved 3.2m bowl isn't integrated into the game's physics yet). */
-const FLAT_ARENA_DEPTH_M = 0;
+/**
+ * Dust scraped off each arena's floor at the Clash contact (the grit sparks use the arena's own
+ * approved sparkColors). Presentation-only tints matched to each approved floor material.
+ */
+const ARENA_DUST_COLORS: Readonly<Record<ArenaId, number>> = { foundry: 0x6b5a4a, rift: 0x6d6480, stadium: 0xb8c0cc };
 
 export class ClashStageView {
   readonly renderer: THREE.WebGLRenderer;
@@ -63,7 +66,10 @@ export class ClashStageView {
       this.scene.remove(this.builtArena.root);
       this.builtArena.dispose();
     }
-    this.builtArena = ARENA_CONCEPTS[id].build(FLAT_ARENA_DEPTH_M);
+    // The approved arena, built with its own approved bowl (defaultDepth = 3.2m, each arena's own h(r)
+    // profile — visual-prototypes-approval.md §2). The game's physics floor is still flat, so the Beys'
+    // visuals are lifted onto this surface by presentation/contactPose.ts; the physics is untouched.
+    this.builtArena = ARENA_CONCEPTS[id].build();
     this.currentArenaId = id;
     this.scene.add(this.builtArena.root);
     this.scene.fog = this.builtArena.fog;
@@ -85,6 +91,19 @@ export class ClashStageView {
     if (this.builtArena) this.builtArena.flash(new THREE.Vector3(point.x, point.y, point.z));
   }
 
+  /** Visual floor height at distance r from the center (the approved bowl profile). */
+  floorHeightAt(r: number): number {
+    return this.builtArena ? this.builtArena.floorHeightAt(r) : 0;
+  }
+
+  get arenaDepth(): number {
+    return this.builtArena?.depth ?? 0;
+  }
+
+  get dustColor(): number {
+    return this.currentArenaId ? ARENA_DUST_COLORS[this.currentArenaId] : 0x888888;
+  }
+
   get sparkColors(): readonly [number, number] {
     return this.builtArena?.sparkColors ?? [0xffe08a, 0xfff2cc];
   }
@@ -100,10 +119,14 @@ export class ClashStageView {
     this.renderer.render(this.scene, this.camera);
   }
 
+  /** Called with the stage's CSS size after every resize (the speedline overlay follows it). */
+  onResize: ((w: number, h: number, pixelRatio: number) => void) | null = null;
+
   private resize(): void {
     const w = Math.max(1, this.stage.clientWidth);
     const h = Math.max(1, this.stage.clientHeight);
     this.renderer.setSize(w, h, false);
+    this.onResize?.(w, h, this.renderer.getPixelRatio());
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }

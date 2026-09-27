@@ -16,6 +16,15 @@ import { ScriptedMashDriver } from '../../prototypes/clash-presentation-concepts
 import { SCENARIOS, mashSourceFor, scenarioById } from '../../prototypes/clash-presentation-concepts/src/harness/scenarios';
 import { ClashStageSim } from '../../prototypes/clash-presentation-concepts/src/sim/ClashStageSim';
 import { createFxRng } from '../../prototypes/clash-presentation-concepts/src/fx/rng';
+import * as THREE from 'three';
+import { ARENA_FLOOR_RADIUS, ARENA_WALL_HEIGHT } from '../../src/arena/colliders/ArenaTuning';
+import { CONTACT_SEPARATION_M } from '../../prototypes/clash-presentation-concepts/src/harness/scenarios';
+import { computeVisualPose, hudShare } from '../../prototypes/clash-presentation-concepts/src/presentation/contactPose';
+import { ClashPresenter, type PresentationHost } from '../../prototypes/clash-presentation-concepts/src/presentation/ClashPresenter';
+import { DIRECTIONS, DIRECTION_IDS } from '../../prototypes/clash-presentation-concepts/src/presentation/directions';
+import { TIE_STYLE_IDS } from '../../prototypes/clash-presentation-concepts/src/presentation/tieStyles';
+import type { ClashFx } from '../../prototypes/clash-presentation-concepts/src/fx/ClashFx';
+import type { TieStyleId } from '../../prototypes/clash-presentation-concepts/src/presentation/types';
 
 const DT = 1 / 60;
 
@@ -260,5 +269,186 @@ describe('cooldown', () => {
       ticks++;
     }
     expect(harness.phase).toBe('Idle');
+  });
+});
+
+// ---------------- Presentation revision: contact, bowl, HUD, no result pause ----------------
+
+describe('stage harness — the Clash starts from real contact, resting on the floor', () => {
+  it('every scenario holds the two Beys exactly in collider contact, resting on the floor (no hovering) for the whole Active beat', async () => {
+    for (const scenario of SCENARIOS) {
+      const sim = await ClashStageSim.create(scenario);
+      sim.beginApproach();
+      const driver = new ScriptedMashDriver(mashSourceFor(scenario.first.mash), mashSourceFor(scenario.second.mash));
+      let activeTicks = 0;
+      for (let i = 0; i < 400 && sim.harness.phase !== 'Cooldown'; i++) {
+        const mash = sim.harness.phase === 'Active' ? driver.sample(sim.harness.elapsedActiveS) : { first: false, second: false };
+        sim.tick(DT, mash.first, mash.second);
+        if (sim.harness.phase !== 'Active') continue;
+        activeTicks++;
+        const { first, second } = sim.frame;
+        expect(Math.hypot(first.position.x - second.position.x, first.position.z - second.position.z), scenario.id).toBeCloseTo(CONTACT_SEPARATION_M, 5);
+        expect(first.position.y, `${scenario.id}: first rests on the floor`).toBeCloseTo(sim.restHeights[0], 5);
+        expect(second.position.y, `${scenario.id}: second rests on the floor`).toBeCloseTo(sim.restHeights[1], 5);
+        expect(first.airborne || second.airborne, `${scenario.id}: grounded`).toBe(false);
+      }
+      expect(activeTicks, scenario.id).toBeGreaterThan(200);
+      sim.dispose();
+    }
+  }, 60000);
+
+  it('the ring-out scenario is a clean airborne flight over the wall, not a Bey sinking through the wall collider', async () => {
+    const scenario = scenarioById('resolution-ring-out');
+    const sim = await ClashStageSim.create(scenario);
+    sim.beginApproach();
+    const driver = new ScriptedMashDriver(mashSourceFor(scenario.first.mash), mashSourceFor(scenario.second.mash));
+    let crossedAtY: number | null = null;
+    let prevR = 0;
+    for (let i = 0; i < 700 && crossedAtY === null; i++) {
+      const mash = sim.harness.phase === 'Active' ? driver.sample(sim.harness.elapsedActiveS) : { first: false, second: false };
+      sim.tick(DT, mash.first, mash.second);
+      const p = sim.frame.second.position;
+      const r = Math.hypot(p.x, p.z);
+      if (prevR < ARENA_FLOOR_RADIUS && r >= ARENA_FLOOR_RADIUS) crossedAtY = p.y;
+      prevR = r;
+    }
+    expect(crossedAtY).not.toBeNull();
+    expect(crossedAtY!).toBeGreaterThan(ARENA_WALL_HEIGHT);
+    sim.dispose();
+  }, 20000);
+});
+
+describe('visual pose layer (contact lean + bowl), visual only', () => {
+  const flat = (): number => 0;
+  const base = {
+    bodyQuaternion: new THREE.Quaternion(),
+    tipDropM: 0.2,
+    leanScale: 1,
+    params: { leanRad: THREE.MathUtils.degToRad(11), wobbleRad: 0, wobbleHz: 10 },
+    timeS: 0,
+    phase: 0,
+  };
+
+  it('leans each Bey into the contact by the configured angle, pivoting on its tip (the tip stays on the floor)', () => {
+    const pose = computeVisualPose({ ...base, bodyPosition: new THREE.Vector3(-0.65, 0.2, 0), towardOpponent: new THREE.Vector2(1, 0), contactWeight: 1, floorHeightAt: flat });
+    expect(THREE.MathUtils.radToDeg(pose.extraTiltRad)).toBeCloseTo(11, 4);
+    const top = new THREE.Vector3(0, 1, 0).applyQuaternion(pose.quaternion);
+    expect(top.x, 'leans toward +x, the opponent').toBeGreaterThan(0.15);
+    const tip = new THREE.Vector3(0, -0.2, 0).applyQuaternion(pose.quaternion).add(pose.position);
+    expect(tip.y).toBeCloseTo(0, 6);
+    // Rims keep meeting: the lean carries the body-origin height forward, the pose steps back by the same amount.
+    const rimCenter = new THREE.Vector3(0, 0, 0).applyQuaternion(pose.quaternion).add(pose.position);
+    expect(rimCenter.x).toBeCloseTo(-0.65, 2);
+  });
+
+  it('has no lean at all outside the contact, and a live shudder inside it', () => {
+    const still = computeVisualPose({ ...base, bodyPosition: new THREE.Vector3(0, 0.2, 0), towardOpponent: new THREE.Vector2(1, 0), contactWeight: 0, floorHeightAt: flat });
+    expect(still.extraTiltRad).toBeCloseTo(0, 9);
+    const tilts = [0, 0.02, 0.04, 0.06].map((t) => computeVisualPose({ ...base, params: { ...base.params, wobbleRad: THREE.MathUtils.degToRad(2) }, timeS: t, bodyPosition: new THREE.Vector3(0, 0.2, 0), towardOpponent: new THREE.Vector2(1, 0), contactWeight: 1, floorHeightAt: flat }).extraTiltRad);
+    expect(Math.max(...tilts) - Math.min(...tilts)).toBeGreaterThan(THREE.MathUtils.degToRad(0.5));
+  });
+
+  it('seats the Bey on the approved bowl: lifted to h(r) and tilted to the local slope, tip on the surface', () => {
+    const bowl = (r: number): number => 3.2 * Math.pow(Math.min(r, 12) / 12, 2); // Foundry's approved h(r)
+    const r = 6;
+    const pose = computeVisualPose({ ...base, bodyPosition: new THREE.Vector3(r, 0.2, 0), towardOpponent: null, contactWeight: 0, floorHeightAt: bowl });
+    const tip = new THREE.Vector3(0, -0.2, 0).applyQuaternion(pose.quaternion).add(pose.position);
+    expect(tip.y).toBeCloseTo(bowl(r), 2);
+    expect(tip.x).toBeCloseTo(r, 6);
+    const slopeDeg = THREE.MathUtils.radToDeg(Math.atan((2 * 3.2 * r) / (12 * 12)));
+    expect(THREE.MathUtils.radToDeg(pose.extraTiltRad)).toBeCloseTo(slopeDeg, 1);
+  });
+});
+
+describe('Clash HUD share (real ClashPower advantage → bar proportion)', () => {
+  it('is even when even, grows toward the leader, flips exactly when the lead flips, and stays inside the bar', () => {
+    expect(hudShare(0.7, 0.7, 4)).toBe(0.5);
+    expect(hudShare(0.8, 0.7, 4)).toBeGreaterThan(0.5);
+    expect(hudShare(0.7, 0.8, 4)).toBeLessThan(0.5);
+    expect(hudShare(0.8, 0.7, 4)).toBeCloseTo(1 - hudShare(0.7, 0.8, 4), 12);
+    expect(hudShare(0.9, 0.7, 4)).toBeGreaterThan(hudShare(0.8, 0.7, 4));
+    expect(hudShare(5, 0, 4)).toBeLessThan(1);
+    expect(hudShare(0, 0, 4)).toBe(0.5);
+  });
+});
+
+describe('ClashPresenter — show, don\'t tell: the resolution never pauses', () => {
+  const fxStub = (): ClashFx => {
+    const noop = (): void => {};
+    return { clear: noop, emitContactDust: noop, dustBurst: noop, impactStar: noop, mashPulse: noop, shockwave: noop, spawnSparks: noop } as unknown as ClashFx;
+  };
+
+  async function run(scenarioId: string, directionId: 'A' | 'B' | 'C', tieStyle: TieStyleId) {
+    const scenario = scenarioById(scenarioId);
+    const sim = await ClashStageSim.create(scenario);
+    const calls: Array<{ tick: number; kind: string; value: number }> = [];
+    let tick = 0;
+    const host: PresentationHost = {
+      requestHitstop: (s) => calls.push({ tick, kind: 'hitstop', value: s }),
+      requestSlowMo: (_f, s) => calls.push({ tick, kind: 'slowmo', value: s }),
+      setArenaClashIntensity: () => {},
+      flashScreen: () => {},
+    };
+    const presenter = new ClashPresenter(DIRECTIONS[directionId], tieStyle, fxStub(), host);
+    const driver = new ScriptedMashDriver(mashSourceFor(scenario.first.mash), mashSourceFor(scenario.second.mash));
+    sim.beginApproach();
+    let resolvedTick = -1;
+    let winnerIsFirst: boolean | null = null;
+    const samples: Array<{ tick: number; phase: string; contact: number; speed: number; hud: number; share: number }> = [];
+    for (; tick < 520; tick++) {
+      const mash = sim.harness.phase === 'Active' ? driver.sample(sim.harness.elapsedActiveS) : { first: false, second: false };
+      const result = sim.tick(DT, mash.first, mash.second);
+      const f = result.fightFrame;
+      presenter.handleTick(DT, sim, result, { first: new THREE.Vector3(f.first.position.x, f.first.position.y, f.first.position.z), second: new THREE.Vector3(f.second.position.x, f.second.position.y, f.second.position.z), floorHeightAt: () => 0, dustColor: new THREE.Color(), sparkColor: new THREE.Color() });
+      if (result.resolution) {
+        resolvedTick = tick;
+        winnerIsFirst = result.resolution.loserIsFirst === null ? null : !result.resolution.loserIsFirst;
+      }
+      samples.push({ tick, phase: sim.harness.phase, contact: presenter.contactWeight, speed: presenter.speedlineLevel, hud: presenter.hudOpacity, share: presenter.hudShareFirst });
+    }
+    sim.dispose();
+    return { calls, resolvedTick, winnerIsFirst, samples };
+  }
+
+  it('A/B/C × every tie style: no hitstop or slow motion from the resolution on, and the contact/HUD/speedlines let go within a fraction of a second', async () => {
+    for (const d of DIRECTION_IDS) {
+      for (const [scenarioId, tie] of [['balanced', DIRECTIONS[d].defaultTieStyle], ...TIE_STYLE_IDS.map((t) => ['tie', t] as const)] as const) {
+        const r = await run(scenarioId, d, tie);
+        expect(r.resolvedTick, `${d}/${scenarioId}`).toBeGreaterThan(0);
+        expect(r.calls.filter((c) => c.tick >= r.resolvedTick), `${d}/${scenarioId}/${tie}: no pause on the result`).toEqual([]);
+        const after = (s: number) => r.samples[r.resolvedTick + Math.round(s * 60)]!;
+        expect(after(0.2).contact).toBe(0);
+        expect(after(0.4).speed).toBe(0);
+        expect(after(0.4).hud).toBe(0);
+        const active = r.samples.filter((s) => s.phase === 'Active' && s.tick > r.resolvedTick - 120);
+        for (const s of active) {
+          expect(s.contact).toBe(1);
+          expect(s.speed).toBeGreaterThan(0.1);
+          expect(s.hud).toBe(1);
+        }
+        // The bar lands on the real result as the impact happens.
+        const landed = r.samples[r.resolvedTick]!.share;
+        if (r.winnerIsFirst === null) expect(landed).toBe(0.5);
+        else expect(landed > 0.5).toBe(r.winnerIsFirst);
+      }
+    }
+  }, 120000);
+
+  it('the HUD follows the lead: in the comeback scenario the player trails far behind, surges back in the last second, and the bar lands on the player as they win', async () => {
+    const r = await run('comeback', 'B', 'mirror');
+    const active = r.samples.filter((s) => s.phase === 'Active');
+    const lastSecond = active.slice(-60);
+    expect(lastSecond[0]!.share, 'still far behind one second from the end').toBeLessThan(0.1);
+    expect(lastSecond[lastSecond.length - 1]!.share, 'surged back').toBeGreaterThan(0.35);
+    expect(r.winnerIsFirst).toBe(true);
+    expect(r.samples[r.resolvedTick]!.share).toBeGreaterThan(0.5);
+  }, 20000);
+
+  it('no direction carries a banner, a resolution hitstop or a resolution slow motion in its config', () => {
+    for (const d of DIRECTION_IDS) {
+      const res = DIRECTIONS[d].resolution as Record<string, unknown>;
+      expect(Object.keys(res).sort()).toEqual(['burstRings', 'dustBurst', 'flash', 'sparks']);
+      expect(DIRECTIONS[d]).not.toHaveProperty('energy');
+    }
   });
 });

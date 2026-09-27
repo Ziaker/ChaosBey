@@ -29,7 +29,13 @@ export interface DetailedBeyVisual extends BeyVisual {
   dispose(): void;
 }
 
-export function createDetailedBeyVisual(definition: ConceptDefinition): DetailedBeyVisual {
+/**
+ * `tipDropM` is how far below the physics body's origin the tip touches the floor. It defaults to
+ * the collider half-height (the placeholder mesh's anchor rule), but the Attack and Defense
+ * colliders rest at different heights, so the Clash stage passes each Bey's measured rest height
+ * instead — that keeps every model sitting on the floor rather than floating or clipping into it.
+ */
+export function createDetailedBeyVisual(definition: ConceptDefinition, tipDropM: number = BEY_COLLIDER_HALF_HEIGHT_M): DetailedBeyVisual {
   const built: BuiltConcept = assembleConcept(definition);
   built.root.traverse((o) => {
     if (o instanceof THREE.Mesh) {
@@ -41,7 +47,7 @@ export function createDetailedBeyVisual(definition: ConceptDefinition): Detailed
   const scaled = new THREE.Group();
   scaled.scale.setScalar(scale);
   // The assembly's own tip contact point is at local y=0; the placeholder mesh anchors that same point at -colliderHalfHeightM below the physics body's origin (createBeyMesh.ts's own anchor rule) — matching it here keeps this drop-in visual sitting exactly where the placeholder did, never floating or clipping into the floor.
-  scaled.position.y = -BEY_COLLIDER_HALF_HEIGHT_M;
+  scaled.position.y = -tipDropM;
   scaled.add(built.root);
   const spinGroup = new THREE.Group();
   spinGroup.add(scaled);

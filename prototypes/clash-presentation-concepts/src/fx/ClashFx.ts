@@ -1,8 +1,8 @@
 // ============================================================
 // CLASH PRESENTATION LAB — VFX PRIMITIVES
 // Self-contained Three.js building blocks for the Clash-specific visuals
-// this lab explores (energy between the Beys, mash pulses, the resolution
-// burst, a winner/loser/tie banner). Styled in the spirit of the approved
+// this lab explores (dust and grit scraped off the floor at the contact,
+// mash pulses, the resolution burst). Styled in the spirit of the approved
 // Híbrida VFX language (prototypes/vfx-visual-concepts) — additive glow,
 // cel-flavored rings, sparks that respect the arena's own spark palette —
 // but built fresh for a moment (the Clash) that Híbrida itself never
@@ -37,7 +37,7 @@ interface LifetimeObject {
 }
 
 /**
- * Owns every transient Clash visual (beam, pulses, bursts, sparks) inside
+ * Owns every transient Clash visual (contact dust, pulses, bursts, sparks) inside
  * one Group, so a direction switch or a scenario restart can clear
  * everything with one call. Nothing here decides Clash outcomes — it only
  * reacts to what ClashStageSim/ClashHarness already computed (GDD 158:
@@ -47,36 +47,56 @@ export class ClashFx {
   readonly group = new THREE.Group();
   private readonly sprite = softDisc();
   private readonly transient: LifetimeObject[] = [];
-  private beam: THREE.Mesh | null = null;
-  private beamMaterial: THREE.MeshBasicMaterial | null = null;
+  /** Dust scraped off the floor at the contact (normal blending, reads as matter) and hot grit (additive). Fixed pools, no per-frame allocation. */
+  private readonly dust = new ParticlePool(900, THREE.NormalBlending, 0.55, -1.2, 2.2);
+  private readonly grit = new ParticlePool(500, THREE.AdditiveBlending, 1, -9.8, 0.6);
+  private dustCarry = 0;
+
+  constructor() {
+    this.group.add(this.dust.points, this.grit.points);
+  }
   /** Seeded scatter for sparks; reseeded on clear() so a restarted scenario replays the same bursts. */
   private random = createFxRng();
 
-  /** Persistent energy visual between the two Beys, shown for the whole Approach+Active beat. Call every tick; `advantage` is -1 (second fully ahead) .. +1 (first fully ahead), `pulse01` a 0..1 wobble driven by the current mash rate. */
-  updateEnergyBeam(a: THREE.Vector3, b: THREE.Vector3, colorFirst: THREE.Color, colorSecond: THREE.Color, opts: { visible: boolean; radius: number; segments: number; advantage: number; pulse01: number; twist: number }): void {
-    if (!this.beam) {
-      const geo = new THREE.CylinderGeometry(1, 1, 1, 10, Math.max(2, opts.segments), true);
-      this.beamMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-      this.beam = new THREE.Mesh(geo, this.beamMaterial);
-      this.beam.renderOrder = 5;
-      this.group.add(this.beam);
-    }
-    this.beam.visible = opts.visible;
-    if (!opts.visible) return;
-    const mid = a.clone().lerp(b, 0.5);
-    const dist = a.distanceTo(b);
-    this.beam.position.copy(mid);
-    this.beam.scale.set(opts.radius * (0.85 + opts.pulse01 * 0.5), Math.max(0.01, dist), opts.radius * (0.85 + opts.pulse01 * 0.5));
-    this.beam.lookAt(b.x, this.beam.position.y, b.z);
-    this.beam.rotateX(Math.PI / 2);
-    this.beam.rotation.z += opts.twist;
-    const bias = THREE.MathUtils.clamp((opts.advantage + 1) / 2, 0, 1);
-    this.beamMaterial!.color.copy(colorSecond).lerp(colorFirst, bias);
-    this.beamMaterial!.opacity = 0.35 + opts.pulse01 * 0.5;
+  /**
+   * Continuous contact dust while the Beys grind against each other: spawned on the floor at the
+   * contact point and thrown out mostly SIDEWAYS (perpendicular to the push axis, both ways —
+   * both Beys are spinning against each other), low and fast, with a share of hot grit sparks.
+   * Call every tick with the particles/second rate for this moment.
+   */
+  emitContactDust(contact: THREE.Vector3, axisXZ: THREE.Vector2, dt: number, opts: { perSecond: number; size: number; speed: number; sparkShare: number; dustColor: THREE.Color; sparkColor: THREE.Color }): void {
+    this.dustCarry += opts.perSecond * dt;
+    const n = Math.floor(this.dustCarry);
+    this.dustCarry -= n;
+    for (let i = 0; i < n; i++) this.emitOne(contact, axisXZ, opts, 1);
   }
 
-  hideEnergyBeam(): void {
-    if (this.beam) this.beam.visible = false;
+  /** One-shot dust + grit burst at the contact (resolution, knockdown tie). */
+  dustBurst(contact: THREE.Vector3, axisXZ: THREE.Vector2, count: number, opts: { size: number; speed: number; sparkShare: number; dustColor: THREE.Color; sparkColor: THREE.Color }): void {
+    for (let i = 0; i < count; i++) this.emitOne(contact, axisXZ, opts, 1.8);
+  }
+
+  private emitOne(contact: THREE.Vector3, axisXZ: THREE.Vector2, opts: { size: number; speed: number; sparkShare: number; dustColor: THREE.Color; sparkColor: THREE.Color }, boost: number): void {
+    const rnd = this.random;
+    const side = rnd() < 0.5 ? -1 : 1;
+    const perpX = -axisXZ.y * side;
+    const perpZ = axisXZ.x * side;
+    const spread = (rnd() - 0.5) * 0.9; // a little along the axis too
+    const speed = opts.speed * boost * (0.45 + rnd() * 0.9);
+    const vx = (perpX + axisXZ.x * spread) * speed;
+    const vz = (perpZ + axisXZ.y * spread) * speed;
+    const px = contact.x + (rnd() - 0.5) * 0.25;
+    const pz = contact.z + (rnd() - 0.5) * 0.25;
+    if (rnd() < opts.sparkShare) {
+      this.grit.spawn(px, contact.y + 0.05, pz, vx * 1.4, 0.6 + rnd() * 1.6, vz * 1.4, 0.05 + rnd() * 0.05, 0.25 + rnd() * 0.25, opts.sparkColor);
+    } else {
+      this.dust.spawn(px, contact.y + 0.03, pz, vx, 0.15 + rnd() * 0.7, vz, opts.size * (0.6 + rnd() * 0.9), 0.5 + rnd() * 0.6, opts.dustColor);
+    }
+  }
+
+  /** Live particle counts (debug/tests). */
+  get particleCounts(): { dust: number; grit: number } {
+    return { dust: this.dust.alive, grit: this.grit.alive };
   }
 
   /** A short-lived ring pulse at a mash event, sized by how much that event mattered to the running total (0..1). */
@@ -184,6 +204,8 @@ export class ClashFx {
 
   /** Advances every transient effect and removes the ones that finished. */
   tick(dt: number): void {
+    this.dust.tick(dt);
+    this.grit.tick(dt);
     for (let i = this.transient.length - 1; i >= 0; i--) {
       const t = this.transient[i]!;
       t.ageS += dt;
@@ -202,13 +224,16 @@ export class ClashFx {
       this.group.remove(t.object);
       disposeObject(t.object);
     }
-    this.hideEnergyBeam();
+    this.dust.clear();
+    this.grit.clear();
+    this.dustCarry = 0;
     this.random = createFxRng();
   }
 
   dispose(): void {
     this.clear();
-    if (this.beam) disposeObject(this.beam);
+    this.dust.dispose();
+    this.grit.dispose();
     this.sprite.dispose();
   }
 }
@@ -220,4 +245,115 @@ function disposeObject(o: THREE.Object3D): void {
     const material = (mesh as THREE.Mesh).material;
     if (material) (Array.isArray(material) ? material : [material]).forEach((m) => m.dispose());
   });
+}
+
+/**
+ * Fixed-capacity particle pool with per-particle size/alpha/color (a tiny
+ * point shader), simple ballistic motion with drag, and a round soft
+ * sprite. Dead slots are reused; nothing is allocated per frame.
+ */
+class ParticlePool {
+  readonly points: THREE.Points;
+  alive = 0;
+  private readonly pos: Float32Array;
+  private readonly vel: Float32Array;
+  private readonly col: Float32Array;
+  private readonly size: Float32Array;
+  private readonly alpha: Float32Array;
+  private readonly age: Float32Array;
+  private readonly life: Float32Array;
+  private readonly baseSize: Float32Array;
+  private readonly geo = new THREE.BufferGeometry();
+  private readonly mat: THREE.ShaderMaterial;
+  private next = 0;
+
+  constructor(
+    private readonly capacity: number,
+    blending: THREE.Blending,
+    private readonly peakAlpha: number,
+    private readonly gravity: number,
+    private readonly drag: number,
+  ) {
+    this.pos = new Float32Array(capacity * 3);
+    this.vel = new Float32Array(capacity * 3);
+    this.col = new Float32Array(capacity * 3);
+    this.size = new Float32Array(capacity);
+    this.alpha = new Float32Array(capacity);
+    this.age = new Float32Array(capacity);
+    this.life = new Float32Array(capacity);
+    this.baseSize = new Float32Array(capacity);
+    this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    this.geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
+    this.geo.setAttribute('aSize', new THREE.BufferAttribute(this.size, 1));
+    this.geo.setAttribute('aAlpha', new THREE.BufferAttribute(this.alpha, 1));
+    this.mat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending,
+      vertexShader: `attribute float aSize; attribute float aAlpha; varying float vAlpha; varying vec3 vColor;
+        void main() { vAlpha = aAlpha; vColor = color; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = aSize * 900.0 / max(0.1, -mv.z); gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: `varying float vAlpha; varying vec3 vColor;
+        void main() { vec2 c = gl_PointCoord - 0.5; float d = dot(c, c) * 4.0; if (d > 1.0) discard; gl_FragColor = vec4(vColor, vAlpha * (1.0 - d)); }`,
+      vertexColors: true,
+    });
+    this.points = new THREE.Points(this.geo, this.mat);
+    this.points.frustumCulled = false;
+    this.points.renderOrder = 4;
+  }
+
+  spawn(x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, life: number, color: THREE.Color): void {
+    const i = this.next;
+    this.next = (this.next + 1) % this.capacity;
+    if (this.life[i]! <= 0 || this.age[i]! >= this.life[i]!) this.alive++;
+    this.pos.set([x, y, z], i * 3);
+    this.vel.set([vx, vy, vz], i * 3);
+    this.col.set([color.r, color.g, color.b], i * 3);
+    this.baseSize[i] = size;
+    this.age[i] = 0;
+    this.life[i] = life;
+  }
+
+  tick(dt: number): void {
+    const k = Math.exp(-this.drag * dt);
+    let alive = 0;
+    for (let i = 0; i < this.capacity; i++) {
+      const life = this.life[i]!;
+      if (life <= 0) continue;
+      const age = (this.age[i] = this.age[i]! + dt);
+      if (age >= life) {
+        this.life[i] = 0;
+        this.alpha[i] = 0;
+        this.size[i] = 0;
+        continue;
+      }
+      alive++;
+      const j = i * 3;
+      this.vel[j + 1] = this.vel[j + 1]! + this.gravity * dt;
+      this.vel[j] = this.vel[j]! * k;
+      this.vel[j + 1] = this.vel[j + 1]! * k;
+      this.vel[j + 2] = this.vel[j + 2]! * k;
+      this.pos[j] = this.pos[j]! + this.vel[j]! * dt;
+      this.pos[j + 1] = this.pos[j + 1]! + this.vel[j + 1]! * dt;
+      this.pos[j + 2] = this.pos[j + 2]! + this.vel[j + 2]! * dt;
+      const f = age / life;
+      this.alpha[i] = this.peakAlpha * Math.min(1, f * 8) * (1 - f);
+      this.size[i] = this.baseSize[i]! * (1 + f * 1.6); // dust puffs grow as they thin out
+    }
+    this.alive = alive;
+    for (const name of ['position', 'color', 'aSize', 'aAlpha']) (this.geo.getAttribute(name) as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  clear(): void {
+    this.life.fill(0);
+    this.alpha.fill(0);
+    this.size.fill(0);
+    this.alive = 0;
+    this.next = 0;
+    for (const name of ['aSize', 'aAlpha']) (this.geo.getAttribute(name) as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  dispose(): void {
+    this.geo.dispose();
+    this.mat.dispose();
+  }
 }
