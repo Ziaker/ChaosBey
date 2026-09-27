@@ -45,7 +45,23 @@ export default defineConfig({
         launchOptions: process.env.CHAOSBEY_PW_CHROMIUM_PATH ? { executablePath: process.env.CHAOSBEY_PW_CHROMIUM_PATH } : undefined,
       },
     },
-    ...(INCLUDE_FIREFOX ? [{ name: 'firefox', testMatch: GAME_SMOKE_SPECS, use: { ...devices['Desktop Firefox'] } }] : []),
+    ...(INCLUDE_FIREFOX
+      ? [
+          {
+            name: 'firefox',
+            testMatch: GAME_SMOKE_SPECS,
+            use: {
+              ...devices['Desktop Firefox'],
+              // CI runners have no GPU, and headless Firefox blocklists
+              // software WebGL2 there ("AllowWebgl2:false restricts context
+              // creation on this system"), which three.js needs, so the game
+              // never boots. force-enabled lifts that blocklist for the test
+              // browser only; the game and the smokes are unchanged.
+              launchOptions: { firefoxUserPrefs: { 'webgl.force-enabled': true } },
+            },
+          },
+        ]
+      : []),
   ],
   webServer: {
     command: `npm run preview -- --port ${PORT} --strictPort`,
