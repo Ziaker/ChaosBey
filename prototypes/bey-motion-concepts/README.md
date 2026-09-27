@@ -1,5 +1,7 @@
 # Bey Motion Lab — prototype
 
+**Status:** the three motion directions (A/B/C) below and this lab's physical language are approved as base directions and as a tuning tool. The 33 slider values shown are still prototype values, not approved production tuning — see `docs/design-decisions/motion-approval.md` for the exact, owner-worded scope of what is approved vs. still open (including the `ext-0`/`ext-32` cases and spin readability). Nothing here is integrated into the game yet.
+
 Interactive prototype for **comparing, tuning and approving how a ChaosBey moves** before any new motion language is integrated into the game. The goal is a Bey that reads as a spinning mechanical object, not a rigid disc sliding on the floor.
 
 - **Isolated.** It imports nothing from `src/` and changes no gameplay, physics, collider, knockback, stat or balance.
@@ -167,8 +169,8 @@ This is a finding for the owner to weigh, not a decision.
   - fewer, larger features.
 - [ ] **Wobble style.** The game's rock about one axis, or precession.
 - [ ] **Which 3 finals, one per archetype** (still open in the inventory). This lab lets them be judged at game speed and distance.
-- [ ] **Motion language:** A, B, C or a mix. Record the choice with Copy JSON.
-- [ ] **The two M7 edge cases.** Is a ~28 m/s counter launch over the wall acceptable (ext-0)? The edge wedge (ext-32) is a collision problem to fix at integration.
+- [x] **Motion language direction:** A, B and C are approved as base directions (`docs/design-decisions/motion-approval.md`). Still open: a single default, or a final mix — record that choice with Copy JSON when made.
+- [ ] **The two M7 edge cases.** Is a ~28 m/s counter launch over the wall acceptable (ext-0)? The edge wedge (ext-32) is a collision problem to fix at integration. Recorded as investigation scenarios, not approved fixes, in `docs/design-decisions/motion-approval.md`.
 
 ## Files
 
