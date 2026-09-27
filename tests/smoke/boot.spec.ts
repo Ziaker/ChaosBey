@@ -33,7 +33,18 @@ test('production build boots under /ChaosBey/, renders and produces no fatal err
   // the Combat state once bootstrap() has finished wiring physics/render and
   // the Milestone 2 match is running (GDD section 9: Sandbox was only ever
   // the Milestone 0 placeholder-scene state).
-  await expect(page.locator('#debug-overlay-root pre')).toContainText('Combat', { timeout: 15_000 });
+  // If boot fails, say why: main.ts logs "ChaosBey failed to boot: <error>"
+  // and the listeners above have it, but the assertion below would otherwise
+  // fail on the missing overlay without ever printing it (this is how a
+  // browser-specific boot failure, e.g. no WebGL, becomes diagnosable from
+  // the CI log alone).
+  try {
+    await expect(page.locator('#debug-overlay-root pre')).toContainText('Combat', { timeout: 15_000 });
+  } catch (error) {
+    throw new Error(
+      `the game never reached Combat. Console errors: ${JSON.stringify(consoleErrors)}. Failed requests: ${JSON.stringify(failedRequests)}.\n${String(error)}`,
+    );
+  }
 
   // Let a few fixed ticks and render frames run to catch startup-only failures.
   await page.waitForTimeout(1000);
