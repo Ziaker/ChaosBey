@@ -56,7 +56,9 @@ export default defineConfig({
               // software WebGL2 there ("AllowWebgl2:false restricts context
               // creation on this system"), which three.js needs, so the game
               // never boots. force-enabled lifts that blocklist for the test
-              // browser only; the game and the smokes are unchanged.
+              // browser only; the game and the smokes are unchanged. (CI also
+              // runs this project headed on xvfb with Mesa software GL, since
+              // headless Firefox has no GL driver there — see deploy.yml.)
               launchOptions: { firefoxUserPrefs: { 'webgl.force-enabled': true } },
             },
           },

@@ -60,9 +60,14 @@ jobs:
       - run: npm run build
 
       - run: npx playwright install --with-deps firefox
-      - run: npx playwright test -c tests/smoke/playwright.config.ts --project=firefox
+      # Headless Firefox has no GL driver on a display-less, GPU-less runner
+      # ("tryNativeGL: Exhausted GL driver options"), so the game can't
+      # create its WebGL context. Run it headed on a virtual X display
+      # (xvfb, installed by --with-deps) with Mesa's software rasterizer.
+      - run: xvfb-run --auto-servernum -- npx playwright test -c tests/smoke/playwright.config.ts --project=firefox --headed
         env:
           CHAOSBEY_PW_INCLUDE_FIREFOX: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
