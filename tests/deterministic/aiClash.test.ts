@@ -174,7 +174,7 @@ describe('AI Clash participation', () => {
     expect(buildMashActionSet(clashBFirstActions).has(Action.Attack)).toBe(true);
   });
 
-  it('regression: three consecutive successful mash rolls on the same action count as three separate events, not one (M7 audit round 3)', async () => {
+  it('regression: three consecutive successful mash rolls on the same action count as three separate events, not one (M7 audit round 4)', async () => {
     // Same forced-RNG pattern as the Clash-to-Clash regression above:
     // every roll succeeds and always picks Action.Attack (options[0]).
     // Before this fix, AIController.sampleClashMashActions reported
