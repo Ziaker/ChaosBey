@@ -151,6 +151,8 @@ export class AIController implements CombatController {
   private pendingDodgeAttemptSucceeds = false;
   /** True from the first tick this Bey is seen airborne with an air-recovery window (just launched) until that window closes — see sampleActions. */
   private reactingToLaunch = false;
+  /** Tracks ClashState.Active across ticks so the Idle/Cooldown -> Active edge can be detected — see sampleActions's clashMashActionSelector.reset() call. */
+  private wasClashActive = false;
 
   constructor(
     private readonly physics: PhysicsWorld,
@@ -168,9 +170,18 @@ export class AIController implements CombatController {
       return this.actionSelector.repeatFrozenActions(context.fixedDeltaSeconds);
     }
 
-    if (this.clashController.getState() === ClashState.Active) {
+    const clashActive = this.clashController.getState() === ClashState.Active;
+    if (clashActive) {
+      // A fresh Clash: the dedicated selector must not carry an "already
+      // held" action over from whatever the previous Clash's last mash
+      // tick held (see ActionSelector.reset()'s own doc comment) — nothing
+      // else ever calls commit() on this selector between Clashes to
+      // clear it on its own.
+      if (!this.wasClashActive) this.clashMashActionSelector.reset();
+      this.wasClashActive = true;
       return this.sampleClashMashActions(context.fixedDeltaSeconds);
     }
+    this.wasClashActive = false;
 
     this.nowS += context.fixedDeltaSeconds;
 

@@ -384,3 +384,31 @@ describe('ActionSelector — Clash-mash held state must not leak into normal com
     expect(postClash.pressedThisFrame.has(Action.Attack)).toBe(true);
   });
 });
+
+describe('ActionSelector — dedicated Clash-mash selector must reset between separate Clashes (M7 audit follow-up)', () => {
+  // Review finding on the fix above: giving the Clash-mash path its own
+  // ActionSelector stops it leaking into normal combat, but nothing calls
+  // commit() on that dedicated selector between Clashes (Cooldown/Idle,
+  // normal combat) to clear it on its own. If Clash A's last mash tick
+  // held Attack and Clash B's first mash tick also picks Attack, the
+  // unreset selector still reads Attack as "already held" and swallows
+  // that first mash event of Clash B — the same leak, just Clash-to-Clash
+  // instead of Clash-to-normal-combat.
+  it("without a reset, a repeated Attack mash across two Clashes loses the second Clash's first event (documents the gap)", () => {
+    const mashSelector = new ActionSelector();
+    mashSelector.commit(new Set([Action.Attack]), DT); // Clash A's last mash tick.
+    // ... Clash A resolves, Cooldown elapses, Clash B starts — nothing
+    // touches mashSelector in between (mirrors AIController's real flow
+    // before the fix below).
+    const clashBFirstMash = mashSelector.commit(new Set([Action.Attack]), DT); // Clash B's first mash tick, same action.
+    expect(clashBFirstMash.pressedThisFrame.has(Action.Attack)).toBe(false); // the gap: Clash B's first mash event is lost.
+  });
+
+  it('reset() at the start of a new Clash (the fix) lets the same repeated Attack mash land as a fresh event', () => {
+    const mashSelector = new ActionSelector();
+    mashSelector.commit(new Set([Action.Attack]), DT); // Clash A's last mash tick.
+    mashSelector.reset(); // AIController calls this on the Idle/Cooldown -> Active edge for the next Clash.
+    const clashBFirstMash = mashSelector.commit(new Set([Action.Attack]), DT); // Clash B's first mash tick, same action.
+    expect(clashBFirstMash.pressedThisFrame.has(Action.Attack)).toBe(true);
+  });
+});

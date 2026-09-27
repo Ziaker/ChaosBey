@@ -437,6 +437,24 @@ export class ActionSelector {
     if (Math.abs(centerward) >= CIRCLE_SIDE_SWITCH_MIN_DOT) this.circleSign = centerward >= 0 ? 1 : -1;
   }
 
+  /**
+   * Clears held/pressedThisFrame/hold-duration bookkeeping so the next
+   * commit() starts fresh, as if nothing was ever held — for
+   * AIController's Clash-mash path at the start of each new Clash
+   * (ClashState transitioning to Active). Without this, an action still
+   * "held" from the tick a previous Clash ended stays in this
+   * bookkeeping indefinitely (nothing calls commit() for this selector
+   * between Clashes), so if the next Clash's first mash happens to pick
+   * the same action, commit() reads it as already held and produces no
+   * fresh pressedThisFrame — silently losing that Clash's first mash
+   * event (M7 audit follow-up).
+   */
+  reset(): void {
+    this.previousHeld = new Set();
+    this.holdStartedAtTick.clear();
+    this.currentTick = 0;
+  }
+
   /** Same held->pressedThisFrame/hold-duration bookkeeping ScriptedController.ts uses — see its header comment for why this shape. Public so AIController's Clash-mash path (a very different decision than normal intent-driven play — see AIController.ts) can drive the same diffing without duplicating it. */
   commit(activeHeld: ReadonlySet<Action>, fixedDeltaSeconds: number): ControllerActions {
     const pressedThisFrame = new Set<Action>();
