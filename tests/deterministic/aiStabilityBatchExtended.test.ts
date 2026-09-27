@@ -15,8 +15,11 @@
 // Two categories below are logged, not asserted on. Both were investigated
 // (2026 M7 stabilization pass) and traced to the physics/collision layer,
 // not an AI decision bug — fixing them means touching knockback or arena
-// collision tuning, which M7 is explicitly holding off during Bey Motion
-// Lab development:
+// collision tuning, which M7 is explicitly holding off while Bey Motion Lab
+// prototypes movement/physics separately. These are candidate test
+// scenarios for that lab's isolated prototype (presets/sliders, owner
+// approval, only then production tuning) — not a mandate to retune
+// production knockback/collision directly:
 // - "early ring-out": a Circular counter landing on an active Dash can
 //   launch the dasher (KnockbackTuning's upward-launch component) far and
 //   high enough to carry it out of the arena mid-air, before any
