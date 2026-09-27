@@ -41,9 +41,23 @@ export class ActionSampleBuffer {
     this.holdStartedAtSeconds.delete(action);
   }
 
-  /** Call on focus loss or similar — stops any in-progress hold-duration tracking without touching pending (already-completed) presses. */
+  /**
+   * Call on focus loss or similar. Clears in-progress hold-duration
+   * tracking, and also drops any not-yet-flushed gameplay press: without
+   * this, a key pressed the instant before focus is lost would still
+   * surface as pressedThisFrame on the next sample() — a "ghost" action
+   * (e.g. an Attack) firing after the player has already left the window,
+   * with held already empty (KeyboardController clears currentlyDown on
+   * the same blur) — breaking every caller's pressedThisFrame ⊆ held
+   * assumption. UI actions (Pause/DebugToggle/SettingsToggle) are kept:
+   * losing an already-completed UI press to the same blur that likely
+   * caused it (e.g. Alt+Tab away) would be the more surprising behavior.
+   */
   clearHoldTracking(): void {
     this.holdStartedAtSeconds.clear();
+    for (const action of [...this.pendingPressed]) {
+      if (!UI_ACTIONS.has(action)) this.pendingPressed.delete(action);
+    }
   }
 
   /**
