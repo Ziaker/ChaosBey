@@ -6,6 +6,7 @@
 // ============================================================
 
 import * as THREE from 'three';
+import { WebGl2UnavailableError } from './bootFailureScreen';
 
 // Placeholder camera framing for Milestone 0 (proves the render path only).
 // Final combat camera behavior belongs to the camera/director system.
@@ -22,7 +23,15 @@ export interface AppRenderer {
 }
 
 export function createRenderer(canvas: HTMLCanvasElement): AppRenderer {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  // three.js needs WebGL2 and throws when the context can't be created
+  // (no GPU, a blocklisted driver, WebGL disabled). Tag that case so boot
+  // can show the player a message instead of a blank page (GDD 117).
+  let renderer: THREE.WebGLRenderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  } catch (error) {
+    throw new WebGl2UnavailableError(error);
+  }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
   const scene = new THREE.Scene();

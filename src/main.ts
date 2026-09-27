@@ -8,6 +8,7 @@
 // section 1.4: no giant GameManager).
 // ============================================================
 
+import { WebGl2UnavailableError, showWebGl2UnavailableScreen } from './app/bootstrap/bootFailureScreen';
 import { createMatchScene } from './app/bootstrap/createMatchScene';
 import { createRenderer } from './app/bootstrap/createRenderer';
 import { GameState, GameStateMachine } from './app/lifecycle/GameState';
@@ -521,4 +522,5 @@ async function bootstrap(): Promise<void> {
 bootstrap().catch((error: unknown) => {
   // Errors must never be swallowed silently (GDD section 117).
   console.error('ChaosBey failed to boot:', error);
+  if (error instanceof WebGl2UnavailableError) showWebGl2UnavailableScreen();
 });
