@@ -9,7 +9,7 @@
 // Same pattern as the VFX Language Lab's panel.
 // ============================================================
 
-import { GROUP_TITLES, PROPOSAL, TUNING, TUNING_SPEC, applyTuning, resetTuning, type Tuning, type TuningGroup } from '../tuning';
+import { APPROVED, GROUP_TITLES, TUNING, TUNING_SPEC, applyTuning, resetTuning, type Tuning, type TuningGroup } from '../tuning';
 import type { LanguageId } from '../languages/types';
 
 const DRAFT_KEY = 'chaosbey.conditionlab.tuning.draft.v1';
@@ -114,7 +114,7 @@ export class TuningPanel {
     if (!el) return;
     const v = TUNING[key];
     el.out.textContent = Number.isInteger(v) ? String(v) : v.toFixed(2);
-    el.row.classList.toggle('changed', Math.abs(v - PROPOSAL[key]) > 1e-6);
+    el.row.classList.toggle('changed', Math.abs(v - APPROVED[key]) > 1e-6);
   }
 
   sync(): void {
@@ -128,7 +128,7 @@ export class TuningPanel {
     resetTuning();
     writeDraft();
     this.sync();
-    this.setStatus('De volta à proposta inicial.');
+    this.setStatus('De volta à configuração aprovada.');
   }
 
   private payload(): Record<string, unknown> {

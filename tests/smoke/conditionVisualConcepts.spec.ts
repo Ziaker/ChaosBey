@@ -24,8 +24,12 @@ test('stamina & stability lab loads, switches directions and views, and reacts t
     await page.waitForFunction((target) => window.__conditionLab.state().frames >= target, start + n, { timeout: 30_000 });
   };
 
+  // Opens on the approved choice: all three directions mixed.
+  expect((await state()).layers).toEqual({ A: true, B: true, C: true });
+
   // Three directions, one at a time with keys 1–3.
   await expect(page.locator('.lang')).toHaveCount(3);
+  await page.locator('#mix').uncheck();
   for (const [key, id] of [['2', 'B'], ['3', 'C'], ['1', 'A']] as const) {
     await page.keyboard.press(key);
     await expect(page.locator(`.lang[data-lang="${id}"]`)).toHaveAttribute('aria-pressed', 'true');
@@ -38,8 +42,8 @@ test('stamina & stability lab loads, switches directions and views, and reacts t
   await page.keyboard.press('3');
   expect((await state()).layers).toEqual({ A: true, B: true, C: true });
 
-  // Tuning panel: 50 sliders; moving one marks it as changed.
-  await expect(page.locator('#tune-groups input[type="range"]')).toHaveCount(50);
+  // Tuning panel: 49 sliders; moving one marks it as changed.
+  await expect(page.locator('#tune-groups input[type="range"]')).toHaveCount(49);
   const slider = page.locator('#tune-bShards');
   await slider.fill('10');
   await expect(page.locator('.tune-row').filter({ has: slider })).toHaveClass(/changed/);

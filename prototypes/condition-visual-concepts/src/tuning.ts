@@ -4,12 +4,13 @@
 // physical motion they all share. The tuning panel edits TUNING live and
 // everything reads it every frame, so changes show immediately.
 //
-// PROPOSAL holds Claude's starting proposal. It is NOT an approved design
-// (GDD section 1.6 / 167): the owner tunes the sliders and presses
-// "Save as final", which stores the chosen values and direction so they can
-// be recorded as a decision and later carried into the game.
+// APPROVED holds the owner's final configuration: the values saved with
+// "Salvar como final" on 2026-09-27 (all three directions on), minus C's
+// red light column, which the owner removed afterwards. Recorded in
+// docs/design-decisions/condition-visual-approval.md. "Voltar ao aprovado"
+// returns here; rows that differ from it turn orange.
 //
-// Units: multipliers (1 = proposal) unless the label names a unit.
+// Units: multipliers (1 = Claude's original proposal) unless the label names a unit.
 // ============================================================
 
 export interface TuningSpec {
@@ -86,12 +87,11 @@ export interface Tuning {
   cCritAt: number;
   cNotch: number;
   cCorePulse: number;
-  cBeam: number;
   cHazardSpin: number;
 }
 
-/** Claude's starting proposal. Not approved; "Back to proposal" returns here. */
-export const PROPOSAL: Readonly<Tuning> = {
+/** Owner's final configuration (2026-09-27). "Voltar ao aprovado" returns here. */
+export const APPROVED: Readonly<Tuning> = {
   spinMaxRps: 18,
   spinMinRps: 1.2,
   spinCurve: 1.6,
@@ -112,43 +112,42 @@ export const PROPOSAL: Readonly<Tuning> = {
   brokenStutter: 0.5,
   spinOutSeconds: 3,
 
-  aTrail: 1,
-  aTrailSeconds: 3,
-  aRattle: 1,
-  aSeamGap: 1,
-  aWear: 1,
-  aGrind: 1,
-  aSmoke: 1,
+  aTrail: 0.55,
+  aTrailSeconds: 3.6,
+  aRattle: 0.5,
+  aSeamGap: 1.8,
+  aWear: 1.65,
+  aGrind: 2.35,
+  aSmoke: 2.4,
   aShudder: 1,
-  aDebris: 1,
+  aDebris: 2.35,
 
-  bAuraHeight: 1,
-  bAuraIntensity: 1,
-  bAuraBreakup: 1,
-  bSpinLines: 1,
+  bAuraHeight: 0.4,
+  bAuraIntensity: 0.25,
+  bAuraBreakup: 1.5,
+  bSpinLines: 1.3,
   bShards: 6,
   bShardSize: 1,
-  bShardOrbit: 1,
-  bDangerShell: 1,
-  bDangerHz: 2.4,
-  bDazed: 1,
-  bArcs: 1,
+  bShardOrbit: 0.9,
+  bDangerShell: 0,
+  bDangerHz: 2.2,
+  bDazed: 1.6,
+  bArcs: 1.85,
   bGlowDim: 0.8,
 
-  cRadius: 1,
-  cWidth: 1,
-  cOpacity: 0.85,
-  cSegments: 8,
-  cWarnAt: 0.3,
-  cCritAt: 0.12,
-  cNotch: 1,
-  cCorePulse: 1,
-  cBeam: 1,
-  cHazardSpin: 1,
+  cRadius: 1.15,
+  cWidth: 0.95,
+  cOpacity: 0.6,
+  cSegments: 10,
+  cWarnAt: 0.35,
+  cCritAt: 0.23,
+  cNotch: 0.85,
+  cCorePulse: 1.25,
+  cHazardSpin: 1.15,
 };
 
 /** Live values (mutated by the tuning panel). */
-export const TUNING: Tuning = { ...PROPOSAL };
+export const TUNING: Tuning = { ...APPROVED };
 
 export const TUNING_SPEC: readonly TuningSpec[] = [
   { key: 'spinMaxRps', group: 'physics', label: 'Giro com Stamina cheia (voltas/s)', min: 4, max: 40, step: 0.5 },
@@ -202,7 +201,6 @@ export const TUNING_SPEC: readonly TuningSpec[] = [
   { key: 'cCritAt', group: 'C', label: 'Stamina crítica, vermelho (0–1)', min: 0, max: 0.4, step: 0.01 },
   { key: 'cNotch', group: 'C', label: 'Marcador de rotação no anel', min: 0, max: 1, step: 0.05 },
   { key: 'cCorePulse', group: 'C', label: 'Pulso do núcleo (batimento)', min: 0, max: 2, step: 0.05 },
-  { key: 'cBeam', group: 'C', label: 'Coluna de perigo quando quebrado', min: 0, max: 2, step: 0.05 },
   { key: 'cHazardSpin', group: 'C', label: 'Giro das listras de perigo', min: 0, max: 3, step: 0.05 },
 ];
 
@@ -215,5 +213,5 @@ export function applyTuning(values: Partial<Record<string, unknown>>): void {
 }
 
 export function resetTuning(): void {
-  Object.assign(TUNING, PROPOSAL);
+  Object.assign(TUNING, APPROVED);
 }

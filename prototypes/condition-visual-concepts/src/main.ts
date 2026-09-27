@@ -43,8 +43,9 @@ const pct = (v: number): string => `${Math.round(v * 100)}%`;
 // ---------------- State ----------------
 const lab = {
   view: 'arena' as View,
-  layers: { A: true, B: false, C: false } as Record<LanguageId, boolean>,
-  mix: false,
+  // Approved choice (2026-09-27): all three on together.
+  layers: { A: true, B: true, C: true } as Record<LanguageId, boolean>,
+  mix: true,
   paused: false,
   slow: false,
   testBey: DEFAULT_TEST_BEY,

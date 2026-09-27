@@ -84,6 +84,6 @@ export const LANGUAGE_INFO: Readonly<Record<LanguageId, LanguageInfo>> = {
     idea: 'O chão da arena projeta um instrumento sob o Bey. Preciso, lê de qualquer câmera e deixa o Bey limpo.',
     stamina: 'Um arco externo com marcas de 10% esvazia no sentido horário e muda de branco para âmbar e vermelho. O núcleo do Bey pulsa como um batimento que desacelera.',
     stability: 'Um anel interno de segmentos: cada golpe apaga segmentos, e a recuperação os reacende em sequência.',
-    broken: 'O anel vira listras de perigo girando e uma coluna de luz vermelha sobe do Bey, visível de qualquer ponto da arena.',
+    broken: 'O anel de segmentos vira listras de perigo girando.',
   },
 };

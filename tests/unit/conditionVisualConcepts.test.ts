@@ -6,7 +6,7 @@ import type { SpiritLayer } from '../../prototypes/condition-visual-concepts/src
 import { BeyMotion } from '../../prototypes/condition-visual-concepts/src/sim/BeyMotion';
 import { AUTO_HITS, BROKEN_CLEAR_AT, ConditionSim, type ConditionEvent } from '../../prototypes/condition-visual-concepts/src/sim/ConditionSim';
 import { World } from '../../prototypes/condition-visual-concepts/src/stage/World';
-import { PROPOSAL, TUNING, TUNING_SPEC } from '../../prototypes/condition-visual-concepts/src/tuning';
+import { APPROVED, TUNING, TUNING_SPEC } from '../../prototypes/condition-visual-concepts/src/tuning';
 
 // Visual-prototype checks (not gameplay): the Stamina & Stability lab's
 // scripted fight must show every state in order, the shared motion must
@@ -32,12 +32,12 @@ function runAuto(seconds: number): Array<ConditionEvent & { t: number }> {
 }
 
 describe('condition lab — tuning', () => {
-  it('has one slider per value and the proposal sits inside every range', () => {
+  it('has one slider per value and the approved configuration sits inside every range', () => {
     const keys = TUNING_SPEC.map((s) => s.key);
     expect(new Set(keys).size).toBe(keys.length);
-    expect(new Set(keys)).toEqual(new Set(Object.keys(PROPOSAL)));
+    expect(new Set(keys)).toEqual(new Set(Object.keys(APPROVED)));
     for (const spec of TUNING_SPEC) {
-      const v = PROPOSAL[spec.key];
+      const v = APPROVED[spec.key];
       expect(v, spec.key).toBeGreaterThanOrEqual(spec.min);
       expect(v, spec.key).toBeLessThanOrEqual(spec.max);
     }

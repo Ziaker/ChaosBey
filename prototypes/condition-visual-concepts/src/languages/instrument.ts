@@ -12,8 +12,9 @@
 //               slows as Stamina drops.
 //   Stability → inner ring of segments. Hits blank segments (they flash
 //               first); recovery refills them one after another.
-//   Broken    → the inner ring becomes rotating hazard stripes and a red
-//               light column rises from the Bey, visible across the arena.
+//   Broken    → the inner ring becomes rotating hazard stripes.
+//               (A red light column above the Bey was prototyped and removed
+//               by the owner on 2026-09-27.)
 // ============================================================
 
 import * as THREE from 'three';
@@ -30,8 +31,6 @@ const NOTCH_RATE = 0.25;            // Notch turns at this fraction of the spin 
 const REFILL_RATE_PER_S = 0.8;      // Stability shown refilling after recovery (per second).
 const HEART_HZ_EMPTY = 0.55;        // Core heartbeat near zero Stamina…
 const HEART_HZ_FULL = 1.5;          // …and at full Stamina.
-const BEAM_HEIGHT_M = 7;
-const BEAM_GROW_S = 0.35;
 const COLOR_COOL = 0xd8f6ff;
 const COLOR_WARN = 0xffb347;
 const COLOR_CRIT = 0xff3b3b;
@@ -135,19 +134,6 @@ const FLARE_FRAG = /* glsl */ `
   }
 `;
 
-const BEAM_FRAG = /* glsl */ `
-  uniform vec3 uColor;
-  uniform float uOpacity;
-  uniform float uTime;
-  varying vec2 vUv;
-  void main() {
-    float y = vUv.y;
-    float scroll = 0.75 + 0.25 * sin(y * 42.0 - uTime * 12.0);
-    float a = pow(1.0 - y, 1.2) * smoothstep(0.0, 0.03, y) * scroll;
-    gl_FragColor = vec4(uColor, a * uOpacity);
-  }
-`;
-
 /** "Lub-dub": two quick bumps per beat. `phase` is 0..1. */
 function heartbeat(phase: number): number {
   const g = (x: number, c: number): number => Math.exp(-(((x - c) / 0.055) ** 2));
@@ -160,7 +146,6 @@ export class InstrumentLayer implements ConditionLayer {
   private readonly holder = new THREE.Group();
   private readonly gauge: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   private readonly flare: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
-  private readonly beam: THREE.Mesh<THREE.CylinderGeometry, THREE.ShaderMaterial>;
   private shownStability = 1;
   private notch = 0;
   private heartPhase = 0;
@@ -169,7 +154,6 @@ export class InstrumentLayer implements ConditionLayer {
   private lostFrom = 0;
   private lostTo = 0;
   private lostFlash = 0;
-  private beamGrow = 0;
   private readonly up = new THREE.Vector3(0, 1, 0);
   private readonly n = new THREE.Vector3();
   private readonly v = new THREE.Vector3();
@@ -178,7 +162,7 @@ export class InstrumentLayer implements ConditionLayer {
   private readonly cSeg = new THREE.Color();
 
   constructor(private readonly ctx: LayerContext) {
-    const { world, rig } = ctx;
+    const { world } = ctx;
     this.gauge = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
       new THREE.ShaderMaterial({
@@ -212,17 +196,6 @@ export class InstrumentLayer implements ConditionLayer {
     this.flare.renderOrder = 9;
     world.scene.add(this.flare);
 
-    this.beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.1, 0.32, 1, 24, 1, true).translate(0, 0.5, 0),
-      new THREE.ShaderMaterial({
-        vertexShader: UV_VERT, fragmentShader: BEAM_FRAG,
-        uniforms: { uColor: { value: new THREE.Color(COLOR_CRIT) }, uOpacity: { value: 0 }, uTime: { value: 0 } },
-        transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-      }),
-    );
-    this.beam.renderOrder = 8;
-    this.beam.position.y = rig.dims.topY;
-    rig.root.add(this.beam);
   }
 
   /** Stability segments lit on the gauge right now — read by tests. */
@@ -239,7 +212,6 @@ export class InstrumentLayer implements ConditionLayer {
     this.enabled = on;
     this.holder.visible = on;
     this.flare.visible = on;
-    this.beam.visible = on;
     if (on) this.shownStability = -1;
   }
 
@@ -324,13 +296,6 @@ export class InstrumentLayer implements ConditionLayer {
     this.flare.material.uniforms.uOpacity!.value = Math.min(1, T.cCorePulse) * (0.2 + 0.8 * beat) * (0.35 + 0.65 * Math.sqrt(s.stamina)) * live;
     this.flare.visible = T.cCorePulse > 0.01;
 
-    // --- Broken: danger column ---
-    const target = s.broken ? 1 : 0;
-    this.beamGrow += Math.sign(target - this.beamGrow) * Math.min(Math.abs(target - this.beamGrow), dt / BEAM_GROW_S);
-    this.beam.scale.set(1, Math.max(0.001, BEAM_HEIGHT_M * this.beamGrow), 1);
-    this.beam.material.uniforms.uTime!.value = time;
-    this.beam.material.uniforms.uOpacity!.value = T.cBeam * this.beamGrow * (0.6 + 0.4 * Math.sin(time * Math.PI * 2 * 2.2)) * 0.8;
-    this.beam.visible = T.cBeam > 0.01 && this.beamGrow > 0.001;
   }
 
   onEvent(e: ConditionEvent, frame: LayerFrame): void {
@@ -354,19 +319,15 @@ export class InstrumentLayer implements ConditionLayer {
       this.hit = 0.8;
     } else if (e.kind === 'reset') {
       this.shownStability = -1;
-      this.beamGrow = 0;
     }
   }
 
   dispose(): void {
     this.holder.removeFromParent();
     this.flare.removeFromParent();
-    this.beam.removeFromParent();
     this.gauge.geometry.dispose();
     this.gauge.material.dispose();
     this.flare.geometry.dispose();
     this.flare.material.dispose();
-    this.beam.geometry.dispose();
-    this.beam.material.dispose();
   }
 }

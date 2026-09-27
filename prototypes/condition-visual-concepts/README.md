@@ -1,6 +1,8 @@
 # Stamina & Stability Lab — prototype
 
-An interactive Three.js page that proposes **three complete visual languages for a Bey's condition**: how Stamina, Stability and the Broken state (GDD 28–30, 84, 123) read on screen. Nothing here is approved. The owner compares the three, tunes them with sliders and saves the chosen direction and values (GDD 1.6 / 167).
+An interactive Three.js page with **three complete visual languages for a Bey's condition**: how Stamina, Stability and the Broken state (GDD 28–30, 84, 123) read on screen.
+
+**Status (2026-09-27): all three APPROVED** as player-selectable options (any combination of 1, 2 or 3), with the owner's saved values and C's red light column removed. The decision record is `docs/design-decisions/condition-visual-approval.md`.
 
 This is **visual exploration only**. It imports nothing from `src/` and changes no gameplay, physics, colliders, rules or balance. The motion is choreography, not the game's physics. It reuses the round-2 Bey concepts from `../bey-visual-concepts/` at game scale (about 1.3 m across) and the approved 3.2 m bowl with a neutral floor, because the arena's look is still an open choice.
 
@@ -11,7 +13,7 @@ This is **visual exploration only**. It imports nothing from `src/` and changes 
 | **Idea** | Nothing that couldn't physically exist: motion, material, contact | The fighting spirit as visible energy, in the approved anime family | The floor projects an instrument under the Bey; the Bey stays clean |
 | **Stamina** | The tip scribes a rosette on the floor that opens up; the rim grinds and throws sparks; faint smoke at the end | A flame aura in the Bey's colour: tall when fresh, short, flickering and broken into wisps when tired; anime spin lines | Outer arc with 10% ticks, white → amber → pulsing red; a notch runs at a quarter of the spin rate; the core pulses like a heartbeat that slows |
 | **Stability** | The four pieces go loose and rattle, seams open, paint darkens and loses its lacquer; hits knock chips off | Hexagonal shield shards orbit the Bey, one per slice of Stability; hits shatter them, recovery re-forms them | Inner ring of segments; hits blank them (with a flash), recovery refills them one by one |
-| **Broken** | Limping lean, rim grinding continuously, smoke from the Driver | Pulsing red outline, dazed stars, electric arcs, the aura turns to embers | Rotating hazard stripes and a red light column visible across the arena |
+| **Broken** | Limping lean, rim grinding continuously, smoke from the Driver | Pulsing red outline, dazed stars, electric arcs, the aura turns to embers | Rotating hazard stripes (the red light column was removed by the owner) |
 
 **Shared by all three (always on):** the physical degradation the GDD requires. The spin slows (the blur shell fades and the pieces become visible), the wobble and precession grow, a hit kicks harder when Stability is low, a broken Bey leans and hiccups, and at zero Stamina it spins out and falls onto its ring rim.
 
@@ -42,17 +44,17 @@ The **scripted fight** loops in about 40 s: hits at 2.5, 5, 7.5 and 10 s (Break)
 
 ## Tuning and saving the decision
 
-The right panel has 50 sliders: 19 for the shared physical expression and 9–12 per direction. Changes apply at once; rows in orange differ from the proposal. The draft is kept in the browser.
+The right panel has 49 sliders: 19 for the shared physical expression and 9–12 per direction. They start at the approved configuration; changes apply at once and rows in orange differ from it. The draft is kept in the browser.
 
 - **Salvar como final** stores the values **and the selected direction(s)** in the artifact's shared store (document `config/final`), so Claude can read the decision back and record it.
 - **Copiar valores** copies the same JSON.
-- **Voltar à proposta** resets every slider to `PROPOSAL` in `src/tuning.ts`.
+- **Voltar ao aprovado** resets every slider to `APPROVED` in `src/tuning.ts`.
 
 ## Files
 
 | File | Contents |
 |---|---|
-| `src/tuning.ts` | Every slider: `PROPOSAL`, live `TUNING`, ranges and labels |
+| `src/tuning.ts` | Every slider: `APPROVED`, live `TUNING`, ranges and labels |
 | `src/sim/ConditionSim.ts` | Stamina / Stability / Broken / spin-out state and events; the scripted fight (demo choreography, not game rules) |
 | `src/sim/BeyMotion.ts` | Shared physical choreography: spin rate, lean, precession, nutation, tip rosette, hit kick, spin-out |
 | `src/stage/BeyRig.ts` | Round-2 concept at game scale; blur shell; material wear, glow, rattle and seam mods |
