@@ -50,7 +50,7 @@ O motivo de a `main` não mostrar esse material é histórico: o PR #9 mergeou a
 | 36 valores finais de tuning | **APROVADO** | `prototypes/vfx-visual-concepts/src/tuning.ts` (`APPROVED`) |
 | Condição do Bey: Stamina, Stability e Quebrado — 3 direções (Desgaste Mecânico, Aura de Espírito, Instrumento no Chão) | **APROVADO** como opções selecionáveis nas Configurações (1, 2 ou 3); 49 valores finais | `prototypes/condition-visual-concepts/` · `docs/design-decisions/condition-visual-approval.md` |
 | Câmera de combate — 3 direções (A Arena Fighter, B Cinematic Hybrid, C Hyper Dynamic) com modos Combat Follow, High Speed, Close Combat, Knockback Follow, Clash, Ring-Out e Finisher | **APROVADO** sem alterações, como opções selecionáveis nas Configurações (uma por vez); 43 valores por direção; ainda não integrado | `prototypes/camera-concepts/` · `docs/design-decisions/camera-approval.md` |
-| Clash completo entre os Beys — energia, pulsos, mash e explosão final | **NÃO PROTOTIPADO** | — |
+| Clash completo entre os Beys — contato travado, speedlines, poeira, HUD de força, mash e resolução sem pausa | **APROVADO:** direção C (Overdrive) com câmera B (Cinematic Hybrid); estilo de empate em aberto; ainda não integrado | `prototypes/clash-presentation-concepts/` · `docs/design-decisions/clash-presentation-approval.md` |
 | Bloom / aberração cromática | **DECISÃO VISUAL AINDA NÃO TOMADA; não prototipado** | — |
 | Sparks, speed lines, trail, landing burst, shake, hitstop e FOV do jogo atual | **INTEGRADO NA MAIN, placeholder M4** | `src/vfx/`, `src/camera/` |
 | Mesh procedural atual do Bey (`ring / upper / lower / tip`) | **INTEGRADO NA MAIN, placeholder M1/M6** | `src/bey/procedural-model/createBeyMesh.ts` |
@@ -352,10 +352,10 @@ Uma auditoria que leia apenas `main@47a6deb` vê corretamente o que **está inte
 | Wind burst Dash/Dodge | “Não existe” | Cel Cyclone aprovado e tunado |
 | Arena | “Não existe” | Lab + decisões aprovadas: 3,2 m, 12 m, 3 perfis, 3 direções |
 | Luz de Clash da arena | “Não existe” | Definida individualmente por arena |
-| Clash completo entre Beys | “Não existe” | **Correto:** não prototipado; só a reação da arena existe |
+| Clash completo entre Beys | “Não existe” | **Atualizado (27/09/2026):** prototipado no Clash Presentation Lab e aprovado (direção C + câmera B), ainda não integrado |
 | Bloom / chromatic aberration | “Não existe” | **Correto como ausência:** não prototipado e nenhuma decisão foi tomada sobre usar ou não |
 
-Dos laboratórios inicialmente sugeridos como novos, VFX de impacto, VFX de ataque, Arena, luz de Clash e Bey em movimento real (Motion Lab, 27/09/2026) já foram feitos. As lacunas reais restantes são **VFX completo do Clash** e uma **decisão futura sobre pós-processamento** caso se deseje testar bloom/aberração cromática.
+Dos laboratórios inicialmente sugeridos como novos, VFX de impacto, VFX de ataque, Arena, luz de Clash e Bey em movimento real (Motion Lab, 27/09/2026) já foram feitos. O VFX completo do Clash foi prototipado e aprovado depois (Clash Presentation Lab, 27/09/2026: direção C com câmera B). A lacuna real restante é uma **decisão futura sobre pós-processamento** caso se deseje testar bloom/aberração cromática.
 
 # 10. O que falta e ordem recomendada
 
@@ -379,7 +379,7 @@ A canonização acima **não autoriza** implementar essas decisões dentro de `s
 
 ## 10.2 Protótipos que ainda não existem
 
-1. **VFX completo do Clash:** energia entre os Beys, pulsos durante mash, explosão de resolução, vencedor e apresentação de empate. Hoje existe apenas a reação de luz das arenas.
+1. ~~**VFX completo do Clash**~~: feito e aprovado (`clash-presentation-approval.md`: direção C + câmera B). Só o estilo de empate continua em aberto.
 2. **Pós-processamento:** bloom e aberração cromática **não são requisitos aprovados**. Antes de implementar, deve haver uma decisão visual explícita sobre se entram no estilo final; só depois faria sentido criar presets Low/Medium/High.
 
 > Bey em movimento real (9 conceitos em velocidade de jogo, tilt, wobble, câmera de combate) deixou de faltar: coberto pelo Bey Motion Lab em 27/09/2026 (seção 1, tabela de status, e `docs/design-decisions/motion-approval.md`).

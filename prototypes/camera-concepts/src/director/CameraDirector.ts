@@ -184,7 +184,13 @@ export class CameraDirector {
   private readonly modifiers: string[] = [];
   private hasEncounter = false;
 
-  constructor(private readonly params: CameraParams, private aspect = 16 / 9) {}
+  /**
+   * `clashOrbit: false` holds the camera's angle for the whole Clash instead of the contained orbit
+   * (distance/height/FOV still frame the Clash as usual). Off by default only for the Clash
+   * Presentation Lab, whose screen-space Clash HUD needs a camera that is not circling the Beys;
+   * this lab and every preset keep the orbit.
+   */
+  constructor(private readonly params: CameraParams, private aspect = 16 / 9, private readonly options: { readonly clashOrbit?: boolean } = {}) {}
 
   setAspect(aspect: number): void {
     if (Number.isFinite(aspect) && aspect > 0.2) this.aspect = aspect;
@@ -316,7 +322,7 @@ export class CameraDirector {
     if (frame.clashActive && !this.wasClash) this.clashYaw = this.yaw;
     this.wasClash = frame.clashActive;
     if (wClash > 0.01) {
-      this.clashYaw += CLASH_ORBIT_RAD_S * (0.5 + P.orbitStrength) * (0.6 + frame.clashProgress) * dt;
+      if (this.options.clashOrbit !== false) this.clashYaw += CLASH_ORBIT_RAD_S * (0.5 + P.orbitStrength) * (0.6 + frame.clashProgress) * dt;
       yawTarget = lerpAngle(yawTarget, this.clashYaw, wClash);
     }
 
