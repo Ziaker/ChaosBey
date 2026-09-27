@@ -2,10 +2,10 @@
 
 An interactive page for choosing ChaosBey's camera. It shows **three complete camera directions** running on **real fights from the game's own simulation**, with sliders for every parameter, twelve reproducible scenarios and a debug view of why the camera is where it is.
 
-Status: **prototype for approval**.
-- The values are prototype values (GDD 167).
-- The game's camera (`src/camera/`) is untouched, and nothing here is integrated.
-- Final integration happens only after the owner picks a direction, or a mix.
+Status: **approved** (2026-09-27).
+- The owner approved all three directions **unchanged**, as options the player picks from in Settings, one at a time.
+- The decision, the exact values, the measurements and the open items are in `docs/design-decisions/camera-approval.md`. `PRESETS` in `src/director/CameraParams.ts` is the source of truth.
+- The game's camera (`src/camera/`) is still untouched, and nothing here is integrated yet. Integration follows section 11 of the decision document, when the owner asks for it.
 
 ## Direction it follows (GDD 48–50)
 

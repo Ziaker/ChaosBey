@@ -1,8 +1,10 @@
 // ============================================================
 // CAMERA LAB — PARAMETERS AND THE THREE PRESETS
 // Every value the Camera Director reads, with its range and meaning, and
-// the three directions proposed for approval. PROTOTYPE VALUES (GDD 167):
-// nothing here is approved until the owner picks a direction or a mix.
+// the three directions. APPROVED by the owner on 2026-09-27, all three
+// unchanged, as options the player picks from in Settings (one at a time):
+// see docs/design-decisions/camera-approval.md. PRESETS below is the
+// source of truth for those values. Not integrated into the game yet.
 //
 //   A  Arena Fighter / Readability First — the most consistent framing:
 //      contained orbit, heavy damping, gentle FOV, no side switching.
