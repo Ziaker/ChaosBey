@@ -41,6 +41,7 @@ export default defineConfig(({ command, isPreview }) => ({
         conditionVisualConcepts: fileURLToPath(new URL('./prototypes/condition-visual-concepts/index.html', import.meta.url)),
         cameraConcepts: fileURLToPath(new URL('./prototypes/camera-concepts/index.html', import.meta.url)),
         beyMotionConcepts: fileURLToPath(new URL('./prototypes/bey-motion-concepts/index.html', import.meta.url)),
+        clashPresentationConcepts: fileURLToPath(new URL('./prototypes/clash-presentation-concepts/index.html', import.meta.url)),
       },
     },
   },
