@@ -6,15 +6,15 @@
 
 ## 1. Resumo e onde está cada coisa
 
-Todo o trabalho visual de **Arena** e **VFX** existe, está aprovado e tunado, mas ainda vive apenas na branch `claude/tender-turing-3k7o8v`. A `main` recebeu apenas o laboratório de Beys. Portanto, quem audita somente a `main` pode concluir incorretamente que Arena e VFX “não existem”. A distinção central é:
+Todo o trabalho visual de **Arena** e **VFX** existe, está aprovado e tunado. O material original continua preservado na branch histórica `claude/tender-turing-3k7o8v` e foi portado para o PR #17, ainda não mergeado. A `main` continua sem ele até o merge do PR #17: por enquanto, ela recebeu apenas o laboratório de Beys. Portanto, quem audita somente a `main` pode concluir incorretamente que Arena e VFX “não existem”. A distinção central é:
 
 > **prototipado + aprovado ≠ integrado no jogo**
 
 | Onde | O que contém | Commits principais |
 |---|---|---|
 | `main` via PR #9 | Bey Visual Lab rodada 2 (4 peças) + rodada 1 arquivada | `621f85a`, `0e6d622` |
-| Somente `claude/tender-turing-3k7o8v` | Arena Visual Lab, empacotador de artifacts, documento de decisões aprovadas | `7e06f4b`, `20ee932`, `f6359e0` |
-| Somente `claude/tender-turing-3k7o8v` | VFX Language Lab (A, B, C Híbrida), wind burst, painel de tuning e configuração final | `5b4c7c5`, `89f8421`, `db97e20`, `22796b7`, `f73d657`, `2ad6909` |
+| `claude/tender-turing-3k7o8v` + PR #17 (ainda fora da `main`) | Arena Visual Lab, empacotador de artifacts, documento de decisões aprovadas | `7e06f4b`, `20ee932`, `f6359e0` |
+| `claude/tender-turing-3k7o8v` + PR #17 (ainda fora da `main`) | VFX Language Lab (A, B, C Híbrida), wind burst, painel de tuning e configuração final | `5b4c7c5`, `89f8421`, `db97e20`, `22796b7`, `f73d657`, `2ad6909` |
 | Somente na branch visual, **não deve ser canonizado** | `CLAUDE.md` com a regra de sessão `[Nifty]` | `d6245cf` |
 
 **HEAD da branch visual:** `d6245cf`, 10 commits à frente da `main` no momento deste inventário. A branch ficou congelada para preservar as decisões. O trabalho visual nela é isolado em `prototypes/`, documentação e testes próprios; não altera gameplay, física, colliders ou stats.
@@ -112,7 +112,7 @@ Os códigos são provisórios e **não são nomes finais**.
 
 A arena já possui laboratório e decisões aprovadas: bowl de **3,2 m** de profundidade, raio de **12 m**, três perfis de chão e três direções visuais completas. Ainda falta escolher qual será a arena inicial ou se as três serão presets visuais de pré-jogo.
 
-Pasta: `prototypes/arena-visual-concepts/` — atualmente apenas na branch visual.
+Pasta: `prototypes/arena-visual-concepts/` — branch histórica + PR #17; ainda fora da `main`.
 
 ## 5.1 Geometria aprovada
 
@@ -168,7 +168,7 @@ Altura `h(r)` em metros, com `R = 12`.
 
 Os VFX de combate, incluindo os VFX de ataque, já foram prototipados e aprovados. A direção escolhida é **C — Híbrida**, combinação das linguagens **A — Mecânica** e **B — Anime**, com impact frame apenas em golpes fortes.
 
-Pasta: `prototypes/vfx-visual-concepts/` — atualmente apenas na branch visual.
+Pasta: `prototypes/vfx-visual-concepts/` — branch histórica + PR #17; ainda fora da `main`.
 
 ## 6.1 As três linguagens
 
