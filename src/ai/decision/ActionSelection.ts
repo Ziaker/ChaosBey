@@ -287,6 +287,8 @@ export class ActionSelector {
   private circleSign: 1 | -1 = 1;
   private currentTick = 0;
   private previousHeld = new Set<Action>();
+  /** A Dash charge AirRecover took over in the air: held until the Bey is back on the ground (see selectActions). */
+  private holdingChargeThroughLaunch = false;
   private readonly holdStartedAtTick = new Map<Action, number>();
 
   /**
@@ -382,6 +384,22 @@ export class ActionSelector {
     if (intent === AiIntent.AirRecover && !world.own.grounded && world.own.airRecoveryAvailable && !this.previousHeld.has(Action.Dodge)) {
       desiredHeld.add(Action.Dodge);
     }
+    // Launched mid-charge: AirRecover takes over from the Dash, but letting
+    // go of Attack is the release (AttackController fires the Dash when the
+    // button is no longer held) — a Dash fired from the air. Keep holding
+    // the charge that already exists until the Bey is back on the ground,
+    // even if a later decision in the same flight no longer wants it (a
+    // high launch outlasts the reaction delay after the recovery), and for
+    // as long as AirRecover is still the decision. Never a new press: this
+    // only continues a ChargingDash already in progress. Back on the
+    // ground the next decision decides what to do with it
+    // (release = a normal grounded Dash), and Attack Energy running out
+    // still ends the charge on its own.
+    const charging = world.own.attackState === AttackState.ChargingDash;
+    const airRecoverOwnsCharge = intent === AiIntent.AirRecover && charging;
+    if (airRecoverOwnsCharge) this.holdingChargeThroughLaunch = true;
+    if (!charging || world.own.grounded) this.holdingChargeThroughLaunch = false;
+    if (airRecoverOwnsCharge || this.holdingChargeThroughLaunch) desiredHeld.add(Action.Attack);
 
     // Sustain JumpDrift through the whole Idle->Hopping->Drifting sequence,
     // not just the tick that starts it — DriftController only transitions

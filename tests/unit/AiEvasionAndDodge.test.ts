@@ -161,4 +161,42 @@ describe('air recovery (GDD section 21)', () => {
       expect(selector.selectActions(AiIntent.AirRecover, used, DEFENSE_AI_PERSONALITY, false, DT).held.has(Action.Dodge)).toBe(false);
     }
   });
+
+  describe('launched mid-Dash-charge (releasing Attack would fire the Dash from the air)', () => {
+    const far = { positionXZ: { x: 6, z: 0 } };
+    const charging = (grounded: boolean, airRecoveryAvailable: boolean) =>
+      world({ grounded, airRecoveryAvailable, attackState: AttackState.ChargingDash, dashChargeFraction: 0.3, attackEnergyFraction: 0.8 }, far);
+
+    it('AirRecover keeps holding the existing charge while pressing Dodge — no new Attack press', () => {
+      const selector = new ActionSelector();
+      // Charging on the ground under AttackDash: Attack held (pressed once).
+      selector.selectActions(AiIntent.AttackDash, world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.3, attackEnergyFraction: 0.8 }, far), ATTACK_AI_PERSONALITY, false, DT);
+      const actions = selector.selectActions(AiIntent.AirRecover, charging(false, true), ATTACK_AI_PERSONALITY, false, DT);
+      expect(actions.held.has(Action.Attack)).toBe(true);
+      expect(actions.pressedThisFrame.has(Action.Attack)).toBe(false);
+      expect(actions.pressedThisFrame.has(Action.Dodge)).toBe(true);
+    });
+
+    it('keeps holding it through a later decision in the same flight, and lets the decision on the ground release it', () => {
+      const selector = new ActionSelector();
+      selector.selectActions(AiIntent.AirRecover, charging(false, true), ATTACK_AI_PERSONALITY, false, DT);
+      // Still airborne, window used, a new decision that doesn't want the charge.
+      expect(selector.selectActions(AiIntent.Approach, charging(false, false), ATTACK_AI_PERSONALITY, false, DT).held.has(Action.Attack)).toBe(true);
+      // Back on the ground: the decision decides (Approach releases = a normal grounded Dash).
+      expect(selector.selectActions(AiIntent.Approach, charging(true, false), ATTACK_AI_PERSONALITY, false, DT).held.has(Action.Attack)).toBe(false);
+    });
+
+    it('never starts a charge: AirRecover without one does not touch Attack', () => {
+      const selector = new ActionSelector();
+      for (const attackState of [AttackState.Neutral, AttackState.DashRecovery, AttackState.CircularRecovery]) {
+        const actions = selector.selectActions(AiIntent.AirRecover, world({ grounded: false, airRecoveryAvailable: true, attackState }, far), ATTACK_AI_PERSONALITY, false, DT);
+        expect(actions.held.has(Action.Attack), attackState).toBe(false);
+      }
+    });
+
+    it('a normal jump while charging (no AirRecover) is unchanged: the intent alone decides', () => {
+      const selector = new ActionSelector();
+      expect(selector.selectActions(AiIntent.Approach, charging(false, false), ATTACK_AI_PERSONALITY, false, DT).held.has(Action.Attack)).toBe(false);
+    });
+  });
 });
