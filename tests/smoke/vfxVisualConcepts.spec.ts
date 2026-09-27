@@ -1,0 +1,44 @@
+import { expect, test } from '@playwright/test';
+
+// Smoke test for the isolated VFX language lab (visual exploration only):
+// loads the production page, runs every effect in split view (both
+// languages) at heavy intensity, and fails on any console error.
+
+declare global {
+  interface Window {
+    __vfxLab: { scenarios: string[]; set(o: Record<string, string>): void; time(): number[] };
+  }
+}
+
+test('vfx language lab loads and plays every effect in the compared languages', async ({ page }) => {
+  test.setTimeout(240_000); // software WebGL in CI is slow
+  const errors: string[] = [];
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('response', (r) => { if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`); });
+
+  await page.goto('/ChaosBey/prototypes/vfx-visual-concepts/');
+  await page.waitForFunction(() => Boolean(window.__vfxLab));
+  const ids = await page.evaluate(() => window.__vfxLab.scenarios);
+  expect(ids).toHaveLength(9);
+  for (const [i, id] of ids.entries()) {
+    // Alternate the two compare views so all three languages (A, B, C) run every effect family.
+    const view = i % 2 === 0 ? 'BC' : 'AB';
+    await page.evaluate(({ s, v }) => window.__vfxLab.set({ scenario: s, intensity: 'heavy', view: v }), { s: id, v: view });
+    // Run past the main event of every scenario (all fire before t = 1.6 s).
+    await page.waitForFunction(() => window.__vfxLab.time().every((t) => t > 1.6), null, { timeout: 60_000 });
+  }
+  // Three-way wind burst comparison (three worlds side by side).
+  await page.evaluate(() => window.__vfxLab.set({ scenario: 'burst', intensity: 'heavy', view: 'W' }));
+  await page.waitForFunction(() => window.__vfxLab.time().length === 3 && window.__vfxLab.time().every((t) => t > 1.6), null, { timeout: 60_000 });
+  // Live tuning panel: a slider change marks the row as changed; reset restores the approved values.
+  await page.locator('#tune-windRingSize').fill('2');
+  await page.locator('#tune-windRingSize').dispatchEvent('change');
+  await expect(page.locator('.tune-row.changed')).toHaveCount(1);
+  await page.locator('#tune-reset').click();
+  await expect(page.locator('.tune-row.changed')).toHaveCount(0);
+  await page.keyboard.press('a');
+  await page.keyboard.press('b');
+  await expect(page.locator('.badge')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
