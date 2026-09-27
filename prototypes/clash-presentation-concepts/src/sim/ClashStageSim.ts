@@ -26,13 +26,15 @@ import { CLASH_RESOLVED_MAGNITUDE } from '../../../../src/camera/ImpactMagnitude
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../../../src/bey/archetype/BeyArchetypes';
 import { createBey, type Bey } from '../../../../src/bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../../../src/bey/core/BeyTuning';
-import type { BeyVisual } from '../../../../src/bey/procedural-model/createBeyMesh';
 import { isGrounded } from '../../../../src/physics/collision/GroundCheck';
 import { normalize, scale, subtract, type Vec2 } from '../../../../src/physics/Vec2';
 import { PhysicsWorld } from '../../../../src/physics/world/PhysicsWorld';
 import type { CameraIntent, FightFrame, FighterFrame, Vec3 } from '../../../camera-concepts/src/fight/FightFrame';
+import { ATTACK_A, DEFENSE_A } from '../../../bey-visual-concepts/src/concepts/conceptDefinitions';
+import type { ConceptDefinition } from '../../../bey-visual-concepts/src/model/types';
 import { ClashHarness, type ClashTickEvents } from '../harness/ClashHarness';
 import type { ClashScenario } from '../harness/scenarios';
+import { createDetailedBeyVisual, type DetailedBeyVisual } from './DetailedBeyVisual';
 
 /** Presentation harness: this lab has no Stability system of its own, so the loser's Stability fraction is treated as full (1 = no reduction) for the physical knockback formula, same as CIRCULAR_BASE_KNOCKBACK_FORCE-class hits against an undamaged Bey. */
 const ASSUMED_DEFENDER_STABILITY_FRACTION = 1;
@@ -65,8 +67,8 @@ function vecOf(p: { x: number; y: number; z: number }): Vec3 {
 export class ClashStageSim {
   readonly harness = new ClashHarness();
   readonly visuals = new THREE.Group();
-  readonly firstVisual: BeyVisual;
-  readonly secondVisual: BeyVisual;
+  firstVisual: DetailedBeyVisual;
+  secondVisual: DetailedBeyVisual;
 
   private physicsRunning = false;
   private simTimeS = 0;
@@ -80,9 +82,11 @@ export class ClashStageSim {
     private readonly physics: PhysicsWorld,
     private readonly first: Bey,
     private readonly second: Bey,
+    firstConcept: ConceptDefinition,
+    secondConcept: ConceptDefinition,
   ) {
-    this.firstVisual = first.definition.appearance.createVisual();
-    this.secondVisual = second.definition.appearance.createVisual();
+    this.firstVisual = createDetailedBeyVisual(firstConcept);
+    this.secondVisual = createDetailedBeyVisual(secondConcept);
     this.visuals.add(this.firstVisual.group, this.secondVisual.group);
 
     const axisAngle = scenario.arena === 'rift' ? Math.PI * 0.15 : 0; // A little visual variety in which direction the clash axis faces per arena, purely cosmetic.
@@ -98,13 +102,30 @@ export class ClashStageSim {
     this.lastFrame = this.describe([]);
   }
 
-  static async create(scenario: ClashScenario): Promise<ClashStageSim> {
+  static async create(scenario: ClashScenario, firstConcept: ConceptDefinition = ATTACK_A, secondConcept: ConceptDefinition = DEFENSE_A): Promise<ClashStageSim> {
     const physics = await PhysicsWorld.create();
     // Physics colliders only: the game's own placeholder arena mesh this also builds is discarded (this lab shows the approved arena-visual-concepts art in the browser-only view layer instead — see stage/ClashStageView.ts).
     createArenaColliders(new THREE.Scene(), physics);
     const first = createBey(physics, { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, ATTACK_ARCHETYPE);
     const second = createBey(physics, { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, DEFENSE_ARCHETYPE);
-    return new ClashStageSim(scenario, physics, first, second);
+    return new ClashStageSim(scenario, physics, first, second, firstConcept, secondConcept);
+  }
+
+  /**
+   * Swaps which of the 9 approved concepts (visual-prototypes-approval.md
+   * §1) each side renders — purely cosmetic, no physics/collider/stat
+   * change. Which 3 of the 9 (one per archetype) ship is still an open
+   * decision; this lets the owner review the Clash presentation itself
+   * with any of them, and picking one here is not that decision.
+   */
+  setConcepts(firstConcept: ConceptDefinition, secondConcept: ConceptDefinition): void {
+    this.visuals.remove(this.firstVisual.group, this.secondVisual.group);
+    this.firstVisual.dispose();
+    this.secondVisual.dispose();
+    this.firstVisual = createDetailedBeyVisual(firstConcept);
+    this.secondVisual = createDetailedBeyVisual(secondConcept);
+    this.visuals.add(this.firstVisual.group, this.secondVisual.group);
+    this.syncVisuals();
   }
 
   /** Re-arms the same scenario from scratch (a "restart"/"repeat exactly" request) without re-touching Rapier. */

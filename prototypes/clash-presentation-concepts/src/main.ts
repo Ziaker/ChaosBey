@@ -12,6 +12,8 @@
 import { CameraDirector, type DirectorOutput } from '../../camera-concepts/src/director/CameraDirector';
 import { PRESETS, PRESET_IDS, cloneParams, type CameraParams, type PresetId } from '../../camera-concepts/src/director/CameraParams';
 import type { FightFrame, Vec3 } from '../../camera-concepts/src/fight/FightFrame';
+import { ATTACK_A, ATTACK_B, ATTACK_C, DEFENSE_A, DEFENSE_B, DEFENSE_C } from '../../bey-visual-concepts/src/concepts/conceptDefinitions';
+import type { ConceptDefinition } from '../../bey-visual-concepts/src/model/types';
 import { ClashHarness } from './harness/ClashHarness';
 import { KeyboardMashCapture, ScriptedMashDriver, type MashLogEntry } from './harness/mash';
 import { SCENARIOS, mashSourceFor, scenarioById, type ClashScenario } from './harness/scenarios';
@@ -21,6 +23,10 @@ import { TIE_STYLES, TIE_STYLE_IDS } from './presentation/tieStyles';
 import type { BannerStyle, DirectionId, TieStyleId } from './presentation/types';
 import { ClashStageSim } from './sim/ClashStageSim';
 import { ClashStageView } from './stage/ClashStageView';
+
+// Player side draws from the 3 approved Attack concepts, opponent from the 3 approved Defense concepts (visual-prototypes-approval.md §1) — a richer stand-in for the game's placeholder mesh, never a "final Bey" pick (that choice is explicitly still open, §4.1).
+const FIRST_CONCEPTS: Readonly<Record<string, ConceptDefinition>> = { A: ATTACK_A, B: ATTACK_B, C: ATTACK_C };
+const SECOND_CONCEPTS: Readonly<Record<string, ConceptDefinition>> = { A: DEFENSE_A, B: DEFENSE_B, C: DEFENSE_C };
 
 // ---------------- PAGE TUNING ----------------
 const DT = 1 / 60;
@@ -42,6 +48,8 @@ const lab = {
   tieStyleId: DIRECTIONS.B.defaultTieStyle as TieStyleId,
   cameraPresetId: 'B' as PresetId,
   firstMashMode: 'scripted' as 'scripted' | 'keyboard',
+  firstConceptLetter: 'A' as 'A' | 'B' | 'C',
+  secondConceptLetter: 'A' as 'A' | 'B' | 'C',
   paused: false,
   speedIndex: 0,
   loop: false,
@@ -113,7 +121,7 @@ async function loadScenario(id: string): Promise<void> {
   lab.scenarioId = id;
   currentScenario = structuredClone(scenarioById(id));
   sim?.dispose();
-  sim = await ClashStageSim.create(currentScenario);
+  sim = await ClashStageSim.create(currentScenario, FIRST_CONCEPTS[lab.firstConceptLetter], SECOND_CONCEPTS[lab.secondConceptLetter]);
   view.setArena(currentScenario.arena);
   view.setBeyVisuals(sim.visuals);
   for (const pid of PRESET_IDS) directors[pid].reset();
@@ -365,6 +373,31 @@ for (const s of SCENARIOS) {
   scenarioButtons.set(s.id, b);
 }
 
+// ---------------- Bey model pickers (cosmetic — never a "final Bey" decision) ----------------
+const conceptsFirstEl = $<HTMLElement>('concepts-first');
+const conceptsSecondEl = $<HTMLElement>('concepts-second');
+const conceptButtons = { first: new Map<string, HTMLButtonElement>(), second: new Map<string, HTMLButtonElement>() };
+function buildConceptButtons(container: HTMLElement, letters: readonly ('A' | 'B' | 'C')[], onPick: (letter: 'A' | 'B' | 'C') => void, into: Map<string, HTMLButtonElement>): void {
+  for (const letter of letters) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = letter;
+    b.addEventListener('click', () => onPick(letter));
+    container.append(b);
+    into.set(letter, b);
+  }
+}
+buildConceptButtons(conceptsFirstEl, ['A', 'B', 'C'], (letter) => setConcept('first', letter), conceptButtons.first);
+buildConceptButtons(conceptsSecondEl, ['A', 'B', 'C'], (letter) => setConcept('second', letter), conceptButtons.second);
+
+function setConcept(side: 'first' | 'second', letter: 'A' | 'B' | 'C'): void {
+  if (side === 'first') lab.firstConceptLetter = letter;
+  else lab.secondConceptLetter = letter;
+  sim?.setConcepts(FIRST_CONCEPTS[lab.firstConceptLetter]!, SECOND_CONCEPTS[lab.secondConceptLetter]!);
+  syncPanel();
+}
+
 function setDirection(id: DirectionId): void {
   lab.directionId = id;
   lab.tieStyleId = DIRECTIONS[id].defaultTieStyle;
@@ -451,6 +484,8 @@ function syncPanel(): void {
   for (const [id, b] of tieButtons) b.setAttribute('aria-pressed', String(id === lab.tieStyleId));
   for (const [id, b] of cameraButtons) b.setAttribute('aria-pressed', String(id === lab.cameraPresetId));
   for (const [id, b] of scenarioButtons) b.setAttribute('aria-pressed', String(id === lab.scenarioId));
+  for (const [id, b] of conceptButtons.first) b.setAttribute('aria-pressed', String(id === lab.firstConceptLetter));
+  for (const [id, b] of conceptButtons.second) b.setAttribute('aria-pressed', String(id === lab.secondConceptLetter));
   $<HTMLElement>('pause').setAttribute('aria-pressed', String(lab.paused));
   $<HTMLElement>('loop').setAttribute('aria-pressed', String(lab.loop));
   $<HTMLElement>('speed').firstChild!.textContent = `${SPEEDS[lab.speedIndex]}× `;

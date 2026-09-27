@@ -51,6 +51,12 @@ src/
                          rule), and applies the exact same physical-consequence formulas
                          `ClashOrchestration` uses the instant the real controller resolves.
                          Node-testable (no DOM/canvas dependency) — see the unit tests.
+    DetailedBeyVisual.ts — wraps one of the 9 approved round-2 Bey concepts
+                         (`assembleConcept()` from `prototypes/bey-visual-concepts`) in the same
+                         `{ group, spinGroup }` shape the game's placeholder `BeyVisual` uses, so
+                         the physics-driven position/quaternion sync above never needs to know
+                         which visual is plugged in. Also Node-testable — `assembleConcept()` has
+                         no DOM dependency, unlike the arena art below.
   presentation/
     types.ts, directions.ts, tieStyles.ts, ClashPresenter.ts
                       — the three presentation directions (data + the director that turns a
@@ -121,6 +127,7 @@ The Tie **rule** is closed (symmetric physical repulsion, no winner, no Stabilit
 - **Scenario:** `[` `]` (or the scenario list) — 10 scenarios, always reproducible.
 - **Tie style:** pick any of the three regardless of direction.
 - **Camera:** pick any of the three approved presets independently.
+- **Bey model** (right panel): pick any of the 3 approved Attack concepts for the player and any of the 3 approved Defense concepts for the opponent (`prototypes/bey-visual-concepts`, catalog approved in `visual-prototypes-approval.md` §1) — swaps live, no reload. This is a richer stand-in for the game's current placeholder mesh, not a "final Bey" pick; which 3 of the 9 concepts ship is still explicitly open (§4.1).
 - **Mash mode (player/first side):** `M` toggles between the scenario's scripted rate and real `Z` `X` `C` keyboard input — press them together to see the debug log confirm a simultaneous press still counts as **one** event.
 - **Stamina / speed / mash rate sliders** (right panel): live-edit either side's Clash inputs; takes effect on the next Approach (matches the real game capturing these once, at `tryStart()`).
 - **Transport:** `Espaço` pause, `R` restart (repeats the exact same Clash), `S` cycles 1×/½×/¼×/2×/4×, `L` toggles auto-loop.
@@ -162,5 +169,5 @@ Open with `npm run dev` → `/prototypes/clash-presentation-concepts/`, or the p
 
 - No real attack/hit-detection, Stamina/Stability system, or `AIController` — see "Presentation-harness simplifications" above.
 - The arena is flattened to match the game's current flat physics floor; the approved 3.2m bowl isn't integrated into physics yet.
-- The Beys are the game's current placeholder models, not the round-2 visual concepts — the Clash presentation is what's being judged here.
+- The Beys render the approved round-2 concepts (`assembleConcept()` from `prototypes/bey-visual-concepts`, the same models the Stamina & Stability Lab's `BeyRig` uses) instead of the game's current crude placeholder mesh, scaled and anchored to match the real Bey collider — but no specific concept is treated as final; the picker exists so the owner isn't stuck reviewing the Clash presentation on a stand-in that doesn't look like a Bey at all.
 - Single active view (no A|B|C side-by-side compare like the Camera Lab) — switching direction is instant since the underlying sim keeps running regardless.
