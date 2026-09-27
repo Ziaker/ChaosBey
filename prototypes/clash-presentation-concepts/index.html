@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChaosBey Clash Presentation Lab</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #05050a;
+        --panel: #0c1017;
+        --panel-2: #121823;
+        --line: #1f2835;
+        --text: #e9eef5;
+        --muted: #8894a6;
+        --soft: #c6cfdb;
+        --accent: #ff4fa3;
+        --dir-a: #6fd3ff;
+        --dir-b: #ffb347;
+        --dir-c: #ff4fa3;
+        --first: #6fd3ff;
+        --second: #ffb347;
+        --danger: #ff3b4e;
+        font-family: 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+      .lab { display: grid; grid-template-columns: 320px 1fr 340px; height: 100%; min-height: 640px; }
+      .panel, .side { background: var(--panel); padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+      .panel { border-right: 1px solid var(--line); }
+      .side { border-left: 1px solid var(--line); }
+      .kicker { font: 600 11px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+      h1 { margin: 6px 0 8px; font-size: 20px; text-wrap: balance; }
+      h2 { margin: 0; font-size: 14px; }
+      h3 { margin: 0 0 8px; font: 700 11px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--muted); text-transform: uppercase; }
+      .warn { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+      .hint { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+      kbd { font: 10px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--muted); background: var(--bg); }
+      :is(button, select, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+      .options { display: grid; gap: 6px; }
+      .option { display: grid; grid-template-columns: 26px 1fr; align-items: center; gap: 9px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 7px 9px; cursor: pointer; font: 12.5px inherit; font-family: inherit; }
+      .option strong { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; color: #0b0d12; font-size: 13px; }
+      .option[data-id='A'] strong { background: var(--dir-a); }
+      .option[data-id='B'] strong { background: var(--dir-b); }
+      .option[data-id='C'] strong { background: var(--dir-c); }
+      .option span small { display: block; color: var(--muted); font-size: 10.8px; margin-top: 2px; line-height: 1.35; }
+      .option[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel-2)); }
+
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip { display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; cursor: pointer; font: 12px inherit; font-family: inherit; padding: 6px 9px; }
+      .chip:hover, .option:hover, .scenario:hover { border-color: #3a4658; }
+      .chip[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+
+      .scenarios { display: grid; gap: 4px; }
+      .scenario { display: grid; gap: 2px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 6px 9px; cursor: pointer; font: 12px inherit; font-family: inherit; }
+      .scenario small { color: var(--muted); font-size: 10.6px; line-height: 1.3; }
+      .scenario[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); }
+
+      .stage { position: relative; overflow: hidden; background: #000; min-height: 0; }
+      .stage canvas#lab-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+      .overlay { position: absolute; inset: 0; pointer-events: none; }
+      .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+      .banner { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); text-align: center; font: 800 26px/1.2 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.03em; padding: 10px 22px; border-radius: 10px; background: rgba(6,8,12,0.55); backdrop-filter: blur(2px); opacity: 0; transition: opacity 0.15s; }
+      .banner.show { opacity: 1; }
+      .banner.quiet { font-size: 16px; top: 14px; transform: translateX(-50%); background: rgba(6,8,12,0.75); }
+      .banner.bold { font-size: 30px; }
+      .banner.dramatic { font-size: 40px; text-shadow: 0 0 24px currentColor; }
+      .phase-hud { position: absolute; left: 12px; top: 12px; font: 12px ui-monospace, Consolas, monospace; color: var(--soft); background: rgba(6,8,12,0.75); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; line-height: 1.6; }
+      .phase-hud b { color: var(--accent); }
+      .harness-note { position: absolute; right: 12px; top: 12px; max-width: 260px; font: 10.5px/1.4 ui-monospace, Consolas, monospace; color: var(--muted); background: rgba(6,8,12,0.75); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; }
+      .bottom { position: absolute; left: 12px; right: 12px; bottom: 12px; display: grid; gap: 6px; }
+      .timeline { position: relative; height: 20px; background: rgba(12,16,23,.88); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+      .timeline .fill { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 18%, transparent); }
+      .timeline .label { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font: 10.2px ui-monospace, Consolas, monospace; color: var(--muted); }
+
+      .score { display: grid; gap: 8px; }
+      .side-score { border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2); padding: 8px 9px; }
+      .side-score h4 { margin: 0 0 6px; font: 700 11px ui-monospace, Consolas, monospace; text-transform: uppercase; letter-spacing: 0.08em; }
+      .side-score.first h4 { color: var(--first); }
+      .side-score.second h4 { color: var(--second); }
+      .bar-row { display: grid; grid-template-columns: 78px 1fr 40px; gap: 6px; align-items: center; margin-bottom: 3px; }
+      .bar-row span:first-child { font-size: 10.5px; color: var(--muted); }
+      .bar-row output { font: 600 10.5px ui-monospace, Consolas, monospace; text-align: right; }
+      .bar-track { height: 7px; border-radius: 4px; background: #060810; overflow: hidden; border: 1px solid var(--line); }
+      .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+      .power-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px; font: 700 13px ui-monospace, Consolas, monospace; }
+
+      .sliders { display: grid; gap: 8px; }
+      .slider-row { display: grid; grid-template-columns: 1fr 46px; gap: 4px 6px; align-items: center; }
+      .slider-row label { grid-column: 1 / -1; margin: 0; font-size: 11px; color: var(--muted); }
+      .slider-row input { width: 100%; accent-color: var(--accent); }
+      .slider-row output { font: 600 11px ui-monospace, Consolas, monospace; text-align: right; }
+
+      .mash-log { margin: 0; font: 10.3px/1.5 ui-monospace, Consolas, monospace; color: var(--soft); white-space: pre-wrap; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-height: 90px; max-height: 150px; overflow-y: auto; }
+      .keys { font-size: 11px; color: var(--muted); line-height: 1.7; }
+      .tie-styles { display: grid; gap: 4px; }
+      .tie-style { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 6px 8px; text-align: left; cursor: pointer; font: 11.5px inherit; font-family: inherit; }
+      .tie-style small { display: block; color: var(--muted); font-size: 10.3px; margin-top: 2px; }
+      .tie-style[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel-2)); }
+
+      @media (max-width: 1080px) {
+        .lab { grid-template-columns: 1fr; grid-template-rows: auto minmax(420px, 62vh) auto; height: auto; }
+        .panel { border-right: 0; border-bottom: 1px solid var(--line); }
+        .side { border-left: 0; border-top: 1px solid var(--line); }
+        .keys { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="lab" id="lab">
+      <aside class="panel">
+        <header>
+          <div class="kicker">ChaosBey · Protótipo de apresentação</div>
+          <h1>Clash Presentation Lab</h1>
+          <p class="warn">Explora só a APRESENTAÇÃO do Clash. As regras (janela de 150ms, ~4s, fórmula ClashPower, caps, cooldown de 10s) vêm sem alteração de <code>src/combat/clash/</code>. Nada aqui é integrado ao jogo.</p>
+        </header>
+        <section>
+          <h3>Direção de apresentação</h3>
+          <div class="options" id="directions"></div>
+        </section>
+        <section>
+          <h3>Estilo de empate <span class="hint">(nenhum é oficial)</span></h3>
+          <div class="tie-styles" id="tie-styles"></div>
+        </section>
+        <section>
+          <h3>Câmera aprovada</h3>
+          <div class="chips" id="camera-presets"></div>
+        </section>
+        <section>
+          <h3>Reprodução</h3>
+          <div class="chips">
+            <button type="button" class="chip" id="pause">Pausar <kbd>Espaço</kbd></button>
+            <button type="button" class="chip" id="restart">Repetir <kbd>R</kbd></button>
+            <button type="button" class="chip" id="speed">1× <kbd>S</kbd></button>
+            <button type="button" class="chip" id="loop">Auto-loop <kbd>L</kbd></button>
+          </div>
+        </section>
+        <section class="keys" aria-label="Atalhos">
+          <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> direção · <kbd>[</kbd> <kbd>]</kbd> cenário<br />
+          <kbd>Espaço</kbd> pausa · <kbd>R</kbd> repete · <kbd>S</kbd> velocidade<br />
+          <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> mash manual (lado jogador)
+        </section>
+      </aside>
+      <main class="stage" id="stage">
+        <canvas id="lab-canvas" aria-label="Cena do Clash"></canvas>
+        <div class="overlay" id="overlay">
+          <div class="flash" id="flash"></div>
+          <div class="phase-hud" id="phase-hud"></div>
+          <div class="harness-note">Instrumentação de protótipo — não é o HUD final do jogo (isso é o HUD Combat Lab, um lab futuro separado).</div>
+          <div class="banner" id="banner"></div>
+        </div>
+        <div class="bottom">
+          <div class="timeline" id="timeline"><div class="fill" id="timeline-fill"></div><span class="label" id="timeline-label"></span></div>
+        </div>
+      </main>
+      <aside class="side">
+        <section>
+          <h3>Cenário <kbd>[</kbd> <kbd>]</kbd></h3>
+          <div class="scenarios" id="scenarios"></div>
+        </section>
+        <section>
+          <h3>Score ao vivo</h3>
+          <div class="score" id="score"></div>
+        </section>
+        <section>
+          <h3>Entradas (Stamina / velocidade / mash)</h3>
+          <div class="sliders" id="sliders"></div>
+        </section>
+        <section>
+          <h3>Debug de mash (Z+X+C simultâneo = 1 evento)</h3>
+          <div class="chips">
+            <button type="button" class="chip" id="mash-mode-first">Jogador: roteiro <kbd>M</kbd></button>
+          </div>
+          <pre class="mash-log" id="mash-log" aria-live="off"></pre>
+        </section>
+      </aside>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
