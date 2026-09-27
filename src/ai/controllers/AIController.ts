@@ -105,6 +105,18 @@ const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerab
 
 export class AIController implements CombatController {
   private readonly actionSelector = new ActionSelector();
+  /**
+   * A separate ActionSelector for the Clash-mash path (sampleClashMashActions)
+   * so its held/pressedThisFrame bookkeeping never shares state with
+   * actionSelector's normal-combat one. Without this, an Attack the mash
+   * happened to hold right up to the Clash's Active -> Cooldown resolution
+   * stayed in the shared selector's "already held" bookkeeping, so the very
+   * next real AttackCircular/AttackDash decision after the Clash produced no
+   * fresh pressedThisFrame press — AttackController.tick() only starts an
+   * attack from Neutral on a real press, never from held alone — silently
+   * swallowing that attack (M7 audit regression).
+   */
+  private readonly clashMashActionSelector = new ActionSelector();
   private readonly adaptation = new AdaptationTracker();
   private nowS = 0;
   /** Forces an immediate first decision on the very first non-frozen tick. */
@@ -371,7 +383,7 @@ export class AIController implements CombatController {
       const options = [Action.Attack, Action.JumpDrift, Action.Dodge];
       held.add(options[this.rng.nextInt(0, options.length - 1)] ?? Action.Attack);
     }
-    const actions = this.actionSelector.commit(held, fixedDeltaSeconds);
+    const actions = this.clashMashActionSelector.commit(held, fixedDeltaSeconds);
     this.lastActionSummary = actions.pressedThisFrame.size > 0 ? 'clash mash' : 'clash — no mash this tick';
     return actions;
   }
