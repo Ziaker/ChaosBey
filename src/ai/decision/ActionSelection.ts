@@ -24,6 +24,7 @@ import { DodgeState } from '../../dodge/DodgeController';
 import { DriftState } from '../../drift/DriftController';
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { add, dot, fromYaw, length, normalize, perpendicular, scale, signedAngleBetween, subtract, type Vec2 } from '../../physics/Vec2';
+import { RINGOUT_RADIUS_M } from '../../arena/ringout/RingOutTuning';
 import type { AiPersonality } from '../personalities/AiPersonality';
 import { AI_CIRCULAR_ATTACK_RANGE_M, AI_COUNTER_MAX_LEAD_S, AI_COUNTER_MIN_CLOSING_SPEED_MPS, AI_DASH_ATTACK_MAX_RANGE_M } from './AiCombatRanges';
 import { AiIntent } from './Intent';
@@ -56,6 +57,85 @@ const EDGE_PRESSURE_CENTER_SIDE_MIN_DOT = 0.5;
 const EDGE_PRESSURE_STANDOFF_M = 2;
 /** Circle keeps its current side unless the other side leads toward the center at least this much (cosine) — and only re-picks at all once some edge risk exists. Without this hysteresis the side flipped every few ticks near the center, and each flip meant turning around. */
 const CIRCLE_SIDE_SWITCH_MIN_DOT = 0.3;
+
+/** Evasion: weight of the inward (toward-center) pull added to the sideways escape at full edge risk. Enough that at the edge the escape clearly leads back in, while the sideways part still leaves the attack line. */
+const EVASION_INWARD_PULL_AT_FULL_EDGE_RISK = 1.5;
+/** Circle: weight of the inward pull added to the sideways direction at the ring-out line for centerControl 1, scaled down linearly toward the center. */
+const CIRCLE_CENTER_PULL = 1.5;
+
+/** Edge recovery: the opponent "blocks the way in" when it is within this distance (m) ... */
+const RECOVERY_BLOCKED_MAX_DISTANCE_M = 3;
+/** ... and this close (cosine) to the straight line toward the center. */
+const RECOVERY_BLOCKED_MIN_DOT = 0.8;
+/** How much of the center direction a blocked recovery keeps while going around the opponent (the rest is sideways). */
+const RECOVERY_DETOUR_CENTER_WEIGHT = 0.5;
+
+/**
+ * Edge recovery heads for the center — unless the opponent stands in that
+ * path, where "straight to the center" means pushing into them and staying
+ * pinned against the wall. Then it goes around: sideways (on the side
+ * away from the opponent's offset) with part of the inward direction.
+ */
+export function edgeRecoveryDirection(world: WorldState): Vec2 {
+  const center = world.own.directionTowardCenter;
+  if (length(center) === 0) return center;
+  const toOpponent = subtract(world.opponent.positionXZ, world.own.positionXZ);
+  const distance = length(toOpponent);
+  if (distance > RECOVERY_BLOCKED_MAX_DISTANCE_M || distance < 1e-6) return center;
+  const towardOpponent = scale(toOpponent, 1 / distance);
+  if (dot(towardOpponent, center) < RECOVERY_BLOCKED_MIN_DOT) return center;
+  const side = perpendicular(center);
+  const sign = dot(side, towardOpponent) > 0 ? -1 : 1;
+  return normalize(add(scale(side, sign), scale(center, RECOVERY_DETOUR_CENTER_WEIGHT)));
+}
+
+/** Component (of a unit direction) along a Bey-relative axis above which a Dodge direction key is held — cos(67.5°), so the 8 key combinations each cover a 45° sector: the same 8 directions a player can press (DodgeController.applyBurst). */
+const DODGE_KEY_COMPONENT_THRESHOLD = 0.38;
+
+/**
+ * Where to go to get out of the way of an attack: sideways off the line
+ * between the two Beys (a Dash homes in at a limited turn rate, so leaving
+ * its line is what makes it miss), on the side leading toward the center,
+ * pulled inward in proportion to own (momentum-projected) edge risk — and
+ * never with any component toward the attacker, even when the attacker
+ * sits between this AI and the center (then it is purely tangential, on
+ * the side away from the attacker's own sideways drift).
+ */
+export function evasionDirection(world: WorldState): Vec2 {
+  const center = world.own.directionTowardCenter;
+  if (world.distanceToOpponentM <= 1e-3) return center;
+  const towardAttacker = world.directionToOpponent;
+  const side = perpendicular(towardAttacker);
+  const centerSide = dot(side, center);
+  let sign: 1 | -1;
+  if (Math.abs(centerSide) > 0.05) {
+    sign = centerSide >= 0 ? 1 : -1;
+  } else {
+    // No side leads inward (attacker straight toward/away from center):
+    // step opposite to where the attacker is drifting sideways.
+    sign = dot(side, world.opponent.velocityXZ) > 0 ? -1 : 1;
+  }
+  const edgeWeight = Math.max(world.own.edgeRiskFraction, world.own.projectedEdgeRiskFraction);
+  let escape = add(scale(side, sign), scale(center, edgeWeight * EVASION_INWARD_PULL_AT_FULL_EDGE_RISK));
+  const intoAttacker = dot(escape, towardAttacker);
+  if (intoAttacker > 0) escape = subtract(escape, scale(towardAttacker, intoAttacker));
+  const direction = normalize(escape);
+  return length(direction) > 0 ? direction : scale(side, sign);
+}
+
+/** The Bey-relative direction keys (forward/back/left/right, diagonals allowed) that point a Dodge burst closest to `direction` — exactly the inputs a player would press. */
+export function dodgeDirectionKeys(headingRad: number, direction: Vec2): Action[] {
+  const forward = fromYaw(headingRad);
+  const right = perpendicular(forward);
+  const forwardComponent = dot(forward, direction);
+  const rightComponent = dot(right, direction);
+  const keys: Action[] = [];
+  if (forwardComponent > DODGE_KEY_COMPONENT_THRESHOLD) keys.push(Action.MoveForward);
+  if (forwardComponent < -DODGE_KEY_COMPONENT_THRESHOLD) keys.push(Action.MoveBackward);
+  if (rightComponent > DODGE_KEY_COMPONENT_THRESHOLD) keys.push(Action.SteerRight);
+  if (rightComponent < -DODGE_KEY_COMPONENT_THRESHOLD) keys.push(Action.SteerLeft);
+  return keys;
+}
 
 /** How much of a fully-charged Dash a personality commits to before releasing, biased by aggression (aggression 1 -> ~0.4 charge, aggression 0 -> ~0.9 charge). Recomputed fresh each tick from personality alone (not stored) so it never needs its own state to stay in sync with. */
 function dashTargetChargeFraction(personality: AiPersonality): number {
@@ -119,25 +199,49 @@ function edgePressurePlan(world: WorldState): EdgePressurePlan | null {
 }
 
 /** null means "no movement intent this tick" (e.g. Wait, or holding ground for a counter). */
-function computeMovePlan(intent: AiIntent, world: WorldState, edgePlan: EdgePressurePlan | null, circleSign: 1 | -1): MovePlan | null {
+/**
+ * Circle: sideways relative to the opponent (on circleSign's side), plus an
+ * inward pull for a personality that values the middle
+ * (AiPersonality.centerControl, GDD section 64 Defense "uses wall/arena
+ * positioning") — the further out, the stronger, so it spirals back in.
+ */
+export function circleDirection(world: WorldState, personality: AiPersonality, circleSign: 1 | -1): Vec2 {
+  const sideways = scale(perpendicular(world.directionToOpponent), circleSign);
+  const radiusFraction = Math.max(0, Math.min(1, 1 - world.own.distanceToEdgeM / RINGOUT_RADIUS_M));
+  const inwardWeight = personality.centerControl * radiusFraction * CIRCLE_CENTER_PULL;
+  if (inwardWeight <= 0 || length(sideways) === 0) return sideways;
+  return normalize(add(sideways, scale(world.own.directionTowardCenter, inwardWeight)));
+}
+
+function computeMovePlan(
+  intent: AiIntent,
+  world: WorldState,
+  edgePlan: EdgePressurePlan | null,
+  circleSign: 1 | -1,
+  personality: AiPersonality,
+): MovePlan | null {
   const hasOpponentDirection = world.distanceToOpponentM > 1e-3;
   switch (intent) {
     case AiIntent.Approach:
     case AiIntent.AttackDash:
     case AiIntent.AttackCircular:
-    case AiIntent.UseJumpDrift:
       return hasOpponentDirection ? { direction: world.directionToOpponent, allowReverse: false } : null;
+    case AiIntent.UseJumpDrift:
+      // Only ever chosen to answer a threat (IntentSelection): hop off the
+      // attack line like a dodge would, never into the attacker.
+      return { direction: evasionDirection(world), allowReverse: false };
     case AiIntent.PressAdvantage:
       if (edgePlan) return { direction: edgePlan.direction, allowReverse: false };
       return hasOpponentDirection ? { direction: world.directionToOpponent, allowReverse: false } : null;
     case AiIntent.Retreat:
-    case AiIntent.DodgeThreat:
       return hasOpponentDirection ? { direction: retreatDirection(world), allowReverse: true } : null;
+    case AiIntent.DodgeThreat:
+      return { direction: evasionDirection(world), allowReverse: true };
     case AiIntent.RecoverFromEdge:
-      return { direction: world.own.directionTowardCenter, allowReverse: true };
+      return { direction: edgeRecoveryDirection(world), allowReverse: true };
     case AiIntent.Circle:
       // Side chosen (with hysteresis) by ActionSelector.updateCircleSign.
-      return { direction: scale(perpendicular(world.directionToOpponent), circleSign), allowReverse: false };
+      return { direction: circleDirection(world, personality, circleSign), allowReverse: false };
     case AiIntent.CounterAttack:
     case AiIntent.Wait:
       return null;
@@ -183,6 +287,8 @@ export class ActionSelector {
   private circleSign: 1 | -1 = 1;
   private currentTick = 0;
   private previousHeld = new Set<Action>();
+  /** A Dash charge that was being held when this Bey was launched: held until it is back on the ground (see selectActions). */
+  private holdingChargeThroughLaunch = false;
   private readonly holdStartedAtTick = new Map<Action, number>();
 
   /**
@@ -205,7 +311,7 @@ export class ActionSelector {
 
     const edgePlan = intent === AiIntent.PressAdvantage ? edgePressurePlan(world) : null;
     if (intent === AiIntent.Circle) this.updateCircleSign(world);
-    const movePlan = computeMovePlan(intent, world, edgePlan, this.circleSign);
+    const movePlan = computeMovePlan(intent, world, edgePlan, this.circleSign, personality);
     if (movePlan) addMovementActions(movePlan, world.own.headingRad, desiredHeld);
 
     // PressAdvantage is an attack intent too (GDD section 64: Attack AI
@@ -249,9 +355,59 @@ export class ActionSelector {
       desiredHeld.add(Action.Attack);
     }
 
-    if (intent === AiIntent.DodgeThreat && world.own.dodgeState === DodgeState.Idle && dodgeAttemptSucceeds) {
+    // A Dodge only starts from a fresh press while grounded with enough
+    // Stamina (DodgeController) — anything else is silently ignored, and
+    // HOLDING the button afterwards never produces another press, so one
+    // early press used to swallow the whole dodge. Press only when it can
+    // take, and release for a tick between attempts so a retry is a real
+    // new press. The burst goes wherever the direction keys held on the
+    // press tick point (DodgeController.applyBurst): aim it along
+    // evasionDirection with the same 8 key combinations a player has,
+    // instead of letting whatever this tick's steering was decide.
+    if (
+      intent === AiIntent.DodgeThreat &&
+      dodgeAttemptSucceeds &&
+      world.own.dodgeState === DodgeState.Idle &&
+      world.own.grounded &&
+      world.own.canAffordDodge &&
+      !this.previousHeld.has(Action.Dodge)
+    ) {
+      for (const key of [Action.MoveForward, Action.MoveBackward, Action.SteerLeft, Action.SteerRight]) desiredHeld.delete(key);
+      for (const key of dodgeDirectionKeys(world.own.headingRad, evasionDirection(world))) desiredHeld.add(key);
       desiredHeld.add(Action.Dodge);
     }
+
+    // Air recovery (GDD section 21): one fresh Dodge press while the window
+    // is open. Not gated by dodgeSkill or Dodge cooldown — DodgeController
+    // honors this press on its own air-recovery rule — and never held on:
+    // once the window is used or closed there is nothing to press for.
+    if (intent === AiIntent.AirRecover && !world.own.grounded && world.own.airRecoveryAvailable && !this.previousHeld.has(Action.Dodge)) {
+      desiredHeld.add(Action.Dodge);
+    }
+    // Launched mid-charge: letting go of Attack is the release
+    // (AttackController fires the Dash when the button is no longer held),
+    // so any intent that stops holding it in the air fires the Dash from
+    // the air. Owner decision (after PR #16): a charge being held when the
+    // Bey is launched is kept held through that whole flight — from the
+    // first tick the launch is seen, through the reaction delay (the
+    // previous intent is still in charge then, and would release the
+    // charge the moment it reached its target or 100%), through AirRecover
+    // and any later decision in the same flight — until the Bey is back on
+    // the ground. This is the button already held staying held, not a
+    // reaction: AirRecover still waits its normal reaction delay, and
+    // nothing is ever newly pressed (only a ChargingDash already in
+    // progress continues). "Launched" is the air-recovery window
+    // (DodgeController.registerLaunch arms it for knockbacks/launches
+    // only), so a voluntary jump is unaffected: air attacks while jumping
+    // stay allowed. Back on the ground the current decision decides
+    // (release = a normal grounded Dash); Attack Energy running out still
+    // ends the charge on its own.
+    const charging = world.own.attackState === AttackState.ChargingDash;
+    const airRecoverOwnsCharge = intent === AiIntent.AirRecover && charging;
+    const launchedAirborne = !world.own.grounded && world.own.airRecoveryAvailable;
+    if (charging && (launchedAirborne || airRecoverOwnsCharge)) this.holdingChargeThroughLaunch = true;
+    if (!charging || world.own.grounded) this.holdingChargeThroughLaunch = false;
+    if (airRecoverOwnsCharge || this.holdingChargeThroughLaunch) desiredHeld.add(Action.Attack);
 
     // Sustain JumpDrift through the whole Idle->Hopping->Drifting sequence,
     // not just the tick that starts it — DriftController only transitions

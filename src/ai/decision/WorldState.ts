@@ -35,6 +35,24 @@ export interface PredictionConfig {
   readonly strength: number;
 }
 
+/**
+ * What this AI's targeting is made of, kept apart so debug never passes one
+ * off as another (GDD section 65: "AI current target", "predicted path").
+ * Ported from PR #15; the aim point keeps PR #16's name (aimPositionXZ).
+ */
+export interface TargetingInfo {
+  /** The opponent's position as observed right now (same object as opponent.positionXZ) — range checks use this. */
+  readonly observedOpponentXZ: Vec2;
+  /** The opponent's position extrapolated linearly from its current velocity, predictionHorizonS ahead (AiPerception.predictPositionXZ). Null when no prediction is in use (strength 0, or no PredictionConfig) — never the observed position relabeled. */
+  readonly predictedOpponentXZ: Vec2 | null;
+  /** The point this AI actually aims/steers at (directionToOpponent points here): observed, pulled toward predicted by predictionStrength; equals observedOpponentXZ when there is no prediction. */
+  readonly aimPositionXZ: Vec2;
+  /** Seconds ahead predictedOpponentXZ looks; 0 when there is no prediction. */
+  readonly predictionHorizonS: number;
+  /** 0..1 how much aimPositionXZ trusts the prediction; 0 when there is no prediction. */
+  readonly predictionStrength: number;
+}
+
 export interface WorldState {
   readonly nowS: number;
   readonly own: PerceivedCombatant;
@@ -44,6 +62,10 @@ export interface WorldState {
   readonly distanceToOpponentM: number;
   /** Unit vector from own position toward the opponent's targeting position — a strength-weighted blend of their current and short-horizon-predicted position (see PredictionConfig); equals the plain current-position direction when no PredictionConfig is supplied or strength is 0. Zero vector only in the degenerate case of identical positions. */
   readonly directionToOpponent: Vec2;
+  /** The point directionToOpponent aims at: the opponent's OBSERVED position blended toward its short-horizon predicted one (see PredictionConfig). Never used for range checks — opponent.positionXZ is the observed position. Same value as targeting.aimPositionXZ. */
+  readonly aimPositionXZ: Vec2;
+  /** Observed vs predicted vs aimed-at opponent position, with the prediction's horizon and strength (see TargetingInfo). */
+  readonly targeting: TargetingInfo;
   /** Own speed relative to the opponent's — positive means own is faster (used by RiskEvaluation for "a slower defender is more vulnerable", GDD section 27, from the AI's own perspective as a potential defender). */
   readonly relativeSpeedAdvantageMps: number;
   /** How fast (m/s) the gap between the two is shrinking right now (relative velocity along the line between them); negative while separating. From real current positions/velocities only. */
@@ -65,11 +87,10 @@ export function buildWorldState(
   prediction?: PredictionConfig,
   self?: SelfKnowledge,
 ): WorldState {
-  const targetPositionXZ =
-    prediction && prediction.strength > 0
-      ? lerpVec2(opponent.positionXZ, predictPositionXZ(opponent, prediction.horizonSeconds), prediction.strength)
-      : opponent.positionXZ;
-  const toTarget = subtract(targetPositionXZ, own.positionXZ);
+  const predicting = prediction !== undefined && prediction.strength > 0;
+  const predictedOpponentXZ = predicting ? predictPositionXZ(opponent, prediction.horizonSeconds) : null;
+  const aimPositionXZ = predictedOpponentXZ ? lerpVec2(opponent.positionXZ, predictedOpponentXZ, prediction!.strength) : opponent.positionXZ;
+  const toTarget = subtract(aimPositionXZ, own.positionXZ);
   const dist = length(toTarget);
   const toOpponentNow = subtract(opponent.positionXZ, own.positionXZ);
   const distNow = length(toOpponentNow);
@@ -82,6 +103,14 @@ export function buildWorldState(
     clash,
     distanceToOpponentM: distanceBetweenM(own, opponent),
     directionToOpponent: dist > 1e-6 ? { x: toTarget.x / dist, z: toTarget.z / dist } : { x: 0, z: 0 },
+    aimPositionXZ,
+    targeting: {
+      observedOpponentXZ: opponent.positionXZ,
+      predictedOpponentXZ,
+      aimPositionXZ,
+      predictionHorizonS: predicting ? prediction.horizonSeconds : 0,
+      predictionStrength: predicting ? prediction.strength : 0,
+    },
     relativeSpeedAdvantageMps: own.speedMps - opponent.speedMps,
     closingSpeedMps,
     ownCircularReachM: self?.circularReachM ?? AI_DEFAULT_CIRCULAR_REACH_M,

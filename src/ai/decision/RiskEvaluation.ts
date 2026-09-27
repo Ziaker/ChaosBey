@@ -12,13 +12,13 @@ import type { AiPersonality } from '../personalities/AiPersonality';
 import type { WorldState } from './WorldState';
 
 export interface RiskAssessment {
-  /** 0..1, personality-weighted danger of leaving the ring soon (GDD section 129). */
+  /** 0..1, personality-weighted danger of leaving the ring soon (GDD section 129) — from the current position or, if worse, the momentum-projected one. */
   edgeRisk: number;
   /** 0..1: how dangerous the opponent's current/imminent action is to react to right now (an active/imminent hitbox within realistic striking range). */
   opponentThreat: number;
   /** 0..1: how vulnerable this AI's own Bey currently is (low Stability/Stamina, or already Broken — GDD section 28/30: Broken is a visible danger state a decisive hit can end). */
   selfVulnerability: number;
-  /** 0..1: how good an opening the opponent is presenting right now (Broken, low Stability, or caught in an exposed recovery-adjacent state) — GDD section 64 Attack: "pressures broken Stability". */
+  /** 0..1: how good an opening the opponent is presenting right now (Broken or low Stability — GDD section 64 Attack: "pressures broken Stability" — or tired, weighted by fatigueExploitation — GDD section 64 Stamina: "exploits fatigue"). Recovery windows are punishWindow, separately. */
   opportunity: number;
   /** True while the opponent is stuck in an attack's recovery (a whiffed/spent Dash or Circular) — a visible punish window (GDD section 106: whiff punishment emerges from recovery time), not a hidden debuff. */
   punishWindow: boolean;
@@ -41,11 +41,18 @@ function clamp01(t: number): number {
   return Math.max(0, Math.min(1, t));
 }
 
+/** Opponent Stamina fraction below which their fatigue starts counting as an opening (scaled by AiPersonality.fatigueExploitation). */
+const FATIGUE_OPPORTUNITY_STAMINA_FRACTION = 0.5;
+/** Opportunity added by a fully exhausted opponent at fatigueExploitation 1. */
+const FATIGUE_OPPORTUNITY_WEIGHT = 0.6;
+
 /** Range (m) inside which an opponent's imminent hitbox is treated as an immediate threat rather than a distant one worth ignoring for now. Wide enough to cover a charging Dash Attack's realistic closing distance, not just point-blank range. */
 const THREAT_RANGE_M = 6.5;
 
 export function evaluateRisk(world: WorldState, personality: AiPersonality): RiskAssessment {
-  const edgeRisk = clamp01(world.own.edgeRiskFraction * personality.edgeCautionMultiplier);
+  // Whichever is worse: where this Bey is, or where its own momentum takes
+  // it within EDGE_PROJECTION_HORIZON_S (see AiPerception.ts).
+  const edgeRisk = clamp01(Math.max(world.own.edgeRiskFraction, world.own.projectedEdgeRiskFraction) * personality.edgeCautionMultiplier);
 
   const opponentInRange = clamp01(1 - world.distanceToOpponentM / THREAT_RANGE_M);
   const opponentThreat = world.opponent.hasImminentHitbox ? clamp01(opponentInRange) : 0;
@@ -56,7 +63,15 @@ export function evaluateRisk(world: WorldState, personality: AiPersonality): Ris
     (world.own.isBroken ? 0.6 : 0) + stabilityVulnerability * 0.3 + staminaVulnerability * 0.1,
   );
 
-  const opportunity = clamp01((world.opponent.isBroken ? 0.7 : 0) + (1 - world.opponent.stabilityFraction) * 0.3);
+  // A tired opponent (low Stamina) is an opening for a personality that
+  // exploits fatigue (GDD section 64 Stamina) — nothing above
+  // FATIGUE_OPPORTUNITY_STAMINA_FRACTION, full weight at empty.
+  const opponentFatigue = clamp01((FATIGUE_OPPORTUNITY_STAMINA_FRACTION - world.opponent.staminaFraction) / FATIGUE_OPPORTUNITY_STAMINA_FRACTION);
+  const opportunity = clamp01(
+    (world.opponent.isBroken ? 0.7 : 0) +
+      (1 - world.opponent.stabilityFraction) * 0.3 +
+      opponentFatigue * FATIGUE_OPPORTUNITY_WEIGHT * personality.fatigueExploitation,
+  );
 
   const punishWindow = RECOVERY_ATTACK_STATES.has(world.opponent.attackState);
   const edgePressure = clamp01(world.opponent.edgeRiskFraction / EDGE_PRESSURE_FULL_AT_OPPONENT_EDGE_RISK);
