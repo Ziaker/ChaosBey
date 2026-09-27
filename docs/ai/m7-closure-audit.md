@@ -155,7 +155,7 @@ present at audit start):
 | Command | Result |
 |---|---|
 | `npm run typecheck` | **PASS** — 0 errors |
-| `npm test` (Vitest, full suite) | **PASS** — 590 passed, 1 skipped (591) after both fixes and all 4 new regression-test cases (586 before this audit's changes) |
+| `npm test` (Vitest, full suite) | **PASS** — 591 passed, 1 skipped (592) after both fixes and all 5 new regression-test cases (586 before this audit's changes) |
 | `npm run build` | **PASS** |
 | `npm run test:smoke` | **12 failed on this container** — every failure is `browserType.launch: Executable doesn't exist at .../chromium_headless_shell-1243/...`, i.e. this sandbox's pre-installed Chromium revision doesn't match what this `@playwright/test` version expects by default. This is exactly the documented escape hatch in `tests/smoke/playwright.config.ts` (`CHAOSBEY_PW_CHROMIUM_PATH`). Re-running the full suite with `CHAOSBEY_PW_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` got **11/12 passing**, including both `tests/smoke/aiRuntime.spec.ts` cases (one observed a real Clash go Active → resolve → back to normal: `"Clash exercised (Active seen, then left Active)"`) — a sandbox/CI infrastructure characteristic, not an AI bug, left alone per scope (Loft's lane). The one remaining failure, `repeatedMatchStability.spec.ts` ("run 0: should reach RoundEnd within the budget"), did **not** reproduce in two isolated re-runs — one against this fix, one against the pre-fix `AIController.ts` (temporarily checked out via `git checkout HEAD~1 -- src/ai/controllers/AIController.ts`, then restored) — both passed cleanly. That test races a real match against a **wall-clock** budget (25s of real time per run) while software-rendering (SwiftShader) under this sandbox's shared CPU; a one-off slow tick during the full-suite run (heavy WebGL labs running back-to-back) is consistent with the config's own documented CPU-contention note, not a code regression from this fix. |
 | `AI_STABILITY_BATCH=1 npx vitest run tests/deterministic/aiStabilityBatchExtended.test.ts` | **PASS** — 360/360 matches (40 seeds × 9 archetype pairings), 47 known-physics notes logged (not failures — see §12), 0 unresolved rounds beyond the 5% budget, 0 stalled-attack/press-spam/mutual-idle regressions. |
@@ -165,7 +165,7 @@ Also ran individually: `aiArchetypeMatrix`, `aiArchetypeBehavior`,
 `aiClashWillingness`, `aiHitstopFreeze`, and (via the corrected chromium
 path) `aiRuntime` (smoke) — all pass. Every other `tests/unit` and
 `tests/deterministic` AI file is included in the full `npm test` run
-above (590 passed covers all of them, including
+above (591 passed covers all of them, including
 `AiAdaptationTracker`, `AiIntentionalError`, `AiWorldStatePrediction`,
 `AiEdgeThreat`, `AiEdgeRecoveryBlocked`, `AiEvasionAndDodge`,
 `AiArchetypeTraits`, `AiIntentSelection`, `AiPerceptionAndRisk`).
@@ -242,14 +242,38 @@ B's first mash event.
 (tracked via a new `wasClashActive` field), i.e. at the start of every
 new Clash, before that Clash's first mash tick.
 
-**Regression tests.** `tests/unit/AiActionSelection.test.ts`, new
-`describe('ActionSelector — dedicated Clash-mash selector must reset
-between separate Clashes (M7 audit follow-up)')`: one case reproduces the
-gap (repeated Attack across two unreset Clashes loses the second one's
-first event), one proves `reset()` fixes it.
+**Regression tests.**
+- `tests/unit/AiActionSelection.test.ts`, new `describe('ActionSelector —
+  dedicated Clash-mash selector must reset between separate Clashes (M7
+  audit follow-up)')`: one case reproduces the gap on `ActionSelector` in
+  isolation (repeated Attack across two unreset Clashes loses the second
+  one's first event), one proves `reset()` fixes it.
+- **Second review round** (on HEAD `da5cec4`) correctly pointed out that
+  the isolated-`ActionSelector` tests above don't exercise the actual
+  wiring in `AIController` — the bug was in whether `wasClashActive` and
+  the real `clashMashActionSelector.reset()` call fire correctly on a real
+  Idle/Cooldown → Active edge, not in whether `reset()` itself works.
+  Added `tests/deterministic/aiClash.test.ts`'s new "regression: a real
+  AIController resets its Clash-mash bookkeeping between two separate
+  Clashes, through the controller itself" case: drives a real
+  `AIController` (via `CombatHarness`, real physics) through two full,
+  separate Clashes with a forced-deterministic RNG (`Object.create(base)`
+  override, same pattern `aiSlowToReactCriticalPreemption.test.ts` already
+  uses) that makes every Clash-mash roll succeed and always pick
+  `Action.Attack` — so Clash A's last mash tick and Clash B's first mash
+  tick are guaranteed to both be Attack, deterministically, no lucky seed
+  needed. Between the two Clashes it calls `ai.sampleActions()` on a real
+  Idle tick (exactly like `main.ts`'s per-tick loop), so the real
+  `wasClashActive` transition is what triggers the reset, not a hand-set
+  flag. Asserts Clash B's first tick actually presses (`pressedThisFrame`,
+  not just `held`) Attack. **Verified this test is not vacuous**: with the
+  `AIController`'s reset call temporarily disabled, this exact test fails
+  (`expected false to be true` on the fresh-press assertion); restoring
+  the call makes it pass again — confirmed before finalizing.
 
 **Files changed (this follow-up):** `src/ai/decision/ActionSelection.ts`,
-`src/ai/controllers/AIController.ts`, `tests/unit/AiActionSelection.test.ts`.
+`src/ai/controllers/AIController.ts`, `tests/unit/AiActionSelection.test.ts`,
+`tests/deterministic/aiClash.test.ts`.
 
 ## Bug fixed: Clash-mash held state leaking into normal combat
 

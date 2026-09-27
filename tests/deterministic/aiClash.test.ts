@@ -16,6 +16,7 @@ import { ClashController, ClashState, type ClashCombatantInputTick } from '../..
 import { FixedIntervalAiMashSource, NullAiMashSource } from '../../src/combat/clash/ClashMash';
 import { CLASH_AI_MASH_INTERVAL_TICKS } from '../../src/combat/clash/ClashTuning';
 import { buildMashActionSet } from '../../src/app/simulation/ClashOrchestration';
+import { Action } from '../../src/input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { SeededRng } from '../../src/rng/SeededRng';
 import { CombatHarness } from './combatHarness';
@@ -112,5 +113,64 @@ describe('AI Clash participation', () => {
     // And on this captured sequence it actually does add at least one —
     // otherwise this regression would be vacuous.
     expect(withPlaceholderLeftActive).toBeGreaterThan(withNullMashSource);
+  });
+
+  it('regression: a real AIController resets its Clash-mash bookkeeping between two separate Clashes, through the controller itself (not ActionSelector in isolation)', async () => {
+    // Forces every Clash-mash roll to succeed and always pick the first
+    // option (Action.Attack — see AIController.sampleClashMashActions'
+    // `options` array) — same Object.create(base) pattern already used by
+    // aiSlowToReactCriticalPreemption.test.ts's forcedSlowToReactRng. This
+    // guarantees Clash A's last mash tick and Clash B's first mash tick
+    // both hold Attack, without depending on a lucky seed.
+    function alwaysAttackRng(): SeededRng {
+      const base = SeededRng.fromSeedText('clash-to-clash-reset-regression');
+      const rng = Object.create(base) as SeededRng;
+      rng.nextBool = () => true;
+      rng.nextInt = () => 0;
+      return rng;
+    }
+
+    const harness = await CombatHarness.create(undefined, undefined, {}, new NullAiMashSource());
+    const ai = new AIController(
+      harness.physics,
+      harness.second,
+      harness.first,
+      harness.clash.controller,
+      ATTACK_AI_PERSONALITY,
+      DEFAULT_AI_DIFFICULTY_PROFILE,
+      alwaysAttackRng(),
+    );
+    const noInput: ClashCombatantInputTick = { pressedActionIds: new Set(), aiMashEventThisTick: false };
+
+    // --- Clash A: drive it through the real AIController until it resolves. ---
+    expect(harness.clash.controller.tryStart({ firstStaminaFraction: 1, secondStaminaFraction: 1, firstSpeedMps: 3, secondSpeedMps: 3 })).toBe(true);
+    let lastClashAActions = ai.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
+    for (let i = 0; i < 300 && harness.clash.controller.getState() === ClashState.Active; i++) {
+      lastClashAActions = ai.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
+      harness.clash.controller.tick(FIXED_DELTA_SECONDS, noInput, { pressedActionIds: buildMashActionSet(lastClashAActions), aiMashEventThisTick: false });
+    }
+    expect(harness.clash.controller.getState()).toBe(ClashState.Cooldown);
+    // Every Active tick mashed (forced RNG), so the last one held Attack.
+    expect(lastClashAActions.held.has(Action.Attack)).toBe(true);
+
+    // --- Let Cooldown elapse (no need to drive the AI through every tick of
+    // it — only that it sees at least one non-Active sample, exactly like
+    // main.ts calling sampleActions() every tick, so wasClashActive turns
+    // false before Clash B starts). ---
+    while (harness.clash.controller.getState() === ClashState.Cooldown) {
+      harness.clash.controller.tick(FIXED_DELTA_SECONDS, noInput, noInput);
+    }
+    expect(harness.clash.controller.getState()).toBe(ClashState.Idle);
+    ai.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }); // real Idle/Cooldown sample -> wasClashActive = false.
+
+    // --- Clash B: starts fresh. Its very first mash tick, through the real
+    // AIController (wasClashActive edge -> clashMashActionSelector.reset()),
+    // must press Attack for real — not read it as already held from
+    // Clash A's last tick. ---
+    expect(harness.clash.controller.tryStart({ firstStaminaFraction: 1, secondStaminaFraction: 1, firstSpeedMps: 3, secondSpeedMps: 3 })).toBe(true);
+    const clashBFirstActions = ai.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
+    expect(clashBFirstActions.held.has(Action.Attack)).toBe(true);
+    expect(clashBFirstActions.pressedThisFrame.has(Action.Attack)).toBe(true);
+    expect(buildMashActionSet(clashBFirstActions).has(Action.Attack)).toBe(true);
   });
 });
