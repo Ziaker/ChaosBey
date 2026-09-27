@@ -9,11 +9,12 @@ import type { Locator, Page } from '@playwright/test';
 // The budget is SIMULATED time, read from the overlay's own tick counter,
 // not wall-clock time, for two reasons:
 // - A round only ends by KO or Ring-Out, and every boot draws a fresh
-//   random seed, so round length varies a lot. Measured over 300 seeds
-//   headless, with this input against the real AI, rounds took 6.9 s at
-//   the median, 1.3% took over 25 s and the longest took 45.6 s. A fixed
-//   25-30 s wall-clock budget failed on real, legitimate rounds (main went
-//   red on repeatedMatchStability).
+//   random seed, so round length varies a lot. With this exact input
+//   against the real AI, 60 rounds in the production build (running at
+//   1.00x real time) took 12.4 s at the median and up to 29.9 s, with 4
+//   over 25 s; 300 seeds headless reached 45.6 s. A fixed 25-30 s
+//   wall-clock budget failed on real, legitimate rounds (main went red on
+//   repeatedMatchStability).
 // - The fixed-step loop caps catch-up, so under load the simulation can
 //   run slower than the wall clock (see the note on SIMULATED_TICKS in
 //   aiRuntime.spec.ts).
