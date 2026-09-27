@@ -24,6 +24,7 @@ import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
 import { DodgeState } from '../../src/dodge/DodgeController';
 import { Action, type ControllerActions } from '../../src/input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
+import { checkAngularVelocity, checkLinearVelocity, type PhysicsAnomaly } from '../../src/physics/diagnostics/physicsSafety';
 import { SeededRng } from '../../src/rng/SeededRng';
 import { CombatHarness } from './combatHarness';
 
@@ -72,6 +73,17 @@ export interface AiSideStats {
   longestWedgedTicks: number;
 }
 
+/**
+ * A catastrophic-numerical-state detection (same detectors main.ts's live
+ * loop already runs — see physicsSafety.ts) caught during a headless batch,
+ * where there is no telemetry sink to report it: seed + tick + side pin down
+ * exactly which run and which moment to reproduce.
+ */
+export interface AiMatchAnomaly extends PhysicsAnomaly {
+  tick: number;
+  side: 'first' | 'second';
+}
+
 export interface AiMatchStats {
   seed: string;
   ticks: number;
@@ -83,6 +95,8 @@ export interface AiMatchStats {
   meanDistanceM: number;
   first: AiSideStats;
   second: AiSideStats;
+  /** Non-finite/implausible velocity readings caught this match. Empty in the overwhelming common case. */
+  anomalies: AiMatchAnomaly[];
 }
 
 export interface AiMatchSetup {
@@ -252,6 +266,7 @@ export async function runAiMatch(setup: AiMatchSetup): Promise<AiMatchStats> {
   let previousSecondBroken = false;
   let distanceSum = 0;
   let ticks = 0;
+  const anomalies: AiMatchAnomaly[] = [];
 
   for (let tick = 0; tick < maxTicks; tick++) {
     const firstActions = firstAi.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
@@ -279,6 +294,16 @@ export async function runAiMatch(setup: AiMatchSetup): Promise<AiMatchStats> {
     for (const event of result.combatEvents) {
       if (event.kind === 'dodged') (event.targetIsFirst ? first : second).stats.hitsDodged++;
     }
+    for (const [side, snapshot] of [
+      ['first', result.first],
+      ['second', result.second],
+    ] as const) {
+      const linvel = side === 'first' ? harness.first.body.linvel() : harness.second.body.linvel();
+      const linearAnomaly = checkLinearVelocity(linvel.x, linvel.y, linvel.z);
+      if (linearAnomaly) anomalies.push({ ...linearAnomaly, tick, side });
+      const angularAnomaly = checkAngularVelocity(snapshot.spin.angularVelocity.x, snapshot.spin.angularVelocity.y, snapshot.spin.angularVelocity.z);
+      if (angularAnomaly) anomalies.push({ ...angularAnomaly, tick, side });
+    }
     if (result.clashResolvedThisTick) clashes++;
     mutualIdleStreak = !clashActive && firstActions.held.size === 0 && secondActions.held.size === 0 ? mutualIdleStreak + 1 : 0;
     longestMutualIdleTicks = Math.max(longestMutualIdleTicks, mutualIdleStreak);
@@ -300,6 +325,7 @@ export async function runAiMatch(setup: AiMatchSetup): Promise<AiMatchStats> {
     meanDistanceM: distanceSum / Math.max(1, ticks),
     first: first.stats,
     second: second.stats,
+    anomalies,
   };
 }
 
