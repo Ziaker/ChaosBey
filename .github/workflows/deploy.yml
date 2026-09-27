@@ -40,9 +40,33 @@ jobs:
         with:
           path: dist
 
+  # GDD 133: Firefox is a supported browser, so the game's own smokes run
+  # there too. A separate job so it runs in parallel with the Chromium one
+  # instead of after it; the prototype labs stay Chromium-only (see
+  # GAME_SMOKE_SPECS in tests/smoke/playwright.config.ts).
+  smoke-firefox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - run: npx playwright install --with-deps firefox
+      - run: npx playwright test -c tests/smoke/playwright.config.ts --project=firefox
+        env:
+          CHAOSBEY_PW_INCLUDE_FIREFOX: '1'
+
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: build
+    needs: [build, smoke-firefox]
     runs-on: ubuntu-latest
     environment:
       name: github-pages
