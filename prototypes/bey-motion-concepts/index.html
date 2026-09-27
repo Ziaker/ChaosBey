@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en" data-tab="physics">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bey Motion Lab</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07090d;
+        --panel: #0d1118;
+        --panel-2: #131a24;
+        --line: #212a37;
+        --text: #e9eef5;
+        --muted: #8a96a8;
+        --accent: #33c4ff;
+        --warn: #ffb547;
+        --bad: #ff6b6b;
+        --good: #6fdc8c;
+        font-family: 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+      .lab { display: grid; grid-template-columns: 340px 1fr; height: 100%; min-height: 560px; }
+      .panel { background: var(--panel); border-right: 1px solid var(--line); padding: 18px 18px 24px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+      .kicker { font: 600 11px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+      h1 { margin: 6px 0 6px; font-size: 21px; }
+      .warn { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+      h3 { margin: 0 0 8px; font: 700 11px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; }
+      .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+      .seg button, .concept-button, .action { border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); cursor: pointer; font: 12px/1 inherit; padding: 7px 9px; }
+      .seg button:hover, .concept-button:hover, .action:hover { border-color: #3a4658; }
+      .seg button[aria-pressed='true'], .concept-button[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--panel-2)); }
+      .seg kbd, .concept-button kbd { font: 10px ui-monospace, Consolas, monospace; color: var(--muted); margin-left: 4px; }
+      #concept-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      .concept-button { text-align: left; padding: 8px; }
+      .concept-button b { display: block; font-size: 12px; }
+      .concept-button span { font-size: 10px; color: var(--muted); }
+      .concept-button[data-second='true'] { outline: 1px dashed var(--warn); outline-offset: 1px; }
+      label.slider { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; font-size: 12px; align-items: center; margin-bottom: 8px; }
+      label.slider input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+      label.slider output { font: 12px ui-monospace, Consolas, monospace; color: var(--accent); }
+      .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+      .readout { font: 12px/1.5 ui-monospace, Consolas, monospace; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+      .readout .good { color: var(--good); } .readout .warn-t { color: var(--warn); } .readout .bad { color: var(--bad); }
+      .stage { position: relative; min-width: 0; }
+      #lab-canvas { display: block; width: 100%; height: 100%; }
+      #hud { position: absolute; left: 14px; top: 12px; font: 12px/1.45 ui-monospace, Consolas, monospace; color: var(--muted); pointer-events: none; text-shadow: 0 1px 2px #000; }
+      #hud b { color: var(--text); }
+      .note { font-size: 11px; color: var(--muted); line-height: 1.4; margin: 4px 0 0; }
+      #tab-bar { display: flex; gap: 6px; }
+      #tab-bar button { flex: 1; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); padding: 9px; cursor: pointer; font: 600 12px/1 inherit; }
+      #tab-bar button[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--panel-2)); }
+      :root[data-tab='physics'] .only-spin, :root[data-tab='spin'] .only-physics { display: none !important; }
+      .list { display: grid; gap: 4px; }
+      .list button { text-align: left; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); cursor: pointer; font: 12px/1.25 inherit; padding: 6px 8px; }
+      .list button[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--panel-2)); }
+      .list button.replay { border-style: dashed; }
+      details.params { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; background: var(--panel-2); }
+      details.params summary { cursor: pointer; font: 700 11px/1.4 ui-monospace, Consolas, monospace; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+      details.params label.slider { margin: 6px 0; }
+      label.slider.changed output { color: var(--warn); }
+      .legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--muted); margin-top: 6px; }
+      .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+      select { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px; font: 12px inherit; }
+      table.ro { width: 100%; border-collapse: collapse; font: 11px/1.45 ui-monospace, Consolas, monospace; }
+      table.ro td { padding: 1px 4px; border-bottom: 1px solid var(--line); }
+      table.ro td:first-child { color: var(--muted); }
+      #params-json { white-space: pre-wrap; font: 11px ui-monospace, Consolas, monospace; background: #05070a; border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 220px; overflow: auto; display: none; }
+      #phys-canvas { display: block; width: 100%; height: 100%; }
+      #phys-hud { position: absolute; left: 14px; top: 12px; font: 12px/1.45 ui-monospace, Consolas, monospace; color: var(--muted); pointer-events: none; text-shadow: 0 1px 2px #000; }
+      #phys-hud b { color: var(--text); }
+      @media (max-width: 760px) { .lab { grid-template-columns: 1fr; grid-template-rows: auto 60vh; } .panel { border-right: 0; border-bottom: 1px solid var(--line); } }
+    </style>
+  </head>
+  <body>
+    <div class="lab">
+      <aside class="panel">
+        <div>
+          <div class="kicker">ChaosBey · Prototype</div>
+          <h1>Bey Motion Lab</h1>
+          <p class="warn">Prototype for comparing and approving how a ChaosBey MOVES before anything is integrated. Isolated: nothing here changes the game, and every value is a prototype value, not balance.</p>
+        </div>
+
+        <div id="tab-bar">
+          <button type="button" data-tab="physics">Motion physics</button>
+          <button type="button" data-tab="spin">Spin readability</button>
+        </div>
+
+        <!-- ================= MOTION PHYSICS ================= -->
+        <section class="only-physics">
+          <h3>Preset</h3>
+          <div class="seg" id="preset-seg">
+            <button type="button" data-preset="A">A · Stable Arcade</button>
+            <button type="button" data-preset="B">B · Physical Hybrid</button>
+            <button type="button" data-preset="C">C · Wild Mechanical</button>
+          </div>
+          <p class="note" id="preset-summary"></p>
+          <p class="note">Lab identifiers only, not game modes. Keys A / B / C (restart the scenario to compare).</p>
+        </section>
+
+        <section class="only-physics">
+          <h3>Scenario</h3>
+          <div class="list" id="scenario-list"></div>
+          <h3 style="margin-top: 10px">Game replays (what the game does today)</h3>
+          <div class="list" id="replay-list"></div>
+          <p class="note" id="scenario-desc"></p>
+        </section>
+
+        <section class="only-physics">
+          <h3>Transport</h3>
+          <div class="seg">
+            <button type="button" class="action" id="restart">Restart <kbd>R</kbd></button>
+            <button type="button" class="action" id="ppause">Pause <kbd>Space</kbd></button>
+            <button type="button" class="action" id="pstep">Step <kbd>.</kbd></button>
+          </div>
+          <label class="slider" style="margin-top: 8px">Timeline <output id="timeline-out"></output><input id="timeline" type="range" min="0" max="1" step="0.01" /></label>
+          <div class="list" id="moments"></div>
+          <div class="seg" id="ptime-seg" style="margin-top: 6px">
+            <button type="button" data-ptime="1">1×</button>
+            <button type="button" data-ptime="0.25">¼×</button>
+            <button type="button" data-ptime="0.1">1/10×</button>
+          </div>
+        </section>
+
+        <section class="only-physics">
+          <h3>Camera</h3>
+          <div class="seg" id="pcam-seg">
+            <button type="button" data-pcam="combat">Combat (ref.)<kbd>G</kbd></button>
+            <button type="button" data-pcam="follow">Follow<kbd>F</kbd></button>
+            <button type="button" data-pcam="top">Top<kbd>T</kbd></button>
+            <button type="button" data-pcam="side">Side<kbd>V</kbd></button>
+            <button type="button" data-pcam="free">Free<kbd>O</kbd></button>
+          </div>
+          <p class="note">"Combat" reproduces the game's current camera as a reference only. Camera language is decided later, in a separate Camera Lab, using the approved motion.</p>
+          <div class="seg" id="follow-seg" style="margin-top: 6px">
+            <button type="button" data-follow="0">Follow Bey 1</button>
+            <button type="button" data-follow="1">Follow Bey 2</button>
+          </div>
+        </section>
+
+        <section class="only-physics">
+          <h3>Beys (visual only)</h3>
+          <label class="note">Bey 1 <select id="bey1-select"></select></label>
+          <label class="note">Bey 2 <select id="bey2-select"></select></label>
+        </section>
+
+        <section class="only-physics">
+          <h3>Debug</h3>
+          <div class="seg" id="debug-seg">
+            <button type="button" data-debug="velocity">Velocity</button>
+            <button type="button" data-debug="heading">Heading</button>
+            <button type="button" data-debug="steering">Steering</button>
+            <button type="button" data-debug="spinAxis">Spin axis</button>
+            <button type="button" data-debug="contact">Contact normal</button>
+            <button type="button" data-debug="trail">Trail</button>
+          </div>
+          <div class="legend"><span><i style="background:#4dff88"></i>velocity</span><span><i style="background:#4db8ff"></i>heading</span><span><i style="background:#ffd24d"></i>steering</span><span><i style="background:#fff"></i>spin axis</span><span><i style="background:#ff4d4d"></i>contact normal</span></div>
+          <div class="readout" id="phys-readout" style="margin-top: 8px"></div>
+        </section>
+
+        <section class="only-physics">
+          <h3>Parameters <span class="note" id="modified-count"></span></h3>
+          <div id="param-groups"></div>
+          <div class="seg" style="margin-top: 6px">
+            <button type="button" class="action" id="reset-params">Reset to preset</button>
+            <button type="button" class="action" id="copy-params">Copy JSON</button>
+          </div>
+          <pre id="params-json"></pre>
+        </section>
+
+        <!-- ================= SPIN READABILITY ================= -->
+
+        <section class="only-spin">
+          <h3>Layout</h3>
+          <div class="seg" id="layout-seg">
+            <button type="button" data-layout="solo">Solo<kbd>Q</kbd></button>
+            <button type="button" data-layout="duel">Duel<kbd>W</kbd></button>
+            <button type="button" data-layout="grid">All 9<kbd>A</kbd></button>
+          </div>
+        </section>
+
+        <section class="only-spin">
+          <h3>Concept <span id="second-hint" class="note"></span></h3>
+          <div id="concept-picker"></div>
+          <p class="note">Keys 1–9. In Duel, Shift+click (or Shift+1–9) picks the second Bey.</p>
+        </section>
+
+        <section class="only-spin">
+          <h3>Spin</h3>
+          <label class="slider">Visual spin rate <output id="spin-out"></output><input id="spin" type="range" min="0" max="160" step="1" /></label>
+          <div class="seg" id="spin-presets"></div>
+          <div class="row" style="margin-top: 8px">
+            <button type="button" class="action" id="reverse">Reverse direction <kbd>V</kbd></button>
+            <button type="button" class="action" id="spin-down">Spin-down <kbd>N</kbd></button>
+          </div>
+        </section>
+
+        <section class="only-spin">
+          <h3>Tilt &amp; wobble</h3>
+          <label class="slider">Static tilt <output id="tilt-out"></output><input id="tilt" type="range" min="0" max="35" step="1" /></label>
+          <label class="slider">Wobble energy <output id="wobble-out"></output><input id="wobble" type="range" min="0" max="1" step="0.05" /></label>
+          <div class="seg" id="wobble-seg">
+            <button type="button" data-wobble="game">Rock (game)</button>
+            <button type="button" data-wobble="precession">Precession</button>
+          </div>
+        </section>
+
+        <section class="only-spin">
+          <h3>Movement</h3>
+          <div class="seg" id="motion-seg">
+            <button type="button" data-motion="still">Still<kbd>M</kbd></button>
+            <button type="button" data-motion="orbit">Circle</button>
+            <button type="button" data-motion="figure8">Figure 8</button>
+          </div>
+          <label class="slider" style="margin-top: 8px">Speed <output id="speed-out"></output><input id="speed" type="range" min="0" max="18" step="0.5" /></label>
+        </section>
+
+        <section class="only-spin">
+          <h3>Camera &amp; time</h3>
+          <div class="seg" id="camera-seg">
+            <button type="button" data-camera="combat">Combat<kbd>G</kbd></button>
+            <button type="button" data-camera="close">Close<kbd>C</kbd></button>
+            <button type="button" data-camera="top">Top<kbd>T</kbd></button>
+            <button type="button" data-camera="free">Free<kbd>F</kbd></button>
+          </div>
+          <div class="seg" id="time-seg" style="margin-top: 8px">
+            <button type="button" data-time="1">1×</button>
+            <button type="button" data-time="0.25">¼× <kbd>S</kbd></button>
+            <button type="button" data-time="0.05">1/20×</button>
+            <button type="button" data-pause="1">Pause <kbd>Space</kbd></button>
+          </div>
+          <div class="seg" style="margin-top: 8px">
+            <button type="button" id="blur">Spin blur <kbd>B</kbd></button>
+          </div>
+        </section>
+
+        <section class="only-spin">
+          <h3>Readability at 60 fps</h3>
+          <div class="readout" id="readout"></div>
+          <p class="note">One image per frame: a ring whose features repeat N times looks identical every 360°/N, so what the eye reads is the rotation per frame modulo that. The game draws at 60 fps.</p>
+        </section>
+      </aside>
+      <main class="stage" id="stage">
+        <canvas id="lab-canvas" class="only-spin"></canvas>
+        <div id="hud" class="only-spin"></div>
+        <canvas id="phys-canvas" class="only-physics"></canvas>
+        <div id="phys-hud" class="only-physics"></div>
+      </main>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
