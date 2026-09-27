@@ -37,6 +37,7 @@ export default defineConfig(({ command, isPreview }) => ({
         beyVisualConceptsRound1: fileURLToPath(new URL('./prototypes/bey-visual-concepts-round1/index.html', import.meta.url)),
         arenaVisualConcepts: fileURLToPath(new URL('./prototypes/arena-visual-concepts/index.html', import.meta.url)),
         vfxVisualConcepts: fileURLToPath(new URL('./prototypes/vfx-visual-concepts/index.html', import.meta.url)),
+        beyMotionConcepts: fileURLToPath(new URL('./prototypes/bey-motion-concepts/index.html', import.meta.url)),
       },
     },
   },
