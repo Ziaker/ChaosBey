@@ -24,6 +24,9 @@ import { directionTowardCenter, distanceToEdgeM, edgeRiskFraction } from './Edge
 /** How far from the ring-out boundary edge-risk starts ramping up (GDD section 129 — must give the AI enough room to actually attempt recovery, not just notice the edge a tick before falling off it). */
 export const EDGE_RISK_MARGIN_M = 3.5;
 
+/** Seconds ahead a combatant's own velocity is projected for projectedEdgeRiskFraction — a Bey already sliding outward is in danger before its current position says so. */
+export const EDGE_PROJECTION_HORIZON_S = 0.5;
+
 export interface CombatantRawState {
   positionXZ: Vec2;
   velocityXZ: Vec2;
@@ -37,6 +40,10 @@ export interface CombatantRawState {
   stabilityFraction: number;
   isBroken: boolean;
   attackEnergyFraction: number;
+  /** DodgeController.isAirRecoveryAvailable(): pressing Dodge right now (airborne) would trigger air recovery (GDD section 21) — see that method for why this is not privileged information. */
+  airRecoveryAvailable: boolean;
+  /** Current Stamina covers a Dodge's cost — the Bey's own resource bar, which a player reads off the HUD. DodgeController silently ignores a Dodge press it cannot pay for. */
+  canAffordDodge: boolean;
 }
 
 export interface PerceivedCombatant extends CombatantRawState {
@@ -44,6 +51,8 @@ export interface PerceivedCombatant extends CombatantRawState {
   distanceToEdgeM: number;
   directionTowardCenter: Vec2;
   edgeRiskFraction: number;
+  /** edgeRiskFraction of where current velocity carries this combatant in EDGE_PROJECTION_HORIZON_S (public position/velocity only). */
+  projectedEdgeRiskFraction: number;
   /** True while this combatant currently has a live/imminent hitbox that could land soon — mirrors ClashOrchestration's ENGAGED_ATTACK_STATES notion of "threatening", reused here for the AI's own read of danger rather than duplicating the list. */
   hasImminentHitbox: boolean;
 }
@@ -81,6 +90,13 @@ export function perceiveCombatant(raw: CombatantRawState): PerceivedCombatant {
     distanceToEdgeM: distanceToEdgeM(raw.positionXZ),
     directionTowardCenter: directionTowardCenter(raw.positionXZ),
     edgeRiskFraction: edgeRiskFraction(raw.positionXZ, EDGE_RISK_MARGIN_M),
+    projectedEdgeRiskFraction: edgeRiskFraction(
+      {
+        x: raw.positionXZ.x + raw.velocityXZ.x * EDGE_PROJECTION_HORIZON_S,
+        z: raw.positionXZ.z + raw.velocityXZ.z * EDGE_PROJECTION_HORIZON_S,
+      },
+      EDGE_RISK_MARGIN_M,
+    ),
     hasImminentHitbox: ENGAGED_ATTACK_STATES.has(raw.attackState),
   };
 }

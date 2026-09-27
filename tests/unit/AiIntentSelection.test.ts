@@ -14,7 +14,7 @@ import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { perceiveCombatant, type CombatantRawState } from '../../src/ai/perception/AiPerception';
 import { buildWorldState, type WorldState } from '../../src/ai/decision/WorldState';
 import { evaluateRisk } from '../../src/ai/decision/RiskEvaluation';
-import { NEUTRAL_DECISION_CONTEXT, selectIntent, type DecisionContext } from '../../src/ai/decision/IntentSelection';
+import { clashWillingness, NEUTRAL_DECISION_CONTEXT, selectIntent, type DecisionContext } from '../../src/ai/decision/IntentSelection';
 import { AiIntent } from '../../src/ai/decision/Intent';
 import { ATTACK_AI_PERSONALITY, DEFENSE_AI_PERSONALITY, STAMINA_AI_PERSONALITY } from '../../src/ai/personalities/AiArchetypePersonalities';
 
@@ -32,6 +32,8 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    airRecoveryAvailable: false,
+    canAffordDodge: true,
     ...overrides,
   };
 }
@@ -173,13 +175,13 @@ describe('selectIntent — anti-passivity tempo (M7 Part 2)', () => {
 });
 
 describe('selectIntent — considered scores (M7 Part 2, GDD section 65)', () => {
-  it('reports up to 3 candidates, best first, with the winner on top', () => {
+  it('reports every scored candidate, best first, with the winner on top (M7 Part 2b: all, not just the top 3)', () => {
     const decision = decide({}, { positionXZ: { x: 0, z: 4.5 } }, DEFENSE_AI_PERSONALITY);
     const scores = decision.consideredScores ?? [];
-    expect(scores.length).toBe(3);
+    expect(scores.length).toBe(8);
+    expect(new Set(scores.map((entry) => entry.intent)).size).toBe(scores.length);
     expect(scores[0]!.intent).toBe(decision.intent);
-    expect(scores[0]!.score).toBeGreaterThanOrEqual(scores[1]!.score);
-    expect(scores[1]!.score).toBeGreaterThanOrEqual(scores[2]!.score);
+    for (let i = 1; i < scores.length; i++) expect(scores[i - 1]!.score).toBeGreaterThanOrEqual(scores[i]!.score);
   });
 
   it('reports no scores when an override decided', () => {
@@ -203,5 +205,77 @@ describe('selectIntent — edge recovery hysteresis (M7 Part 2)', () => {
     expect(decide(clear, opponentFarAway, DEFENSE_AI_PERSONALITY, { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true }).intent).not.toBe(
       AiIntent.RecoverFromEdge,
     );
+  });
+});
+
+// ============================================================
+// Clash willingness (ported from PR #15): GDD section 42/63 — the AI can
+// create/accept Clash opportunities, by personality, only when a Clash can
+// actually start.
+// ============================================================
+
+describe('clashWillingness (M7 Part 2b, ported from PR #15)', () => {
+  const opponentCharging = { positionXZ: { x: 0, z: 6 }, attackState: AttackState.ChargingDash };
+  const withClash = (w: WorldState, state: ClashState): WorldState => ({ ...w, clash: { state, cooldownRemainingS: state === ClashState.Cooldown ? 2 : 0 } });
+  const scoreOf = (decision: ReturnType<typeof selectIntent>, intent: AiIntent) => decision.consideredScores?.find((entry) => entry.intent === intent)?.score;
+
+  it('is 1 (attack as usual) when the opponent has no live/imminent hitbox', () => {
+    expect(clashWillingness(world({}, { positionXZ: { x: 0, z: 6 } }), DEFENSE_AI_PERSONALITY)).toBe(1);
+    expect(clashWillingness(world({}, { positionXZ: { x: 0, z: 6 }, attackState: AttackState.DashRecovery }), DEFENSE_AI_PERSONALITY)).toBe(1);
+  });
+
+  it('is 1 when a Clash cannot start (Cooldown or already Active) — nothing to accept', () => {
+    const w = world({}, opponentCharging);
+    expect(clashWillingness(withClash(w, ClashState.Cooldown), DEFENSE_AI_PERSONALITY)).toBe(1);
+    expect(clashWillingness(withClash(w, ClashState.Active), DEFENSE_AI_PERSONALITY)).toBe(1);
+    expect(clashWillingness(withClash(w, ClashState.Idle), DEFENSE_AI_PERSONALITY)).toBeLessThan(1);
+  });
+
+  it('keeps archetype differences (aggression leans in, caution away) and stays within 0..1', () => {
+    const w = world({}, opponentCharging);
+    const attack = clashWillingness(w, ATTACK_AI_PERSONALITY);
+    const stamina = clashWillingness(w, STAMINA_AI_PERSONALITY);
+    const defense = clashWillingness(w, DEFENSE_AI_PERSONALITY);
+    expect(attack).toBeGreaterThan(stamina);
+    expect(stamina).toBeGreaterThan(defense);
+    for (const value of [attack, stamina, defense]) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('leans in with a Stamina edge (Clash power scales with ClashFormula\'s StaminaFactor) — both bars are visible', () => {
+    const ahead = clashWillingness(world({ staminaFraction: 1 }, { ...opponentCharging, staminaFraction: 0.2 }), DEFENSE_AI_PERSONALITY);
+    const behind = clashWillingness(world({ staminaFraction: 0.2 }, { ...opponentCharging, staminaFraction: 1 }), DEFENSE_AI_PERSONALITY);
+    expect(ahead).toBeGreaterThan(behind);
+  });
+
+  it('scales exactly the attack candidates in real scoring: Idle vs Cooldown differ only by the multiplier', () => {
+    const base = world({}, opponentCharging);
+    const idle = selectIntent(withClash(base, ClashState.Idle), DEFENSE_AI_PERSONALITY, evaluateRisk(base, DEFENSE_AI_PERSONALITY));
+    const cooldown = selectIntent(withClash(base, ClashState.Cooldown), DEFENSE_AI_PERSONALITY, evaluateRisk(base, DEFENSE_AI_PERSONALITY));
+    expect(cooldown.clashWillingness).toBe(1);
+    expect(idle.clashWillingness).toBeLessThan(1);
+    expect(scoreOf(idle, AiIntent.AttackDash)!).toBeCloseTo(scoreOf(cooldown, AiIntent.AttackDash)! * idle.clashWillingness!, 12);
+    for (const unaffected of [AiIntent.Approach, AiIntent.Circle, AiIntent.Retreat, AiIntent.Wait]) {
+      expect(scoreOf(idle, unaffected), unaffected).toBe(scoreOf(cooldown, unaffected));
+    }
+  });
+
+  it('can change the choice, but only while a Clash could start: a cautious attacker declines the exchange when Idle, takes it on Cooldown', () => {
+    const cautiousAttacker = { ...ATTACK_AI_PERSONALITY, caution: 0.9 };
+    const base = world({}, opponentCharging);
+    const risk = evaluateRisk(base, cautiousAttacker);
+    expect(selectIntent(withClash(base, ClashState.Cooldown), cautiousAttacker, risk).intent).toBe(AiIntent.AttackDash);
+    expect(selectIntent(withClash(base, ClashState.Idle), cautiousAttacker, risk).intent).not.toBe(AiIntent.AttackDash);
+    // A willing attacker takes it either way — a multiplier, not a rule.
+    expect(selectIntent(withClash(base, ClashState.Idle), ATTACK_AI_PERSONALITY, evaluateRisk(base, ATTACK_AI_PERSONALITY)).intent).toBe(AiIntent.AttackDash);
+  });
+
+  it('does not touch hard overrides: an imminent threat inside the override range is still answered, whatever the willingness', () => {
+    const close = world({}, { positionXZ: { x: 0, z: 2 }, attackState: AttackState.CircularActive });
+    const decision = selectIntent(close, ATTACK_AI_PERSONALITY, evaluateRisk(close, ATTACK_AI_PERSONALITY));
+    expect(decision.consideredScores ?? []).toEqual([]);
+    expect(decision.clashWillingness).toBeUndefined();
   });
 });

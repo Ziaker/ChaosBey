@@ -32,6 +32,8 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     attackEnergyFraction: 1,
+    airRecoveryAvailable: false,
+    canAffordDodge: true,
     ...overrides,
   };
 }
@@ -82,4 +84,60 @@ describe('buildWorldState prediction blending', () => {
     expect(noPrediction.distanceToOpponentM).toBeCloseTo(5, 5);
     expect(fullPrediction.distanceToOpponentM).toBeCloseTo(5, 5);
   });
+
+  it('keeps the observed opponent position and the predicted aim point separate (M7 Part 2b debug)', () => {
+    const own = perceiveCombatant(rawState({ positionXZ: { x: 0, z: 0 } }));
+    const movingOpponent = perceiveCombatant(rawState({ positionXZ: { x: 5, z: 0 }, velocityXZ: { x: 0, z: 20 } }));
+    const world = buildWorldState(0, own, movingOpponent, { state: ClashState.Idle, cooldownRemainingS: 0 }, { horizonSeconds: 0.5, strength: 0.5 });
+    // Observed: exactly where the opponent is.
+    expect(world.opponent.positionXZ).toEqual({ x: 5, z: 0 });
+    // Aim: halfway to the 0.5 s extrapolation (5, 10) -> (5, 5).
+    expect(world.aimPositionXZ.x).toBeCloseTo(5, 6);
+    expect(world.aimPositionXZ.z).toBeCloseTo(5, 6);
+    // No prediction: aim == observed.
+    const plain = buildWorldState(0, own, movingOpponent, { state: ClashState.Idle, cooldownRemainingS: 0 });
+    expect(plain.aimPositionXZ).toEqual(plain.opponent.positionXZ);
+  });
 });
+
+describe('buildWorldState — targeting: observed vs predicted vs aim (M7 Part 2b, ported from PR #15)', () => {
+  const clash = { state: ClashState.Idle, cooldownRemainingS: 0 };
+  const own = perceiveCombatant(rawState({ positionXZ: { x: 0, z: 0 } }));
+  const movingOpponent = perceiveCombatant(rawState({ positionXZ: { x: 5, z: 0 }, velocityXZ: { x: 0, z: 4 } }));
+
+  it('with no prediction (no config, or strength 0): predicted is null — never the observed position relabeled — horizon/strength 0, aim = observed', () => {
+    for (const world of [buildWorldState(0, own, movingOpponent, clash), buildWorldState(0, own, movingOpponent, clash, { horizonSeconds: 0.35, strength: 0 })]) {
+      expect(world.targeting.predictedOpponentXZ).toBeNull();
+      expect(world.targeting.predictionHorizonS).toBe(0);
+      expect(world.targeting.predictionStrength).toBe(0);
+      expect(world.targeting.observedOpponentXZ).toEqual({ x: 5, z: 0 });
+      expect(world.targeting.aimPositionXZ).toEqual({ x: 5, z: 0 });
+      expect(world.aimPositionXZ).toBe(world.targeting.aimPositionXZ);
+    }
+  });
+
+  it('with prediction: observed stays current, predicted is the exact extrapolation, aim sits between by strength, and directionToOpponent points at the aim', () => {
+    const world = buildWorldState(0, own, movingOpponent, clash, { horizonSeconds: 0.5, strength: 0.25 });
+    expect(world.targeting.observedOpponentXZ).toEqual({ x: 5, z: 0 });
+    expect(world.targeting.observedOpponentXZ).toBe(world.opponent.positionXZ);
+    expect(world.targeting.predictedOpponentXZ!.x).toBeCloseTo(5, 12);
+    expect(world.targeting.predictedOpponentXZ!.z).toBeCloseTo(2, 12); // 4 m/s x 0.5 s
+    expect(world.targeting.aimPositionXZ.z).toBeCloseTo(0.5, 12); // a quarter of the way
+    expect(world.targeting.predictionHorizonS).toBe(0.5);
+    expect(world.targeting.predictionStrength).toBe(0.25);
+    expect(world.aimPositionXZ).toBe(world.targeting.aimPositionXZ);
+    const aim = world.targeting.aimPositionXZ;
+    expect(world.directionToOpponent.x).toBeCloseTo(aim.x / Math.hypot(aim.x, aim.z), 12);
+    expect(world.directionToOpponent.z).toBeCloseTo(aim.z / Math.hypot(aim.x, aim.z), 12);
+    // Range is still judged from the observed position.
+    expect(world.distanceToOpponentM).toBeCloseTo(5, 12);
+  });
+
+  it('a stationary opponent is still a real prediction (equal to observed only because it is not moving)', () => {
+    const still = perceiveCombatant(rawState({ positionXZ: { x: 5, z: 0 } }));
+    const world = buildWorldState(0, own, still, clash, { horizonSeconds: 0.35, strength: 0.5 });
+    expect(world.targeting.predictedOpponentXZ).toEqual({ x: 5, z: 0 });
+    expect(world.targeting.predictionStrength).toBe(0.5);
+  });
+});
+
