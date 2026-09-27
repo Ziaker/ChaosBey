@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stamina & Stability Lab</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #06080c;
+        --panel: #0c1017;
+        --panel-2: #121823;
+        --line: #1f2835;
+        --text: #e9eef5;
+        --muted: #8894a6;
+        --soft: #c6cfdb;
+        --accent: #ffb347;
+        --lang-a: #d8a25a;
+        --lang-b: #ff4fa3;
+        --lang-c: #6fd3ff;
+        --danger: #ff3b4e;
+        --ok: #7fe0a4;
+        font-family: 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+      .lab { display: grid; grid-template-columns: 310px 1fr 310px; height: 100%; min-height: 560px; }
+      .lab.no-tuning { grid-template-columns: 310px 1fr; }
+      .lab.no-tuning .tuning { display: none; }
+
+      .panel, .tuning { background: var(--panel); padding: 18px 16px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+      .panel { border-right: 1px solid var(--line); }
+      .tuning { border-left: 1px solid var(--line); gap: 10px; }
+      .kicker { font: 600 11px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+      h1 { margin: 6px 0 8px; font-size: 21px; text-wrap: balance; }
+      h2 { margin: 0; font-size: 16px; }
+      h3 { margin: 0 0 8px; font: 700 11px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--muted); text-transform: uppercase; }
+      .warn { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+      .hint { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip, .act { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; cursor: pointer; font: 12.5px inherit; font-family: inherit; padding: 7px 10px; }
+      .chip:hover, .act:hover { border-color: #3a4658; }
+      .chip[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+      .chip:disabled, .act:disabled { opacity: 0.4; cursor: default; }
+      kbd { font: 10px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--muted); background: var(--bg); }
+      :is(.chip, .act, .tool, select, input, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+      .lang-pick { display: grid; gap: 6px; }
+      .lang { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 8px 10px; cursor: pointer; font: 12.5px inherit; font-family: inherit; }
+      .lang strong { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; color: #0b0d12; font-size: 14px; }
+      .lang[data-lang='A'] strong { background: var(--lang-a); }
+      .lang[data-lang='B'] strong { background: var(--lang-b); }
+      .lang[data-lang='C'] strong { background: var(--lang-c); }
+      .lang span small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+      .lang[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel-2)); }
+      .toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--soft); margin-top: 4px; cursor: pointer; }
+      .toggle input { accent-color: var(--accent); }
+
+      .state-grid { display: grid; gap: 8px; }
+      .meter { display: grid; grid-template-columns: 1fr 48px; gap: 2px 8px; align-items: center; }
+      .meter label { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
+      .meter input { width: 100%; accent-color: var(--accent); }
+      .meter output { font: 600 12px ui-monospace, Consolas, monospace; text-align: right; font-variant-numeric: tabular-nums; }
+      .pills { display: flex; gap: 6px; flex-wrap: wrap; min-height: 22px; }
+      .pill { font: 700 10.5px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.08em; padding: 5px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+      .pill.on.broken { color: #fff; background: color-mix(in srgb, var(--danger) 55%, transparent); border-color: var(--danger); }
+      .pill.on.spin { color: #fff; background: #3a4150; border-color: #6a7385; }
+      .pill.on.auto { color: #0b0d12; background: var(--accent); border-color: var(--accent); }
+      .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      .act { justify-content: space-between; padding: 7px 8px; font-size: 12px; }
+
+      label.sel { display: block; font-size: 11px; color: var(--muted); margin: 6px 0 4px; }
+      select { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 7px 8px; font: 12px inherit; font-family: inherit; }
+
+      .notes { display: grid; gap: 10px; margin: 0; font-size: 12px; line-height: 1.45; }
+      .note { border: 1px solid var(--line); border-radius: 7px; padding: 9px 10px; background: var(--panel-2); }
+      .note.dim { opacity: 0.55; }
+      .note b { display: block; font: 700 11px ui-monospace, Consolas, monospace; margin-bottom: 4px; letter-spacing: 0.04em; }
+      .note[data-lang='A'] b { color: var(--lang-a); }
+      .note[data-lang='B'] b { color: var(--lang-b); }
+      .note[data-lang='C'] b { color: var(--lang-c); }
+      .note p { margin: 0 0 4px; color: var(--soft); }
+      .note dl { margin: 0; display: grid; grid-template-columns: 74px 1fr; gap: 3px 8px; }
+      .note dt { color: var(--muted); font-size: 11px; }
+      .note dd { margin: 0; color: var(--soft); }
+      .keys { margin-top: auto; font-size: 11.5px; color: var(--muted); line-height: 1.8; }
+
+      .stage { position: relative; overflow: hidden; background: #000; min-height: 0; }
+      .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+      .overlay { position: absolute; inset: 0; pointer-events: none; }
+      .readout { position: absolute; top: 14px; left: 14px; display: flex; gap: 10px; align-items: center; font: 600 12px ui-monospace, Consolas, monospace; color: #dfe6ef; text-shadow: 0 1px 3px #000; font-variant-numeric: tabular-nums; }
+      .readout small { font: 11px inherit; font-family: 'Segoe UI', system-ui, sans-serif; color: var(--muted); }
+      .badge { position: absolute; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #dfe6ef; text-shadow: 0 1px 3px #000; }
+      .badge strong { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 5px; color: #0b0d12; font-size: 13px; }
+      .badge[data-lang='A'] strong { background: var(--lang-a); }
+      .badge[data-lang='B'] strong { background: var(--lang-b); }
+      .badge[data-lang='C'] strong { background: var(--lang-c); }
+      .divider { position: absolute; background: var(--line); }
+      .ladder-label { position: absolute; transform: translate(-50%, 0); font: 600 11.5px ui-monospace, Consolas, monospace; color: #dfe6ef; background: rgba(12,16,23,.8); border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; white-space: nowrap; }
+      .ladder-label.broken { border-color: var(--danger); color: #ffd7dc; }
+
+      .bottom { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(720px, calc(100% - 28px)); display: grid; gap: 8px; }
+      .timeline { position: relative; height: 26px; background: rgba(12,16,23,.88); border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+      .timeline .fill { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 16%, transparent); }
+      .timeline .mark { position: absolute; top: 5px; bottom: 5px; width: 3px; border-radius: 2px; transform: translateX(-50%); }
+      .timeline .mark.hit-light { background: #c9d2de; top: 9px; bottom: 9px; }
+      .timeline .mark.hit-medium { background: #e6ecf3; top: 7px; bottom: 7px; }
+      .timeline .mark.hit-heavy { background: #fff; }
+      .timeline .mark.break { background: var(--danger); width: 5px; }
+      .timeline .mark.recover { background: var(--ok); width: 5px; }
+      .timeline .mark.spinOut { background: #8a93a3; width: 5px; }
+      .timeline .label { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font: 10.5px ui-monospace, Consolas, monospace; color: var(--muted); }
+      .toolbar { justify-self: center; display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; background: rgba(12,16,23,.9); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
+      .tool { display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: #c5cfdc; padding: 8px 11px; border-radius: 6px; cursor: pointer; font: 600 11.5px/1 inherit; font-family: inherit; text-transform: uppercase; letter-spacing: 0.07em; }
+      .tool:hover { background: #182030; }
+      .tool[aria-pressed='true'] { background: color-mix(in srgb, var(--accent) 22%, #121823); color: #fff; box-shadow: inset 0 0 0 1px var(--accent); }
+      .tool:disabled { opacity: 0.35; cursor: default; }
+
+      .tune-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      .tune-actions button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 7px 8px; font: 600 11.5px/1.2 inherit; font-family: inherit; cursor: pointer; }
+      .tune-actions button.primary { grid-column: 1 / -1; background: color-mix(in srgb, var(--accent) 28%, var(--panel-2)); border-color: var(--accent); }
+      .tune-actions button:hover { border-color: #3a4658; }
+      .tune-status { font-size: 11.5px; color: var(--soft); min-height: 1.4em; margin: 0; }
+      .tune-group { border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+      .tune-group summary { cursor: pointer; padding: 8px 10px; font: 700 11px ui-monospace, Consolas, monospace; letter-spacing: 0.06em; text-transform: uppercase; color: #c9d2de; }
+      .tune-group.group-A summary { color: var(--lang-a); }
+      .tune-group.group-B summary { color: var(--lang-b); }
+      .tune-group.group-C summary { color: var(--lang-c); }
+      .tune-body { display: grid; gap: 7px; padding: 2px 10px 10px; }
+      .tune-row { display: grid; grid-template-columns: 1fr 44px; gap: 2px 8px; align-items: center; }
+      .tune-row label { grid-column: 1 / -1; margin: 0; font-size: 11.5px; color: var(--muted); }
+      .tune-row input { width: 100%; accent-color: var(--accent); }
+      .tune-row output { font: 600 11.5px ui-monospace, Consolas, monospace; text-align: right; font-variant-numeric: tabular-nums; }
+      .tune-row.changed label { color: var(--accent); }
+      .tune-row.changed label::after { content: ' •'; }
+
+      @media (max-width: 900px) {
+        .lab, .lab.no-tuning { grid-template-columns: 1fr; grid-template-rows: auto minmax(460px, 70vh) auto; height: auto; }
+        .panel { border-right: 0; border-bottom: 1px solid var(--line); }
+        .tuning { border-left: 0; border-top: 1px solid var(--line); }
+        .keys, .notes-section { display: none; }
+        .tool { padding: 7px 8px; font-size: 10.5px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .timeline .fill { transition: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="lab" id="lab">
+      <aside class="panel">
+        <header>
+          <div class="kicker">ChaosBey · Protótipo visual</div>
+          <h1>Stamina & Stability Lab</h1>
+          <p class="warn">Três direções para mostrar Stamina, Stability e o estado Quebrado, todas aprovadas em 27/09/2026 como opções que o jogador liga em qualquer combinação. A física de giro e bamboleio é comum às três. O movimento é coreografia, não a física do jogo, e nada no jogo muda.</p>
+        </header>
+        <section>
+          <h3>Direção</h3>
+          <div class="lang-pick" id="lang-picker"></div>
+          <label class="toggle"><input type="checkbox" id="mix" /> Misturar direções (cada clique liga ou desliga)</label>
+        </section>
+        <section>
+          <h3>Estado</h3>
+          <div class="pills" id="pills">
+            <span class="pill" id="pill-auto">LUTA ROTEIRIZADA</span>
+            <span class="pill broken" id="pill-broken">QUEBRADO</span>
+            <span class="pill spin" id="pill-spin">SPIN-OUT</span>
+          </div>
+          <div class="state-grid">
+            <div class="meter">
+              <label for="stamina">Stamina</label>
+              <input type="range" id="stamina" min="0" max="100" step="1" value="100" />
+              <output id="stamina-out" for="stamina">100%</output>
+            </div>
+            <div class="meter">
+              <label for="stability">Stability</label>
+              <input type="range" id="stability" min="0" max="100" step="1" value="100" />
+              <output id="stability-out" for="stability">100%</output>
+            </div>
+          </div>
+          <p class="hint">Mexer num slider passa para o modo Manual.</p>
+        </section>
+        <section>
+          <h3>Ações</h3>
+          <div class="actions">
+            <button type="button" class="act" id="act-light">Golpe leve <kbd>Z</kbd></button>
+            <button type="button" class="act" id="act-medium">Médio <kbd>X</kbd></button>
+            <button type="button" class="act" id="act-heavy">Forte <kbd>C</kbd></button>
+            <button type="button" class="act" id="act-break">Quebrar <kbd>B</kbd></button>
+            <button type="button" class="act" id="act-recover">Recuperar <kbd>R</kbd></button>
+            <button type="button" class="act" id="act-spinout">Spin-out <kbd>O</kbd></button>
+          </div>
+          <div class="chips" style="margin-top: 8px">
+            <button type="button" class="chip" id="demo-auto">Luta roteirizada <kbd>M</kbd></button>
+            <button type="button" class="chip" id="demo-manual">Manual</button>
+            <button type="button" class="chip" id="act-reset">Reiniciar <kbd>N</kbd></button>
+          </div>
+          <div class="chips" style="margin-top: 6px">
+            <button type="button" class="chip" id="time-pause">Pausar <kbd>Espaço</kbd></button>
+            <button type="button" class="chip" id="time-slow">Câmera lenta <kbd>S</kbd></button>
+          </div>
+        </section>
+        <section>
+          <h3>Beys (conceitos da rodada 2)</h3>
+          <label class="sel" for="bey-test">Bey em teste</label>
+          <select id="bey-test"></select>
+          <label class="sel" for="bey-opp">Oponente (só dá os golpes)</label>
+          <select id="bey-opp"></select>
+        </section>
+        <section class="notes-section">
+          <h3>O que cada direção faz</h3>
+          <div class="notes" id="notes"></div>
+        </section>
+        <section class="keys" aria-label="Atalhos de teclado">
+          <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> direção · <kbd>Q</kbd> comparar A | B | C<br />
+          <kbd>G</kbd> jogo · <kbd>L</kbd> oponente longe · <kbd>V</kbd> perto · arraste para orbitar<br />
+          <kbd>E</kbd> escada de Stamina · <kbd>T</kbd> escada de Stability<br />
+          <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> golpes · <kbd>B</kbd> quebrar · <kbd>R</kbd> recuperar · <kbd>O</kbd> spin-out<br />
+          <kbd>M</kbd> luta roteirizada · <kbd>N</kbd> reiniciar · <kbd>P</kbd> painel de ajuste
+        </section>
+      </aside>
+      <main class="stage" id="stage">
+        <canvas id="lab-canvas" aria-label="Visualização 3D do Bey"></canvas>
+        <div class="overlay" id="overlay">
+          <div class="readout" id="readout"></div>
+        </div>
+        <div class="bottom">
+          <div class="timeline" id="timeline" aria-hidden="true"><div class="fill" id="timeline-fill"></div><span class="label" id="timeline-label"></span></div>
+          <div class="toolbar" id="toolbar" role="toolbar" aria-label="Vista e câmera"></div>
+        </div>
+      </main>
+      <aside class="tuning" id="tuning" aria-label="Ajuste das direções">
+        <h2>Ajuste</h2>
+        <p class="hint">Tudo muda na hora. Os valores de partida são a configuração aprovada. Rótulos em laranja diferem dela. Para mudar a decisão, ajuste e aperte <strong>Salvar como final</strong>: os valores e a direção ficam gravados para o Claude ler.</p>
+        <div class="tune-actions">
+          <button type="button" class="primary" id="tune-save">Salvar como final</button>
+          <button type="button" id="tune-copy">Copiar valores</button>
+          <button type="button" id="tune-reset">Voltar ao aprovado</button>
+        </div>
+        <p class="tune-status" id="tune-status" aria-live="polite"></p>
+        <div id="tune-groups"></div>
+      </aside>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
