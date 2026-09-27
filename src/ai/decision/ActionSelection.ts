@@ -287,7 +287,7 @@ export class ActionSelector {
   private circleSign: 1 | -1 = 1;
   private currentTick = 0;
   private previousHeld = new Set<Action>();
-  /** A Dash charge AirRecover took over in the air: held until the Bey is back on the ground (see selectActions). */
+  /** A Dash charge that was being held when this Bey was launched: held until it is back on the ground (see selectActions). */
   private holdingChargeThroughLaunch = false;
   private readonly holdStartedAtTick = new Map<Action, number>();
 
@@ -384,20 +384,28 @@ export class ActionSelector {
     if (intent === AiIntent.AirRecover && !world.own.grounded && world.own.airRecoveryAvailable && !this.previousHeld.has(Action.Dodge)) {
       desiredHeld.add(Action.Dodge);
     }
-    // Launched mid-charge: AirRecover takes over from the Dash, but letting
-    // go of Attack is the release (AttackController fires the Dash when the
-    // button is no longer held) — a Dash fired from the air. Keep holding
-    // the charge that already exists until the Bey is back on the ground,
-    // even if a later decision in the same flight no longer wants it (a
-    // high launch outlasts the reaction delay after the recovery), and for
-    // as long as AirRecover is still the decision. Never a new press: this
-    // only continues a ChargingDash already in progress. Back on the
-    // ground the next decision decides what to do with it
-    // (release = a normal grounded Dash), and Attack Energy running out
-    // still ends the charge on its own.
+    // Launched mid-charge: letting go of Attack is the release
+    // (AttackController fires the Dash when the button is no longer held),
+    // so any intent that stops holding it in the air fires the Dash from
+    // the air. Owner decision (after PR #16): a charge being held when the
+    // Bey is launched is kept held through that whole flight — from the
+    // first tick the launch is seen, through the reaction delay (the
+    // previous intent is still in charge then, and would release the
+    // charge the moment it reached its target or 100%), through AirRecover
+    // and any later decision in the same flight — until the Bey is back on
+    // the ground. This is the button already held staying held, not a
+    // reaction: AirRecover still waits its normal reaction delay, and
+    // nothing is ever newly pressed (only a ChargingDash already in
+    // progress continues). "Launched" is the air-recovery window
+    // (DodgeController.registerLaunch arms it for knockbacks/launches
+    // only), so a voluntary jump is unaffected: air attacks while jumping
+    // stay allowed. Back on the ground the current decision decides
+    // (release = a normal grounded Dash); Attack Energy running out still
+    // ends the charge on its own.
     const charging = world.own.attackState === AttackState.ChargingDash;
     const airRecoverOwnsCharge = intent === AiIntent.AirRecover && charging;
-    if (airRecoverOwnsCharge) this.holdingChargeThroughLaunch = true;
+    const launchedAirborne = !world.own.grounded && world.own.airRecoveryAvailable;
+    if (charging && (launchedAirborne || airRecoverOwnsCharge)) this.holdingChargeThroughLaunch = true;
     if (!charging || world.own.grounded) this.holdingChargeThroughLaunch = false;
     if (airRecoverOwnsCharge || this.holdingChargeThroughLaunch) desiredHeld.add(Action.Attack);
 
