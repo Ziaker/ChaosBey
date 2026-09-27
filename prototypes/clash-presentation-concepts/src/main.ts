@@ -51,8 +51,9 @@ const $ = <T extends HTMLElement>(id: string): T => {
 
 const lab = {
   scenarioId: SCENARIOS[0]!.id,
-  directionId: 'B' as DirectionId,
-  tieStyleId: DIRECTIONS.B.defaultTieStyle as TieStyleId,
+  // Owner-approved (docs/design-decisions/clash-presentation-approval.md): direction C with camera B. The tie style is still open.
+  directionId: 'C' as DirectionId,
+  tieStyleId: DIRECTIONS.C.defaultTieStyle as TieStyleId,
   cameraPresetId: 'B' as PresetId,
   firstMashMode: 'scripted' as 'scripted' | 'keyboard',
   firstConceptLetter: 'A' as 'A' | 'B' | 'C',
