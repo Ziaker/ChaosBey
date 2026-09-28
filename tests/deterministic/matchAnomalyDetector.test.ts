@@ -186,8 +186,11 @@ describe('MatchAnomalyDetector — each GDD 67 condition is caught, once per epi
 });
 
 describe('recorded ext-32 wall bug, reproduced from its seed', () => {
-  it('self-test-5/stamina-vs-defense: wedged in the wall, then off the rim with no ring-out — both tagged ext-32, deterministically', async () => {
-    const setup = { seed: 'self-test-5/stamina-prototype-vs-defense-prototype', firstDefinition: STAMINA_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE };
+  // Seed re-pinned for RNG scheme 2 + headless hitstop (M9): the M8 seed
+  // (self-test-5/stamina-prototype-vs-defense-prototype, RNG scheme 1) now
+  // plays a different match. This one reproduces the same two ext-32 facts.
+  it('self-test-32/defense-vs-stamina: wedged in the wall, then off the rim with no ring-out — both tagged ext-32, deterministically', async () => {
+    const setup = { seed: 'self-test-32/defense-prototype-vs-stamina-prototype', firstDefinition: DEFENSE_ARCHETYPE, secondDefinition: STAMINA_ARCHETYPE };
     const a = await simulateAiMatch(setup);
     const b = await simulateAiMatch(setup);
     const shape = (d: DetectedAnomaly) => `${d.tick}/${d.side}/${d.kind}/${d.knownIssue}`;

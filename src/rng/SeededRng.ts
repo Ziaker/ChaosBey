@@ -28,6 +28,11 @@ export class SeededRng {
     return new SeededRng(seedUint32 >>> 0, seedUint32.toString(10));
   }
 
+  /** The raw uint32 generator state, read-only — for the canonical match state / state hash (M9). */
+  getState(): number {
+    return this.state >>> 0;
+  }
+
   getCanonicalSeedText(): string {
     return this.canonicalSeedText;
   }
@@ -66,6 +71,11 @@ export class SeededRng {
  * sequences (GDD section 73: gameplay RNG, AI RNG, cosmetic RNG are kept
  * separate). Cosmetic draws (e.g. spark scatter) must never be able to
  * change gameplay-relevant outcomes just because visuals changed.
+ *
+ * RNG scheme 2 (M9, `RNG_SCHEME_VERSION` in src/replay/contracts.ts): each
+ * AI side has its own stream, so how many draws one side's AI makes never
+ * shifts the other side's sequence. The same derivation is used live, in
+ * the Debug Lab and headless (Self Test batches and scenarios).
  */
 export interface RngStreams {
   /**
@@ -78,7 +88,10 @@ export interface RngStreams {
    */
   readonly rootSeedText: string;
   readonly gameplay: SeededRng;
-  readonly ai: SeededRng;
+  /** The first side's AI (stream `ai:first`). */
+  readonly aiFirst: SeededRng;
+  /** The second side's AI (stream `ai:second`). */
+  readonly aiSecond: SeededRng;
   readonly cosmetic: SeededRng;
 }
 
@@ -92,7 +105,8 @@ export function createRngStreams(seedText: string): RngStreams {
   return {
     rootSeedText: canonicalText,
     gameplay: SeededRng.fromSeedUint32((seedUint32 ^ 0x9e3779b9) >>> 0),
-    ai: SeededRng.fromSeedUint32((seedUint32 ^ 0x85ebca6b) >>> 0),
+    aiFirst: SeededRng.fromSeedUint32((seedUint32 ^ 0x85ebca6b) >>> 0),
+    aiSecond: SeededRng.fromSeedUint32((seedUint32 ^ 0x27d4eb2f) >>> 0),
     cosmetic: SeededRng.fromSeedUint32((seedUint32 ^ 0xc2b2ae35) >>> 0),
   };
 }

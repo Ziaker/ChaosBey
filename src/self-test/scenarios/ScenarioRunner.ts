@@ -18,7 +18,7 @@ import { FIXED_DELTA_SECONDS } from '../../physics/fixed-step/FixedTimestepLoop'
 import { AIController } from '../../ai/controllers/AIController';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../ai/difficulty/AiDifficultyProfile';
 import { personalityForBeyDefinitionId } from '../../ai/personalities/AiArchetypePersonalities';
-import { SeededRng } from '../../rng/SeededRng';
+import { createRngStreams } from '../../rng/SeededRng';
 import { SelfTestMatchWorld } from '../SelfTestMatchWorld';
 import { MatchAnomalyDetector, type DetectedAnomaly } from '../anomalies/MatchAnomalyDetector';
 import { SCENARIO_PRESETS, type ScenarioPreset, type ScenarioSideScript } from './ScenarioPresets';
@@ -75,10 +75,12 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
   try {
     preset.setup?.({ first: world.first, second: world.second });
     trace = createScenarioTrace(world.first);
+    // RNG scheme 2 (M9): per-side AI streams from the preset id as root seed.
+    const rng = createRngStreams(preset.id);
     const aiFor = (side: 'first' | 'second'): CombatController => {
       const own = side === 'first' ? world.first : world.second;
       const opponent = side === 'first' ? world.second : world.first;
-      return new AIController(world.physics, own, opponent, world.clash.controller, personalityForBeyDefinitionId(own.definition.id), DEFAULT_AI_DIFFICULTY_PROFILE, SeededRng.fromSeedText(`${preset.id}/${side}`));
+      return new AIController(world.physics, own, opponent, world.clash.controller, personalityForBeyDefinitionId(own.definition.id), DEFAULT_AI_DIFFICULTY_PROFILE, side === 'first' ? rng.aiFirst : rng.aiSecond);
     };
     const first = options.aiSide === 'first' ? aiFor('first') : controllerForScript(preset.first);
     const second = options.aiSide === 'second' ? aiFor('second') : controllerForScript(preset.second);

@@ -523,7 +523,7 @@ export class MatchSession {
       ownBey: own,
       opponentBey: opponent,
       clashController: this.clash.controller,
-      aiRng: this.rngStreams.ai,
+      aiRng: side === 'first' ? this.rngStreams.aiFirst : this.rngStreams.aiSecond,
       telemetry: this.telemetry,
       keyboard: this.keyboard,
     };

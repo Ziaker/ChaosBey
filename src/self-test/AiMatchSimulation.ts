@@ -31,7 +31,7 @@ import { DodgeState } from '../dodge/DodgeController';
 import { Action, type ControllerActions } from '../input/actions/Action';
 import { checkAngularVelocity, checkLinearVelocity, type PhysicsAnomaly } from '../physics/diagnostics/physicsSafety';
 import { FIXED_DELTA_SECONDS } from '../physics/fixed-step/FixedTimestepLoop';
-import { SeededRng } from '../rng/SeededRng';
+import { createRngStreams } from '../rng/SeededRng';
 import { SelfTestMatchWorld } from './SelfTestMatchWorld';
 
 /** Speed (m/s) under which a Bey holding MoveForward outside the floor radius counts as wedged (see AiSideStats.longestWedgedTicks). */
@@ -315,6 +315,8 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
   const difficulty = setup.difficulty ?? DEFAULT_AI_DIFFICULTY_PROFILE;
   const firstPersonality = setup.firstPersonality ?? personalityForBeyDefinitionId(setup.firstDefinition.id);
   const secondPersonality = setup.secondPersonality ?? personalityForBeyDefinitionId(setup.secondDefinition.id);
+  // RNG scheme 2 (M9): the same per-side streams a live match with this seed uses.
+  const rng = createRngStreams(setup.seed);
   const firstAi = new AIController(
     world.physics,
     world.first,
@@ -322,7 +324,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     world.clash.controller,
     firstPersonality,
     difficulty,
-    SeededRng.fromSeedText(`${setup.seed}/first`),
+    rng.aiFirst,
   );
   const secondAi = new AIController(
     world.physics,
@@ -331,7 +333,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     world.clash.controller,
     secondPersonality,
     difficulty,
-    SeededRng.fromSeedText(`${setup.seed}/second`),
+    rng.aiSecond,
   );
 
   const first = new SideTracker(firstPersonality.id);
