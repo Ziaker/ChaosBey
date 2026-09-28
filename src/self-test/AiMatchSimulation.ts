@@ -13,6 +13,7 @@
 // match is seeded or simulated, so every existing seed plays the same fight.
 // ============================================================
 
+import { MatchAnomalyDetector, type DetectedAnomaly } from './anomalies/MatchAnomalyDetector';
 import { AIController } from '../ai/controllers/AIController';
 import { AI_DASH_ATTACK_MAX_RANGE_M } from '../ai/decision/AiCombatRanges';
 import { AiIntent } from '../ai/decision/Intent';
@@ -229,7 +230,7 @@ export interface MatchAnomaly extends PhysicsAnomaly {
 const MAX_STORED_ANOMALIES = 20;
 
 export interface AiMatchTiming {
-  /** Wall-clock milliseconds the whole match took to simulate. */
+  /** Milliseconds spent simulating the match (the sum of its tick times). */
   readonly wallMs: number;
   readonly meanTickMs: number;
   readonly maxTickMs: number;
@@ -237,11 +238,20 @@ export interface AiMatchTiming {
   readonly slowTicks: number;
 }
 
+/** GDD 67 detections beyond the physics-safety checks, one per episode (see MatchAnomalyDetector). */
+export const MAX_STORED_DETECTIONS = 20;
+
 export interface AiMatchRecord {
   readonly stats: AiMatchStats;
   /** The first MAX_STORED_ANOMALIES anomalies, in order. */
   readonly anomalies: readonly MatchAnomaly[];
   readonly anomalyCount: number;
+  /** GDD 67 detector findings (first MAX_STORED_DETECTIONS), in order. */
+  readonly detections: readonly DetectedAnomaly[];
+  /** Detector findings that make the match an invalid state. */
+  readonly invalidDetectionCount: number;
+  /** Detector findings that are only warnings (e.g. ai-inactive). */
+  readonly warningCount: number;
   readonly timing: AiMatchTiming;
 }
 
@@ -288,6 +298,20 @@ export async function simulateAiMatch(setup: AiMatchSetup & { slowTickThresholdM
 }
 
 function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThresholdMs: number): AiMatchRecord {
+  const steps = stepAiMatchOnWorld(world, setup, slowTickThresholdMs);
+  for (let next = steps.next(); ; next = steps.next()) {
+    if (next.done) return next.value;
+  }
+}
+
+/**
+ * The match loop, one fixed tick per iteration: yields the tick index just
+ * simulated and returns the record when the round ends (or at maxTicks).
+ * simulateAiMatch() drains it in one go; the browser Self Test steps it a
+ * few ticks per frame (GDD 164: more fixed ticks per second, never a bigger
+ * delta) so the page stays responsive. Same loop either way.
+ */
+export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThresholdMs: number = DEFAULT_SLOW_TICK_THRESHOLD_MS): Generator<number, AiMatchRecord, void> {
   const difficulty = setup.difficulty ?? DEFAULT_AI_DIFFICULTY_PROFILE;
   const firstPersonality = setup.firstPersonality ?? personalityForBeyDefinitionId(setup.firstDefinition.id);
   const secondPersonality = setup.secondPersonality ?? personalityForBeyDefinitionId(setup.secondDefinition.id);
@@ -315,6 +339,10 @@ function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThre
   const maxTicks = setup.maxTicks ?? DEFAULT_AI_MATCH_MAX_TICKS;
   const anomalies: MatchAnomaly[] = [];
   let anomalyCount = 0;
+  const detector = new MatchAnomalyDetector();
+  const detections: DetectedAnomaly[] = [];
+  let invalidDetectionCount = 0;
+  let warningCount = 0;
   let clashes = 0;
   let clashActiveTicks = 0;
   let mutualIdleStreak = 0;
@@ -329,7 +357,9 @@ function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThre
   let ticks = 0;
   let maxTickMs = 0;
   let slowTicks = 0;
-  const startedAtMs = performance.now();
+  // Time spent simulating (sum of tick times), not wall time between the
+  // first and last tick: a stepped run pauses between frames.
+  let busyMs = 0;
 
   for (let tick = 0; tick < maxTicks; tick++) {
     const tickStartMs = performance.now();
@@ -367,16 +397,33 @@ function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThre
 
     anomalyCount += checkSide(tick, 'first', world, result.first.spin.angularVelocity, anomalies);
     anomalyCount += checkSide(tick, 'second', world, result.second.spin.angularVelocity, anomalies);
+    for (const detection of detector.check({
+      tick,
+      first: world.first,
+      second: world.second,
+      result,
+      roundState: world.roundState,
+      clash: world.clash.controller,
+      firstActions,
+      secondActions,
+      aiSides: { first: true, second: true },
+    })) {
+      if (detection.severity === 'invalid-state') invalidDetectionCount++;
+      else warningCount++;
+      if (detections.length < MAX_STORED_DETECTIONS) detections.push(detection);
+    }
 
     setup.onTick?.(tick, world, firstActions, secondActions, firstAi, secondAi);
 
     const tickMs = performance.now() - tickStartMs;
+    busyMs += tickMs;
     maxTickMs = Math.max(maxTickMs, tickMs);
     if (tickMs > slowTickThresholdMs) slowTicks++;
     if (world.roundState.isOver) break;
+    yield tick;
   }
 
-  const wallMs = performance.now() - startedAtMs;
+  const wallMs = busyMs;
   return {
     stats: {
       seed: setup.seed,
@@ -391,6 +438,9 @@ function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThre
     },
     anomalies,
     anomalyCount,
+    detections,
+    invalidDetectionCount,
+    warningCount,
     timing: { wallMs, meanTickMs: wallMs / Math.max(1, ticks), maxTickMs, slowTicks },
   };
 }

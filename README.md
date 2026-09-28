@@ -53,6 +53,12 @@ Open the game with `?mode=debug-lab` (for example `/ChaosBey/?mode=debug-lab`) t
 - speed 1× / 2× / 4× / 8× runs that many fixed 60 Hz ticks per step; it never enlarges the timestep
 - each side can be driven by the keyboard, the AI (any archetype personality) or nothing (idle), switched live
 
+The panel also loads the GDD 68 scenario presets into the live match and shows the GDD 67 anomaly detector's findings.
+
+## Self Test
+
+Open the game with `?mode=self-test` for the browser Self Test (GDD 66, 162–164): AI-vs-AI batches over any matchups and seeds, the GDD 68 scenario presets (scripted vs scripted, or with one side swapped for the AI), the GDD 67 anomaly detector on every tick, and the GDD 163 report (download as JSON; failing seeds can be replayed). It runs the shared headless core in `src/self-test/`, 1× (real time) to 64× or as fast as the CPU allows — always more fixed ticks, never a bigger timestep — with a 2D minimap instead of the 3D renderer.
+
 Progress on the rest of Milestone 8 is tracked in [`docs/ai/m8-status.md`](docs/ai/m8-status.md).
 
 ## Keyboard bindings

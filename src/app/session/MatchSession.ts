@@ -41,6 +41,8 @@ import { TelemetryEventKind } from '../../telemetry/events/TelemetryEvent';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 import { VfxManager } from '../../vfx/VfxManager';
 import { ForcedInputController } from '../../automation/scripted-scenarios/ForcedInputController';
+import { AIController } from '../../ai/controllers/AIController';
+import { MatchAnomalyDetector, type DetectedAnomaly } from '../../self-test/anomalies/MatchAnomalyDetector';
 import type { ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
 import { createSideController, describeControllerSpec, type SideControllerSpec, type SideControllerDeps } from './SideControllers';
 
@@ -121,6 +123,9 @@ export class MatchSession {
   /** Each side's driver, wrapped so the Debug Lab can force short input bursts. */
   private readonly drivers: Record<Side, ForcedInputController>;
   private readonly debugMutations: { tickIndex: number; description: string }[] = [];
+  /** GDD 67 checks on the live match, the same detector the Self-Test batches use. */
+  private readonly anomalyDetector = new MatchAnomalyDetector();
+  private readonly detectedAnomalies: DetectedAnomaly[] = [];
 
   private tickIndex = 0;
   private lastMatchResult: MatchTickResult | null = null;
@@ -237,6 +242,11 @@ export class MatchSession {
 
   getDebugMutations(): readonly { tickIndex: number; description: string }[] {
     return this.debugMutations;
+  }
+
+  /** Every GDD 67 detection on this match so far (one per episode). */
+  getDetectedAnomalies(): readonly DetectedAnomaly[] {
+    return this.detectedAnomalies;
   }
 
   getControllerSpec(side: Side): SideControllerSpec {
@@ -409,6 +419,26 @@ export class MatchSession {
     };
 
     this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState);
+
+    for (const detection of this.anomalyDetector.check({
+      tick: tickIndex,
+      first: match.first,
+      second: match.second,
+      result,
+      roundState,
+      clash: clash.controller,
+      firstActions,
+      secondActions,
+      aiSides: { first: this.getController('first') instanceof AIController, second: this.getController('second') instanceof AIController },
+      hitstopActive: isFrozenByHitstop,
+    })) {
+      this.detectedAnomalies.push(detection);
+      telemetry.record({
+        kind: TelemetryEventKind.PhysicsAnomaly,
+        anomalyKind: detection.kind,
+        detail: `[${detection.severity}${detection.knownIssue ? `, known ${detection.knownIssue}` : ''}] ${detection.side}: ${detection.detail}`,
+      });
+    }
 
     this.tickIndex++;
     return { tickIndex, firstActions, secondActions, result, simulationAdvanced: !isFrozenByHitstop };

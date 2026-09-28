@@ -75,6 +75,7 @@ function buildMatchSection(session: MatchSession, frame: InspectionFrameStats): 
       ...Object.keys(config).map((key) => row(`Rule: ${key}`, String(config[key]))),
       row('First controller', session.describeController('first')),
       row('Second controller', session.describeController('second')),
+      row('Anomalies (GDD 67)', anomalySummary(session)),
       row(
         'Debug mutations',
         session.getDebugMutations().length === 0 ? 'none (pure seed replay)' : `${session.getDebugMutations().length} — run no longer reproducible from the seed alone`,
@@ -367,6 +368,14 @@ function buildTelemetrySection(session: MatchSession): InspectorSection {
       gap('Divergence state', 'divergence detection arrives with replay playback (Milestone 9, GDD section 145)'),
     ],
   };
+}
+
+function anomalySummary(session: MatchSession): string {
+  const found = session.getDetectedAnomalies();
+  if (found.length === 0) return 'none';
+  const last = found[found.length - 1]!;
+  const invalid = found.filter((d) => d.severity === 'invalid-state').length;
+  return `${found.length} (${invalid} invalid) — last: t${last.tick} ${last.side} ${last.kind}${last.knownIssue ? ` [known ${last.knownIssue}]` : ''}`;
 }
 
 function row(label: string, value: string): InspectorRow {
