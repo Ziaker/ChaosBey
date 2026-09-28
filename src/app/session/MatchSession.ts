@@ -17,7 +17,11 @@ import * as THREE from 'three';
 import { createMatchScene, type MatchScene } from '../bootstrap/createMatchScene';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
 import type { MatchTickResult } from '../simulation/tickMatch';
-import { MatchStepper } from '../simulation/MatchStepper';
+import { MatchStepper, type MatchStepWorld } from '../simulation/MatchStepper';
+import { buildCanonicalMatchState } from '../../replay/state/CanonicalMatchState';
+import type { CanonicalRecord } from '../../replay/state/CanonicalValue';
+import { stateHash } from '../../replay/state/stateHash';
+import type { StateHash } from '../../replay/contracts';
 import { ClashOrchestration } from '../simulation/ClashOrchestration';
 import { ClashPresentationTracker } from '../simulation/ClashPresentationTracker';
 import { RoundState } from '../../combat/round-rules/RoundState';
@@ -116,6 +120,20 @@ export class MatchSession {
   private readonly vfxManager: VfxManager;
   private readonly cameraDirector = new CombatCameraController();
   private readonly stepper = new MatchStepper();
+
+  /** CanonicalMatchStateV1 after the ticks run so far (M9: the official state-hash input). */
+  getCanonicalState(): CanonicalRecord {
+    return buildCanonicalMatchState({ tick: this.tickIndex, world: this.stepWorld(), hitstop: this.stepper.hitstop });
+  }
+
+  /** stateHash(getCanonicalState()). */
+  getStateHash(): StateHash {
+    return stateHash(this.getCanonicalState());
+  }
+
+  private stepWorld(): MatchStepWorld {
+    return { physics: this.physics, first: this.match.first, second: this.match.second, roundState: this.roundState, clash: this.clash };
+  }
 
   private hitstopView(): { isFreezing: boolean; remainingS: number } {
     return { isFreezing: this.stepper.hitstop.isFreezing(), remainingS: this.stepper.hitstop.getRemainingS() };
@@ -304,7 +322,7 @@ export class MatchSession {
     // delivered once on the first unfrozen sample afterward — see
     // ActionSampleBuffer. Camera/VFX timers below still tick regardless.
     const stepStart = performance.now();
-    const step = this.stepper.step({ physics: this.physics, first: match.first, second: match.second, roundState, clash }, this.drivers, fixedDeltaSeconds);
+    const step = this.stepper.step(this.stepWorld(), this.drivers, fixedDeltaSeconds);
     const { firstActions, secondActions, result } = step;
     const isFrozenByHitstop = !step.advanced;
     this.lastActions = { first: firstActions, second: secondActions };

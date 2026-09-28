@@ -27,6 +27,7 @@ import {
   DASH_WHIFF_RECOVERY_S,
   TAP_MAX_HOLD_S,
 } from './AttackTuning';
+import type { CanonicalRecord } from '../../replay/state/CanonicalValue';
 
 export enum AttackState {
   Neutral = 'Neutral',
@@ -220,5 +221,16 @@ export class AttackController {
       };
     }
     return null;
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return {
+      state: this.state,
+      bufferTimerS: this.bufferTimerS,
+      chargeTimerS: this.chargeTimerS,
+      activeTimerS: this.activeTimerS,
+      recoveryTimerS: this.recoveryTimerS,
+    };
   }
 }

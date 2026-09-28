@@ -22,6 +22,7 @@
 import { computeClashPower } from './ClashFormula';
 import { nextMashEventCount } from './ClashMash';
 import { CLASH_COOLDOWN_S, CLASH_TARGET_DURATION_S, CLASH_TIE_EPSILON } from './ClashTuning';
+import { plainData, type CanonicalRecord } from '../../replay/state/CanonicalValue';
 
 export enum ClashState {
   Idle = 'Idle',
@@ -204,5 +205,21 @@ export class ClashController {
     };
     this.state = ClashState.Cooldown;
     this.cooldownRemainingS = CLASH_COOLDOWN_S;
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return {
+      state: this.state,
+      elapsedS: this.elapsedS,
+      cooldownRemainingS: this.cooldownRemainingS,
+      firstMashEventCount: this.firstMashEventCount,
+      secondMashEventCount: this.secondMashEventCount,
+      firstStaminaFraction: this.firstStaminaFraction,
+      secondStaminaFraction: this.secondStaminaFraction,
+      firstSpeedMps: this.firstSpeedMps,
+      secondSpeedMps: this.secondSpeedMps,
+      lastResult: plainData(this.lastResult, 'ClashController.lastResult'),
+    };
   }
 }

@@ -23,6 +23,7 @@ import {
   WOBBLE_FREQUENCY_HZ,
   WOBBLE_IMPACT_ENERGY_GAIN_PER_MPS,
 } from './SpinTuning';
+import type { CanonicalRecord } from '../../replay/state/CanonicalValue';
 
 export interface SpinSnapshot {
   tiltRad: number;
@@ -144,5 +145,10 @@ export class SpinController {
       wobbleEnergy: this.wobbleEnergy,
       wobbleOffsetRad: this.getWobbleOffsetRad(),
     };
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return { spinRateRadPerSec: this.spinRateRadPerSec };
   }
 }

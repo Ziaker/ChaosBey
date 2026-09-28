@@ -14,6 +14,8 @@ import * as THREE from 'three';
 import { FIRST_SPAWN, SECOND_SPAWN, type SpawnPositionM } from '../app/bootstrap/matchSpawns';
 import { ClashOrchestration } from '../app/simulation/ClashOrchestration';
 import { MatchStepper, type MatchStepControllers, type MatchStepOutput } from '../app/simulation/MatchStepper';
+import { buildCanonicalMatchState } from '../replay/state/CanonicalMatchState';
+import type { CanonicalRecord } from '../replay/state/CanonicalValue';
 import { tickMatch, type MatchTickResult } from '../app/simulation/tickMatch';
 import { createArenaColliders } from '../arena/colliders/createArenaColliders';
 import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
@@ -83,6 +85,11 @@ export class SelfTestMatchWorld {
    */
   step(controllers: MatchStepControllers): MatchStepOutput {
     return this.stepper.step(this, controllers, FIXED_DELTA_SECONDS);
+  }
+
+  /** CanonicalMatchStateV1 after `ticksCompleted` ticks (M9: the official state-hash input). */
+  getCanonicalState(ticksCompleted: number): CanonicalRecord {
+    return buildCanonicalMatchState({ tick: ticksCompleted, world: this, hitstop: this.stepper.hitstop });
   }
 
   /** Low-level: one tickMatch() with the given actions, no controllers and no hitstop (physics/combat unit tests). */

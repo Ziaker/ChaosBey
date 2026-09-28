@@ -33,6 +33,7 @@ import {
   JUMP_ASSIST_MAX_DURATION_S,
   LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS,
 } from './DriftTuning';
+import type { CanonicalRecord } from '../replay/state/CanonicalValue';
 
 export enum DriftState {
   Idle = 'Idle',
@@ -193,5 +194,17 @@ export class DriftController {
       return DRIFT_LATERAL_GRIP_PER_S + (this.normalLateralGripPerS - DRIFT_LATERAL_GRIP_PER_S) * t;
     }
     return null;
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return {
+      state: this.state,
+      hopTimerS: this.hopTimerS,
+      recoveryTimerS: this.recoveryTimerS,
+      jumpAssistElapsedS: this.jumpAssistElapsedS,
+      wasGrounded: this.wasGrounded,
+      lastAirborneVerticalVelocityMps: this.lastAirborneVerticalVelocityMps,
+    };
   }
 }

@@ -10,6 +10,7 @@ import {
   ATTACK_ENERGY_RECOVERY_DELAY_S,
   ATTACK_ENERGY_RECOVERY_PER_S,
 } from './AttackEnergyTuning';
+import type { CanonicalRecord } from '../../replay/state/CanonicalValue';
 
 export class AttackEnergySystem {
   readonly resource = new Resource(ATTACK_ENERGY_MAX);
@@ -32,5 +33,10 @@ export class AttackEnergySystem {
     if (this.timeSinceLastConsumptionS >= ATTACK_ENERGY_RECOVERY_DELAY_S) {
       this.resource.add(ATTACK_ENERGY_RECOVERY_PER_S * fixedDeltaSeconds);
     }
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return { resource: this.resource.value, timeSinceLastConsumptionS: this.timeSinceLastConsumptionS };
   }
 }

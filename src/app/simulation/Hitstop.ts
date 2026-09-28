@@ -16,6 +16,7 @@
 // ============================================================
 
 import { CAMERA_HITSTOP_DURATION_PER_MAGNITUDE_S, CAMERA_HITSTOP_MAX_DURATION_S, CAMERA_HITSTOP_MIN_MAGNITUDE } from '../../camera/CameraTuning';
+import type { CanonicalRecord } from '../../replay/state/CanonicalValue';
 
 export class HitstopClock {
   private remainingS = 0;
@@ -43,5 +44,10 @@ export class HitstopClock {
     }
     this.remainingS = Math.max(0, this.remainingS - fixedDeltaSeconds);
     this.suppressedByClash = clashActive;
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return { remainingS: this.remainingS, suppressedByClash: this.suppressedByClash };
   }
 }

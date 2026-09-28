@@ -26,6 +26,7 @@ import {
   STEERING_RESPONSE_PER_S,
 } from './MovementTuning';
 import { DEFAULT_HANDLING_PROFILE, type BeyHandlingProfile } from '../archetype/BeyHandlingProfile';
+import { vec2, type CanonicalRecord } from '../../replay/state/CanonicalValue';
 
 export interface MovementPreStepInput {
   actions: ControllerActions;
@@ -236,6 +237,18 @@ export class MovementController {
       isGrounded: grounded,
       impactDeltaSpeedMps,
       impactDirection,
+    };
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return {
+      headingRad: this.headingRad,
+      turnRateRadPerS: this.turnRateRadPerS,
+      postImpactCooldownRemainingS: this.postImpactCooldownRemainingS,
+      lastHeadingForward: vec2(this.lastHeadingForward),
+      lastLateralGripPerS: this.lastLateralGripPerS,
+      intendedVelocityThisTick: vec2(this.intendedVelocityThisTick),
     };
   }
 }

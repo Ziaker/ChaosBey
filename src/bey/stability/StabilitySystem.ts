@@ -15,6 +15,7 @@ import {
   STABILITY_RECOVERY_DELAY_AFTER_HIT_S,
   STABILITY_RECOVERY_PER_S,
 } from './StabilityTuning';
+import type { CanonicalRecord } from '../../replay/state/CanonicalValue';
 
 export class StabilitySystem {
   readonly resource = new Resource(STABILITY_MAX);
@@ -82,5 +83,10 @@ export class StabilitySystem {
     this.broken = false;
     this.timeSinceLastDamageS = Number.POSITIVE_INFINITY;
     this.resource.set(this.resource.max);
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return { resource: this.resource.value, timeSinceLastDamageS: this.timeSinceLastDamageS, broken: this.broken };
   }
 }

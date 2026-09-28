@@ -47,7 +47,7 @@ Status values: **DONE** (merged and tested), **IN PROGRESS** (PR named),
 | Lane | Scope | Depends on | Touches `MatchSession.ts` | Status |
 |---|---|---|---|---|
 | Contracts | `src/replay/contracts.ts` + this file | — | no | IN PROGRESS |
-| A | M9-0 (hitstop into the simulation, RNG scheme 2) + `CanonicalMatchStateV1` + state hash | Contracts | yes (hitstop wiring, RNG) | TODO |
+| A | M9-0 (hitstop into the simulation, RNG scheme 2) + `CanonicalMatchStateV1` + state hash | Contracts | yes (hitstop wiring, RNG) | IN PROGRESS (branch `claude/m9-a-canonical-state`) |
 | B | `ChaosBeyReplayV1` format, encode/decode/validate, recorder, config snapshot — pure modules, no call-site hooks | Contracts | no | TODO |
 | C | `ReplayController`, recorder hooks at the three `tickMatch` callers, headless replay runner, checkpoint compare, first-divergence bisect | A + B | yes (after A) | TODO |
 | D | `replay-reproduction` preset, batch divergence, Debug Lab and Self Test integration | C | via `DebugLabMode` | TODO |
@@ -55,6 +55,38 @@ Status values: **DONE** (merged and tested), **IN PROGRESS** (PR named),
 
 A and B run in parallel: they share only `contracts.ts`. Only one lane at a
 time edits `MatchSession.ts` (A, then C).
+
+## Lane A notes
+
+- **One simulation.** `app/simulation/MatchStepper.ts` is the single
+  per-tick step (hitstop check, controller sampling, `tickMatch()` unless
+  frozen, hitstop update). `MatchSession`, the headless AI batches and the
+  scenario runner all use it. `app/simulation/Hitstop.ts` owns the freeze;
+  the camera only receives it. A test compares it tick for tick with the
+  pre-M9 camera arithmetic, so live freeze timing is unchanged.
+- **RNG scheme 2** is live: `createRngStreams` gives gameplay, `aiFirst`,
+  `aiSecond` and cosmetic; live and headless derive them the same way.
+- **What the hash covers.** `CanonicalMatchStateV1`
+  (`src/replay/state/CanonicalMatchState.ts`): per Bey, the Rapier body
+  (translation, rotation, linear/angular velocity, user force/torque,
+  sleeping) and every gameplay system's `getDeterministicState()`; the
+  round, both Clash parts and hitstop. A guard test fails if any system
+  field is neither hashed nor excluded with a reason.
+- **RNG is not in the hash** (refines the pre-implementation plan): the AI
+  streams are consumed by controllers, and a replay records controller
+  outputs, so playback never advances them; AI determinism is covered by
+  the same-seed tests instead. The gameplay stream is not drawn by the
+  simulation today; a test fails if that changes, and it then joins the
+  schema with a version bump.
+- **Proofs in `tests/deterministic/canonicalState.test.ts`:** same seed →
+  identical hash every tick; a live AI-vs-AI match and a headless one with
+  the same seed hash identically every tick, hitstop freezes included;
+  scripted inputs likewise; rendering with any camera/VFX settings never
+  changes the hash; FNV-1a 64 test vectors; strict floats (one ulp
+  changes the hash).
+- **Baseline changes (accepted):** the `clash-cooldown-collision` preset's
+  second Dash moved from 7 s to 8 s; the ext-32 reproduction seed is now
+  `self-test-32/defense-prototype-vs-stamina-prototype`.
 
 ## Known architecture facts (main@972f65d)
 

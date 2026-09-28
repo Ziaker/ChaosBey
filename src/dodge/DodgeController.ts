@@ -31,6 +31,7 @@ import {
   DODGE_STAMINA_COST,
   LAUNCH_PENDING_WINDOW_S,
 } from './DodgeTuning';
+import type { CanonicalRecord } from '../replay/state/CanonicalValue';
 
 export enum DodgeState {
   Idle = 'Idle',
@@ -223,5 +224,18 @@ export class DodgeController {
     const vel = body.linvel();
     const burst = scale(direction, DODGE_BURST_SPEED_MPS);
     body.setLinvel({ x: vel.x + burst.x, y: vel.y, z: vel.z + burst.z }, true);
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return {
+      state: this.state,
+      activeTimerS: this.activeTimerS,
+      cooldownTimerS: this.cooldownTimerS,
+      wasGrounded: this.wasGrounded,
+      airRecoveryAvailable: this.airRecoveryAvailable,
+      launchPending: this.launchPending,
+      launchPendingRemainingS: this.launchPendingRemainingS,
+    };
   }
 }
