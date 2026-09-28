@@ -61,11 +61,10 @@ export const CAMERA_SHAKE_AMPLITUDE_REFERENCE_M = 0.35;
 export const CAMERA_SHAKE_DECAY_PER_S = 8;
 export const CAMERA_SHAKE_FREQUENCY_HZ = 18;
 
-// --- Hitstop (brief simulation freeze on a strong impact) ---
-// Below this impact magnitude, no hitstop at all.
-export const CAMERA_HITSTOP_MIN_MAGNITUDE = 0.35;
-export const CAMERA_HITSTOP_DURATION_PER_MAGNITUDE_S = 0.18;
-export const CAMERA_HITSTOP_MAX_DURATION_S = 0.18;
+// Hitstop (brief simulation freeze on a strong impact) moved to
+// src/app/simulation/SimulationHitstop.ts (M9-0A): it decides whether
+// gameplay itself advances, which is a simulation rule, not a camera one —
+// see that file's header for why. Same values, same feel, different owner.
 
 // --- High-speed camera (GDD: distinct from speed FOV above — a further,
 // conservative reframing that only kicks in at genuinely extreme

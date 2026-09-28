@@ -14,6 +14,8 @@
 // ============================================================
 
 import { MatchAnomalyDetector, type DetectedAnomaly } from './anomalies/MatchAnomalyDetector';
+import { collectHitstopImpactMagnitudes, SimulationHitstop } from '../app/simulation/SimulationHitstop';
+import type { MatchTickResult } from '../app/simulation/tickMatch';
 import { AIController } from '../ai/controllers/AIController';
 import { AI_DASH_ATTACK_MAX_RANGE_M } from '../ai/decision/AiCombatRanges';
 import { AiIntent } from '../ai/decision/Intent';
@@ -360,43 +362,65 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
   // Time spent simulating (sum of tick times), not wall time between the
   // first and last tick: a stepped run pauses between frames.
   let busyMs = 0;
+  // M9-0A: the same hitstop rule live/Debug Lab use (SimulationHitstop.ts)
+  // — headless used to never freeze at all, a live-vs-headless behavioral
+  // gap nothing ever compared directly. lastResult is this gate's own
+  // cache (mirroring MatchSession's), reused verbatim on a frozen tick so
+  // tickMatch() doesn't advance and hitEvents/combatEvents already counted
+  // below can't be double-counted.
+  const hitstop = new SimulationHitstop();
+  let lastResult: MatchTickResult | null = null;
 
   for (let tick = 0; tick < maxTicks; tick++) {
     const tickStartMs = performance.now();
-    const firstActions = firstAi.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
-    const secondActions = secondAi.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
-    const result = world.tick(firstActions, secondActions);
+    const isFrozenByHitstop = hitstop.isActive;
+    const firstActions = firstAi.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS, simulationFrozen: isFrozenByHitstop });
+    const secondActions = secondAi.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS, simulationFrozen: isFrozenByHitstop });
+    let result: MatchTickResult;
+    if (isFrozenByHitstop && lastResult) {
+      result = lastResult;
+    } else {
+      result = world.tick(firstActions, secondActions);
+      lastResult = result;
+    }
     ticks = tick + 1;
 
     const clashActive = world.clash.controller.getState() === ClashState.Active;
-    if (clashActive) clashActiveTicks++;
-    const a = world.first.body.translation();
-    const b = world.second.body.translation();
-    const isOpen = (attackState: AttackState, broken: boolean) =>
-      broken || attackState === AttackState.DashRecovery || attackState === AttackState.CircularRecovery;
-    first.record(tick, firstAi, firstActions, result.first.attackState, result.first.dodgeState, clashActive, Math.hypot(a.x, a.z), isOpen(previousSecondAttackState, previousSecondBroken), result.first.attackEnergyFraction, result.first.movement.speedMps);
-    second.record(tick, secondAi, secondActions, result.second.attackState, result.second.dodgeState, clashActive, Math.hypot(b.x, b.z), isOpen(previousFirstAttackState, previousFirstBroken), result.second.attackEnergyFraction, result.second.movement.speedMps);
-    previousFirstAttackState = result.first.attackState;
-    previousSecondAttackState = result.second.attackState;
-    previousFirstBroken = result.first.isBroken;
-    previousSecondBroken = result.second.isBroken;
-    for (const hit of result.hitEvents) {
-      const attacker = hit.attackerIsFirst ? first : second;
-      attacker.stats.hitsLanded++;
-      if (hit.caughtOpponentDashing) attacker.stats.counterHits++;
-    }
-    for (const event of result.combatEvents) {
-      if (event.kind === 'dodged') (event.targetIsFirst ? first : second).stats.hitsDodged++;
-    }
-    if (result.clashResolvedThisTick) clashes++;
-    mutualIdleStreak = !clashActive && firstActions.held.size === 0 && secondActions.held.size === 0 ? mutualIdleStreak + 1 : 0;
-    longestMutualIdleTicks = Math.max(longestMutualIdleTicks, mutualIdleStreak);
-    distanceSum += Math.hypot(a.x - b.x, a.z - b.z);
-    first.stats.finalStaminaFraction = result.first.staminaFraction;
-    second.stats.finalStaminaFraction = result.second.staminaFraction;
 
-    anomalyCount += checkSide(tick, 'first', world, result.first.spin.angularVelocity, anomalies);
-    anomalyCount += checkSide(tick, 'second', world, result.second.spin.angularVelocity, anomalies);
+    if (!isFrozenByHitstop) {
+      if (clashActive) clashActiveTicks++;
+      const a = world.first.body.translation();
+      const b = world.second.body.translation();
+      const isOpen = (attackState: AttackState, broken: boolean) =>
+        broken || attackState === AttackState.DashRecovery || attackState === AttackState.CircularRecovery;
+      first.record(tick, firstAi, firstActions, result.first.attackState, result.first.dodgeState, clashActive, Math.hypot(a.x, a.z), isOpen(previousSecondAttackState, previousSecondBroken), result.first.attackEnergyFraction, result.first.movement.speedMps);
+      second.record(tick, secondAi, secondActions, result.second.attackState, result.second.dodgeState, clashActive, Math.hypot(b.x, b.z), isOpen(previousFirstAttackState, previousFirstBroken), result.second.attackEnergyFraction, result.second.movement.speedMps);
+      previousFirstAttackState = result.first.attackState;
+      previousSecondAttackState = result.second.attackState;
+      previousFirstBroken = result.first.isBroken;
+      previousSecondBroken = result.second.isBroken;
+      for (const hit of result.hitEvents) {
+        const attacker = hit.attackerIsFirst ? first : second;
+        attacker.stats.hitsLanded++;
+        if (hit.caughtOpponentDashing) attacker.stats.counterHits++;
+      }
+      for (const event of result.combatEvents) {
+        if (event.kind === 'dodged') (event.targetIsFirst ? first : second).stats.hitsDodged++;
+      }
+      if (result.clashResolvedThisTick) clashes++;
+      mutualIdleStreak = !clashActive && firstActions.held.size === 0 && secondActions.held.size === 0 ? mutualIdleStreak + 1 : 0;
+      longestMutualIdleTicks = Math.max(longestMutualIdleTicks, mutualIdleStreak);
+      distanceSum += Math.hypot(a.x - b.x, a.z - b.z);
+      first.stats.finalStaminaFraction = result.first.staminaFraction;
+      second.stats.finalStaminaFraction = result.second.staminaFraction;
+
+      anomalyCount += checkSide(tick, 'first', world, result.first.spin.angularVelocity, anomalies);
+      anomalyCount += checkSide(tick, 'second', world, result.second.spin.angularVelocity, anomalies);
+
+      hitstop.registerImpactMagnitudes(collectHitstopImpactMagnitudes(result, world.clash.controller.getState()));
+    }
+    hitstop.decay(FIXED_DELTA_SECONDS);
+
     for (const detection of detector.check({
       tick,
       first: world.first,
@@ -407,13 +431,14 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
       firstActions,
       secondActions,
       aiSides: { first: true, second: true },
+      hitstopActive: isFrozenByHitstop,
     })) {
       if (detection.severity === 'invalid-state') invalidDetectionCount++;
       else warningCount++;
       if (detections.length < MAX_STORED_DETECTIONS) detections.push(detection);
     }
 
-    setup.onTick?.(tick, world, firstActions, secondActions, firstAi, secondAi);
+    if (!isFrozenByHitstop) setup.onTick?.(tick, world, firstActions, secondActions, firstAi, secondAi);
 
     const tickMs = performance.now() - tickStartMs;
     busyMs += tickMs;

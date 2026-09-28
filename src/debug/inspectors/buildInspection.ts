@@ -106,7 +106,6 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
   const attack = bey.attack.getDebugState();
   const condition = bey.stamina.getPhysicalCondition();
   const actions = session.getLastActions(side);
-  const cameraOutput = session.getLastCameraOutput();
   const opponentPos = opponent.body.translation();
   const distance = Math.hypot(opponentPos.x - t.x, opponentPos.z - t.z);
   const id = (suffix: string): string => `${side}-${suffix}`;
@@ -204,7 +203,7 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
             : 'none',
         ),
         row('Target', `opponent at ${vec3(opponentPos)}, ${f(distance)} m`),
-        row('Hitstop (global)', cameraOutput?.isHitstopActive ? `active, ${f(cameraOutput.hitstopRemainingS)} s left` : 'inactive'),
+        row('Hitstop (global)', session.isHitstopActive() ? `active, ${f(session.getHitstopRemainingS())} s left` : 'inactive'),
         row('Last knockback received', knockback ? `tick ${knockback.tickIndex}, force ${f(knockback.force)}` : 'none yet'),
         knockback?.components
           ? row(
@@ -328,7 +327,7 @@ function buildCameraSection(session: MatchSession): InspectorSection {
     id: 'camera',
     title: 'Camera',
     rows: [
-      row('Active mode', clashActive ? 'Clash (ClashCameraDirector)' : camera.isHitstopActive ? 'CombatFollow (hitstop)' : 'CombatFollow'),
+      row('Active mode', clashActive ? 'Clash (ClashCameraDirector)' : session.isHitstopActive() ? 'CombatFollow (hitstop)' : 'CombatFollow'),
       row('FOV', `${f(camera.fovDeg)}°`),
       row('Target (focus)', vec3(camera.focusPositionM)),
       row('Distance', `${f(distance)} m`),

@@ -2,9 +2,10 @@
 // COMBAT CAMERA CONTROLLER SELF-TESTS
 // Pure-logic tests (no Three.js/physics needed) covering the owner-
 // approved "Hybrid scalable" (profile C) behavior: base framing/speed-FOV
-// when nothing is happening, and shake/hitstop/FOV-punch/knockback-follow
-// that scale with ImpactEvent.magnitude, floor out below a minimum (small
-// hits stay clean), and always decay back to baseline.
+// when nothing is happening, and shake/FOV-punch/knockback-follow that
+// scale with ImpactEvent.magnitude, floor out below a minimum (small hits
+// stay clean), and always decay back to baseline. Hitstop itself moved to
+// SimulationHitstop.ts (M9-0A) — see simulationHitstop.test.ts.
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
@@ -20,7 +21,6 @@ import {
   CAMERA_HIGH_SPEED_EXTRA_HEIGHT_M,
   CAMERA_HIGH_SPEED_FULL_BLEND_MPS,
   CAMERA_HIGH_SPEED_THRESHOLD_MPS,
-  CAMERA_HITSTOP_MAX_DURATION_S,
   CAMERA_MAX_DISTANCE_M,
 } from '../../src/camera/CameraTuning';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
@@ -68,7 +68,6 @@ describe('base framing (no events, a real player->opponent separation along +Z)'
     expect(output.cameraPositionM.y - output.focusPositionM.y).toBeCloseTo(CAMERA_BASE_HEIGHT_M, 2);
     expect(horizontalDistanceM(output)).toBeCloseTo(CAMERA_BASE_DISTANCE_M, 1);
     expect(output.fovDeg).toBeCloseTo(CAMERA_FOV_BASE_DEG, 1);
-    expect(output.isHitstopActive).toBe(false);
     expect(Math.hypot(output.shakeOffsetM.x, output.shakeOffsetM.y, output.shakeOffsetM.z)).toBeCloseTo(0, 3);
   });
 });
@@ -239,8 +238,12 @@ describe('high-speed camera (distinct from speed FOV)', () => {
   });
 });
 
+// Hitstop itself (whether gameplay freezes) moved to SimulationHitstop.ts
+// (M9-0A) — see tests/deterministic/simulationHitstop.test.ts. The camera
+// no longer tracks or reports it at all; these tests only cover what the
+// camera itself still owns (shake).
 describe('impact response scaling', () => {
-  it('a strong impact (magnitude 1, e.g. a KO) triggers both shake and hitstop, which decay back to nothing', () => {
+  it('a strong impact (magnitude 1, e.g. a KO) triggers shake, which decays back to nothing', () => {
     const controller = new CombatCameraController();
     const koEvent: ImpactEvent = { kind: 'ko', magnitude: 1, worldPositionM: STATIONARY, isFirst: true };
 
@@ -254,21 +257,16 @@ describe('impact response scaling', () => {
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
     });
 
-    expect(immediate.isHitstopActive).toBe(true);
-    expect(immediate.hitstopRemainingS).toBeGreaterThan(0);
     expect(Math.hypot(immediate.shakeOffsetM.x, immediate.shakeOffsetM.y, immediate.shakeOffsetM.z)).toBeGreaterThan(0);
 
-    // Enough real time for both the (capped) hitstop duration and the
-    // shake's exponential decay to fully settle.
-    const settleTicks = Math.ceil((CAMERA_HITSTOP_MAX_DURATION_S + 2) / FIXED_DELTA_SECONDS);
+    // Enough real time for the shake's exponential decay to fully settle.
+    const settleTicks = Math.ceil(2 / FIXED_DELTA_SECONDS);
     const settled = tickMany(controller, settleTicks);
 
-    expect(settled.isHitstopActive).toBe(false);
-    expect(settled.hitstopRemainingS).toBe(0);
     expect(Math.hypot(settled.shakeOffsetM.x, settled.shakeOffsetM.y, settled.shakeOffsetM.z)).toBeCloseTo(0, 2);
   });
 
-  it('a sub-hitstop but shake-eligible magnitude (e.g. a clean dodge) shakes the camera without ever freezing gameplay', () => {
+  it('a sub-hitstop but shake-eligible magnitude (e.g. a clean dodge) shakes the camera', () => {
     const controller = new CombatCameraController();
     const dodgedEvent: ImpactEvent = { kind: 'dodged', magnitude: 0.2, worldPositionM: STATIONARY, isFirst: true };
 
@@ -282,11 +280,10 @@ describe('impact response scaling', () => {
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
     });
 
-    expect(immediate.isHitstopActive).toBe(false);
     expect(Math.hypot(immediate.shakeOffsetM.x, immediate.shakeOffsetM.y, immediate.shakeOffsetM.z)).toBeGreaterThan(0);
   });
 
-  it('a tiny magnitude below the shake floor triggers neither shake nor hitstop (routine contact stays clean)', () => {
+  it('a tiny magnitude below the shake floor triggers no shake (routine contact stays clean)', () => {
     const controller = new CombatCameraController();
     const tinyEvent: ImpactEvent = { kind: 'wallImpact', magnitude: 0.03, worldPositionM: STATIONARY, isFirst: true };
 
@@ -300,7 +297,6 @@ describe('impact response scaling', () => {
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
     });
 
-    expect(immediate.isHitstopActive).toBe(false);
     expect(Math.hypot(immediate.shakeOffsetM.x, immediate.shakeOffsetM.y, immediate.shakeOffsetM.z)).toBe(0);
   });
 });

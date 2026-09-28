@@ -19,6 +19,7 @@ import { GameState, type GameStateMachine } from '../lifecycle/GameState';
 import { tickMatch, type MatchTickResult } from '../simulation/tickMatch';
 import { ClashOrchestration } from '../simulation/ClashOrchestration';
 import { ClashPresentationTracker } from '../simulation/ClashPresentationTracker';
+import { collectHitstopImpactMagnitudes, SimulationHitstop } from '../simulation/SimulationHitstop';
 import { RoundState } from '../../combat/round-rules/RoundState';
 import { ClashOutcome, ClashState } from '../../combat/clash/ClashController';
 import { NullAiMashSource } from '../../combat/clash/ClashMash';
@@ -130,6 +131,8 @@ export class MatchSession {
   private tickIndex = 0;
   private lastMatchResult: MatchTickResult | null = null;
   private lastCameraOutput: CombatCameraOutput | null = null;
+  /** M9-0A: the single source of truth for whether gameplay itself is frozen this tick — see SimulationHitstop.ts. */
+  private readonly hitstop = new SimulationHitstop();
   private lastPhysicsStepTimeMs = 0;
   private lastImpulses: Record<Side, SideTickImpulses> = { first: emptyImpulses(), second: emptyImpulses() };
   private lastKnockback: Record<Side, LastKnockback | null> = { first: null, second: null };
@@ -186,6 +189,15 @@ export class MatchSession {
 
   getLastCameraOutput(): CombatCameraOutput | null {
     return this.lastCameraOutput;
+  }
+
+  /** Whether gameplay itself is frozen right now (M9-0A: owned by SimulationHitstop, not the camera). */
+  isHitstopActive(): boolean {
+    return this.hitstop.isActive;
+  }
+
+  getHitstopRemainingS(): number {
+    return this.hitstop.remainingSeconds;
   }
 
   getLastPhysicsStepTimeMs(): number {
@@ -289,16 +301,17 @@ export class MatchSession {
     const roundState = this.roundState;
     telemetry.setCurrentTick(tickIndex);
 
-    // Hitstop (Milestone 4): a strong-enough impact freezes gameplay
-    // simulation itself for a brief, magnitude-scaled window — tickMatch()
-    // doesn't run, so physics/resources/round state don't advance.
-    // Computed before sampling so both controllers know this tick is
-    // frozen: a gameplay press made during the freeze is buffered (not
-    // lost) and delivered exactly once on the first unfrozen sample
-    // afterward, and hold-duration/charge clocks don't advance while
-    // frozen — see ActionSampleBuffer. Camera/VFX timers below still tick
-    // regardless, so the freeze actually ends.
-    const isFrozenByHitstop = this.lastCameraOutput?.isHitstopActive ?? false;
+    // Hitstop (Milestone 4, ownership moved to the simulation in M9-0A): a
+    // strong-enough impact freezes gameplay simulation itself for a brief,
+    // magnitude-scaled window — tickMatch() doesn't run, so
+    // physics/resources/round state don't advance. Computed before
+    // sampling so both controllers know this tick is frozen: a gameplay
+    // press made during the freeze is buffered (not lost) and delivered
+    // exactly once on the first unfrozen sample afterward, and
+    // hold-duration/charge clocks don't advance while frozen — see
+    // ActionSampleBuffer. Camera/VFX timers below still tick regardless,
+    // so the freeze actually ends.
+    const isFrozenByHitstop = this.hitstop.isActive;
 
     const firstActions = this.drivers.first.sampleActions({ fixedDeltaSeconds, simulationFrozen: isFrozenByHitstop });
     const secondActions = this.drivers.second.sampleActions({ fixedDeltaSeconds, simulationFrozen: isFrozenByHitstop });
@@ -625,8 +638,6 @@ export class MatchSession {
         focusPositionM: clashCameraOutput.focusPositionM,
         shakeOffsetM: clashCameraOutput.shakeOffsetM,
         fovDeg: clashCameraOutput.fovDeg,
-        isHitstopActive: false,
-        hitstopRemainingS: 0,
         highSpeedBlend: 0,
         speedLinesScreenDirection: { x: 0, y: 0 },
       };
@@ -646,6 +657,19 @@ export class MatchSession {
         fixedDeltaSeconds,
       });
     }
+
+    // M9-0A: hitstop is decided here, independent of which camera branch
+    // ran above — collectHitstopImpactMagnitudes already encodes the same
+    // resolution/Active/normal distinction the branches above do (see its
+    // doc comment), from `result` and `currentClashState` alone, so a
+    // headless world with no camera at all can compute the exact same
+    // thing. Skipped (not just fed []) when frozen, so a cached/replayed
+    // `result` (which may carry a stale, already-consumed
+    // clashResolvedThisTick) can never re-trigger it.
+    if (!isFrozenByHitstop) {
+      this.hitstop.registerImpactMagnitudes(collectHitstopImpactMagnitudes(result, currentClashState));
+    }
+    this.hitstop.decay(fixedDeltaSeconds);
   }
 }
 

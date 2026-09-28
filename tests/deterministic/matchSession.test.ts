@@ -209,6 +209,55 @@ describe('MatchSession', () => {
   });
 });
 
+describe('Hitstop (M9-0A: owned by the simulation, not the camera)', () => {
+  it('a real connecting hit automatically freezes gameplay for a few ticks, holds it frozen, then resumes on its own', async () => {
+    // A scripted attacker dashing at a stationary idle opponent (same
+    // spawn distance/script shape as aiHitstopFreeze.test.ts, known to
+    // reliably connect) — this exercises the REAL, automatic trigger
+    // (MatchSession -> SimulationHitstop, via a real tickMatch() hit),
+    // not a manually-injected simulationFrozen flag.
+    const { session } = await createSession('hitstop-live-trigger', {
+      first: { kind: 'scripted', label: 'attacker', frames: [{ fromTick: 0, held: [Action.MoveForward, Action.Attack] }] },
+      second: { kind: 'idle' },
+    });
+
+    const MAX_TICKS = 300;
+    let hitstopStartedAtTick: number | null = null;
+    let hitstopEndedAtTick: number | null = null;
+    let stabilityAtFreezeStart: number | null = null;
+    let sawStabilityChangeWhileFrozen = false;
+
+    for (let tick = 0; tick < MAX_TICKS; tick++) {
+      const wasActive = session.isHitstopActive();
+      session.tick();
+      const isActive = session.isHitstopActive();
+      const stability = session.getBey('second').stability.resource.value;
+
+      if (hitstopStartedAtTick === null && !wasActive && isActive) {
+        hitstopStartedAtTick = tick;
+        stabilityAtFreezeStart = stability;
+      } else if (hitstopStartedAtTick !== null && hitstopEndedAtTick === null) {
+        if (isActive) {
+          // Stability only changes inside tickMatch(), so it staying exactly
+          // put is the load-bearing proof that tickMatch() itself is being
+          // skipped while frozen — not merely that some output field says so.
+          if (stability !== stabilityAtFreezeStart) sawStabilityChangeWhileFrozen = true;
+        } else {
+          hitstopEndedAtTick = tick;
+        }
+      }
+      if (hitstopEndedAtTick !== null) break;
+    }
+
+    expect(hitstopStartedAtTick, 'the scripted attack never triggered a hitstop freeze within MAX_TICKS').not.toBeNull();
+    expect(hitstopEndedAtTick, 'hitstop never ended on its own').not.toBeNull();
+    expect(hitstopEndedAtTick!).toBeGreaterThan(hitstopStartedAtTick!);
+    expect(sawStabilityChangeWhileFrozen, 'Stability changed on a tick where isHitstopActive() was still true').toBe(false);
+
+    session.dispose();
+  });
+});
+
 describe('Debug Lab inspection (GDD section 69)', () => {
   it('covers every GDD 69 category for both Beys, with finite readings', async () => {
     const { session } = await createSession('inspection');
