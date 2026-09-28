@@ -4,8 +4,11 @@
 //
 // 1. compatibility: the recording build's fingerprint must match this
 //    build's (refused by default; allowFingerprintMismatch exists for
-//    diagnosis only), and each recorded Bey must resolve to a definition
-//    this build has with the same gameplay digest. Format, versions, tick
+//    diagnosis only), each recorded Bey must resolve to a definition
+//    this build has with the same gameplay digest, and the replay must
+//    carry the checkpoints that make "verified" mean something: the
+//    initial state (TicksCompleted 0) and the final one (frames.length).
+//    Intermediate checkpoints may be sparse. Format, versions, tick
 //    rate and file integrity were already enforced by decodeReplay().
 // 2. the match is rebuilt from the replay's own config only: Bey
 //    definitions (resolved above), spawns, match config, and
@@ -23,7 +26,7 @@ import type { Bey } from '../../bey/core/Bey';
 import { NullAiMashSource } from '../../combat/clash/ClashMash';
 import { applyAttackProfileSettings, type BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import { SelfTestMatchWorld } from '../../self-test/SelfTestMatchWorld';
-import type { RecordedBey, RuntimeFingerprint, StateCheckpoint } from '../contracts';
+import type { RecordedBey, RuntimeFingerprint, StateCheckpoint, TicksCompleted } from '../contracts';
 import type { ChaosBeyReplayV1 } from '../format/ChaosBeyReplayV1';
 import { beyDefinitionDigest } from '../format/configSnapshot';
 import { fromRecordedActions } from '../format/recordedActions';
@@ -37,7 +40,9 @@ export const REPLAY_BEY_CATALOG: readonly BeyDefinition[] = [...ALL_BEY_ARCHETYP
 export type ReplayRefusal =
   | { readonly code: 'fingerprint-mismatch'; readonly mismatches: readonly FingerprintMismatch[] }
   | { readonly code: 'unknown-bey'; readonly side: 'first' | 'second'; readonly definitionId: string }
-  | { readonly code: 'bey-digest-mismatch'; readonly side: 'first' | 'second'; readonly definitionId: string };
+  | { readonly code: 'bey-digest-mismatch'; readonly side: 'first' | 'second'; readonly definitionId: string }
+  /** Without the initial and final states a playback could prove nothing, so it is never called verified. */
+  | { readonly code: 'missing-boundary-checkpoint'; readonly missing: readonly TicksCompleted[] };
 
 export interface ReplayCompatibilityOptions {
   /** Diagnosis only: play a replay from another build anyway (its hashes are then expected to be able to differ). */
@@ -67,6 +72,8 @@ export function checkReplayCompatibility(replay: ChaosBeyReplayV1, current: Runt
   const refusals: ReplayRefusal[] = [];
   const fingerprintMismatches = compareFingerprints(replay.fingerprint, current);
   if (fingerprintMismatches.length > 0 && !options.allowFingerprintMismatch) refusals.push({ code: 'fingerprint-mismatch', mismatches: fingerprintMismatches });
+  const missing = missingBoundaryCheckpoints(replay);
+  if (missing.length > 0) refusals.push({ code: 'missing-boundary-checkpoint', missing });
   const beys: Partial<Record<'first' | 'second', BeyDefinition>> = {};
   for (const side of ['first', 'second'] as const) {
     const recorded = replay.config.beys[side];
@@ -77,6 +84,12 @@ export function checkReplayCompatibility(replay: ChaosBeyReplayV1, current: Runt
   }
   if (refusals.length > 0 || !beys.first || !beys.second) return { ok: false, refusals };
   return { ok: true, beys: { first: beys.first, second: beys.second }, fingerprintMismatches };
+}
+
+/** The boundary states a replay must checkpoint: TicksCompleted 0 and frames.length. */
+export function missingBoundaryCheckpoints(replay: ChaosBeyReplayV1): TicksCompleted[] {
+  const have = new Set(replay.checkpoints.map((c) => c.ticksCompleted));
+  return [...new Set([0, replay.frames.length])].filter((t) => !have.has(t));
 }
 
 /** The replay's frames as each side's ControllerActions, `first[n]` for TickIndex n. */

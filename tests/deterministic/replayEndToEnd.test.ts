@@ -190,6 +190,30 @@ describe('incompatible and tampered replays', () => {
     expect(verdict.comparison.firstMismatch.ticksCompleted).toBe(verdict.comparison.lastMatch! + 1);
   }, 180_000);
 
+  it('never calls a replay verified without its initial and final checkpoints (re-sealed files)', async () => {
+    const fingerprint = await currentRuntimeFingerprint();
+    const replay = (await simulateAiMatch({ seed: 'bounds', firstDefinition: ATTACK_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE, maxTicks: 300, record: { fingerprint, checkpointEvery: 60 } })).replay!;
+    const last = replay.frames.length;
+    expect((await playReplayHeadless(replay, fingerprint)).status).toBe('verified');
+
+    const cases: [string, (r: any) => void, number[]][] = [
+      ['no checkpoints', (r) => (r.checkpoints = []), [0, last]],
+      ['only the initial checkpoint', (r) => (r.checkpoints = r.checkpoints.slice(0, 1)), [last]],
+      ['no final checkpoint', (r) => (r.checkpoints = r.checkpoints.filter((c: any) => c.ticksCompleted !== last)), [last]],
+      ['no initial checkpoint', (r) => (r.checkpoints = r.checkpoints.filter((c: any) => c.ticksCompleted !== 0)), [0]],
+    ];
+    for (const [label, edit, missing] of cases) {
+      const verdict = await playReplayHeadless(reseal(replay, edit), fingerprint);
+      expect(verdict, label).toEqual({ status: 'refused', refusals: [{ code: 'missing-boundary-checkpoint', missing }] });
+      // The live path goes through the same check.
+      expect(checkReplayCompatibility(reseal(replay, edit), fingerprint).ok, label).toBe(false);
+    }
+    // Sparse intermediate checkpoints stay fine: keep only the two boundaries.
+    const boundariesOnly = reseal(replay, (r) => (r.checkpoints = r.checkpoints.filter((c: any) => c.ticksCompleted === 0 || c.ticksCompleted === last)));
+    expect(boundariesOnly.checkpoints.length).toBe(2);
+    expect((await playReplayHeadless(boundariesOnly, fingerprint)).status).toBe('verified');
+  }, 60_000);
+
   it('a re-sealed file with an altered checkpoint is caught at exactly that checkpoint', async () => {
     const fingerprint = await currentRuntimeFingerprint();
     const replay = (await simulateAiMatch({ seed: 'cp', firstDefinition: ATTACK_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE, maxTicks: 600, record: { fingerprint } })).replay!;

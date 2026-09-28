@@ -222,6 +222,10 @@ integrated only after B is merged and `main` is green.
     fingerprint difference: build, commit, Rapier). It also refuses a Bey
     this build doesn't have, or has with different gameplay (the digest).
     `allowFingerprintMismatch` exists for diagnosis only.
+  - It also refuses a replay without a checkpoint at `TicksCompleted` 0
+    and at `frames.length` (`missing-boundary-checkpoint`), so `verified`
+    always means that the initial and final states were reproduced.
+    Intermediate checkpoints may be sparse.
   - `buildPlaybackWorld()` rebuilds the match from the replay's config
     alone: definitions resolved by id and digest, spawns, match config,
     and `NullAiMashSource`.
@@ -246,6 +250,9 @@ integrated only after B is merged and `main` is green.
 - **Refused:** a fingerprint from another build (and allowed with the
   diagnosis flag), an unknown Bey, and a Bey whose gameplay digest
   differs.
+- **Refused when a re-sealed file lacks boundary checkpoints:** no
+  checkpoints, only the initial one, or no final or no initial one. A
+  replay with only the two boundaries still verifies.
 - **Tampering:**
   - an edited file is refused at decode (integrity);
   - re-sealed edited inputs diverge inside the edited range, with a
@@ -262,7 +269,8 @@ integrated only after B is merged and `main` is green.
   - the match config ignored;
   - the sides swapped;
   - a forced input counted as a state edit;
-  - the scenario setup not re-applied.
+  - the scenario setup not re-applied;
+  - the boundary-checkpoint refusal disabled.
 
 ## Known architecture facts (main@972f65d)
 
