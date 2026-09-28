@@ -49,7 +49,7 @@ Status values: **DONE** (merged and tested), **IN PROGRESS** (PR named),
 | Contracts | `src/replay/contracts.ts` + this file | — | no | DONE (#39) |
 | A | M9-0 (hitstop into the simulation, RNG scheme 2) + `CanonicalMatchStateV1` + state hash | Contracts | yes (hitstop wiring, RNG) | DONE (#40) |
 | B | `ChaosBeyReplayV1` format, encode/decode/validate, recorder, config snapshot — pure modules, no call-site hooks | Contracts | no | DONE (#41) |
-| C | `ReplayController`, recorder hooks at the three `tickMatch` callers, headless replay runner, checkpoint compare, first-divergence bisect | A + B | yes (after A) | IN PROGRESS (branch `claude/m9-c-playback`) |
+| C | `ReplayController`, recorder hooks at the three `tickMatch` callers, headless replay runner, checkpoint compare, first-divergence bisect | A + B | yes (after A) | IN PROGRESS (branch `claude/m9-c-playback`, PR pending) |
 | D | `replay-reproduction` preset, batch divergence, Debug Lab and Self Test integration | C | via `DebugLabMode` | TODO |
 | E | Deterministic hardening in Chromium: long AI-vs-AI replays, 1× vs max acceleration, headless vs browser | A/B partly, rest parallel with D | no | TODO |
 
@@ -201,16 +201,68 @@ integrated only after B is merged and `main` is green.
   in the locator's `TickIndex`, a compare that ignores mismatches, and a
   controller that doesn't copy its frames.
 
-**Waiting for B:**
-- recorder hooks at the three `tickMatch` callers (`MatchSession`, the
-  headless batches, the scenario runner), feeding B's `ReplayRecorder`;
-- decoding `ChaosBeyReplayV1` into frames;
-- building the playback world from `DeterministicConfigSnapshot`;
-- refusing a replay whose fingerprint or versions don't match (GDD 77).
+**Integrated after B merged (#41, `main` green):**
+- **Recording at the three places that run ticks.** Each calls
+  `ReplayCapture.afterTick()` right after its `MatchStepper` step:
+  - `MatchSession.startReplayCapture()` / `finishReplayCapture()`, only
+    from tick 0;
+  - `AiMatchSetup.record` → `AiMatchRecord.replay`;
+  - `ScenarioRunOptions.record` → `ScenarioResult.replay`.
 
-**Note for B/D:** a Debug Lab session with state mutations can't be
-reproduced from its inputs alone (`MatchSession.getDebugMutations()`), so a
-recording from such a session must be marked non-reproducible.
+  `ReplayCapture` holds each tick until the next one, so the final state is
+  always checkpointed. By default it checkpoints every tick, so a
+  divergence is pinned to the exact tick with no re-run.
+- **Live recordings report Debug Lab state edits** (teleport, set
+  resource, reset cooldowns, loading a preset) made while recording. They
+  aren't inputs, so such a replay diverges at the tick right after the
+  edit. Forced inputs aren't reported: they reach the match through the
+  controllers, so the frames already contain them.
+- **Playback (`playback/replayPlayback.ts`):**
+  - `checkReplayCompatibility()` refuses a replay from another build (any
+    fingerprint difference: build, commit, Rapier). It also refuses a Bey
+    this build doesn't have, or has with different gameplay (the digest).
+    `allowFingerprintMismatch` exists for diagnosis only.
+  - `buildPlaybackWorld()` rebuilds the match from the replay's config
+    alone: definitions resolved by id and digest, spawns, match config,
+    and `NullAiMashSource`.
+  - `framesFromReplay()` decodes the frames.
+  - `playReplayHeadless()` plays through the real runtime and compares
+    every stored checkpoint, returning `verified`, `diverged` (with the
+    window) or `refused`. Live playback uses the `replay` controller spec
+    in a `MatchSession` built from the replay's config.
+- **Scenario recordings** start after the preset's `setup`. Playback must
+  re-apply the same setup; the checkpoint at `TicksCompleted` 0 catches it
+  when it doesn't.
+
+**Proofs (`tests/deterministic/replayEndToEnd.test.ts`):**
+- **Live → file → headless:** a 1403-tick fight with 211 hitstop-frozen
+  ticks. Every per-tick checkpoint is reproduced, and the stored
+  checkpoints equal the live session's own hashes.
+- **Live → file → live `MatchSession`:** the identical hash on every tick.
+- **AI batch hook:** per-tick and every-60 checkpoints, final state
+  included, both verified.
+- **Scenario hook:** verified with its setup; caught at `TicksCompleted` 0
+  without it.
+- **Refused:** a fingerprint from another build (and allowed with the
+  diagnosis flag), an unknown Bey, and a Bey whose gameplay digest
+  differs.
+- **Tampering:**
+  - an edited file is refused at decode (integrity);
+  - re-sealed edited inputs diverge inside the edited range, with a
+    one-tick window;
+  - a re-sealed altered checkpoint is caught at exactly that checkpoint.
+- **Debug Lab:** a state edit is reported and diverges at the next tick; a
+  forced input is not reported and still verifies.
+- **Mutation checks,** each caught:
+  - checkpoints labelled with the wrong tick count;
+  - the final state not checkpointed;
+  - the fingerprint not enforced;
+  - the digest ignored;
+  - wrong spawns;
+  - the match config ignored;
+  - the sides swapped;
+  - a forced input counted as a state edit;
+  - the scenario setup not re-applied.
 
 ## Known architecture facts (main@972f65d)
 
