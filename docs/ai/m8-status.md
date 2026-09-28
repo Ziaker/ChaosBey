@@ -13,9 +13,9 @@ Living checklist for Milestone 8 (GDD section 144, detailed by sections
 
 | PR | Scope | State |
 |---|---|---|
-| #31 | Shared headless Self-Test core (`src/self-test/`), AI batch runner, typed GDD 163 report | approved, pending merge |
-| #33 | Debug Lab: `MatchSession`, `?mode=debug-lab`, GDD 69 inspector, pause/step/restart/seed/speed, controller switching, GDD 70/71 visualization, presentation toggles, logged mutations, JSON debug report | open |
-| M8 Self-Test (next) | GDD 67 anomaly detector, GDD 68 scenario presets, steppable batch, browser `?mode=self-test` | on top of #31 + #33 |
+| #31 | Shared headless Self-Test core (`src/self-test/`), AI batch runner, typed GDD 163 report | merged (`6bd4024`) |
+| #33 | Debug Lab: `MatchSession`, `?mode=debug-lab`, GDD 69 inspector, pause/step/restart/seed/speed, controller switching, GDD 70/71 visualization, presentation toggles, logged mutations, JSON debug report | merged (`dc0f40b`) |
+| M8 Self-Test (`claude/m8-selftest-mode`) | GDD 67 anomaly detector, GDD 68 scenario presets, steppable batch, browser `?mode=self-test` | open, on `main@6bd4024` |
 
 ## GDD 144 headline items
 
