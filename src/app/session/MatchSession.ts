@@ -259,6 +259,21 @@ export class MatchSession {
 
   /** Swaps who drives one side (GDD section 70: toggle AI / automated controller, change AI profile). Takes effect on the next tick. */
   setController(side: Side, spec: SideControllerSpec): void {
+    if (spec.kind === 'keyboard') {
+      const opposite: Side = side === 'first' ? 'second' : 'first';
+      // Only one side may ever be wired to the shared keyboard device (see
+      // MatchSessionOptions.keyboard's doc comment — "only used by a side",
+      // singular). The Debug Lab panel has one independent dropdown per
+      // side with no cross-validation, so without this a developer could
+      // switch both sides to Keyboard and have them silently share the same
+      // ActionSampleBuffer: presses lost to whichever side samples second,
+      // and its hold-duration clock advancing twice per tick.
+      if (this.controllerSpecs[opposite].kind === 'keyboard') this.applyController(opposite, { kind: 'idle' });
+    }
+    this.applyController(side, spec);
+  }
+
+  private applyController(side: Side, spec: SideControllerSpec): void {
     this.controllerSpecs[side] = spec;
     this.drivers[side].setInner(createSideController(spec, this.controllerDeps(side)));
   }

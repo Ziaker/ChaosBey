@@ -1,7 +1,7 @@
 // GDD 68 scenario presets, run headless on the shared Self-Test core.
 
 import { describe, expect, it } from 'vitest';
-import { SCENARIO_PRESETS, findScenarioPreset } from '../../src/self-test/scenarios/ScenarioPresets';
+import { SCENARIO_PRESETS } from '../../src/self-test/scenarios/ScenarioPresets';
 import { runScenario, runScenarioSuite } from '../../src/self-test/scenarios/ScenarioRunner';
 
 const GDD_68_NAMES = [
@@ -43,12 +43,11 @@ describe('GDD 68 scenario presets', () => {
     expect(report.passed).toBe(report.total - 1);
   }, 300_000);
 
-  it('is deterministic: the same preset gives the same run', async () => {
-    for (const id of ['clash', 'ring-out', 'drift', 'perfect-dodge']) {
-      const preset = findScenarioPreset(id)!;
+  it('is deterministic: every supported preset gives the same run twice (not just a hand-picked sample)', async () => {
+    for (const preset of SCENARIO_PRESETS.filter((p) => p.supported)) {
       const a = await runScenario(preset);
       const b = await runScenario(preset);
-      expect({ ticks: b.ticks, detail: b.detail, status: b.status }, id).toEqual({ ticks: a.ticks, detail: a.detail, status: a.status });
+      expect({ ticks: b.ticks, detail: b.detail, status: b.status }, preset.id).toEqual({ ticks: a.ticks, detail: a.detail, status: a.status });
     }
-  }, 120_000);
+  }, 300_000);
 });

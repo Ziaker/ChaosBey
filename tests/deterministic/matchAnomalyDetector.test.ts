@@ -175,6 +175,14 @@ describe('MatchAnomalyDetector — each GDD 67 condition is caught, once per epi
     expect(found).toHaveLength(1);
     expect(found[0]).toMatchObject({ kind: 'ai-inactive', severity: 'warning', side: 'first' });
   });
+
+  it('an AI side pressing nothing does not accumulate ai-inactive while hitstop freezes gameplay (same freeze rule as every other streak)', async () => {
+    // Same shape as the "permanent hitstop" case above, but held well below
+    // maxHitstopTicks so permanent-hitstop itself never fires — isolating
+    // whether ai-inactive respects the freeze on its own.
+    const found = await run(DEFAULT_ANOMALY_THRESHOLDS.aiInactiveTicks + 2, () => ({ hitstopActive: true }), { first: true, second: false });
+    expect(found.filter((d) => d.kind === 'ai-inactive')).toHaveLength(0);
+  });
 });
 
 describe('recorded ext-32 wall bug, reproduced from its seed', () => {
