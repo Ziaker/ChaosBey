@@ -1,9 +1,11 @@
 # M8 status — Debug Lab / Self Test expansion
 
-Living checklist for Milestone 8 (GDD section 144, detailed by sections
-1.2, 65–71, 162–164). Updated by every M8 PR. Status values:
+Checklist for Milestone 8 (GDD section 144, detailed by sections
+1.2, 65–71, 162–164). **M8 is complete on `main@fb93e05`:** every item is
+DONE except the ones below marked UNSUPPORTED (M9) or BLOCKED BY OWNER.
+Status values:
 
-- **DONE** — implemented and tested (merged, or in the PR named in the row until it merges);
+- **DONE** — implemented, tested and merged to `main`;
 - **PARTIAL** — some of the requirement exists, the rest is listed;
 - **MISSING** — not built yet;
 - **UNSUPPORTED (M9)** — depends on replay/state hashes, which GDD section 145 schedules for Milestone 9; reported as unsupported, never faked;
@@ -15,14 +17,14 @@ Living checklist for Milestone 8 (GDD section 144, detailed by sections
 |---|---|---|
 | #31 | Shared headless Self-Test core (`src/self-test/`), AI batch runner, typed GDD 163 report | merged (`6bd4024`) |
 | #33 | Debug Lab: `MatchSession`, `?mode=debug-lab`, GDD 69 inspector, pause/step/restart/seed/speed, controller switching, GDD 70/71 visualization, presentation toggles, logged mutations, JSON debug report | merged (`dc0f40b`) |
-| M8 Self-Test (`claude/m8-selftest-mode`) | GDD 67 anomaly detector, GDD 68 scenario presets, steppable batch, browser `?mode=self-test` | open, on `main@6bd4024` |
+| #34 | GDD 67 anomaly detector, GDD 68 scenario presets, steppable batch, browser `?mode=self-test` | merged (`fb93e05`) |
 
 ## GDD 144 headline items
 
 | Requirement | Implementation | Evidence | Status |
 |---|---|---|---|
 | Inspectors | `src/debug/inspectors/buildInspection.ts`, Debug Lab panel | `matchSession.test.ts`, `debugLab.spec.ts` | DONE (#33) |
-| Raw state | Same inspector: transform, linear, angular, surface, resources, combat, dodge, jump, Clash, AI, camera, performance, telemetry, anomalies | same | DONE (#33, anomalies row with the Self-Test PR) |
+| Raw state | Same inspector: transform, linear, angular, surface, resources, combat, dodge, jump, Clash, AI, camera, performance, telemetry, anomalies | same | DONE (#33; anomalies row #34) |
 | Force visualization | `src/debug/visualization/DebugVisualLayers.ts` | `debugVisualLayers.test.ts`, `debugLab.spec.ts` | DONE (#33) |
 | Scenario presets | `src/self-test/scenarios/` — all 18 GDD 68 presets; headless runner + Debug Lab loader | `scenarioPresets.test.ts`, `sessionScenarios.test.ts`, `selfTest.spec.ts`, `debugLab.spec.ts` | DONE (17) + UNSUPPORTED (M9): Replay Reproduction |
 | Controller switching | Debug Lab: keyboard / AI (any personality) / idle / scripted per side, live. Self Test: AI vs AI, scripted vs AI, scripted vs scripted | `matchSession.test.ts`, `selfTestStepped.test.ts` | DONE |
@@ -72,9 +74,9 @@ All categories are shown. Gaps are labeled UNSUPPORTED in the panel with the rea
 | visualize colliders, hitboxes, velocity, angular axis, forces/impulses, target path, ring-out boundaries (+ contacts, normals, lock-on) | DONE (#33) |
 | toggle VFX layers, toggle camera effects (+ overview camera) | DONE (#33) — render-only |
 | export debug report | DONE (#33) |
-| load scenario preset | DONE (Self-Test PR) |
+| load scenario preset | DONE (#34) |
 
-## Real problems the Self-Test found
+## Real problems the Self-Test found (future work, not M8)
 
 - **ext-32 wall collider** (already recorded, `docs/design-decisions/motion-approval.md` §10.2 / §13.6): Beys end up inside the edge wall band (`stuck-in-wall`). It is the only invalid state the Self-Test has seen; it is reported as a failure tagged `ext-32`, not hidden.
   - Sweep `m8-sweep-0..19` × all 9 matchups (180 matches, live spawns): 0 crashes, 0 hangs, 0 warnings; **25 matches (14%) invalid, all ext-32** (32 `stuck-in-wall` + 3 `below-floor` detections), `unknownInvalidStates` 0; 138 ring-outs, 40 KOs, 2 draws; 37 Clashes; average round 11.2 s.
