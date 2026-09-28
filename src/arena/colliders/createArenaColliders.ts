@@ -24,7 +24,7 @@ export interface Arena {
   readonly group: THREE.Group;
 }
 
-export function createArenaColliders(scene: THREE.Scene, physics: PhysicsWorld): Arena {
+export function createArenaColliders(scene: THREE.Object3D, physics: PhysicsWorld): Arena {
   const group = new THREE.Group();
   scene.add(group);
 

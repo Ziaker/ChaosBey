@@ -8,16 +8,11 @@
 import * as THREE from 'three';
 import { createArenaColliders } from '../../arena/colliders/createArenaColliders';
 import { createBey, type Bey } from '../../bey/core/Bey';
-import { BEY_SPAWN_HEIGHT_M } from '../../bey/core/BeyTuning';
 import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
 import { applyAttackProfileSettings, createDefaultAttackProfileSettings, type BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
-
-// Opposite starting positions, facing each other — arbitrary, generous
-// distance for a readable opening (arena radius is 12m).
-const FIRST_SPAWN = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: -4 };
-const SECOND_SPAWN = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 4 };
+import { FIRST_SPAWN, SECOND_SPAWN } from './matchSpawns';
 
 export interface MatchScene {
   readonly first: Bey;
@@ -51,7 +46,7 @@ function createSyncFn(body: Bey['body'], visual: BeyVisual) {
 // all three are equally unapproved prototypes pending the owner's visual
 // approval gate (GDD section 96/97).
 export function createMatchScene(
-  scene: THREE.Scene,
+  scene: THREE.Object3D,
   physics: PhysicsWorld,
   attackProfileSettings: BeyAttackProfileSettings = createDefaultAttackProfileSettings(),
 ): MatchScene {

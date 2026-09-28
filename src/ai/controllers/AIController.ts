@@ -412,6 +412,11 @@ export class AIController implements CombatController {
     return mashActions;
   }
 
+  /** The difficulty multipliers this controller runs with — Debug Lab inspection only (GDD section 65: "difficulty modifiers"). */
+  getDifficultyProfile(): AiDifficultyProfile {
+    return this.difficulty;
+  }
+
   getDebugState(): AiDebugState {
     const world = this.lastWorld;
     return {
