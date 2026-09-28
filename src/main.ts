@@ -6,7 +6,8 @@
 //
 // Modes (URL query `mode`):
 // - default: the Player-vs-AI match (app/modes/playMode.ts);
-// - `debug-lab`: the Debug Lab developer tool (debug/lab/DebugLabMode.ts).
+// - `debug-lab`: the Debug Lab developer tool (debug/lab/DebugLabMode.ts);
+// - `self-test`: the browser Self Test (debug/self-test-ui/SelfTestMode.ts).
 // ============================================================
 
 import { WebGl2UnavailableError, showWebGl2UnavailableScreen } from './app/bootstrap/bootFailureScreen';
@@ -14,6 +15,7 @@ import { createRenderer } from './app/bootstrap/createRenderer';
 import { startPlayMode } from './app/modes/playMode';
 import { resolveAppMode } from './app/modes/appMode';
 import { startDebugLabMode } from './debug/lab/DebugLabMode';
+import { startSelfTestMode } from './debug/self-test-ui/SelfTestMode';
 
 async function bootstrap(): Promise<void> {
   const canvas = document.querySelector<HTMLCanvasElement>('#app-canvas');
@@ -23,8 +25,15 @@ async function bootstrap(): Promise<void> {
     throw new Error('bootstrap: required DOM mount points are missing from index.html.');
   }
 
+  const mode = resolveAppMode(window.location.search);
+  if (mode === 'self-test') {
+    // Headless core + 2D minimap: the 3D renderer is not created at all.
+    canvas.style.display = 'none';
+    await startSelfTestMode(debugOverlayRoot);
+    return;
+  }
   const appRenderer = createRenderer(canvas);
-  if (resolveAppMode(window.location.search) === 'debug-lab') {
+  if (mode === 'debug-lab') {
     await startDebugLabMode(appRenderer, debugOverlayRoot);
   } else {
     await startPlayMode(appRenderer, { debugOverlayRoot, attackSettingsRoot });

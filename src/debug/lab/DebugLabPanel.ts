@@ -139,8 +139,8 @@ export class DebugLabPanel {
     this.pauseButton.setAttribute('data-paused', String(status.paused));
     if (document.activeElement !== this.seedInput) this.seedInput.value = status.seedText;
     this.speedSelect.value = String(status.speed);
-    this.controllerSelects.first.value = controllerSpecValue(status.firstController);
-    this.controllerSelects.second.value = controllerSpecValue(status.secondController);
+    this.setControllerSelect(this.controllerSelects.first, status.firstController);
+    this.setControllerSelect(this.controllerSelects.second, status.secondController);
     this.statusLine.textContent = `${status.paused ? 'PAUSED' : 'RUNNING'} · tick ${status.tickIndex}${status.message ? ` · ${status.message}` : ''}`;
     this.statusLine.setAttribute('data-tick', String(status.tickIndex));
   }
@@ -187,6 +187,23 @@ export class DebugLabPanel {
   isTypingInField(): boolean {
     const active = document.activeElement;
     return active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement;
+  }
+
+  /** A scripted side (scenario preset) gets a read-only option of its own so the select never shows blank. */
+  private setControllerSelect(select: HTMLSelectElement, spec: SideControllerSpec): void {
+    const value = controllerSpecValue(spec);
+    select.querySelectorAll('option[data-scripted]').forEach((o) => {
+      if ((o as HTMLOptionElement).value !== value) o.remove();
+    });
+    if (spec.kind === 'scripted' && !select.querySelector(`option[value="${CSS.escape(value)}"]`)) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = `Scripted (${spec.label})`;
+      option.disabled = true;
+      option.setAttribute('data-scripted', 'true');
+      select.append(option);
+    }
+    select.value = value;
   }
 
   private controllerSelect(side: Side): HTMLSelectElement {
