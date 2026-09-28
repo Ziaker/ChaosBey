@@ -212,7 +212,16 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
       refreshPanel(0, 0);
     },
     restart: async (seedText) => {
-      await createSession(seedText ?? session?.seedText ?? generateRandomSeedText());
+      // normalizeSeedText() throws on an empty/whitespace-only string
+      // (SeededRng.fromSeedText -> createRngStreams), which MatchSession
+      // .create() never catches — an empty string here (not just null:
+      // DebugLabHandle.restart is a public window.__chaosBeyDebugLab API,
+      // not only the panel's own "typed seed" button, which already guards
+      // this at the DOM layer) used to throw out of createSession(), leaving
+      // `session` stuck at null with no round running. Treat blank the same
+      // as null/undefined.
+      const trimmed = seedText?.trim();
+      await createSession(trimmed || session?.seedText || generateRandomSeedText());
       refreshPanel(0, 0);
     },
     setController: (side, spec) => {

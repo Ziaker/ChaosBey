@@ -153,3 +153,30 @@ test('Debug Lab: pause, step, restart, seeds, speed and controller switching on 
 
   expect(consoleErrors).toEqual([]);
 });
+
+test('Debug Lab: restart() with an empty/whitespace seed does not crash or strand the session', async ({ page }) => {
+  // DebugLabHandle.restart(seedText) is a public window.__chaosBeyDebugLab
+  // API (used by this very file, not only the panel's own "typed seed"
+  // button, which already trims and falls back at the DOM layer) — it must
+  // stay robust on its own. An empty/blank string reaching
+  // normalizeSeedText() throws ("seed text must not be empty"), which used
+  // to escape createSession() uncaught and leave `session` stuck at null.
+  await page.goto('/?mode=debug-lab');
+  await page.waitForFunction(() => window.__chaosBeyDebugLab?.getSession() !== null);
+
+  for (const blank of ['', '   ']) {
+    let threw: string | null = null;
+    try {
+      await page.evaluate(async (seedText) => {
+        await window.__chaosBeyDebugLab!.restart(seedText);
+      }, blank);
+    } catch (error) {
+      threw = String(error);
+    }
+    expect(threw, `restart(${JSON.stringify(blank)}) should not throw`).toBeNull();
+    expect(await page.evaluate(() => window.__chaosBeyDebugLab?.getSession() !== null)).toBe(true);
+    // The match still runs normally afterward.
+    await page.evaluate(() => window.__chaosBeyDebugLab!.step(5));
+    expect(await page.evaluate(() => window.__chaosBeyDebugLab!.getSession()!.getTickIndex())).toBeGreaterThan(0);
+  }
+});
