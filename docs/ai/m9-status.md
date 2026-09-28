@@ -46,9 +46,9 @@ Status values: **DONE** (merged and tested), **IN PROGRESS** (PR named),
 
 | Lane | Scope | Depends on | Touches `MatchSession.ts` | Status |
 |---|---|---|---|---|
-| Contracts | `src/replay/contracts.ts` + this file | — | no | IN PROGRESS |
-| A | M9-0 (hitstop into the simulation, RNG scheme 2) + `CanonicalMatchStateV1` + state hash | Contracts | yes (hitstop wiring, RNG) | IN PROGRESS (branch `claude/m9-a-canonical-state`) |
-| B | `ChaosBeyReplayV1` format, encode/decode/validate, recorder, config snapshot — pure modules, no call-site hooks | Contracts | no | TODO |
+| Contracts | `src/replay/contracts.ts` + this file | — | no | DONE (#39) |
+| A | M9-0 (hitstop into the simulation, RNG scheme 2) + `CanonicalMatchStateV1` + state hash | Contracts | yes (hitstop wiring, RNG) | DONE (#40) |
+| B | `ChaosBeyReplayV1` format, encode/decode/validate, recorder, config snapshot — pure modules, no call-site hooks | Contracts | no | IN PROGRESS (branch `claude/m9-b-replay-format`) |
 | C | `ReplayController`, recorder hooks at the three `tickMatch` callers, headless replay runner, checkpoint compare, first-divergence bisect | A + B | yes (after A) | TODO |
 | D | `replay-reproduction` preset, batch divergence, Debug Lab and Self Test integration | C | via `DebugLabMode` | TODO |
 | E | Deterministic hardening in Chromium: long AI-vs-AI replays, 1× vs max acceleration, headless vs browser | A/B partly, rest parallel with D | no | TODO |
@@ -101,6 +101,62 @@ Frozen ticks (hitstop or Clash) count in both.
 - **Baseline changes (accepted):** the `clash-cooldown-collision` preset's
   second Dash moved from 7 s to 8 s; the ext-32 reproduction seed is now
   `self-test-32/defense-prototype-vs-stamina-prototype`.
+
+## Lane B notes
+
+Pure modules in `src/replay/format/`. None of them runs the simulation,
+reads a controller or touches `localStorage`.
+
+- **`ChaosBeyReplayV1`** has the fields `format`, `stateHashAlgorithm`,
+  `fingerprint`, `config` (`DeterministicConfigSnapshot`), `frames`,
+  `checkpoints` and `integrity`.
+  - `frames[n]` is `{ tickIndex: n, first, second }`: both sides'
+    `RecordedActions` for every tick from 0, with none skipped.
+  - `checkpoints` are `{ ticksCompleted, hash }`, strictly increasing and
+    within `[0, frames.length]`.
+- **Deterministic encoding.** Keys are sorted at every level and there is
+  no whitespace. JSON round-trips every finite double exactly, so the same
+  replay always gives the same bytes. JSON writes -0 as 0, which the state
+  hash already treats as equal.
+- **`integrity`** is the FNV-1a 64 of all the other content. It detects a
+  corrupted or hand-edited file. It is not a signature, since anyone can
+  recompute it.
+- **Strict decoding.** A file is either fully valid or refused, with every
+  error listed by path and code:
+  - malformed JSON;
+  - wrong format;
+  - an unsupported hash algorithm, RNG scheme, state schema or tick rate;
+  - missing or unknown fields (at every level, including `matchConfig` and
+    the attack profiles against this build's own shapes);
+  - wrong types;
+  - non-finite numbers (JSON reads `1e999` as Infinity);
+  - unknown, unsorted or duplicated actions, and negative hold times;
+  - an invalid, duplicate, out-of-order or missing `tickIndex`;
+  - bad checkpoints;
+  - an integrity mismatch.
+- **`RecordedActions`** use sorted arrays and exact hold durations.
+  `pressed` is not required to be a subset of `held`, because a UI action
+  can be flushed as pressed with nothing held.
+- **The config snapshot** is a detached copy of the resolved config plus
+  this build's RNG scheme, state schema and tick rate. Each Bey is its id
+  plus a digest of its gameplay content (physical, ratings, handling,
+  attack). Presentation (particle, audio, appearance) is excluded: it never
+  affects the simulation, and appearance holds functions.
+- **The fingerprint** is the build version, commit and Rapier version.
+  `compareFingerprints()` lists the mismatches. Refusing playback on a
+  mismatch is the playback side's decision (lane C).
+- **`ReplayRecorder`** takes a `TickIndex`, both sides' `ControllerActions`
+  and an optional checkpoint, and returns a validated `ChaosBeyReplayV1`.
+  It throws at once on a skipped or repeated `TickIndex`, or on a
+  checkpoint that isn't for the state right after its tick.
+- **Tests** are in `tests/replay/replayFormat.test.ts`:
+  - fuzzed round-trips, exact floats included;
+  - recording a real live AI-vs-AI match and decoding every tick back;
+  - byte-identical re-encoding and key-order independence;
+  - no `localStorage`;
+  - the full rejection table.
+
+  11 mutation checks on the validations are all caught.
 
 ## Known architecture facts (main@972f65d)
 
