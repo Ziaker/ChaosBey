@@ -11,10 +11,17 @@ import { expect, test } from '@playwright/test';
 // ============================================================
 
 test('without WebGL2 the player sees a clear message instead of a blank page, and the error is still logged', async ({ page }) => {
-  const consoleErrors: string[] = [];
+  const consoleErrors: Promise<string>[] = [];
   const pageErrors: string[] = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    if (message.type() !== 'error') return;
+    // message.text() renders an Error argument differently per browser
+    // (Firefox gives just "Error"), so read each logged value itself.
+    consoleErrors.push(
+      Promise.all(message.args().map((arg) => arg.evaluate((value) => (value instanceof Error ? `${value.name}: ${value.message}` : String(value)))))
+        .then((parts) => parts.join(' '))
+        .catch(() => message.text()),
+    );
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -40,7 +47,8 @@ test('without WebGL2 the player sees a clear message instead of a blank page, an
   await expect(page.locator('#debug-overlay-root pre')).toHaveCount(0);
 
   // Still diagnosable: the failure is logged, and it is the WebGL2 case.
-  expect(consoleErrors.some((text) => text.includes('ChaosBey failed to boot') && text.includes('WebGL2 context could not be created')), JSON.stringify(consoleErrors)).toBe(true);
+  const loggedErrors = await Promise.all(consoleErrors);
+  expect(loggedErrors.some((text) => text.includes('ChaosBey failed to boot') && text.includes('WebGl2UnavailableError: WebGL2 context could not be created')), JSON.stringify(loggedErrors)).toBe(true);
   // Handled, not an uncaught exception.
   expect(pageErrors).toEqual([]);
 });
