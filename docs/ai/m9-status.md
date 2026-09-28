@@ -50,7 +50,7 @@ Status values: **DONE** (merged and tested), **IN PROGRESS** (PR named),
 | A | M9-0 (hitstop into the simulation, RNG scheme 2) + `CanonicalMatchStateV1` + state hash | Contracts | yes (hitstop wiring, RNG) | DONE (#40) |
 | B | `ChaosBeyReplayV1` format, encode/decode/validate, recorder, config snapshot — pure modules, no call-site hooks | Contracts | no | DONE (#41) |
 | C | `ReplayController`, recorder hooks at the three `tickMatch` callers, headless replay runner, checkpoint compare, first-divergence bisect | A + B | yes (after A) | IN PROGRESS (branch `claude/m9-c-playback`, PR pending) |
-| D | `replay-reproduction` preset, batch divergence, Debug Lab and Self Test integration | C | via `DebugLabMode` | TODO |
+| D | `replay-reproduction` preset, batch divergence, Debug Lab and Self Test integration | C | via `DebugLabMode` | IN PROGRESS (branch `claude/m9-d-integration`, on lane C; PR after #42 merges) |
 | E | Deterministic hardening in Chromium: long AI-vs-AI replays, 1× vs max acceleration, headless vs browser | A/B partly, rest parallel with D | no | TODO |
 
 A and B run in parallel: they share only `contracts.ts`. Only one lane at a
@@ -271,6 +271,54 @@ integrated only after B is merged and `main` is green.
   - a forced input counted as a state edit;
   - the scenario setup not re-applied;
   - the boundary-checkpoint refusal disabled.
+
+## Lane D notes
+
+- **`replay-reproduction` preset** (GDD 68, now supported). It records a
+  real Attack vs Defense AI match (seed `replay-13`, up to 1200 ticks),
+  exports it as `ChaosBeyReplayV1`, re-imports it, replays it through the
+  real runtime and requires every checkpoint to match. Two negative
+  self-checks run on re-sealed copies: edited inputs must diverge inside the
+  edited range, and one altered checkpoint must diverge at exactly that
+  checkpoint. Presets can carry a custom `run()`; the Debug Lab lists this
+  one as "Self Test only". A playback blind to mismatches fails the preset.
+- **Self Test divergence count** (GDD 163). With
+  `AiBatchConfig.verifyReplays`, each match is recorded and, when it ends,
+  replayed from its own recording. The world is rebuilt from the replay's
+  config and played through the real runtime, inside the same tick budget,
+  so the page stays responsive.
+  - A replay that doesn't verify fails the match (`divergence`) and is
+    listed with its first differing `TicksCompleted`.
+  - An unverified batch reports "not checked", never 0.
+  - The browser Self Test has a "Verify replays" option, on by default; its
+    report shows "divergence 0 of N replays".
+  - A state edit injected mid-match is caught at exactly the next state. A
+    verdict forced to "verified" fails that test.
+- **Debug Lab** (`DebugLabReplay.ts`, Replay panel, `window.__chaosBeyDebugLab`):
+  - **Recording.** "Record from start" restarts and records from tick 0.
+    "Stop & download" saves the `.json` and warns if Debug Lab state edits
+    were made while recording.
+  - **Playback.** "Import & play" decodes the file (refusing bad files),
+    checks compatibility, and rebuilds the session from the replay's own
+    config (never the Lab's `localStorage` overrides). It drives both sides
+    with the replay controllers and compares the live state hash with every
+    checkpoint as it ticks: "identical through TicksCompleted N",
+    "DIVERGED at …" or "replay finished: VERIFIED". It stops at the end of
+    the recording.
+  - **Not playable in the Lab.** A replay of another matchup or with other
+    spawns (e.g. a batch matchup) is refused with the reason: the Lab plays
+    the live Attack vs Defense match.
+  - **Inspector.** The "Replay / telemetry" section shows the real last
+    state hash, the recording state and the divergence state.
+  - **Debug report.** `replay` now carries the state hash and
+    `idle`/`recording`/`replaying`.
+  - **Status line.** It shows the latest message and "ROUND OVER" together,
+    so a refusal is no longer hidden when the round has ended.
+- **Smoke (Chromium):**
+  - Debug Lab: record → download → import through the panel → VERIFIED
+    live; a hand-edited file is refused (integrity).
+  - Self Test: "0 of 2 replays", and the `replay-reproduction` preset
+    passes.
 
 ## Known architecture facts (main@972f65d)
 
