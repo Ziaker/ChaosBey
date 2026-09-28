@@ -76,7 +76,9 @@ All categories are shown. Gaps are labeled UNSUPPORTED in the panel with the rea
 
 ## Real problems the Self-Test found
 
-- **ext-32 wall collider** (already recorded, `docs/design-decisions/motion-approval.md` §10.2 / §13.6): Beys end up inside the edge wall band (`stuck-in-wall`). In the Self-Test sweeps this is the only invalid state seen; it is reported as a failure tagged `ext-32`, not hidden.
+- **ext-32 wall collider** (already recorded, `docs/design-decisions/motion-approval.md` §10.2 / §13.6): Beys end up inside the edge wall band (`stuck-in-wall`). It is the only invalid state the Self-Test has seen; it is reported as a failure tagged `ext-32`, not hidden.
+  - Sweep `m8-sweep-0..19` × all 9 matchups (180 matches, live spawns): 0 crashes, 0 hangs, 0 warnings; **25 matches (14%) invalid, all ext-32** (32 `stuck-in-wall` + 3 `below-floor` detections), `unknownInvalidStates` 0; 138 ring-outs, 40 KOs, 2 draws; 37 Clashes; average round 11.2 s.
+  - The existing opt-in extended batch (`AI_STABILITY_BATCH=1`, 360 matches) still passes.
 - **New consequence of ext-32:** a Bey pushed past the floor edge (r > 12 m) but still inside the ring-out radius (12.9 m) falls off the world with no ring-out (`below-floor`, tagged `ext-32`). Reproducible from seed `self-test-5/stamina-prototype-vs-defense-prototype`. It belongs to the collider fix planned for integration, not to M8; no physics was changed.
 - **Detector false positives fixed before merge:** dodge / Clash timers "stuck" during a Clash were the Clash freeze, not bugs; timer checks now ignore frozen ticks.
 
