@@ -139,7 +139,7 @@ export class RealSimSource implements FightSource {
     const control = (spec: ControlSpec, own: Bey, opponent: Bey): CombatController => {
       if (spec.kind === 'script') return new ScriptedController(framesFromScript(spec.held, scenario.durationS));
       if (spec.kind === 'ai') {
-        const rng = createRngStreams(spec.seed).ai;
+        const rng = createRngStreams(spec.seed).aiFirst;
         return new AIController(physics, own, opponent, clash.controller, personalityForBeyDefinitionId(own.definition.id), DEFAULT_AI_DIFFICULTY_PROFILE, rng, null);
       }
       return new IdleController();

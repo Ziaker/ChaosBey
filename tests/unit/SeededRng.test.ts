@@ -61,17 +61,36 @@ describe('createRngStreams', () => {
     const streamsB = createRngStreams('match-seed-1');
 
     expect(streamsA.gameplay.nextFloat()).toEqual(streamsB.gameplay.nextFloat());
-    expect(streamsA.ai.nextFloat()).toEqual(streamsB.ai.nextFloat());
+    expect(streamsA.aiFirst.nextFloat()).toEqual(streamsB.aiFirst.nextFloat());
+    expect(streamsA.aiSecond.nextFloat()).toEqual(streamsB.aiSecond.nextFloat());
     expect(streamsA.cosmetic.nextFloat()).toEqual(streamsB.cosmetic.nextFloat());
   });
 
-  it('gameplay, ai and cosmetic streams do not produce identical sequences', () => {
+  it('gameplay, aiFirst, aiSecond and cosmetic streams do not produce identical sequences', () => {
     const streams = createRngStreams('match-seed-2');
     const gameplayFirst = streams.gameplay.nextFloat();
-    const aiFirst = streams.ai.nextFloat();
+    const aiFirst = streams.aiFirst.nextFloat();
+    const aiSecond = streams.aiSecond.nextFloat();
     const cosmeticFirst = streams.cosmetic.nextFloat();
 
-    expect(new Set([gameplayFirst, aiFirst, cosmeticFirst]).size).toBe(3);
+    expect(new Set([gameplayFirst, aiFirst, aiSecond, cosmeticFirst]).size).toBe(4);
+  });
+
+  it('RNG schema v2: aiFirst and aiSecond are independent streams — draining one leaves the other untouched', () => {
+    // This is the actual bug schema v2 fixes: MatchSession used to wire the
+    // same single `ai` stream to both sides' AIController, so one side's
+    // decision cadence silently advanced the draws the other side would
+    // read next. aiFirst/aiSecond must never be the same instance, and
+    // consuming one must not perturb the other's sequence at all.
+    const streams = createRngStreams('match-seed-schema-v2');
+    const untouchedFirstSequence = Array.from({ length: 10 }, () => streams.aiFirst.nextFloat());
+
+    const control = createRngStreams('match-seed-schema-v2');
+    // Drain aiSecond heavily on the control instance; aiFirst must be unaffected.
+    for (let i = 0; i < 500; i++) control.aiSecond.nextFloat();
+    const stillMatchingFirstSequence = Array.from({ length: 10 }, () => control.aiFirst.nextFloat());
+
+    expect(stillMatchingFirstSequence).toEqual(untouchedFirstSequence);
   });
 
   it('rootSeedText is the reusable match seed, not any individual stream\'s own (salted) canonical seed', () => {
@@ -83,7 +102,8 @@ describe('createRngStreams', () => {
 
     expect(streams.rootSeedText).toBe('1234');
     expect(streams.gameplay.getCanonicalSeedText()).not.toBe(streams.rootSeedText);
-    expect(streams.ai.getCanonicalSeedText()).not.toBe(streams.rootSeedText);
+    expect(streams.aiFirst.getCanonicalSeedText()).not.toBe(streams.rootSeedText);
+    expect(streams.aiSecond.getCanonicalSeedText()).not.toBe(streams.rootSeedText);
     expect(streams.cosmetic.getCanonicalSeedText()).not.toBe(streams.rootSeedText);
   });
 
@@ -92,7 +112,8 @@ describe('createRngStreams', () => {
     const reproduced = createRngStreams(original.rootSeedText);
 
     expect(reproduced.gameplay.nextFloat()).toEqual(original.gameplay.nextFloat());
-    expect(reproduced.ai.nextFloat()).toEqual(original.ai.nextFloat());
+    expect(reproduced.aiFirst.nextFloat()).toEqual(original.aiFirst.nextFloat());
+    expect(reproduced.aiSecond.nextFloat()).toEqual(original.aiSecond.nextFloat());
     expect(reproduced.cosmetic.nextFloat()).toEqual(original.cosmetic.nextFloat());
   });
 });

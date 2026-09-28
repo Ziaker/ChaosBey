@@ -523,7 +523,10 @@ export class MatchSession {
       ownBey: own,
       opponentBey: opponent,
       clashController: this.clash.controller,
-      aiRng: this.rngStreams.ai,
+      // RNG schema v2: each side gets its own AI stream (aiFirst/aiSecond),
+      // never a shared one — see RngStreams' doc comment for why this used
+      // to let one side's decisions perturb the other's draws.
+      aiRng: side === 'first' ? this.rngStreams.aiFirst : this.rngStreams.aiSecond,
       telemetry: this.telemetry,
       keyboard: this.keyboard,
     };

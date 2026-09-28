@@ -66,6 +66,16 @@ export class SeededRng {
  * sequences (GDD section 73: gameplay RNG, AI RNG, cosmetic RNG are kept
  * separate). Cosmetic draws (e.g. spark scatter) must never be able to
  * change gameplay-relevant outcomes just because visuals changed.
+ *
+ * Schema v2 (M9, RNG_SCHEMA_VERSION in src/replay/contracts.ts): `aiFirst`/
+ * `aiSecond` replace the old single shared `ai` stream. Before this, both
+ * sides' AIController — when both are AI-driven — read from the exact same
+ * SeededRng instance (MatchSession wired `rngStreams.ai` to both sides'
+ * controllerDeps), so one side's decision cadence silently perturbed the
+ * other's draws. Each side now gets its own independent stream, matching
+ * what the headless/Self-Test path already did (SeededRng.fromSeedText(
+ * `${seed}/first`) / `${seed}/second`) — this closes that live-vs-headless
+ * inconsistency, not just adds a name.
  */
 export interface RngStreams {
   /**
@@ -78,7 +88,8 @@ export interface RngStreams {
    */
   readonly rootSeedText: string;
   readonly gameplay: SeededRng;
-  readonly ai: SeededRng;
+  readonly aiFirst: SeededRng;
+  readonly aiSecond: SeededRng;
   readonly cosmetic: SeededRng;
 }
 
@@ -92,7 +103,8 @@ export function createRngStreams(seedText: string): RngStreams {
   return {
     rootSeedText: canonicalText,
     gameplay: SeededRng.fromSeedUint32((seedUint32 ^ 0x9e3779b9) >>> 0),
-    ai: SeededRng.fromSeedUint32((seedUint32 ^ 0x85ebca6b) >>> 0),
+    aiFirst: SeededRng.fromSeedUint32((seedUint32 ^ 0x85ebca6b) >>> 0),
+    aiSecond: SeededRng.fromSeedUint32((seedUint32 ^ 0x27d4eb2f) >>> 0),
     cosmetic: SeededRng.fromSeedUint32((seedUint32 ^ 0xc2b2ae35) >>> 0),
   };
 }
