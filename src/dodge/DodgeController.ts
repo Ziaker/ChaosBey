@@ -65,6 +65,16 @@ export class DodgeController {
     return this.state;
   }
 
+  /** Read-only timers for Debug Lab inspection (GDD section 69). No gameplay code may branch on this. */
+  getDebugTimers(): { activeTimerS: number; cooldownRemainingS: number; airRecoveryAvailable: boolean; launchPending: boolean } {
+    return {
+      activeTimerS: this.state === DodgeState.Dodging ? this.activeTimerS : 0,
+      cooldownRemainingS: this.state === DodgeState.Cooldown ? Math.max(0, DODGE_COOLDOWN_S - this.cooldownTimerS) : 0,
+      airRecoveryAvailable: this.isAirRecoveryAvailable(),
+      launchPending: this.launchPending,
+    };
+  }
+
   /**
    * Whether pressing Dodge right now (while airborne) would trigger air
    * recovery. Read by Milestone 7's AIController for its OWN Bey only.

@@ -84,6 +84,11 @@ export class MovementController {
     return this.headingRad;
   }
 
+  /** Read-only steering internals for Debug Lab inspection (GDD section 69). No gameplay code may branch on this. */
+  getDebugState(): { turnRateRadPerS: number; postImpactCooldownRemainingS: number } {
+    return { turnRateRadPerS: this.turnRateRadPerS, postImpactCooldownRemainingS: this.postImpactCooldownRemainingS };
+  }
+
   /** Call before physics.step(). Reads/writes the body's linear velocity directly (the "hybrid" model GDD section 16 permits). */
   applyPreStep(body: RAPIER.RigidBody, input: MovementPreStepInput): void {
     const { actions, fixedDeltaSeconds, grounded, lateralGripOverridePerS, staminaAccelFactor, dashOverride } = input;

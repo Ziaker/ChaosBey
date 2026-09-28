@@ -18,6 +18,11 @@ import {
 
 export class StabilitySystem {
   readonly resource = new Resource(STABILITY_MAX);
+
+  /** Seconds since the last Stability damage (Infinity if never hit) — Debug Lab inspection only (GDD section 69). */
+  getTimeSinceLastDamageS(): number {
+    return this.timeSinceLastDamageS;
+  }
   private timeSinceLastDamageS = Number.POSITIVE_INFINITY;
   private broken = false;
 

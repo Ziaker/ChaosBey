@@ -30,7 +30,7 @@ export class VfxManager {
   private readonly speedLines: SpeedLines;
 
   constructor(
-    private readonly scene: THREE.Scene,
+    private readonly scene: THREE.Object3D,
     camera: THREE.Camera,
     private readonly firstParticleProfile: BeyParticleProfile = DEFAULT_PARTICLE_PROFILE,
     private readonly secondParticleProfile: BeyParticleProfile = DEFAULT_PARTICLE_PROFILE,
@@ -42,6 +42,31 @@ export class VfxManager {
 
     this.speedLines = new SpeedLines();
     camera.add(this.speedLines.object3D);
+  }
+
+  /** Live one-shot effect counts, for Debug Lab performance inspection (GDD section 69/79). */
+  getActiveEffectCounts(): { sparkBursts: number; landingBursts: number } {
+    return { sparkBursts: this.activeSparkBursts.length, landingBursts: this.activeLandingBursts.length };
+  }
+
+  /** Removes everything this manager added — including the speed lines parented to the camera, which outlive the scene subtree otherwise. */
+  dispose(): void {
+    for (const burst of this.activeSparkBursts) {
+      this.scene.remove(burst.points);
+      disposeSparkBurst(burst);
+    }
+    for (const burst of this.activeLandingBursts) {
+      this.scene.remove(burst.mesh);
+      disposeLandingBurst(burst);
+    }
+    this.activeSparkBursts = [];
+    this.activeLandingBursts = [];
+    this.scene.remove(this.firstTrail.object3D);
+    this.scene.remove(this.secondTrail.object3D);
+    this.firstTrail.dispose();
+    this.secondTrail.dispose();
+    this.speedLines.object3D.removeFromParent();
+    this.speedLines.dispose();
   }
 
   /**

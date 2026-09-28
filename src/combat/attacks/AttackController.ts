@@ -93,6 +93,17 @@ export class AttackController {
     return this.dashChargeFraction();
   }
 
+  /** Read-only phase timers and the hitbox that would be live this tick, for Debug Lab inspection/visualization (GDD sections 69/71). No gameplay code may branch on this. */
+  getDebugState(): { bufferTimerS: number; chargeTimerS: number; activeTimerS: number; recoveryTimerS: number; activeHitbox: ActiveHitbox | null } {
+    return {
+      bufferTimerS: this.bufferTimerS,
+      chargeTimerS: this.chargeTimerS,
+      activeTimerS: this.activeTimerS,
+      recoveryTimerS: this.recoveryTimerS,
+      activeHitbox: this.computeActiveHitbox(),
+    };
+  }
+
   tick(
     actions: ControllerActions,
     ownHeadingRad: number,
