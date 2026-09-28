@@ -25,10 +25,10 @@ import type { PhysicsWorld } from '../world/PhysicsWorld';
 // grounded — Rapier reports "speculative" contacts slightly before real
 // touching (for CCD purposes), which would otherwise be mistaken for
 // ground contact a frame early.
-const GROUND_CONTACT_DIST_THRESHOLD_M = 0.02;
+export const GROUND_CONTACT_DIST_THRESHOLD_M = 0.02;
 // How vertical a contact normal must be to count as "floor-like" rather
 // than "wall-like". 0.5 ≈ within 60° of straight up/down.
-const GROUND_CONTACT_MIN_NORMAL_Y = 0.5;
+export const GROUND_CONTACT_MIN_NORMAL_Y = 0.5;
 
 export function isGrounded(physics: PhysicsWorld, beyCollider: RAPIER.Collider): boolean {
   let grounded = false;

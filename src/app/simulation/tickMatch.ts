@@ -22,7 +22,7 @@
 import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { detectHits, type HitEvent } from '../../combat/hit-detection/HitDetection';
-import { applyKnockback, computeKnockback, computeStabilityDamage } from '../../combat/knockback/Knockback';
+import { applyKnockback, computeKnockback, computeStabilityDamage, type KnockbackComponents } from '../../combat/knockback/Knockback';
 import { CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS } from '../../combat/attacks/AttackTuning';
 import { isRingOut } from '../../arena/ringout/RingOut';
 import { RoundState } from '../../combat/round-rules/RoundState';
@@ -70,7 +70,15 @@ export interface BeySnapshot {
 export type CombatEvent =
   | { kind: 'stabilityDamage'; targetIsFirst: boolean; amount: number }
   | { kind: 'stabilityBreak'; targetIsFirst: boolean }
-  | { kind: 'knockback'; targetIsFirst: boolean; force: number }
+  | {
+      kind: 'knockback';
+      targetIsFirst: boolean;
+      force: number;
+      /** Formula breakdown for a normal hit (absent for a Clash resolution, whose knockback is built by ClashOrchestration). */
+      components?: KnockbackComponents;
+      /** Horizontal launch direction (unit, attacker -> defender) for a normal hit — debug visualization only. */
+      directionXZ?: Vec2;
+    }
   | { kind: 'ko'; targetIsFirst: boolean }
   | { kind: 'ringOut'; targetIsFirst: boolean }
   /** An attack that would have connected was nullified by the target's dodge i-frames (Milestone 3). */
@@ -401,7 +409,13 @@ export function tickMatch(
     applyKnockback(defender.body, resolved.attackerPositionXZ, resolved.defenderPositionXZ, knockback);
     // Same immediate-vs-pending arming as the catch-launch path above.
     defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
-    combatEvents.push({ kind: 'knockback', targetIsFirst: defenderIsFirst, force: knockback.force });
+    combatEvents.push({
+      kind: 'knockback',
+      targetIsFirst: defenderIsFirst,
+      force: knockback.force,
+      components: knockback.components,
+      directionXZ: normalize(subtract(resolved.defenderPositionXZ, resolved.attackerPositionXZ)),
+    });
 
     applyStabilityDamageAndTrackKo(
       defenderIsFirst,

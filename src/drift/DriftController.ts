@@ -77,6 +77,16 @@ export class DriftController {
     return this.state;
   }
 
+  /** Read-only jump/drift timers for Debug Lab inspection (GDD section 69). No gameplay code may branch on this. */
+  getDebugTimers(): { hopTimerS: number; recoveryTimerS: number; jumpAssistElapsedS: number; jumpVerticalSpeedAddedMps: number } {
+    return {
+      hopTimerS: this.hopTimerS,
+      recoveryTimerS: this.recoveryTimerS,
+      jumpAssistElapsedS: this.jumpAssistElapsedS,
+      jumpVerticalSpeedAddedMps: this.state === DriftState.Hopping ? HOP_IMPULSE_MPS + JUMP_ASSIST_ACCEL_MPS2 * this.jumpAssistElapsedS : 0,
+    };
+  }
+
   tick(body: RAPIER.RigidBody, actions: ControllerActions, grounded: boolean, fixedDeltaSeconds: number): DriftTickResult {
     const jumpDriftHeld = actions.held.has(Action.JumpDrift);
     const jumpDriftPressed = actions.pressedThisFrame.has(Action.JumpDrift);

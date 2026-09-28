@@ -46,7 +46,7 @@ function createSyncFn(body: Bey['body'], visual: BeyVisual) {
 // all three are equally unapproved prototypes pending the owner's visual
 // approval gate (GDD section 96/97).
 export function createMatchScene(
-  scene: THREE.Scene,
+  scene: THREE.Object3D,
   physics: PhysicsWorld,
   attackProfileSettings: BeyAttackProfileSettings = createDefaultAttackProfileSettings(),
 ): MatchScene {
