@@ -56,6 +56,20 @@ Status values: **DONE** (merged and tested), **IN PROGRESS** (PR named),
 A and B run in parallel: they share only `contracts.ts`. Only one lane at a
 time edits `MatchSession.ts` (A, then C).
 
+## Tick counting (contract)
+
+Two counters, never mixed:
+
+- **`TickIndex`**, zero-based: 0 is the first executed tick, which is the
+  first controller sampling. Replay input frames are indexed by it.
+- **`TicksCompleted`**: 0 is the initial state, before `TickIndex` 0;
+  running `TickIndex` n brings it to n + 1 (`ticksCompletedAfter`).
+  `CanonicalMatchState` and `StateCheckpoint` carry this, so a checkpoint's
+  number always equals the state's own field, and the initial state can be
+  checked.
+
+Frozen ticks (hitstop or Clash) count in both.
+
 ## Known architecture facts (main@972f65d)
 
 - Deterministic core: `tickMatch()` in `src/app/simulation/tickMatch.ts`,
