@@ -75,6 +75,10 @@ function buildMatchSection(session: MatchSession, frame: InspectionFrameStats): 
       ...Object.keys(config).map((key) => row(`Rule: ${key}`, String(config[key]))),
       row('First controller', session.describeController('first')),
       row('Second controller', session.describeController('second')),
+      row(
+        'Debug mutations',
+        session.getDebugMutations().length === 0 ? 'none (pure seed replay)' : `${session.getDebugMutations().length} — run no longer reproducible from the seed alone`,
+      ),
     ],
   };
 }

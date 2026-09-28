@@ -105,5 +105,43 @@ test('Debug Lab: pause, step, restart, seeds, speed and controller switching on 
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => window.__chaosBeyDebugLab!.getLayers()!.getEnabled().length)).toBe(9);
 
+  // Mutations (GDD 70): logged, visible, and the report says the run is mutated.
+  // Start from a fresh round: the 8x run above may already have ended it,
+  // and a finished round is frozen (tickMatch stops advancing).
+  await page.getByTestId('debug-lab-pause').click();
+  await expect(status).toContainText('PAUSED');
+  await page.getByTestId('debug-lab-restart').click();
+  await expect.poll(() => readTick(page)).toBe(0);
+  const log = page.getByTestId('debug-lab-mutation-log');
+  await expect(log).toHaveAttribute('data-count', '0');
+  await page.getByTestId('debug-lab-mut-x').fill('4');
+  await page.getByTestId('debug-lab-mut-z').fill('-3');
+  await page.getByTestId('debug-lab-mut-teleport').click();
+  await expect(log).toHaveAttribute('data-count', '1');
+  await expect(log).toContainText('first: teleport to (4.00, -3.00)');
+  await page.getByTestId('debug-lab-mut-reset-cooldowns').click();
+  await page.getByTestId('debug-lab-mut-force-jump').click();
+  await page.getByTestId('debug-lab-mut-prepare-clash').click();
+  await expect.poll(async () => Number(await log.getAttribute('data-count'))).toBeGreaterThanOrEqual(9);
+  // Prepare Clash + run: a real Clash starts.
+  await page.evaluate(() => window.__chaosBeyDebugLab!.step(240));
+  await inspector.locator('[data-section="clash"] summary').click();
+  await expect(inspector.locator('[data-section="clash"]')).toContainText(/State\s+(Active|Cooldown)/);
+  await page.getByTestId('debug-lab-mut-resource').selectOption('stability');
+  await page.getByTestId('debug-lab-mut-percent').fill('0');
+  await page.getByTestId('debug-lab-mut-resource-apply').click();
+  await expect(inspector.locator('[data-section="first-resources"]')).toContainText('BROKEN');
+
+  await page.getByTestId('debug-lab-report-generate').click();
+  const reportText = await page.getByTestId('debug-lab-report-text').inputValue();
+  const report = JSON.parse(reportText);
+  expect(report.format).toBe('ChaosBeyDebugReportV1');
+  expect(report.mutated).toBe(true);
+  expect(report.mutations.length).toBeGreaterThanOrEqual(10);
+  expect(report.replay.status).toBe('unsupported');
+  expect(reportText).not.toMatch(/NaN|Infinity/);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('debug-lab-report-download').click()]);
+  expect(download.suggestedFilename()).toMatch(/^chaosbey-debug-.*\.json$/);
+
   expect(consoleErrors).toEqual([]);
 });

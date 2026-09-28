@@ -72,6 +72,8 @@ export class DebugLabPanel {
   private readonly speedSelect: HTMLSelectElement;
   private readonly controllerSelects: Record<Side, HTMLSelectElement>;
   private readonly sectionElements = new Map<string, { details: HTMLDetailsElement; body: HTMLElement }>();
+  /** Last data per section, so opening a collapsed section while paused shows it at once. */
+  private readonly lastSections = new Map<string, InspectorSection>();
 
   constructor(mount: HTMLElement, private readonly callbacks: DebugLabPanelCallbacks) {
     this.root = el('div', 'debug-lab');
@@ -147,6 +149,7 @@ export class DebugLabPanel {
     const seen = new Set<string>();
     for (const section of sections) {
       seen.add(section.id);
+      this.lastSections.set(section.id, section);
       let entry = this.sectionElements.get(section.id);
       if (!entry) {
         const details = document.createElement('details');
@@ -157,6 +160,11 @@ export class DebugLabPanel {
         summary.textContent = section.title;
         const body = el('div', 'debug-lab__rows');
         details.append(summary, body);
+        const sectionId = section.id;
+        details.addEventListener('toggle', () => {
+          const latest = this.lastSections.get(sectionId);
+          if (details.open && latest) renderRows(body, latest);
+        });
         this.inspector.append(details);
         entry = { details, body };
         this.sectionElements.set(section.id, entry);
@@ -165,14 +173,13 @@ export class DebugLabPanel {
       if (summary && summary.textContent !== section.title) summary.textContent = section.title;
       // Only a visible section's rows are rebuilt; a collapsed one costs nothing.
       if (!entry.details.open) continue;
-      const lines = section.rows.map((r) => `${r.unsupported ? '⊘ ' : ''}${r.label.padEnd(34)} ${r.value}`);
-      const text = lines.join('\n');
-      if (entry.body.textContent !== text) entry.body.textContent = text;
+      renderRows(entry.body, section);
     }
     for (const [id, entry] of this.sectionElements) {
       if (!seen.has(id)) {
         entry.details.remove();
         this.sectionElements.delete(id);
+        this.lastSections.delete(id);
       }
     }
   }
@@ -198,6 +205,11 @@ export class DebugLabPanel {
     });
     return select;
   }
+}
+
+function renderRows(body: HTMLElement, section: InspectorSection): void {
+  const text = section.rows.map((r) => `${r.unsupported ? '⊘ ' : ''}${r.label.padEnd(34)} ${r.value}`).join('\n');
+  if (body.textContent !== text) body.textContent = text;
 }
 
 function el(tag: string, className: string): HTMLElement {
@@ -269,6 +281,11 @@ function injectStyles(): void {
     .debug-lab button:hover { background: #26304d; }
     .debug-lab button[data-danger="true"] { border-color: #c0504d; color: #ffb4b0; }
     .debug-lab__seed { width: 100%; box-sizing: border-box; }
+    .debug-lab__row { display: flex; gap: 4px; width: 100%; }
+    .debug-lab__number { width: 100%; min-width: 0; box-sizing: border-box; }
+    .debug-lab__note { color: #ffb4b0; width: 100%; }
+    .debug-lab__log { white-space: pre-wrap; margin: 0; max-height: 9em; overflow-y: auto; color: #ffcf99; }
+    .debug-lab__report { width: 100%; box-sizing: border-box; font: inherit; color: #d8e0f0; background: #0e1220; border: 1px solid #334; }
     .debug-lab__check { display: flex; align-items: center; gap: 4px; width: 100%; cursor: pointer; }
     .debug-lab__labeled { display: flex; flex-direction: column; width: 100%; gap: 2px; }
     .debug-lab__labeled > span { color: #8a93a8; }

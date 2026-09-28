@@ -34,6 +34,8 @@ import { buildInspection } from '../inspectors/buildInspection';
 import { DEBUG_LAB_MULTI_STEP_TICKS, DebugLabPanel, checkbox, labeled } from './DebugLabPanel';
 import { DEBUG_LAYERS, DebugVisualLayers, type DebugLayerId } from '../visualization/DebugVisualLayers';
 import type { VfxLayer } from '../../vfx/VfxManager';
+import { createDebugLabTools } from './DebugLabTools';
+import { buildDebugReport } from '../report/buildDebugReport';
 
 // ============================================================
 // DEBUG LAB MODE — TUNING
@@ -108,8 +110,29 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
     onController: (side, spec) => handle.setController(side, spec),
   });
 
+  let lastFps = 0;
+  let lastFrameTimeMs = 0;
+  const frameStats = (): Parameters<typeof buildInspection>[1] => {
+    const info = appRenderer.renderer.info.render;
+    return {
+      gameState: `${appState.getCurrentState()} / ${matchState.getCurrentState()}`,
+      fps: lastFps,
+      frameTimeMs: lastFrameTimeMs,
+      renderTimeMs: lastRenderTimeMs,
+      drawCalls: info.calls,
+      triangles: info.triangles,
+      paused,
+      ticksPerFixedStep: speed,
+    };
+  };
+
   const refreshPanel = (fps: number, frameTimeMs: number): void => {
     if (!session) return;
+    if (fps > 0) {
+      lastFps = fps;
+      lastFrameTimeMs = frameTimeMs;
+    }
+    tools?.refreshLog();
     panel.updateStatus({
       paused,
       speed,
@@ -117,22 +140,12 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
       tickIndex: session.getTickIndex(),
       firstController: controllers.first,
       secondController: controllers.second,
-      message,
+      // A finished round is frozen by tickMatch; say so, or ticks look stuck.
+      message: session.roundState.isOver ? `ROUND OVER (${session.roundState.result}) — frozen, restart to continue` : message,
     });
-    const info = appRenderer.renderer.info.render;
-    panel.updateInspector(
-      buildInspection(session, {
-        gameState: `${appState.getCurrentState()} / ${matchState.getCurrentState()}`,
-        fps,
-        frameTimeMs,
-        renderTimeMs: lastRenderTimeMs,
-        drawCalls: info.calls,
-        triangles: info.triangles,
-        paused,
-        ticksPerFixedStep: speed,
-      }),
-    );
+    panel.updateInspector(buildInspection(session, frameStats()));
   };
+  let tools: ReturnType<typeof createDebugLabTools> | null = null;
 
   const runTicks = (count: number): void => {
     if (!session || restarting) return;
@@ -240,6 +253,13 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
     checkbox('VFX: speed trails', 'debug-lab-vfx-trails', true, (on) => handle.setVfxLayer('trails', on)),
     checkbox('VFX: speed lines', 'debug-lab-vfx-speedLines', true, (on) => handle.setVfxLayer('speedLines', on)),
   ]);
+  tools = createDebugLabTools({
+    getSession: () => (restarting ? null : session),
+    onMutated: () => refreshPanel(0, 0),
+    buildReport: () => (session && !restarting ? buildDebugReport(session, frameStats()) : null),
+  });
+  panel.addGroup('Mutations — change the simulation (GDD 70)', tools.mutationControls);
+  panel.addGroup('Debug report', tools.reportControls);
 
   await createSession(generateRandomSeedText());
 

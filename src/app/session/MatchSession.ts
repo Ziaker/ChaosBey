@@ -95,8 +95,8 @@ export interface SessionRenderView {
 
 const DEFAULT_RENDER_VIEW: SessionRenderView = { cameraView: 'game', cameraEffects: true };
 /** Debug overview camera: high over the arena's near edge, whole bowl in frame. */
-const OVERVIEW_CAMERA_POSITION_M = { x: 0, y: 24, z: 17 } as const;
-const OVERVIEW_CAMERA_FOV_DEG = 50;
+const OVERVIEW_CAMERA_POSITION_M = { x: 0, y: 30, z: 20 } as const;
+const OVERVIEW_CAMERA_FOV_DEG = 55;
 
 export class MatchSession {
   readonly matchId: string;
