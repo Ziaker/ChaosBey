@@ -19,7 +19,7 @@
 // - state machine contradiction ....................... state-contradiction
 // - negative resource / resource above max ............ resource-out-of-range
 // - permanent invulnerability ......................... permanent-invulnerability
-// - permanent hitstop ................................. permanent-hitstop (live sessions only; headless has no hitstop)
+// - permanent hitstop ................................. permanent-hitstop
 // - permanent Clash ................................... permanent-clash
 // - cooldown never ending ............................. cooldown-never-ending
 // - wobble exploding numerically ...................... wobble-explosion
@@ -67,7 +67,7 @@ export interface AnomalyThresholds {
   readonly resourceTolerance: number;
   /** Ticks a dodge may stay in its i-frame state (DODGE_ACTIVE_DURATION_S + slack) before it is permanent invulnerability. */
   readonly maxDodgingTicks: number;
-  /** Ticks of continuous hitstop before it counts as permanent (live sessions only). */
+  /** Ticks of continuous hitstop before it counts as permanent. */
   readonly maxHitstopTicks: number;
   /** Ticks a Clash may stay Active (~4 s target + slack). */
   readonly maxClashActiveTicks: number;
@@ -176,7 +176,7 @@ export interface AnomalyTickInput {
   readonly secondActions: ControllerActions;
   /** Which sides an AI drives (ai-inactive only applies to those). */
   readonly aiSides: { readonly first: boolean; readonly second: boolean };
-  /** Live sessions only: whether hitstop froze this tick. Omit headless. */
+  /** Whether hitstop froze this tick (every caller that runs MatchStepper knows it; omit only when stepping tickMatch() directly). */
   readonly hitstopActive?: boolean;
 }
 

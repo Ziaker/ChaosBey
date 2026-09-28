@@ -363,9 +363,10 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
 
   for (let tick = 0; tick < maxTicks; tick++) {
     const tickStartMs = performance.now();
-    const firstActions = firstAi.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
-    const secondActions = secondAi.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
-    const result = world.tick(firstActions, secondActions);
+    // The same per-tick step as a live match, hitstop included (M9). On a
+    // hitstop-frozen tick the result is the previous tick's: its events
+    // were already counted.
+    const { firstActions, secondActions, result, advanced } = world.step({ first: firstAi, second: secondAi });
     ticks = tick + 1;
 
     const clashActive = world.clash.controller.getState() === ClashState.Active;
@@ -380,15 +381,17 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     previousSecondAttackState = result.second.attackState;
     previousFirstBroken = result.first.isBroken;
     previousSecondBroken = result.second.isBroken;
-    for (const hit of result.hitEvents) {
-      const attacker = hit.attackerIsFirst ? first : second;
-      attacker.stats.hitsLanded++;
-      if (hit.caughtOpponentDashing) attacker.stats.counterHits++;
+    if (advanced) {
+      for (const hit of result.hitEvents) {
+        const attacker = hit.attackerIsFirst ? first : second;
+        attacker.stats.hitsLanded++;
+        if (hit.caughtOpponentDashing) attacker.stats.counterHits++;
+      }
+      for (const event of result.combatEvents) {
+        if (event.kind === 'dodged') (event.targetIsFirst ? first : second).stats.hitsDodged++;
+      }
+      if (result.clashResolvedThisTick) clashes++;
     }
-    for (const event of result.combatEvents) {
-      if (event.kind === 'dodged') (event.targetIsFirst ? first : second).stats.hitsDodged++;
-    }
-    if (result.clashResolvedThisTick) clashes++;
     mutualIdleStreak = !clashActive && firstActions.held.size === 0 && secondActions.held.size === 0 ? mutualIdleStreak + 1 : 0;
     longestMutualIdleTicks = Math.max(longestMutualIdleTicks, mutualIdleStreak);
     distanceSum += Math.hypot(a.x - b.x, a.z - b.z);
@@ -407,6 +410,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
       firstActions,
       secondActions,
       aiSides: { first: true, second: true },
+      hitstopActive: !advanced,
     })) {
       if (detection.severity === 'invalid-state') invalidDetectionCount++;
       else warningCount++;

@@ -85,10 +85,9 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
     const detector = new MatchAnomalyDetector();
     for (let tick = 0; tick < preset.durationTicks; tick++) {
       const clashStateBefore: ClashState = world.clash.controller.getState();
-      const firstActions = first.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
-      const secondActions = second.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
-      const result = world.tick(firstActions, secondActions);
-      recordScenarioTick(trace, { tick, first: world.first, second: world.second, result, roundState: world.roundState, clash: world.clash.controller, clashStateBefore });
+      // The same per-tick step as a live match, hitstop included (M9).
+      const { firstActions, secondActions, result, advanced } = world.step({ first, second });
+      recordScenarioTick(trace, { tick, first: world.first, second: world.second, result, roundState: world.roundState, clash: world.clash.controller, clashStateBefore, advanced });
       detections.push(
         ...detector.check({
           tick,
@@ -100,6 +99,7 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
           firstActions,
           secondActions,
           aiSides: { first: options.aiSide === 'first', second: options.aiSide === 'second' },
+          hitstopActive: !advanced,
         }),
       );
       if (preset.doneWhen?.(trace) || world.roundState.isOver) break;

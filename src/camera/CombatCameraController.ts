@@ -3,7 +3,9 @@
 // Milestone 4's camera "director": pure logic (no Three.js dependency, so
 // it's fully unit-testable — GDD section 114/150) that turns Bey
 // positions/speeds plus this tick's ImpactEvents into a smoothed camera
-// position/focus/FOV, a shake offset, and hitstop state. main.ts is the
+// position/focus/FOV and a shake offset. It also passes through the
+// simulation's hitstop state (app/simulation/Hitstop.ts, which owns it
+// since M9) for presentation. main.ts is the
 // only thing that touches the real THREE.PerspectiveCamera with this
 // output.
 //
@@ -28,7 +30,7 @@
 //
 // Every impact response scales with ImpactEvent.magnitude (0..1, already
 // run through the owner-approved "Hybrid scalable" profile C curve — see
-// ImpactMagnitude.ts) and is capped, so nothing ever locks up (hitstop),
+// ImpactMagnitude.ts) and is capped, so nothing ever locks up,
 // blinds the player (FOV punch), or makes small/routine contact read as a
 // big deal (shake/knockback-follow both have a minimum-magnitude floor
 // below which they do nothing at all).
@@ -50,9 +52,6 @@ import {
   CAMERA_HIGH_SPEED_EXTRA_HEIGHT_M,
   CAMERA_HIGH_SPEED_FULL_BLEND_MPS,
   CAMERA_HIGH_SPEED_THRESHOLD_MPS,
-  CAMERA_HITSTOP_DURATION_PER_MAGNITUDE_S,
-  CAMERA_HITSTOP_MAX_DURATION_S,
-  CAMERA_HITSTOP_MIN_MAGNITUDE,
   CAMERA_KNOCKBACK_FOLLOW_BIAS_MAX,
   CAMERA_KNOCKBACK_FOLLOW_DECAY_PER_S,
   CAMERA_MAX_DISTANCE_M,
@@ -117,6 +116,8 @@ export interface CombatCameraTickInput {
   /** This tick's fresh impact events — pass an empty array on a tick where gameplay itself didn't advance (e.g. frozen by hitstop), so nothing re-triggers. */
   impactEvents: ImpactEvent[];
   fixedDeltaSeconds: number;
+  /** The simulation's hitstop state this tick (app/simulation/Hitstop.ts). The camera only presents it; it no longer owns the timer (M9: hitstop decides whether gameplay advances, so it is simulation state). */
+  hitstop: { isFreezing: boolean; remainingS: number };
 }
 
 export interface CombatCameraOutput {
@@ -152,7 +153,6 @@ export class CombatCameraController {
   private fovPunchDeg = 0;
   private shakeAmplitudeM = 0;
   private shakePhaseRad = 0;
-  private hitstopRemainingS = 0;
   private knockbackFollowBias = 0;
   private knockbackFollowTargetIsFirst = true;
   private highSpeedBlend = 0;
@@ -163,10 +163,6 @@ export class CombatCameraController {
     const { firstPositionM, secondPositionM, firstSpeedMps, secondSpeedMps, firstVelocityXZ, impactEvents, fixedDeltaSeconds } = input;
 
     for (const event of impactEvents) {
-      if (event.magnitude >= CAMERA_HITSTOP_MIN_MAGNITUDE) {
-        const duration = Math.min(CAMERA_HITSTOP_MAX_DURATION_S, event.magnitude * CAMERA_HITSTOP_DURATION_PER_MAGNITUDE_S);
-        this.hitstopRemainingS = Math.max(this.hitstopRemainingS, duration);
-      }
       if (event.magnitude >= CAMERA_SHAKE_MIN_MAGNITUDE) {
         this.shakeAmplitudeM = Math.max(this.shakeAmplitudeM, event.magnitude * CAMERA_SHAKE_AMPLITUDE_REFERENCE_M);
       }
@@ -189,9 +185,7 @@ export class CombatCameraController {
       }
     }
 
-    // Real-time decay — runs every tick regardless of whether gameplay
-    // itself is currently frozen by hitstop, so the freeze actually ends.
-    this.hitstopRemainingS = Math.max(0, this.hitstopRemainingS - fixedDeltaSeconds);
+    // Real-time decay — runs every tick, including ticks frozen by hitstop.
     this.shakeAmplitudeM *= Math.exp(-CAMERA_SHAKE_DECAY_PER_S * fixedDeltaSeconds);
     if (this.shakeAmplitudeM < 0.001) this.shakeAmplitudeM = 0;
     this.shakePhaseRad += CAMERA_SHAKE_FREQUENCY_HZ * Math.PI * 2 * fixedDeltaSeconds;
@@ -295,8 +289,8 @@ export class CombatCameraController {
       focusPositionM: { ...this.focusPositionM },
       shakeOffsetM,
       fovDeg: this.currentFovDeg + this.fovPunchDeg + this.highSpeedBlend * CAMERA_HIGH_SPEED_EXTRA_FOV_DEG,
-      isHitstopActive: this.hitstopRemainingS > 0,
-      hitstopRemainingS: this.hitstopRemainingS,
+      isHitstopActive: input.hitstop.isFreezing,
+      hitstopRemainingS: input.hitstop.remainingS,
       highSpeedBlend: this.highSpeedBlend,
       speedLinesScreenDirection,
     };

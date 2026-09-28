@@ -26,6 +26,9 @@ import {
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 
 const STATIONARY = { x: 0, y: 0, z: 0 };
+// Hitstop is simulation state since M9 (app/simulation/Hitstop.ts, tested in
+// hitstop.test.ts); the camera only passes it through.
+const NO_HITSTOP = { isFreezing: false, remainingS: 0 };
 
 function tickMany(
   controller: CombatCameraController,
@@ -42,6 +45,7 @@ function tickMany(
       firstVelocityXZ: { x: 0, z: 0 },
       impactEvents: [],
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+      hitstop: NO_HITSTOP,
       ...overrides,
     });
   }
@@ -125,6 +129,7 @@ describe('opponent-focused framing follows the live player->opponent axis (not a
       firstVelocityXZ: { x: 0, z: 0 },
       impactEvents: [],
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+      hitstop: NO_HITSTOP,
     });
     const offsetAfterOneTick = { x: afterOneTick.cameraPositionM.x - afterOneTick.focusPositionM.x, z: afterOneTick.cameraPositionM.z - afterOneTick.focusPositionM.z };
 
@@ -158,6 +163,7 @@ describe('speed lines screen-direction projection', () => {
       firstVelocityXZ: { x: 5, z: 0 },
       impactEvents: [],
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+      hitstop: NO_HITSTOP,
     });
     const movingForwardController = new CombatCameraController();
     tickMany(movingForwardController, 600, { firstPositionM: first, secondPositionM: second });
@@ -169,6 +175,7 @@ describe('speed lines screen-direction projection', () => {
       firstVelocityXZ: { x: 0, z: 5 },
       impactEvents: [],
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+      hitstop: NO_HITSTOP,
     });
 
     const magRight = Math.hypot(movingRight.speedLinesScreenDirection.x, movingRight.speedLinesScreenDirection.y);
@@ -240,7 +247,7 @@ describe('high-speed camera (distinct from speed FOV)', () => {
 });
 
 describe('impact response scaling', () => {
-  it('a strong impact (magnitude 1, e.g. a KO) triggers both shake and hitstop, which decay back to nothing', () => {
+  it('a strong impact (magnitude 1, e.g. a KO) triggers shake, which decays back to nothing, and reports the simulation\'s hitstop as given', () => {
     const controller = new CombatCameraController();
     const koEvent: ImpactEvent = { kind: 'ko', magnitude: 1, worldPositionM: STATIONARY, isFirst: true };
 
@@ -252,14 +259,14 @@ describe('impact response scaling', () => {
       firstVelocityXZ: { x: 0, z: 0 },
       impactEvents: [koEvent],
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+      hitstop: { isFreezing: true, remainingS: 0.1 },
     });
 
     expect(immediate.isHitstopActive).toBe(true);
-    expect(immediate.hitstopRemainingS).toBeGreaterThan(0);
+    expect(immediate.hitstopRemainingS).toBe(0.1);
     expect(Math.hypot(immediate.shakeOffsetM.x, immediate.shakeOffsetM.y, immediate.shakeOffsetM.z)).toBeGreaterThan(0);
 
-    // Enough real time for both the (capped) hitstop duration and the
-    // shake's exponential decay to fully settle.
+    // Enough real time for the shake's exponential decay to fully settle.
     const settleTicks = Math.ceil((CAMERA_HITSTOP_MAX_DURATION_S + 2) / FIXED_DELTA_SECONDS);
     const settled = tickMany(controller, settleTicks);
 
@@ -268,7 +275,7 @@ describe('impact response scaling', () => {
     expect(Math.hypot(settled.shakeOffsetM.x, settled.shakeOffsetM.y, settled.shakeOffsetM.z)).toBeCloseTo(0, 2);
   });
 
-  it('a sub-hitstop but shake-eligible magnitude (e.g. a clean dodge) shakes the camera without ever freezing gameplay', () => {
+  it('a sub-hitstop but shake-eligible magnitude (e.g. a clean dodge) shakes the camera', () => {
     const controller = new CombatCameraController();
     const dodgedEvent: ImpactEvent = { kind: 'dodged', magnitude: 0.2, worldPositionM: STATIONARY, isFirst: true };
 
@@ -280,13 +287,14 @@ describe('impact response scaling', () => {
       firstVelocityXZ: { x: 0, z: 0 },
       impactEvents: [dodgedEvent],
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+      hitstop: NO_HITSTOP,
     });
 
     expect(immediate.isHitstopActive).toBe(false);
     expect(Math.hypot(immediate.shakeOffsetM.x, immediate.shakeOffsetM.y, immediate.shakeOffsetM.z)).toBeGreaterThan(0);
   });
 
-  it('a tiny magnitude below the shake floor triggers neither shake nor hitstop (routine contact stays clean)', () => {
+  it('a tiny magnitude below the shake floor triggers no shake (routine contact stays clean)', () => {
     const controller = new CombatCameraController();
     const tinyEvent: ImpactEvent = { kind: 'wallImpact', magnitude: 0.03, worldPositionM: STATIONARY, isFirst: true };
 
@@ -298,6 +306,7 @@ describe('impact response scaling', () => {
       firstVelocityXZ: { x: 0, z: 0 },
       impactEvents: [tinyEvent],
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+      hitstop: NO_HITSTOP,
     });
 
     expect(immediate.isHitstopActive).toBe(false);
@@ -328,6 +337,7 @@ describe('knockback follow', () => {
       firstVelocityXZ: { x: 0, z: 0 },
       impactEvents: [hitOnFirst],
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+      hitstop: NO_HITSTOP,
     });
     outputWithout = withoutBias.tick({
       firstPositionM: first,
@@ -337,6 +347,7 @@ describe('knockback follow', () => {
       firstVelocityXZ: { x: 0, z: 0 },
       impactEvents: [],
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+      hitstop: NO_HITSTOP,
     });
 
     // "first" sits at negative z — a bias toward it pulls focus.z down,
@@ -363,6 +374,7 @@ describe('knockback follow — followTargetIsFirst override (Milestone 5, clashR
       firstVelocityXZ: { x: 0, z: 0 },
       impactEvents: [event],
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
+      hitstop: NO_HITSTOP,
     });
   }
 
