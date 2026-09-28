@@ -4,6 +4,12 @@ A browser-based 3D spinning-top arena combat simulator, built with Three.js, Rap
 
 The authoritative design specification and AI-agent operating contract lives in the project's master design document (provided to development agents out-of-band). Every meaningful design decision in this codebase traces back to it — when this README and that document disagree, the document wins.
 
+## Canonical design decisions
+
+Before reopening any visual/design question, read [`docs/design-decisions/README.md`](docs/design-decisions/README.md). For visual prototypes and approvals, the mandatory entry point is [`docs/design-decisions/VISUAL_APPROVALS_MASTER.md`](docs/design-decisions/VISUAL_APPROVALS_MASTER.md).
+
+Those documents distinguish **prototyped**, **approved** and **integrated** work and record later owner overrides over older snapshots. In particular, all **9 approved Bey concepts are selectable/playable**; older text that says to choose only three final Beys is superseded on that point.
+
 ## Status: Milestone 1 — Physical Movement Prototype
 
 **Milestone 0 (Foundation)** — merged: Vite + TypeScript project under the `/ChaosBey/` GitHub Pages subpath, Three.js renderer bootstrap, Rapier 3D physics world with a fixed 60 Hz timestep loop decoupled from render FPS, seeded deterministic RNG (gameplay/AI/cosmetic streams), top-level game state machine skeleton, `CombatController` abstraction with a `KeyboardController`, runtime quality-preset config, telemetry event bus, debug overlay (`F3`), physics safety diagnostics, unit tests + a production smoke test, and a GitHub Actions workflow (typecheck → test → build → smoke test → deploy to Pages).
