@@ -143,5 +143,13 @@ test('Debug Lab: pause, step, restart, seeds, speed and controller switching on 
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('debug-lab-report-download').click()]);
   expect(download.suggestedFilename()).toMatch(/^chaosbey-debug-.*\.json$/);
 
+  // Scenario presets (GDD 68): load the Clash preset and watch a real Clash start.
+  await page.getByTestId('debug-lab-preset').selectOption('clash');
+  await page.getByTestId('debug-lab-preset-load').click();
+  await expect(status).toContainText('preset: Test Clash');
+  await page.evaluate(() => window.__chaosBeyDebugLab!.step(200));
+  await expect(inspector.locator('[data-section="clash"]')).toContainText(/State\s+Active/);
+  await expect(inspector.locator('[data-section="match"]')).toContainText('Anomalies (GDD 67)');
+
   expect(consoleErrors).toEqual([]);
 });

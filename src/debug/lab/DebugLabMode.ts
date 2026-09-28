@@ -31,10 +31,12 @@ import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import { generateRandomSeedText } from '../../rng/stringSeed';
 import { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 import { buildInspection } from '../inspectors/buildInspection';
-import { DEBUG_LAB_MULTI_STEP_TICKS, DebugLabPanel, checkbox, labeled } from './DebugLabPanel';
+import { DEBUG_LAB_MULTI_STEP_TICKS, DebugLabPanel, button, checkbox, labeled } from './DebugLabPanel';
 import { DEBUG_LAYERS, DebugVisualLayers, type DebugLayerId } from '../visualization/DebugVisualLayers';
 import type { VfxLayer } from '../../vfx/VfxManager';
 import { createDebugLabTools } from './DebugLabTools';
+import { SCENARIO_PRESETS, findScenarioPreset } from '../../self-test/scenarios/ScenarioPresets';
+import type { ScenarioSideScript } from '../../self-test/scenarios/ScenarioPresets';
 import { buildDebugReport } from '../report/buildDebugReport';
 
 // ============================================================
@@ -64,6 +66,8 @@ export interface DebugLabHandle {
   setVfxLayer(layer: VfxLayer, visible: boolean): void;
   setCameraEffects(on: boolean): void;
   setCameraView(view: 'game' | 'overview'): void;
+  /** Restarts on the current seed and sets up a GDD 68 preset (Beys placed, both sides scripted). */
+  loadPreset(id: string): Promise<void>;
 }
 
 declare global {
@@ -225,6 +229,23 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
     setCameraView: (view) => {
       cameraView = view;
     },
+    loadPreset: async (id) => {
+      const preset = findScenarioPreset(id);
+      if (!preset || !preset.supported) {
+        message = preset ? `${preset.label}: ${preset.unsupportedReason ?? 'unsupported'}` : `unknown preset ${id}`;
+        refreshPanel(0, 0);
+        return;
+      }
+      const toSpec = (side: ScenarioSideScript): SideControllerSpec => (side.kind === 'script' ? { kind: 'scripted', label: preset.id, frames: side.frames } : { kind: 'idle' });
+      controllers.first = toSpec(preset.first);
+      controllers.second = toSpec(preset.second);
+      await createSession(session?.seedText ?? generateRandomSeedText());
+      if (!session) return;
+      preset.setup?.({ first: session.getBey('first'), second: session.getBey('second') });
+      session.recordDebugMutation(`loaded scenario preset "${preset.label}" (${preset.durationTicks} ticks)`);
+      message = `preset: ${preset.label}`;
+      refreshPanel(0, 0);
+    },
   };
 
   panel.addGroup(
@@ -258,6 +279,20 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
     onMutated: () => refreshPanel(0, 0),
     buildReport: () => (session && !restarting ? buildDebugReport(session, frameStats()) : null),
   });
+  const presetSelect = document.createElement('select');
+  presetSelect.setAttribute('data-testid', 'debug-lab-preset');
+  for (const preset of SCENARIO_PRESETS) {
+    const option = document.createElement('option');
+    option.value = preset.id;
+    option.textContent = preset.supported ? preset.label : `${preset.label} (unsupported until M9)`;
+    option.disabled = !preset.supported;
+    presetSelect.append(option);
+  }
+  presetSelect.addEventListener('change', () => presetSelect.blur());
+  panel.addGroup('Scenario presets (GDD 68)', [
+    labeled('Preset', presetSelect),
+    button('Load preset (restart + set up, both sides scripted)', 'debug-lab-preset-load', () => void handle.loadPreset(presetSelect.value)),
+  ]);
   panel.addGroup('Mutations — change the simulation (GDD 70)', tools.mutationControls);
   panel.addGroup('Debug report', tools.reportControls);
 

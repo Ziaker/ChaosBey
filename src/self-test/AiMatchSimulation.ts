@@ -13,6 +13,7 @@
 // match is seeded or simulated, so every existing seed plays the same fight.
 // ============================================================
 
+import { MatchAnomalyDetector, type DetectedAnomaly } from './anomalies/MatchAnomalyDetector';
 import { AIController } from '../ai/controllers/AIController';
 import { AI_DASH_ATTACK_MAX_RANGE_M } from '../ai/decision/AiCombatRanges';
 import { AiIntent } from '../ai/decision/Intent';
@@ -237,11 +238,20 @@ export interface AiMatchTiming {
   readonly slowTicks: number;
 }
 
+/** GDD 67 detections beyond the physics-safety checks, one per episode (see MatchAnomalyDetector). */
+export const MAX_STORED_DETECTIONS = 20;
+
 export interface AiMatchRecord {
   readonly stats: AiMatchStats;
   /** The first MAX_STORED_ANOMALIES anomalies, in order. */
   readonly anomalies: readonly MatchAnomaly[];
   readonly anomalyCount: number;
+  /** GDD 67 detector findings (first MAX_STORED_DETECTIONS), in order. */
+  readonly detections: readonly DetectedAnomaly[];
+  /** Detector findings that make the match an invalid state. */
+  readonly invalidDetectionCount: number;
+  /** Detector findings that are only warnings (e.g. ai-inactive). */
+  readonly warningCount: number;
   readonly timing: AiMatchTiming;
 }
 
@@ -315,6 +325,10 @@ function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThre
   const maxTicks = setup.maxTicks ?? DEFAULT_AI_MATCH_MAX_TICKS;
   const anomalies: MatchAnomaly[] = [];
   let anomalyCount = 0;
+  const detector = new MatchAnomalyDetector();
+  const detections: DetectedAnomaly[] = [];
+  let invalidDetectionCount = 0;
+  let warningCount = 0;
   let clashes = 0;
   let clashActiveTicks = 0;
   let mutualIdleStreak = 0;
@@ -367,6 +381,21 @@ function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThre
 
     anomalyCount += checkSide(tick, 'first', world, result.first.spin.angularVelocity, anomalies);
     anomalyCount += checkSide(tick, 'second', world, result.second.spin.angularVelocity, anomalies);
+    for (const detection of detector.check({
+      tick,
+      first: world.first,
+      second: world.second,
+      result,
+      roundState: world.roundState,
+      clash: world.clash.controller,
+      firstActions,
+      secondActions,
+      aiSides: { first: true, second: true },
+    })) {
+      if (detection.severity === 'invalid-state') invalidDetectionCount++;
+      else warningCount++;
+      if (detections.length < MAX_STORED_DETECTIONS) detections.push(detection);
+    }
 
     setup.onTick?.(tick, world, firstActions, secondActions, firstAi, secondAi);
 
@@ -391,6 +420,9 @@ function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThre
     },
     anomalies,
     anomalyCount,
+    detections,
+    invalidDetectionCount,
+    warningCount,
     timing: { wallMs, meanTickMs: wallMs / Math.max(1, ticks), maxTickMs, slowTicks },
   };
 }

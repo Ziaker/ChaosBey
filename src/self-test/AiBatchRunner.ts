@@ -26,6 +26,7 @@ import {
   type AiMatchSetup,
   type MatchAnomaly,
 } from './AiMatchSimulation';
+import type { DetectedAnomaly } from './anomalies/MatchAnomalyDetector';
 
 export interface AiBatchMatchup {
   readonly firstDefinition: BeyDefinition;
@@ -68,6 +69,10 @@ export interface AiBatchMatchEntry {
   readonly crashMessage: string | null;
   readonly anomalies: readonly MatchAnomaly[];
   readonly anomalyCount: number;
+  /** GDD 67 detector findings (invalid states and warnings), capped per match. */
+  readonly detections: readonly DetectedAnomaly[];
+  readonly invalidDetectionCount: number;
+  readonly warningCount: number;
   readonly maxTickMs: number;
   readonly slowTicks: number;
 }
@@ -111,6 +116,14 @@ export interface AiBatchReport {
   readonly divergence: UnsupportedDivergence;
   /** Matches with at least one tick slower than the threshold. Diagnostic, not a failure. */
   readonly performanceAnomalies: readonly { readonly seed: string; readonly matchup: string; readonly slowTicks: number; readonly maxTickMs: number }[];
+  /** GDD 67 detections across the batch, by kind (invalid states and warnings). */
+  readonly anomalyKinds: Readonly<Record<string, number>>;
+  /** Invalid-state detections matched to an already-recorded bug, by issue id (still failures). */
+  readonly knownIssues: Readonly<Record<string, number>>;
+  /** Matches failed as invalid state by anything NOT matched to a known issue — the number that should stay 0. */
+  readonly unknownInvalidStates: number;
+  /** Matches with detector warnings — reported, not failed. */
+  readonly warnings: readonly { readonly seed: string; readonly matchup: string; readonly detections: readonly DetectedAnomaly[] }[];
   /** Every failing match, with its seed preserved for exact replay. */
   readonly failures: readonly AiBatchMatchEntry[];
   readonly entries: readonly AiBatchMatchEntry[];
@@ -132,7 +145,7 @@ function isKo(outcome: RoundOutcome): boolean {
 
 function entryFromRecord(seed: string, matchup: string, record: AiMatchRecord): AiBatchMatchEntry {
   const failureReasons: AiBatchFailureReason[] = [];
-  if (record.anomalyCount > 0) failureReasons.push('invalid-state');
+  if (record.anomalyCount > 0 || record.invalidDetectionCount > 0) failureReasons.push('invalid-state');
   if (record.stats.outcome === RoundOutcome.Ongoing) failureReasons.push('hang');
   return {
     seed,
@@ -145,6 +158,9 @@ function entryFromRecord(seed: string, matchup: string, record: AiMatchRecord): 
     crashMessage: null,
     anomalies: record.anomalies,
     anomalyCount: record.anomalyCount,
+    detections: record.detections,
+    invalidDetectionCount: record.invalidDetectionCount,
+    warningCount: record.warningCount,
     maxTickMs: record.timing.maxTickMs,
     slowTicks: record.timing.slowTicks,
   };
@@ -162,9 +178,38 @@ function crashEntry(seed: string, matchup: string, error: unknown): AiBatchMatch
     crashMessage: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     anomalies: [],
     anomalyCount: 0,
+    detections: [],
+    invalidDetectionCount: 0,
+    warningCount: 0,
     maxTickMs: 0,
     slowTicks: 0,
   };
+}
+
+function countAnomalyKinds(entries: readonly AiBatchMatchEntry[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const entry of entries) {
+    for (const anomaly of entry.anomalies) counts[anomaly.kind] = (counts[anomaly.kind] ?? 0) + 1;
+    for (const detection of entry.detections) counts[detection.kind] = (counts[detection.kind] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function countKnownIssues(entries: readonly AiBatchMatchEntry[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const entry of entries) {
+    for (const detection of entry.detections) {
+      if (detection.knownIssue) counts[detection.knownIssue] = (counts[detection.knownIssue] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+/** True when every invalid-state finding of a match is matched to a known issue (and nothing was cut off by the per-match cap). */
+export function isOnlyKnownIssues(entry: AiBatchMatchEntry): boolean {
+  if (entry.anomalyCount > 0) return false;
+  const invalid = entry.detections.filter((d) => d.severity === 'invalid-state');
+  return invalid.length === entry.invalidDetectionCount && invalid.every((d) => d.knownIssue !== null);
 }
 
 /** Summarizes finished entries into the GDD 163 report. Pure: the same entries always give the same report. */
@@ -190,6 +235,12 @@ export function summarizeAiBatch(entries: readonly AiBatchMatchEntry[], wallMs: 
     clashCount: entries.reduce((sum, e) => sum + e.clashes, 0),
     divergence: DIVERGENCE_UNSUPPORTED_UNTIL_M9,
     performanceAnomalies: entries.filter((e) => e.slowTicks > 0).map((e) => ({ seed: e.seed, matchup: e.matchup, slowTicks: e.slowTicks, maxTickMs: e.maxTickMs })),
+    anomalyKinds: countAnomalyKinds(entries),
+    knownIssues: countKnownIssues(entries),
+    unknownInvalidStates: count((e) => e.failureReasons.includes('invalid-state') && !isOnlyKnownIssues(e)),
+    warnings: entries
+      .filter((e) => e.warningCount > 0)
+      .map((e) => ({ seed: e.seed, matchup: e.matchup, detections: e.detections.filter((d) => d.severity === 'warning') })),
     failures: entries.filter((e) => !e.passed),
     entries,
     timing: { wallMs, simulatedS, simulatedPerWallSecond: wallMs > 0 ? simulatedS / (wallMs / 1000) : 0, slowTickThresholdMs },

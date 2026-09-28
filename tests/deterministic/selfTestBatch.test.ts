@@ -44,7 +44,11 @@ describe('runAiBatch — real matches', () => {
     expect(report.seeds).toHaveLength(report.matches);
     expect(report.seeds).toContain('self-test-0/attack-prototype-vs-defense-prototype');
     expect(report.crashes).toBe(0);
-    expect(report.invalidStates).toBe(0);
+    // The GDD 67 detector reports the recorded ext-32 wall-collider bug as an
+    // invalid state (it must not be hidden); what must stay at 0 is any
+    // invalid state NOT matched to a known issue.
+    expect(report.unknownInvalidStates).toBe(0);
+    expect(report.invalidStates).toBe(report.failures.filter((e) => e.failureReasons.includes('invalid-state')).length);
     const { ringOuts, kos, draws, unresolved } = report.outcomes;
     expect(ringOuts + kos + draws + unresolved).toBe(report.matches);
     expect(report.averageDurationS).toBeGreaterThan(0);
@@ -132,6 +136,9 @@ describe('summarizeAiBatch', () => {
     crashMessage: null,
     anomalies: [],
     anomalyCount: 0,
+    detections: [],
+    invalidDetectionCount: 0,
+    warningCount: 0,
     maxTickMs: 1,
     slowTicks: 0,
     ...over,
