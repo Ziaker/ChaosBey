@@ -16,7 +16,7 @@ import { NullAiMashSource } from '../../src/combat/clash/ClashMash';
 import { applyAttackProfileSettings, createDefaultAttackProfileSettings } from '../../src/config/attack-profile/AttackProfileSettings';
 import { resolveMatchConfig } from '../../src/config/match/MatchConfig';
 import { Action } from '../../src/input/actions/Action';
-import { STATE_SCHEMA_VERSION } from '../../src/replay/contracts';
+import { STATE_SCHEMA_VERSION, ticksCompletedAfter } from '../../src/replay/contracts';
 import { CANONICAL_STATE_EXCLUSIONS } from '../../src/replay/state/CanonicalMatchState';
 import { plainData, type DeterministicStateSource } from '../../src/replay/state/CanonicalValue';
 import { diffCanonical, fnv1a64Bytes, stateHash } from '../../src/replay/state/stateHash';
@@ -147,6 +147,20 @@ describe('CanonicalMatchStateV1 coverage', () => {
     expect(diffCanonical(before, after)).toContain('beys.second.stability.resource');
     expect(JSON.stringify(after)).not.toContain('visualSpinAngle');
     world.dispose();
+  });
+});
+
+describe('tick counting (contract: TickIndex vs TicksCompleted)', () => {
+  it('the canonical state carries ticksCompleted: 0 before TickIndex 0, n + 1 after TickIndex n', async () => {
+    const live = await liveSession('ticks-completed');
+    expect(live.getCanonicalState().ticksCompleted).toBe(0);
+    const out = live.tick();
+    expect(out.tickIndex).toBe(0);
+    expect(live.getCanonicalState().ticksCompleted).toBe(ticksCompletedAfter(out.tickIndex));
+    expect(live.tick().tickIndex).toBe(1);
+    expect(live.getCanonicalState().ticksCompleted).toBe(2);
+    expect('tick' in live.getCanonicalState()).toBe(false);
+    live.dispose();
   });
 });
 

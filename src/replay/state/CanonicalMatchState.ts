@@ -27,21 +27,21 @@
 import type { Bey } from '../../bey/core/Bey';
 import type { HitstopClock } from '../../app/simulation/Hitstop';
 import type { MatchStepWorld } from '../../app/simulation/MatchStepper';
-import { STATE_SCHEMA_VERSION, type Tick } from '../contracts';
+import { STATE_SCHEMA_VERSION, type TicksCompleted } from '../contracts';
 import type { CanonicalRecord, CanonicalValue } from './CanonicalValue';
 
 export interface CanonicalMatchStateInput {
-  /** Ticks completed when the state is read (0 = the initial state, before the first tick). */
-  readonly tick: Tick;
+  /** Ticks completed when the state is read (0 = the initial state, before TickIndex 0). */
+  readonly ticksCompleted: TicksCompleted;
   readonly world: MatchStepWorld;
   readonly hitstop: HitstopClock;
 }
 
 export function buildCanonicalMatchState(input: CanonicalMatchStateInput): CanonicalRecord {
-  const { tick, world, hitstop } = input;
+  const { ticksCompleted, world, hitstop } = input;
   return {
     schema: STATE_SCHEMA_VERSION,
-    tick,
+    ticksCompleted,
     round: world.roundState.getDeterministicState(),
     hitstop: hitstop.getDeterministicState(),
     clash: {

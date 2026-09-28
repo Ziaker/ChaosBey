@@ -123,7 +123,8 @@ export class MatchSession {
 
   /** CanonicalMatchStateV1 after the ticks run so far (M9: the official state-hash input). */
   getCanonicalState(): CanonicalRecord {
-    return buildCanonicalMatchState({ tick: this.tickIndex, world: this.stepWorld(), hitstop: this.stepper.hitstop });
+    // this.tickIndex is the next TickIndex to run, which equals the ticks completed.
+    return buildCanonicalMatchState({ ticksCompleted: this.tickIndex, world: this.stepWorld(), hitstop: this.stepper.hitstop });
   }
 
   /** stateHash(getCanonicalState()). */

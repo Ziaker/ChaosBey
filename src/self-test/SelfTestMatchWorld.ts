@@ -89,7 +89,7 @@ export class SelfTestMatchWorld {
 
   /** CanonicalMatchStateV1 after `ticksCompleted` ticks (M9: the official state-hash input). */
   getCanonicalState(ticksCompleted: number): CanonicalRecord {
-    return buildCanonicalMatchState({ tick: ticksCompleted, world: this, hitstop: this.stepper.hitstop });
+    return buildCanonicalMatchState({ ticksCompleted, world: this, hitstop: this.stepper.hitstop });
   }
 
   /** Low-level: one tickMatch() with the given actions, no controllers and no hitstop (physics/combat unit tests). */
