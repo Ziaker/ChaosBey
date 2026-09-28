@@ -12,6 +12,7 @@
 // - `self-test`: the browser Self Test (debug/self-test-ui/SelfTestMode.ts).
 // ============================================================
 
+import { WebGl2UnavailableError, showWebGl2UnavailableScreen } from './app/bootstrap/bootFailureScreen';
 import { createRenderer } from './app/bootstrap/createRenderer';
 import { startMainMenu } from './app/menu/MainMenu';
 import { startPlayMode } from './app/modes/playMode';
@@ -51,4 +52,5 @@ async function bootstrap(): Promise<void> {
 bootstrap().catch((error: unknown) => {
   // Errors must never be swallowed silently (GDD section 117).
   console.error('ChaosBey failed to boot:', error);
+  if (error instanceof WebGl2UnavailableError) showWebGl2UnavailableScreen();
 });
