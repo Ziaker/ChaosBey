@@ -15,6 +15,10 @@ import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../bey/archetype/BeyArch
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import { NullAiMashSource } from '../../combat/clash/ClashMash';
 import { FIXED_DELTA_SECONDS } from '../../physics/fixed-step/FixedTimestepLoop';
+import { AIController } from '../../ai/controllers/AIController';
+import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../ai/difficulty/AiDifficultyProfile';
+import { personalityForBeyDefinitionId } from '../../ai/personalities/AiArchetypePersonalities';
+import { SeededRng } from '../../rng/SeededRng';
 import { SelfTestMatchWorld } from '../SelfTestMatchWorld';
 import { MatchAnomalyDetector, type DetectedAnomaly } from '../anomalies/MatchAnomalyDetector';
 import { SCENARIO_PRESETS, type ScenarioPreset, type ScenarioSideScript } from './ScenarioPresets';
@@ -24,6 +28,14 @@ export interface ScenarioRunOptions {
   /** Defaults: attack-prototype first, defense-prototype second (the live pairing). */
   readonly firstDefinition?: BeyDefinition;
   readonly secondDefinition?: BeyDefinition;
+  /**
+   * GDD 66 "scripted-controller vs AI": replace this side's script with the
+   * real AIController (its archetype personality, seeded from the preset
+   * id). The preset's own check then describes what happened but no longer
+   * decides pass/fail — an AI need not play the script's part; a run
+   * passes when it neither crashes nor hits an invalid state.
+   */
+  readonly aiSide?: 'first' | 'second';
 }
 
 export interface ScenarioResult {
@@ -63,8 +75,13 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
   try {
     preset.setup?.({ first: world.first, second: world.second });
     trace = createScenarioTrace(world.first);
-    const first = controllerForScript(preset.first);
-    const second = controllerForScript(preset.second);
+    const aiFor = (side: 'first' | 'second'): CombatController => {
+      const own = side === 'first' ? world.first : world.second;
+      const opponent = side === 'first' ? world.second : world.first;
+      return new AIController(world.physics, own, opponent, world.clash.controller, personalityForBeyDefinitionId(own.definition.id), DEFAULT_AI_DIFFICULTY_PROFILE, SeededRng.fromSeedText(`${preset.id}/${side}`));
+    };
+    const first = options.aiSide === 'first' ? aiFor('first') : controllerForScript(preset.first);
+    const second = options.aiSide === 'second' ? aiFor('second') : controllerForScript(preset.second);
     const detector = new MatchAnomalyDetector();
     for (let tick = 0; tick < preset.durationTicks; tick++) {
       const clashStateBefore: ClashState = world.clash.controller.getState();
@@ -82,15 +99,17 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
           clash: world.clash.controller,
           firstActions,
           secondActions,
-          aiSides: { first: false, second: false },
+          aiSides: { first: options.aiSide === 'first', second: options.aiSide === 'second' },
         }),
       );
       if (preset.doneWhen?.(trace) || world.roundState.isOver) break;
     }
     const check = preset.check(trace);
     const invalid = detections.filter((d) => d.severity === 'invalid-state');
-    const passed = check.passed && invalid.length === 0;
-    const detail = invalid.length === 0 ? check.detail : `${check.detail}; invalid states: ${invalid.map((d) => d.kind).join(', ')}`;
+    const checkDecides = options.aiSide === undefined;
+    const passed = (checkDecides ? check.passed : true) && invalid.length === 0;
+    const checkText = checkDecides ? check.detail : `vs AI (${options.aiSide}) — scripted expectation ${check.passed ? 'met' : 'not met'}: ${check.detail}`;
+    const detail = invalid.length === 0 ? checkText : `${checkText}; invalid states: ${invalid.map((d) => d.kind).join(', ')}`;
     return { id: preset.id, label: preset.label, status: passed ? 'passed' : 'failed', detail, ticks: trace.ticks, detections, crashMessage: null };
   } catch (error) {
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);

@@ -3,7 +3,7 @@
 Living checklist for Milestone 8 (GDD section 144, detailed by sections
 1.2, 65–71, 162–164). Updated by every M8 PR. Status values:
 
-- **DONE** — implemented, tested, on `main` (or in the PR named in the row until it merges);
+- **DONE** — implemented and tested (merged, or in the PR named in the row until it merges);
 - **PARTIAL** — some of the requirement exists, the rest is listed;
 - **MISSING** — not built yet;
 - **UNSUPPORTED (M9)** — depends on replay/state hashes, which GDD section 145 schedules for Milestone 9; reported as unsupported, never faked;
@@ -13,22 +13,43 @@ Living checklist for Milestone 8 (GDD section 144, detailed by sections
 
 | PR | Scope | State |
 |---|---|---|
-| #31 | Shared headless Self-Test core (`src/self-test/`), AI batch runner, typed GDD 163 report | open (other session) |
-| M8 Debug Lab (A+B+C, branch `claude/pensive-wright-bm4uss`) | `MatchSession` (shared live-match pipeline), Debug Lab mode, GDD 69 inspector, pause/step/restart/seed/speed, controller switching; GDD 70/71 visualization layers; overview camera, camera-effect and VFX toggles; logged mutation tools; JSON debug report | open |
+| #31 | Shared headless Self-Test core (`src/self-test/`), AI batch runner, typed GDD 163 report | approved, pending merge |
+| #33 | Debug Lab: `MatchSession`, `?mode=debug-lab`, GDD 69 inspector, pause/step/restart/seed/speed, controller switching, GDD 70/71 visualization, presentation toggles, logged mutations, JSON debug report | open |
+| M8 Self-Test (next) | GDD 67 anomaly detector, GDD 68 scenario presets, steppable batch, browser `?mode=self-test` | on top of #31 + #33 |
 
 ## GDD 144 headline items
 
 | Requirement | Implementation | Evidence | Status |
 |---|---|---|---|
-| Inspectors | `src/debug/inspectors/buildInspection.ts`, Debug Lab panel | `tests/deterministic/matchSession.test.ts`, `tests/smoke/debugLab.spec.ts` | DONE (Debug Lab PR) |
-| Raw state | Same inspector: transform, linear, angular, surface, resources, combat, dodge, jump, Clash, AI, camera, performance, telemetry | same | DONE (Debug Lab PR) |
-| Force visualization | `src/debug/visualization/DebugVisualLayers.ts`: colliders, hitboxes, ring-out, velocity/steering, spin axis/angular velocity, knockback + impact impulses, contacts + ground normal, lock-on, AI target path | `tests/deterministic/debugVisualLayers.test.ts`, `debugLab.spec.ts` | DONE (Debug Lab PR) |
-| Scenario presets | — | — | MISSING |
-| Controller switching | `src/app/session/SideControllers.ts` — keyboard / AI (any archetype personality) / idle / scripted, per side, live | `matchSession.test.ts`, `debugLab.spec.ts` | DONE for the live lab (Debug Lab PR); batch pairings with #31/Self Test |
-| Batch tests | #31 `runAiBatch()` (headless) | #31 `selfTestBatch.test.ts` | PARTIAL — pending #31 merge + browser Self Test |
-| Anomaly detection | #31: non-finite position, velocity/angular checks, crash, hang | #31 tests | PARTIAL — remaining GDD 67 detectors missing |
-| Simulation acceleration | Debug Lab speed 1/2/4/8× = more fixed ticks per step (never a bigger delta); headless batches are unthrottled | `debugLab.spec.ts` (8× runs > 90 ticks/s) | PARTIAL — browser Self Test fast-forward via `stepManyTicks()` missing |
-| Reports | #31 GDD 163 batch report object; Debug Lab `ChaosBeyDebugReportV1` (generate / copy / download) | #31 tests; `debugMutations.test.ts`, `debugLab.spec.ts` | PARTIAL — batch report view/export in the browser Self Test pending |
+| Inspectors | `src/debug/inspectors/buildInspection.ts`, Debug Lab panel | `matchSession.test.ts`, `debugLab.spec.ts` | DONE (#33) |
+| Raw state | Same inspector: transform, linear, angular, surface, resources, combat, dodge, jump, Clash, AI, camera, performance, telemetry, anomalies | same | DONE (#33, anomalies row with the Self-Test PR) |
+| Force visualization | `src/debug/visualization/DebugVisualLayers.ts` | `debugVisualLayers.test.ts`, `debugLab.spec.ts` | DONE (#33) |
+| Scenario presets | `src/self-test/scenarios/` — all 18 GDD 68 presets; headless runner + Debug Lab loader | `scenarioPresets.test.ts`, `sessionScenarios.test.ts`, `selfTest.spec.ts`, `debugLab.spec.ts` | DONE (17) + UNSUPPORTED (M9): Replay Reproduction |
+| Controller switching | Debug Lab: keyboard / AI (any personality) / idle / scripted per side, live. Self Test: AI vs AI, scripted vs AI, scripted vs scripted | `matchSession.test.ts`, `selfTestStepped.test.ts` | DONE |
+| Batch tests | #31 `runAiBatch()`; `AiBatchSession` (steppable, same code); browser Self Test | #31 tests, `selfTestStepped.test.ts`, `selfTest.spec.ts` | DONE |
+| Anomaly detection | #31 physics-safety checks + `src/self-test/anomalies/MatchAnomalyDetector.ts` (every GDD 67 item; divergence UNSUPPORTED M9) in batches, scenarios and the live Debug Lab | `matchAnomalyDetector.test.ts`, `sessionScenarios.test.ts` | DONE |
+| Simulation acceleration | Headless: unthrottled fixed ticks. Browser Self Test: 1×–64× fixed ticks per step or "max" per-frame budget. Debug Lab: 1–8×. Never a bigger delta | `selfTest.spec.ts` (1× ≈ 60 ticks/s, 64× > 4× that), `debugLab.spec.ts` | DONE |
+| Reports | GDD 163 batch report (+ anomaly kinds, known issues, unknown invalid states, warnings), scenario results, Self Test JSON download; Debug Lab `ChaosBeyDebugReportV1` | `selfTestBatch.test.ts`, `selfTestStepped.test.ts`, `debugMutations.test.ts`, smokes | DONE |
+
+## GDD 66 — Self Test mode
+
+| Item | Status |
+|---|---|
+| one deterministic scenario | DONE — any preset, "Run preset" |
+| batches of scenarios | DONE — "Run all presets" |
+| AI vs AI | DONE — matchups × seeds |
+| scripted-controller vs AI | DONE — preset with one side swapped for the AI |
+| scripted vs scripted | DONE — presets |
+| fast-forward / acceleration | DONE |
+| optional rendering disable/reduction | DONE — headless core, 2D minimap, no 3D renderer |
+| automatic telemetry capture | DONE — per-match stats, anomalies, detections in the report |
+| pass/fail assertions | DONE — per match and per preset |
+| seed logging | DONE — every match seed in the report; failing seeds copyable and replayable |
+| automatic failure report | DONE — failures list + JSON |
+
+## GDD 67 — automated failure detection
+
+Every item is covered (see the table at the top of `MatchAnomalyDetector.ts`); "replay/state hash divergence" is UNSUPPORTED (M9). Thresholds are documented in that file.
 
 ## GDD 69 — inspectable data (Debug Lab)
 
@@ -42,19 +63,26 @@ All categories are shown. Gaps are labeled UNSUPPORTED in the panel with the rea
 
 | Control | Status |
 |---|---|
-| pause / resume / single-step | DONE (Debug Lab PR) |
-| restart same seed / new seed (plus typed seed, copy seed) | DONE (Debug Lab PR) |
-| toggle AI control / automated controller, change AI profile | DONE (Debug Lab PR) — AI personality per side; only one difficulty profile exists (tier list is an owner decision, GDD 59/171.4) |
-| teleport, set velocity / angular velocity, set Stamina / Stability / Attack Energy, reset cooldowns | DONE (Debug Lab PR) — `src/debug/cheats/DebugMutations.ts`; every call logged on the session + `DebugMutation` telemetry |
-| force attack state for test scenarios | DONE — through real inputs (Circular, full-charge Dash, hop, full jump, dodge) via `ForcedInputController`, never by writing state |
-| trigger/prepare Clash | DONE — lines the Beys up and forces both Dash; the real 150 ms window decides |
-| visualize colliders, hitboxes, velocity, angular axis, forces/impulses, target path, ring-out boundaries (+ contacts, normals, lock-on) | DONE (Debug Lab PR) |
-| toggle VFX layers, toggle camera effects (+ overview camera) | DONE (Debug Lab PR) — render-only |
-| export debug report | DONE (Debug Lab PR) — generate / copy / download JSON; replay section reports M9 as unsupported |
+| pause / resume / single-step | DONE (#33) |
+| restart same seed / new seed (plus typed seed, copy seed) | DONE (#33) |
+| toggle AI control / automated controller, change AI profile | DONE (#33) — AI personality per side; only one difficulty profile exists (tier list is an owner decision, GDD 59/171.4) |
+| teleport, set velocity / angular velocity, set Stamina / Stability / Attack Energy, reset cooldowns | DONE (#33) — every call logged + `DebugMutation` telemetry |
+| force attack state for test scenarios | DONE (#33) — through real inputs via `ForcedInputController`, never by writing state |
+| trigger/prepare Clash | DONE (#33) — the real 150 ms window decides |
+| visualize colliders, hitboxes, velocity, angular axis, forces/impulses, target path, ring-out boundaries (+ contacts, normals, lock-on) | DONE (#33) |
+| toggle VFX layers, toggle camera effects (+ overview camera) | DONE (#33) — render-only |
+| export debug report | DONE (#33) |
+| load scenario preset | DONE (Self-Test PR) |
+
+## Real problems the Self-Test found
+
+- **ext-32 wall collider** (already recorded, `docs/design-decisions/motion-approval.md` §10.2 / §13.6): Beys end up inside the edge wall band (`stuck-in-wall`). In the Self-Test sweeps this is the only invalid state seen; it is reported as a failure tagged `ext-32`, not hidden.
+- **New consequence of ext-32:** a Bey pushed past the floor edge (r > 12 m) but still inside the ring-out radius (12.9 m) falls off the world with no ring-out (`below-floor`, tagged `ext-32`). Reproducible from seed `self-test-5/stamina-prototype-vs-defense-prototype`. It belongs to the collider fix planned for integration, not to M8; no physics was changed.
+- **Detector false positives fixed before merge:** dodge / Clash timers "stuck" during a Clash were the Clash freeze, not bugs; timer checks now ignore frozen ticks.
 
 ## Owner-reserved items touching M8
 
 - **Main Menu entry for DEBUG LAB / SELF TEST** (GDD 1.2, 56): the menu's
   final visual treatment is behind the visual approval gate (GDD 1.6,
-  171.10). Functional access is `?mode=debug-lab` meanwhile.
+  171.10). Functional access is `?mode=debug-lab` / `?mode=self-test`.
   BLOCKED BY OWNER — does not block other M8 items.

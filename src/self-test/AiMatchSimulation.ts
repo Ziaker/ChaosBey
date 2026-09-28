@@ -230,7 +230,7 @@ export interface MatchAnomaly extends PhysicsAnomaly {
 const MAX_STORED_ANOMALIES = 20;
 
 export interface AiMatchTiming {
-  /** Wall-clock milliseconds the whole match took to simulate. */
+  /** Milliseconds spent simulating the match (the sum of its tick times). */
   readonly wallMs: number;
   readonly meanTickMs: number;
   readonly maxTickMs: number;
@@ -298,6 +298,20 @@ export async function simulateAiMatch(setup: AiMatchSetup & { slowTickThresholdM
 }
 
 function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThresholdMs: number): AiMatchRecord {
+  const steps = stepAiMatchOnWorld(world, setup, slowTickThresholdMs);
+  for (let next = steps.next(); ; next = steps.next()) {
+    if (next.done) return next.value;
+  }
+}
+
+/**
+ * The match loop, one fixed tick per iteration: yields the tick index just
+ * simulated and returns the record when the round ends (or at maxTicks).
+ * simulateAiMatch() drains it in one go; the browser Self Test steps it a
+ * few ticks per frame (GDD 164: more fixed ticks per second, never a bigger
+ * delta) so the page stays responsive. Same loop either way.
+ */
+export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThresholdMs: number = DEFAULT_SLOW_TICK_THRESHOLD_MS): Generator<number, AiMatchRecord, void> {
   const difficulty = setup.difficulty ?? DEFAULT_AI_DIFFICULTY_PROFILE;
   const firstPersonality = setup.firstPersonality ?? personalityForBeyDefinitionId(setup.firstDefinition.id);
   const secondPersonality = setup.secondPersonality ?? personalityForBeyDefinitionId(setup.secondDefinition.id);
@@ -343,7 +357,9 @@ function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThre
   let ticks = 0;
   let maxTickMs = 0;
   let slowTicks = 0;
-  const startedAtMs = performance.now();
+  // Time spent simulating (sum of tick times), not wall time between the
+  // first and last tick: a stepped run pauses between frames.
+  let busyMs = 0;
 
   for (let tick = 0; tick < maxTicks; tick++) {
     const tickStartMs = performance.now();
@@ -400,12 +416,14 @@ function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThre
     setup.onTick?.(tick, world, firstActions, secondActions, firstAi, secondAi);
 
     const tickMs = performance.now() - tickStartMs;
+    busyMs += tickMs;
     maxTickMs = Math.max(maxTickMs, tickMs);
     if (tickMs > slowTickThresholdMs) slowTicks++;
     if (world.roundState.isOver) break;
+    yield tick;
   }
 
-  const wallMs = performance.now() - startedAtMs;
+  const wallMs = busyMs;
   return {
     stats: {
       seed: setup.seed,

@@ -18,10 +18,12 @@ import type { SpawnPositionM } from '../app/bootstrap/matchSpawns';
 import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
 import { RoundOutcome } from '../combat/round-rules/RoundState';
 import { FIXED_DELTA_SECONDS } from '../physics/fixed-step/FixedTimestepLoop';
+import { NullAiMashSource } from '../combat/clash/ClashMash';
+import { SelfTestMatchWorld } from './SelfTestMatchWorld';
 import {
   DEFAULT_AI_MATCH_MAX_TICKS,
   DEFAULT_SLOW_TICK_THRESHOLD_MS,
-  simulateAiMatch,
+  stepAiMatchOnWorld,
   type AiMatchRecord,
   type AiMatchSetup,
   type MatchAnomaly,
@@ -247,41 +249,133 @@ export function summarizeAiBatch(entries: readonly AiBatchMatchEntry[], wallMs: 
   };
 }
 
+interface BatchJob {
+  readonly matchup: AiBatchMatchup;
+  readonly label: string;
+  readonly seed: string;
+}
+
+/** What the batch is doing right now — for a live view. */
+export interface AiBatchProgress {
+  readonly completed: number;
+  readonly total: number;
+  /** The match being simulated, or null between matches / when done. */
+  readonly current: { readonly seed: string; readonly matchup: string; readonly tick: number; readonly world: SelfTestMatchWorld } | null;
+}
+
+/**
+ * A batch that can be advanced a bounded number of fixed ticks at a time
+ * (the browser Self Test steps it a few ticks per frame). runAiBatch() is
+ * this session run to completion, so headless and in-browser batches are
+ * the same code, match for match.
+ */
+export class AiBatchSession {
+  private readonly jobs: BatchJob[] = [];
+  private readonly entries: AiBatchMatchEntry[] = [];
+  private readonly slowTickThresholdMs: number;
+  private current: { job: BatchJob; world: SelfTestMatchWorld; steps: Generator<number, AiMatchRecord, void>; tick: number } | null = null;
+  private busyMs = 0;
+
+  constructor(private readonly config: AiBatchConfig) {
+    this.slowTickThresholdMs = config.slowTickThresholdMs ?? DEFAULT_SLOW_TICK_THRESHOLD_MS;
+    for (const matchup of config.matchups) {
+      const label = matchupLabel(matchup);
+      for (const baseSeed of config.seeds) this.jobs.push({ matchup, label, seed: `${baseSeed}/${label}` });
+    }
+  }
+
+  get isDone(): boolean {
+    return this.entries.length >= this.jobs.length;
+  }
+
+  progress(): AiBatchProgress {
+    return {
+      completed: this.entries.length,
+      total: this.jobs.length,
+      current: this.current ? { seed: this.current.job.seed, matchup: this.current.job.label, tick: this.current.tick, world: this.current.world } : null,
+    };
+  }
+
+  /** Simulates up to `tickBudget` fixed ticks (across matches if one ends). Resolves true once every match is done. */
+  async step(tickBudget: number): Promise<boolean> {
+    const startedAtMs = performance.now();
+    let budget = tickBudget;
+    try {
+      while (budget > 0 && !this.isDone) {
+        if (!this.current) {
+          const job = this.jobs[this.entries.length]!;
+          try {
+            const world = await SelfTestMatchWorld.build({
+              firstSpawn: this.config.firstSpawn,
+              secondSpawn: this.config.secondSpawn,
+              aiMashSource: new NullAiMashSource(),
+              firstDefinition: job.matchup.firstDefinition,
+              secondDefinition: job.matchup.secondDefinition,
+            });
+            const steps = stepAiMatchOnWorld(
+              world,
+              {
+                seed: job.seed,
+                firstDefinition: job.matchup.firstDefinition,
+                secondDefinition: job.matchup.secondDefinition,
+                firstPersonality: job.matchup.firstPersonality,
+                secondPersonality: job.matchup.secondPersonality,
+                difficulty: this.config.difficulty,
+                maxTicks: this.config.maxTicks ?? DEFAULT_AI_MATCH_MAX_TICKS,
+                onTick: this.config.onTick,
+              },
+              this.slowTickThresholdMs,
+            );
+            this.current = { job, world, steps, tick: 0 };
+          } catch (error) {
+            this.finish(crashEntry(job.seed, job.label, error));
+            continue;
+          }
+        }
+        const run = this.current!;
+        try {
+          const next = run.steps.next();
+          budget--;
+          if (next.done) {
+            this.finish(entryFromRecord(run.job.seed, run.job.label, next.value));
+          } else {
+            run.tick = next.value + 1;
+          }
+        } catch (error) {
+          this.finish(crashEntry(run.job.seed, run.job.label, error));
+        }
+      }
+    } finally {
+      this.busyMs += performance.now() - startedAtMs;
+    }
+    return this.isDone;
+  }
+
+  /** The GDD 163 report over the matches finished so far. */
+  report(): AiBatchReport {
+    return summarizeAiBatch(this.entries, this.busyMs, this.slowTickThresholdMs);
+  }
+
+  /** Frees the world of a match in progress (when a run is abandoned). */
+  dispose(): void {
+    this.current?.world.dispose();
+    this.current = null;
+  }
+
+  private finish(entry: AiBatchMatchEntry): void {
+    this.current?.world.dispose();
+    this.current = null;
+    this.entries.push(entry);
+    this.config.onMatchComplete?.(entry, this.entries.length - 1, this.jobs.length);
+  }
+}
+
 /**
  * Runs the batch sequentially (one Rapier world at a time, freed after each
  * match). A match that throws is recorded as a crash and the batch goes on.
  */
 export async function runAiBatch(config: AiBatchConfig): Promise<AiBatchReport> {
-  const slowTickThresholdMs = config.slowTickThresholdMs ?? DEFAULT_SLOW_TICK_THRESHOLD_MS;
-  const total = config.matchups.length * config.seeds.length;
-  const entries: AiBatchMatchEntry[] = [];
-  const startedAtMs = performance.now();
-  for (const matchup of config.matchups) {
-    const label = matchupLabel(matchup);
-    for (const baseSeed of config.seeds) {
-      const seed = `${baseSeed}/${label}`;
-      let entry: AiBatchMatchEntry;
-      try {
-        const record = await simulateAiMatch({
-          seed,
-          firstDefinition: matchup.firstDefinition,
-          secondDefinition: matchup.secondDefinition,
-          firstPersonality: matchup.firstPersonality,
-          secondPersonality: matchup.secondPersonality,
-          difficulty: config.difficulty,
-          maxTicks: config.maxTicks ?? DEFAULT_AI_MATCH_MAX_TICKS,
-          firstSpawn: config.firstSpawn,
-          secondSpawn: config.secondSpawn,
-          onTick: config.onTick,
-          slowTickThresholdMs,
-        });
-        entry = entryFromRecord(seed, label, record);
-      } catch (error) {
-        entry = crashEntry(seed, label, error);
-      }
-      entries.push(entry);
-      config.onMatchComplete?.(entry, entries.length - 1, total);
-    }
-  }
-  return summarizeAiBatch(entries, performance.now() - startedAtMs, slowTickThresholdMs);
+  const session = new AiBatchSession(config);
+  await session.step(Number.POSITIVE_INFINITY);
+  return session.report();
 }
