@@ -43,12 +43,35 @@ export const STATE_HASH_ALGORITHM = 'fnv1a-64';
 /** A state hash: 16 lowercase hex characters (64 bits) of STATE_HASH_ALGORITHM over CanonicalMatchState. */
 export type StateHash = string;
 
+// Two tick counters, never interchangeable (one number meaning both would
+// put replay frames and checkpoints off by one):
+//
+//   ticksCompleted:  0      1      2      3
+//   state:           S0 ──► S1 ──► S2 ──► S3
+//   TickIndex:          0      1      2
+//
+// Executing TickIndex n takes the state from ticksCompleted n to n + 1.
+// Ticks frozen by hitstop or a Clash still count in both: controllers are
+// sampled on every tick, so a replay records every tick.
+
 /**
- * A fixed-tick index. Tick 0 is the first tick of the round. Ticks frozen by
- * hitstop or a Clash still count: controllers are sampled on every tick, so
- * a replay records every tick.
+ * Zero-based index of one executed fixed tick: 0 is the first tick of the
+ * round (the first controller sampling). Replay input frames are indexed
+ * by it.
  */
-export type Tick = number;
+export type TickIndex = number;
+
+/**
+ * How many fixed ticks have completed when a state is read: 0 is the
+ * initial state, before TickIndex 0; after TickIndex n it is n + 1.
+ * CanonicalMatchState and StateCheckpoint carry this, never a TickIndex.
+ */
+export type TicksCompleted = number;
+
+/** The state count reached once `index` has executed (index + 1). */
+export function ticksCompletedAfter(index: TickIndex): TicksCompleted {
+  return index + 1;
+}
 
 export type { Side } from '../app/session/MatchSession';
 
@@ -94,8 +117,12 @@ export interface RuntimeFingerprint {
   readonly rapierVersion: string;
 }
 
-/** A state hash taken at a tick. */
+/**
+ * The hash of the canonical state after `ticksCompleted` ticks. Keyed by
+ * ticksCompleted (not TickIndex), so it equals the state's own field and
+ * the initial state (0) can be checked too.
+ */
 export interface StateCheckpoint {
-  readonly tick: Tick;
+  readonly ticksCompleted: TicksCompleted;
   readonly hash: StateHash;
 }
