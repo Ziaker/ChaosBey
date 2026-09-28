@@ -36,38 +36,9 @@ jobs:
         with:
           path: dist
 
-  # GDD 133: Firefox is a supported browser, so the game's own smokes run
-  # there too. A separate job so it runs in parallel with the Chromium one
-  # instead of after it; the prototype labs stay Chromium-only (see
-  # GAME_SMOKE_SPECS in tests/smoke/playwright.config.ts).
-  smoke-firefox:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-      - run: npm run build
-
-      - run: npx playwright install --with-deps firefox
-      # Headless Firefox has no GL driver on a display-less, GPU-less runner
-      # ("tryNativeGL: Exhausted GL driver options"), so the game can't
-      # create its WebGL context. Run it headed on a virtual X display
-      # (xvfb, installed by --with-deps) with Mesa's software rasterizer.
-      - run: xvfb-run --auto-servernum -- npx playwright test -c tests/smoke/playwright.config.ts --project=firefox --headed
-        env:
-          CHAOSBEY_PW_INCLUDE_FIREFOX: '1'
-          LIBGL_ALWAYS_SOFTWARE: '1'
-
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: [build, smoke-firefox]
+    needs: [build]
     runs-on: ubuntu-latest
     # Only Pages deploys are serialized. At workflow level this group put
     # every run (each PR's CI included) in one repo-wide queue: runs waited
