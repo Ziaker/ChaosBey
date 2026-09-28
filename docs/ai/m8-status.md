@@ -2,7 +2,8 @@
 
 Checklist for Milestone 8 (GDD section 144, detailed by sections
 1.2, 65–71, 162–164). **M8 is complete on `main@fb93e05`:** every item is
-DONE except the ones below marked UNSUPPORTED (M9) or BLOCKED BY OWNER.
+DONE except the ones below marked UNSUPPORTED (M9). The last owner item,
+the Main Menu entry, was resolved afterwards (see "Owner-reserved items").
 Status values:
 
 - **DONE** — implemented, tested and merged to `main`;
@@ -86,7 +87,17 @@ All categories are shown. Gaps are labeled UNSUPPORTED in the panel with the rea
 
 ## Owner-reserved items touching M8
 
-- **Main Menu entry for DEBUG LAB / SELF TEST** (GDD 1.2, 56): the menu's
-  final visual treatment is behind the visual approval gate (GDD 1.6,
-  171.10). Functional access is `?mode=debug-lab` / `?mode=self-test`.
-  BLOCKED BY OWNER — does not block other M8 items.
+- **Main Menu entry for DEBUG LAB / SELF TEST** (GDD 1.2, 56): **resolved.**
+  The owner chose option C: a separate "Developer / Debug" section in the
+  Main Menu holds DEBUG LAB and SELF TEST, apart from the player flow
+  (PLAY). The plain game URL now opens that minimal Main Menu
+  (`src/app/menu/MainMenu.ts`); every entry loads the existing `?mode=`
+  URL, and the direct links `?mode=play`, `?mode=debug-lab` and
+  `?mode=self-test` keep working. DONE — `mainMenu.test.ts`,
+  `mainMenu.spec.ts`, `boot.spec.ts`.
+  - The menu's look is provisional (the existing developer-UI styling). Its
+    final visual treatment is still behind the visual approval gate (GDD
+    1.6, 171.10; `VISUAL_APPROVALS_MASTER.md` §11.1). This is not a visual
+    direction.
+  - GDD 56 also lists SETTINGS; it has no screen until Milestone 10, so the
+    menu does not show it yet.

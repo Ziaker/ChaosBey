@@ -30,7 +30,7 @@ test('several fresh boot -> Combat -> RoundEnd cycles in a row stay clean and st
   const outcomes: string[] = [];
 
   for (let run = 0; run < RUNS; run++) {
-    await page.goto('/ChaosBey/');
+    await page.goto('/ChaosBey/?mode=play');
     const overlay = page.locator('#debug-overlay-root pre');
     await expect(overlay, `run ${run}: boot`).toContainText('Combat', { timeout: BOOT_TIMEOUT_MS });
 
