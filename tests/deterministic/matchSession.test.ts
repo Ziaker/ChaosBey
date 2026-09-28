@@ -16,6 +16,40 @@ import { buildInspection, type InspectionFrameStats } from '../../src/debug/insp
 import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecorder';
 import { isGrounded } from '../../src/physics/collision/GroundCheck';
 import { probeGround } from '../../src/physics/collision/GroundProbe';
+import { Action, type CombatController, type ControllerActions, type ControllerContext } from '../../src/input/actions/Action';
+import { ActionSampleBuffer } from '../../src/input/devices/ActionSampleBuffer';
+
+/**
+ * Mirrors KeyboardController's own press/hold bookkeeping (same
+ * ActionSampleBuffer), without needing a real `window` — a stand-in for the
+ * one physical keyboard device MatchSessionOptions.keyboard describes as
+ * "only used by a side whose spec is `keyboard`" (singular: one side at a
+ * time).
+ */
+class FakeKeyboardDevice implements CombatController {
+  private readonly currentlyDown = new Set<Action>();
+  private readonly buffer = new ActionSampleBuffer();
+
+  press(action: Action): void {
+    if (!this.currentlyDown.has(action)) this.buffer.registerPress(action);
+    this.currentlyDown.add(action);
+  }
+
+  release(action: Action): void {
+    this.currentlyDown.delete(action);
+    this.buffer.registerRelease(action);
+  }
+
+  sampleActions(context: ControllerContext): ControllerActions {
+    const { pressedThisFrame, holdDuration } = this.buffer.sample(context.fixedDeltaSeconds, context.simulationFrozen ?? false);
+    return {
+      held: new Set(this.currentlyDown),
+      pressedThisFrame,
+      attackHoldDurationSeconds: holdDuration(Action.Attack),
+      jumpDriftHoldDurationSeconds: holdDuration(Action.JumpDrift),
+    };
+  }
+}
 
 const FRAME: InspectionFrameStats = {
   gameState: 'DebugLab / Combat',
@@ -110,6 +144,48 @@ describe('MatchSession', () => {
     expect(session.describeController('second')).toBe('AI (stamina)');
     session.tick();
     expect((session.getController('second') as AIController).getDebugState().personalityId).toContain('stamina');
+    session.dispose();
+  });
+
+  it('never lets two sides share the keyboard device at once (Debug Lab lets either side switch to Keyboard independently)', async () => {
+    const keyboard = new FakeKeyboardDevice();
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    scene.add(camera);
+    const session = await MatchSession.create({
+      scene,
+      camera,
+      seedText: 'keyboard-switch',
+      matchConfig: resolveMatchConfig(),
+      attackProfileSettings: createDefaultAttackProfileSettings(),
+      telemetry: new TelemetryRecorder(),
+      stateMachine: new GameStateMachine(),
+      controllers: { first: { kind: 'keyboard' }, second: { kind: 'idle' } },
+      keyboard,
+    });
+    expect(session.getControllerSpec('first').kind).toBe('keyboard');
+
+    // The Debug Lab panel has one independent dropdown per side (no cross
+    // validation) — nothing stops a developer from also switching the
+    // second side to Keyboard while the first already is.
+    session.setController('second', { kind: 'keyboard' });
+
+    // Only one side may end up on the shared device: the other side must
+    // have been moved off Keyboard, never silently doubled up on it.
+    const specs = [session.getControllerSpec('first').kind, session.getControllerSpec('second').kind];
+    expect(specs.filter((kind) => kind === 'keyboard')).toHaveLength(1);
+
+    // Prove it's not just bookkeeping: drive the real shared device and
+    // confirm only the side still wired to 'keyboard' actually reads it.
+    keyboard.press(Action.Attack);
+    const out = session.tick();
+    const keyboardSide: Side = session.getControllerSpec('first').kind === 'keyboard' ? 'first' : 'second';
+    const otherSide: Side = keyboardSide === 'first' ? 'second' : 'first';
+    const keyboardActions = keyboardSide === 'first' ? out.firstActions : out.secondActions;
+    const otherActions = otherSide === 'first' ? out.firstActions : out.secondActions;
+    expect(keyboardActions.held.has(Action.Attack)).toBe(true);
+    expect(otherActions.held.has(Action.Attack)).toBe(false);
+
     session.dispose();
   });
 

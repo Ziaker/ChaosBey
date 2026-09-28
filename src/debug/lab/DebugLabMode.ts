@@ -90,6 +90,8 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   let paused = false;
   let speed = 1;
   let restarting = false;
+  /** Bumped on every createSession() call; lets a call whose await resolves after a newer one started detect it's stale (see createSession). */
+  let restartToken = 0;
   let message: string | null = null;
   let framesSinceInspector = 0;
   let lastRenderTimeMs: number | null = null;
@@ -156,6 +158,7 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   };
 
   const createSession = async (seedText: string): Promise<void> => {
+    const myToken = ++restartToken;
     restarting = true;
     layers?.dispose();
     layers = null;
@@ -165,7 +168,7 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
     recordAppBoot(telemetry);
     matchState = new GameStateMachine();
     try {
-      session = await MatchSession.create({
+      const newSession = await MatchSession.create({
         scene: appRenderer.scene,
         camera: appRenderer.camera,
         seedText,
@@ -176,12 +179,21 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
         controllers: { first: controllers.first, second: controllers.second },
         keyboard,
       });
+      if (myToken !== restartToken) {
+        // A newer restart (Restart/New Seed/loadPreset clicked again before
+        // this one's async MatchSession.create() finished) already won and
+        // owns `session` — adopt nothing here, and free this call's own
+        // Rapier world/scene subtree instead of leaking it.
+        newSession.dispose();
+        return;
+      }
+      session = newSession;
       matchState.transitionTo(GameState.Combat);
       layers = new DebugVisualLayers(session, enabledLayers);
       for (const layer of Object.keys(vfxLayers) as VfxLayer[]) session.getVfxManager().setLayerVisible(layer, vfxLayers[layer]);
       message = null;
     } finally {
-      restarting = false;
+      if (myToken === restartToken) restarting = false;
     }
   };
 
@@ -199,12 +211,29 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
       refreshPanel(0, 0);
     },
     restart: async (seedText) => {
-      await createSession(seedText ?? session?.seedText ?? generateRandomSeedText());
+      // normalizeSeedText() throws on an empty/whitespace-only string
+      // (SeededRng.fromSeedText -> createRngStreams), which MatchSession
+      // .create() never catches — an empty string here (not just null:
+      // DebugLabHandle.restart is a public window.__chaosBeyDebugLab API,
+      // not only the panel's own "typed seed" button, which already guards
+      // this at the DOM layer) used to throw out of createSession(), leaving
+      // `session` stuck at null with no round running. Treat blank the same
+      // as null/undefined.
+      const trimmed = seedText?.trim();
+      await createSession(trimmed || session?.seedText || generateRandomSeedText());
       refreshPanel(0, 0);
     },
     setController: (side, spec) => {
       controllers[side] = spec;
       session?.setController(side, spec);
+      // setController() may have moved the OTHER side off Keyboard too (only
+      // one side may ever hold the shared device) — re-read both sides from
+      // the session, the source of truth, so the panel's dropdowns don't
+      // drift out of sync with it.
+      if (session) {
+        controllers.first = session.getControllerSpec('first');
+        controllers.second = session.getControllerSpec('second');
+      }
       message = `${side} → ${session?.describeController(side) ?? spec.kind}`;
       refreshPanel(0, 0);
     },

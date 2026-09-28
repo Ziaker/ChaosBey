@@ -306,7 +306,7 @@ export class MatchAnomalyDetector {
       const actions = side === 'first' ? input.firstActions : input.secondActions;
       const clashActive = input.clash.getState() === ClashState.Active;
       const inactive = input.aiSides[side] && roundRunning && !clashActive && actions.held.size === 0 && actions.pressedThisFrame.size === 0;
-      if (this.streak(key('ai-inactive'), inactive, t.aiInactiveTicks)) {
+      if (this.streak(key('ai-inactive'), inactive, t.aiInactiveTicks, frozen)) {
         emit('ai-inactive', side, `AI pressed nothing for ${t.aiInactiveTicks} ticks (${(t.aiInactiveTicks / FIXED_TICKS_PER_SECOND).toFixed(0)} s) outside a Clash`);
       }
     }
