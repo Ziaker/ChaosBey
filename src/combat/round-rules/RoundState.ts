@@ -10,6 +10,8 @@
 // which side's event happened to be checked first — it resolves to Draw.
 // ============================================================
 
+import type { CanonicalRecord } from '../../replay/state/CanonicalValue';
+
 export enum RoundOutcome {
   Ongoing = 'Ongoing',
   FirstWinsByKo = 'FirstWinsByKo',
@@ -52,5 +54,10 @@ export class RoundState {
     } else if (firstLost) {
       this.outcome = events.firstKoed ? RoundOutcome.SecondWinsByKo : RoundOutcome.SecondWinsByRingOut;
     }
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return { outcome: this.outcome };
   }
 }

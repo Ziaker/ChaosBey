@@ -109,6 +109,8 @@ export interface ScenarioTickFacts {
   readonly roundState: RoundState;
   readonly clash: ClashController;
   readonly clashStateBefore: ClashState;
+  /** False on a hitstop-frozen tick: the result is the previous tick's, so its events were already recorded. */
+  readonly advanced: boolean;
 }
 
 /** Folds one tick into the trace. */
@@ -123,21 +125,22 @@ export function recordScenarioTick(trace: ScenarioTrace, facts: ScenarioTickFact
     trace.clashStarts++;
     trace.clashStartedTick ??= tick;
   }
-  if (result.clashResolvedThisTick) {
-    trace.clashResolvedTick ??= tick;
-    trace.clashOutcome ??= result.clashResolvedThisTick.outcome;
-  }
-
-  for (const hit of result.hitEvents) {
-    trace.hits.push({ tick, attackerIsFirst: hit.attackerIsFirst, kind: hit.hitbox.kind, caughtOpponentDashing: hit.caughtOpponentDashing });
-    if (clashState === ClashState.Cooldown) trace.hitsDuringClashCooldown++;
-  }
-  for (const event of result.combatEvents) {
-    const side = event.targetIsFirst ? 'first' : 'second';
-    if (event.kind === 'stabilityBreak') trace.stabilityBreaks.push(side);
-    if (event.kind === 'dodged') trace.dodges.push(side);
-    if (event.kind === 'perfectDodge') trace.perfectDodges.push(side);
-    if (event.kind === 'knockback' && !event.targetIsFirst) trace.maxKnockbackOnSecond = Math.max(trace.maxKnockbackOnSecond, event.force);
+  if (facts.advanced) {
+    if (result.clashResolvedThisTick) {
+      trace.clashResolvedTick ??= tick;
+      trace.clashOutcome ??= result.clashResolvedThisTick.outcome;
+    }
+    for (const hit of result.hitEvents) {
+      trace.hits.push({ tick, attackerIsFirst: hit.attackerIsFirst, kind: hit.hitbox.kind, caughtOpponentDashing: hit.caughtOpponentDashing });
+      if (clashState === ClashState.Cooldown) trace.hitsDuringClashCooldown++;
+    }
+    for (const event of result.combatEvents) {
+      const side = event.targetIsFirst ? 'first' : 'second';
+      if (event.kind === 'stabilityBreak') trace.stabilityBreaks.push(side);
+      if (event.kind === 'dodged') trace.dodges.push(side);
+      if (event.kind === 'perfectDodge') trace.perfectDodges.push(side);
+      if (event.kind === 'knockback' && !event.targetIsFirst) trace.maxKnockbackOnSecond = Math.max(trace.maxKnockbackOnSecond, event.force);
+    }
   }
 
   const a = result.first;

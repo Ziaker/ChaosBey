@@ -16,7 +16,12 @@
 import * as THREE from 'three';
 import { createMatchScene, type MatchScene } from '../bootstrap/createMatchScene';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
-import { tickMatch, type MatchTickResult } from '../simulation/tickMatch';
+import type { MatchTickResult } from '../simulation/tickMatch';
+import { MatchStepper, type MatchStepWorld } from '../simulation/MatchStepper';
+import { buildCanonicalMatchState } from '../../replay/state/CanonicalMatchState';
+import type { CanonicalRecord } from '../../replay/state/CanonicalValue';
+import { stateHash } from '../../replay/state/stateHash';
+import type { StateHash } from '../../replay/contracts';
 import { ClashOrchestration } from '../simulation/ClashOrchestration';
 import { ClashPresentationTracker } from '../simulation/ClashPresentationTracker';
 import { RoundState } from '../../combat/round-rules/RoundState';
@@ -114,6 +119,26 @@ export class MatchSession {
   private readonly root = new THREE.Group();
   private readonly vfxManager: VfxManager;
   private readonly cameraDirector = new CombatCameraController();
+  private readonly stepper = new MatchStepper();
+
+  /** CanonicalMatchStateV1 after the ticks run so far (M9: the official state-hash input). */
+  getCanonicalState(): CanonicalRecord {
+    // this.tickIndex is the next TickIndex to run, which equals the ticks completed.
+    return buildCanonicalMatchState({ ticksCompleted: this.tickIndex, world: this.stepWorld(), hitstop: this.stepper.hitstop });
+  }
+
+  /** stateHash(getCanonicalState()). */
+  getStateHash(): StateHash {
+    return stateHash(this.getCanonicalState());
+  }
+
+  private stepWorld(): MatchStepWorld {
+    return { physics: this.physics, first: this.match.first, second: this.match.second, roundState: this.roundState, clash: this.clash };
+  }
+
+  private hitstopView(): { isFreezing: boolean; remainingS: number } {
+    return { isFreezing: this.stepper.hitstop.isFreezing(), remainingS: this.stepper.hitstop.getRemainingS() };
+  }
   private readonly clashCameraDirector = new ClashCameraDirector();
   private readonly clashPresentationTracker = new ClashPresentationTracker();
   private readonly stateMachine: GameStateMachine;
@@ -289,27 +314,21 @@ export class MatchSession {
     const roundState = this.roundState;
     telemetry.setCurrentTick(tickIndex);
 
-    // Hitstop (Milestone 4): a strong-enough impact freezes gameplay
-    // simulation itself for a brief, magnitude-scaled window — tickMatch()
-    // doesn't run, so physics/resources/round state don't advance.
-    // Computed before sampling so both controllers know this tick is
-    // frozen: a gameplay press made during the freeze is buffered (not
-    // lost) and delivered exactly once on the first unfrozen sample
-    // afterward, and hold-duration/charge clocks don't advance while
-    // frozen — see ActionSampleBuffer. Camera/VFX timers below still tick
-    // regardless, so the freeze actually ends.
-    const isFrozenByHitstop = this.lastCameraOutput?.isHitstopActive ?? false;
-
-    const firstActions = this.drivers.first.sampleActions({ fixedDeltaSeconds, simulationFrozen: isFrozenByHitstop });
-    const secondActions = this.drivers.second.sampleActions({ fixedDeltaSeconds, simulationFrozen: isFrozenByHitstop });
+    // One fixed tick of the real match (app/simulation/MatchStepper.ts,
+    // shared with the headless Self Test): hitstop check, controller
+    // sampling, tickMatch() unless frozen, hitstop update. Hitstop is
+    // simulation state (M9): a strong-enough impact freezes gameplay for a
+    // brief, magnitude-scaled window. Controllers are told a tick is
+    // frozen, so a press made during the freeze is buffered (not lost) and
+    // delivered once on the first unfrozen sample afterward — see
+    // ActionSampleBuffer. Camera/VFX timers below still tick regardless.
+    const stepStart = performance.now();
+    const step = this.stepper.step(this.stepWorld(), this.drivers, fixedDeltaSeconds);
+    const { firstActions, secondActions, result } = step;
+    const isFrozenByHitstop = !step.advanced;
     this.lastActions = { first: firstActions, second: secondActions };
 
-    let result: MatchTickResult;
-    if (isFrozenByHitstop && this.lastMatchResult) {
-      result = this.lastMatchResult;
-    } else {
-      const stepStart = performance.now();
-      result = tickMatch(this.physics, match.first, match.second, firstActions, secondActions, fixedDeltaSeconds, roundState, clash);
+    if (step.advanced) {
       this.lastPhysicsStepTimeMs = performance.now() - stepStart;
       this.lastMatchResult = result;
       this.recordTickDerivedState(tickIndex, result, fixedDeltaSeconds);
@@ -523,7 +542,7 @@ export class MatchSession {
       ownBey: own,
       opponentBey: opponent,
       clashController: this.clash.controller,
-      aiRng: this.rngStreams.ai,
+      aiRng: side === 'first' ? this.rngStreams.aiFirst : this.rngStreams.aiSecond,
       telemetry: this.telemetry,
       keyboard: this.keyboard,
     };
@@ -601,6 +620,7 @@ export class MatchSession {
         firstVelocityXZ: result.first.movement.actualVelocityVector,
         impactEvents: [resolutionEvent],
         fixedDeltaSeconds,
+        hitstop: this.hitstopView(),
       });
     } else if (currentClashState === ClashState.Active) {
       // Dedicated Clash camera: a controlled cinematic orbit near the
@@ -614,6 +634,7 @@ export class MatchSession {
         firstVelocityXZ: { x: 0, z: 0 },
         impactEvents: [],
         fixedDeltaSeconds,
+        hitstop: this.hitstopView(),
       });
       const progressFraction = this.clash.controller.getElapsedS() / CLASH_TARGET_DURATION_S;
       const clashCameraOutput = this.clashCameraDirector.tick({ midpointM, progressFraction, fixedDeltaSeconds });
@@ -641,6 +662,7 @@ export class MatchSession {
         firstVelocityXZ: result.first.movement.actualVelocityVector,
         impactEvents,
         fixedDeltaSeconds,
+        hitstop: this.hitstopView(),
       });
     }
   }

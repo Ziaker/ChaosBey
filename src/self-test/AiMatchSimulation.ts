@@ -31,7 +31,7 @@ import { DodgeState } from '../dodge/DodgeController';
 import { Action, type ControllerActions } from '../input/actions/Action';
 import { checkAngularVelocity, checkLinearVelocity, type PhysicsAnomaly } from '../physics/diagnostics/physicsSafety';
 import { FIXED_DELTA_SECONDS } from '../physics/fixed-step/FixedTimestepLoop';
-import { SeededRng } from '../rng/SeededRng';
+import { createRngStreams } from '../rng/SeededRng';
 import { SelfTestMatchWorld } from './SelfTestMatchWorld';
 
 /** Speed (m/s) under which a Bey holding MoveForward outside the floor radius counts as wedged (see AiSideStats.longestWedgedTicks). */
@@ -315,6 +315,8 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
   const difficulty = setup.difficulty ?? DEFAULT_AI_DIFFICULTY_PROFILE;
   const firstPersonality = setup.firstPersonality ?? personalityForBeyDefinitionId(setup.firstDefinition.id);
   const secondPersonality = setup.secondPersonality ?? personalityForBeyDefinitionId(setup.secondDefinition.id);
+  // RNG scheme 2 (M9): the same per-side streams a live match with this seed uses.
+  const rng = createRngStreams(setup.seed);
   const firstAi = new AIController(
     world.physics,
     world.first,
@@ -322,7 +324,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     world.clash.controller,
     firstPersonality,
     difficulty,
-    SeededRng.fromSeedText(`${setup.seed}/first`),
+    rng.aiFirst,
   );
   const secondAi = new AIController(
     world.physics,
@@ -331,7 +333,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     world.clash.controller,
     secondPersonality,
     difficulty,
-    SeededRng.fromSeedText(`${setup.seed}/second`),
+    rng.aiSecond,
   );
 
   const first = new SideTracker(firstPersonality.id);
@@ -363,9 +365,10 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
 
   for (let tick = 0; tick < maxTicks; tick++) {
     const tickStartMs = performance.now();
-    const firstActions = firstAi.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
-    const secondActions = secondAi.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
-    const result = world.tick(firstActions, secondActions);
+    // The same per-tick step as a live match, hitstop included (M9). On a
+    // hitstop-frozen tick the result is the previous tick's: its events
+    // were already counted.
+    const { firstActions, secondActions, result, advanced } = world.step({ first: firstAi, second: secondAi });
     ticks = tick + 1;
 
     const clashActive = world.clash.controller.getState() === ClashState.Active;
@@ -380,15 +383,17 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     previousSecondAttackState = result.second.attackState;
     previousFirstBroken = result.first.isBroken;
     previousSecondBroken = result.second.isBroken;
-    for (const hit of result.hitEvents) {
-      const attacker = hit.attackerIsFirst ? first : second;
-      attacker.stats.hitsLanded++;
-      if (hit.caughtOpponentDashing) attacker.stats.counterHits++;
+    if (advanced) {
+      for (const hit of result.hitEvents) {
+        const attacker = hit.attackerIsFirst ? first : second;
+        attacker.stats.hitsLanded++;
+        if (hit.caughtOpponentDashing) attacker.stats.counterHits++;
+      }
+      for (const event of result.combatEvents) {
+        if (event.kind === 'dodged') (event.targetIsFirst ? first : second).stats.hitsDodged++;
+      }
+      if (result.clashResolvedThisTick) clashes++;
     }
-    for (const event of result.combatEvents) {
-      if (event.kind === 'dodged') (event.targetIsFirst ? first : second).stats.hitsDodged++;
-    }
-    if (result.clashResolvedThisTick) clashes++;
     mutualIdleStreak = !clashActive && firstActions.held.size === 0 && secondActions.held.size === 0 ? mutualIdleStreak + 1 : 0;
     longestMutualIdleTicks = Math.max(longestMutualIdleTicks, mutualIdleStreak);
     distanceSum += Math.hypot(a.x - b.x, a.z - b.z);
@@ -407,6 +412,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
       firstActions,
       secondActions,
       aiSides: { first: true, second: true },
+      hitstopActive: !advanced,
     })) {
       if (detection.severity === 'invalid-state') invalidDetectionCount++;
       else warningCount++;

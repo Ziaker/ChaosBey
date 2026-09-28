@@ -13,6 +13,9 @@
 import * as THREE from 'three';
 import { FIRST_SPAWN, SECOND_SPAWN, type SpawnPositionM } from '../app/bootstrap/matchSpawns';
 import { ClashOrchestration } from '../app/simulation/ClashOrchestration';
+import { MatchStepper, type MatchStepControllers, type MatchStepOutput } from '../app/simulation/MatchStepper';
+import { buildCanonicalMatchState } from '../replay/state/CanonicalMatchState';
+import type { CanonicalRecord } from '../replay/state/CanonicalValue';
 import { tickMatch, type MatchTickResult } from '../app/simulation/tickMatch';
 import { createArenaColliders } from '../arena/colliders/createArenaColliders';
 import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
@@ -71,7 +74,25 @@ export class SelfTestMatchWorld {
     return { physics, first, second, roundState: new RoundState(), clash };
   }
 
-  /** Advances the match by exactly one fixed tick (GDD 164: acceleration runs more ticks, never a bigger delta). */
+  /** Hitstop + controller sampling + tickMatch: the same per-tick step the live MatchSession runs (M9: one simulation). */
+  readonly stepper = new MatchStepper();
+
+  /**
+   * Advances the match by exactly one fixed tick exactly as a live match
+   * does, hitstop included (GDD 164: acceleration runs more ticks, never a
+   * bigger delta). On a frozen tick `advanced` is false and the result is
+   * the previous tick's.
+   */
+  step(controllers: MatchStepControllers): MatchStepOutput {
+    return this.stepper.step(this, controllers, FIXED_DELTA_SECONDS);
+  }
+
+  /** CanonicalMatchStateV1 after `ticksCompleted` ticks (M9: the official state-hash input). */
+  getCanonicalState(ticksCompleted: number): CanonicalRecord {
+    return buildCanonicalMatchState({ ticksCompleted, world: this, hitstop: this.stepper.hitstop });
+  }
+
+  /** Low-level: one tickMatch() with the given actions, no controllers and no hitstop (physics/combat unit tests). */
   tick(firstActions: ControllerActions, secondActions: ControllerActions): MatchTickResult {
     return tickMatch(this.physics, this.first, this.second, firstActions, secondActions, FIXED_DELTA_SECONDS, this.roundState, this.clash);
   }

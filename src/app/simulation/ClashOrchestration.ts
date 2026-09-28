@@ -53,6 +53,7 @@ import { FixedIntervalAiMashSource, type ClashAiMashSource } from '../../combat/
 import { CLASH_AI_MASH_INTERVAL_TICKS, CLASH_TIE_REPULSION_BASE_FORCE } from '../../combat/clash/ClashTuning';
 import { computeCooldownAlternativeMultiplier } from '../../combat/clash/ClashCooldownResolution';
 import type { MatchConfig } from '../../config/match/MatchConfig';
+import { plainData, type CanonicalRecord } from '../../replay/state/CanonicalValue';
 
 /** Only Z/X/C (Attack/JumpDrift/Dodge) count as Clash mash input — see ClashMash.ts's simultaneous-presses-count-as-one rule, which this Set naturally preserves. */
 const CLASH_MASH_ACTIONS: ReadonlySet<Action> = new Set([Action.Attack, Action.JumpDrift, Action.Dodge]);
@@ -312,5 +313,15 @@ export class ClashOrchestration {
     first.body.applyImpulse({ x: -horizontal.x, y: upward, z: -horizontal.z }, true);
     first.dodge.registerLaunch(!isGrounded(physics, first.collider));
     second.dodge.registerLaunch(!isGrounded(physics, second.collider));
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return {
+      activeClashLocalTickIndex: this.activeClashLocalTickIndex,
+      activeClashPair: plainData(this.activeClashPair, 'ClashOrchestration.activeClashPair'),
+      matchElapsedS: this.matchElapsedS,
+      pendingHit: plainData(this.pendingHit, 'ClashOrchestration.pendingHit'),
+    };
   }
 }

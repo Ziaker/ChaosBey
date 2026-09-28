@@ -119,8 +119,11 @@ describe('MatchSession', () => {
   });
 
   it('a different seed produces a different fight', async () => {
+    // RNG scheme 2 (M9, per-side AI streams): 'seed-one' and 'seed-two'
+    // happen to make no action-changing AI draw before their early
+    // ring-out, so this uses a pair that does diverge under scheme 2.
     const a = await createSession('seed-one');
-    const b = await createSession('seed-two');
+    const b = await createSession('seed-three');
     for (let i = 0; i < 600; i++) {
       a.session.tick();
       b.session.tick();

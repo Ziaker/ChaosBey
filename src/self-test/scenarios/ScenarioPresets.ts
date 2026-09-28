@@ -378,8 +378,11 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     setup: faceOff(3),
     // Second Dash starts well after the ~4 s Clash resolves (tick ~320) and
     // lands inside its 10 s cooldown; the lock-on steers both back together.
-    first: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...hold(Action.Attack, 7 * FIXED_TICKS_PER_SECOND, FULL_DASH_HOLD_TICKS)]),
-    second: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...hold(Action.Attack, 7 * FIXED_TICKS_PER_SECOND, FULL_DASH_HOLD_TICKS)]),
+    // 8 s since M9: the Clash resolution's hitstop now freezes the headless
+    // match too (one simulation), shifting the fight against this absolute-
+    // tick script; at the old 7 s the Dashes no longer met.
+    first: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...hold(Action.Attack, 8 * FIXED_TICKS_PER_SECOND, FULL_DASH_HOLD_TICKS)]),
+    second: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...hold(Action.Attack, 8 * FIXED_TICKS_PER_SECOND, FULL_DASH_HOLD_TICKS)]),
     check: (t) => ok(t.clashStarts === 1 && t.hitsDuringClashCooldown > 0, `Clash starts ${t.clashStarts}; hits during cooldown ${t.hitsDuringClashCooldown}`),
   },
   {

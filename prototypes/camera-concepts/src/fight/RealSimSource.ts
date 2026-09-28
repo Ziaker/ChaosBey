@@ -139,7 +139,10 @@ export class RealSimSource implements FightSource {
     const control = (spec: ControlSpec, own: Bey, opponent: Bey): CombatController => {
       if (spec.kind === 'script') return new ScriptedController(framesFromScript(spec.held, scenario.durationS));
       if (spec.kind === 'ai') {
-        const rng = createRngStreams(spec.seed).ai;
+        // Each AI spec has its own seed here, so one stream per spec is
+        // already independent; aiFirst keeps the pre-M9 `ai` salt, so the
+        // approved lab's fights are unchanged.
+        const rng = createRngStreams(spec.seed).aiFirst;
         return new AIController(physics, own, opponent, clash.controller, personalityForBeyDefinitionId(own.definition.id), DEFAULT_AI_DIFFICULTY_PROFILE, rng, null);
       }
       return new IdleController();

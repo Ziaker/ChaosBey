@@ -18,6 +18,7 @@ import {
   STAMINA_PENALTY_START_FRACTION,
 } from './StaminaTuning';
 import { INTENDED_MAX_SPEED_MPS } from '../movement/MovementTuning';
+import type { CanonicalRecord } from '../../replay/state/CanonicalValue';
 
 /** Physical-condition multipliers derived from current Stamina, consumed by movement/spin (never raw Stamina numbers). */
 export interface PhysicalCondition {
@@ -70,6 +71,11 @@ export class StaminaSystem {
       spinDecayMultiplier: lerp(1, STAMINA_MAX_SPIN_DECAY_MULTIPLIER, penaltyProgress),
       ambientWobbleFloor: lerp(0, STAMINA_MAX_WOBBLE_ENERGY_FLOOR, penaltyProgress),
     };
+  }
+
+  /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
+  getDeterministicState(): CanonicalRecord {
+    return { resource: this.resource.value };
   }
 }
 
