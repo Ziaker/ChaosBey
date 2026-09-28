@@ -50,12 +50,18 @@ test('Self Test: batch at 1x and accelerated, GDD 163 report, scenario preset, d
   for (const field of ['matches', 'pass / fail', 'crashes', 'hangs', 'invalid states', 'average duration', 'ring-outs / KOs', 'Clash count', 'divergence', 'acceleration']) {
     await expect(report).toContainText(field);
   }
-  await expect(report).toContainText(/divergence\s+UNSUPPORTED/);
+  // M9: every match was replayed from its own recording; none diverged.
+  await expect(report).toContainText(/divergence\s+0 of 2 replays/);
 
   // A scenario preset.
   await page.getByTestId('self-test-preset').selectOption('clash');
   await page.getByTestId('self-test-run-preset').click();
   await expect(page.getByTestId('self-test-scenarios')).toContainText(/PASSED\s+Test Clash/, { timeout: 60_000 });
+
+  // M9: the real replay-reproduction preset (record, export, import, replay, negative checks).
+  await page.getByTestId('self-test-preset').selectOption('replay-reproduction');
+  await page.getByTestId('self-test-run-preset').click();
+  await expect(page.getByTestId('self-test-scenarios')).toContainText(/PASSED\s+Test Replay Reproduction/, { timeout: 120_000 });
 
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('self-test-download').click()]);
   expect(download.suggestedFilename()).toMatch(/^chaosbey-self-test-.*\.json$/);
