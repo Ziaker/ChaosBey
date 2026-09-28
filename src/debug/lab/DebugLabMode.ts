@@ -13,9 +13,8 @@
 // - pausing, stepping and inspecting never change what a tick computes;
 //   the same seed + controllers replay the same fight.
 //
-// Reached with ?mode=debug-lab. A Main Menu entry is not wired here: the
-// menu's final visual treatment is still behind the owner's approval gate
-// (GDD sections 1.6, 56, 171.10).
+// Reached with ?mode=debug-lab, directly or from the Main Menu's
+// Developer / Debug section (app/menu/MainMenu.ts), which loads that URL.
 // ============================================================
 
 import type { AppRenderer } from '../../app/bootstrap/createRenderer';
