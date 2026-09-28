@@ -44,6 +44,17 @@ Smoke-test environment variables:
 - `CHAOSBEY_PW_CHROMIUM_PATH=/path/to/chrome` runs the smoke tests with an existing Chromium binary. Use it when a sandboxed container ships a Chromium revision that doesn't match what `@playwright/test` expects and can't download another one. CI leaves it unset and installs its own browser.
 - `CHAOSBEY_PW_INCLUDE_FIREFOX=1` adds the Firefox project, which runs only the game's smoke specs; the prototype labs stay Chromium-only. Run it with `npx playwright install firefox` first, then `CHAOSBEY_PW_INCLUDE_FIREFOX=1 npx playwright test -c tests/smoke/playwright.config.ts --project=firefox`. CI runs it as its own parallel job.
 
+## Debug Lab
+
+Open the game with `?mode=debug-lab` (for example `/ChaosBey/?mode=debug-lab`) to get the Debug Lab: the real match with a raw-state inspector (GDD section 69) and developer controls (GDD section 70). Its panel is a temporary developer UI, not the final HUD or menu.
+
+- `P` pause / resume · `N` step one fixed tick · `M` step ten ticks
+- `R` restart with the same seed · `T` restart with a new seed (a typed seed can also be applied from the panel)
+- speed 1× / 2× / 4× / 8× runs that many fixed 60 Hz ticks per step; it never enlarges the timestep
+- each side can be driven by the keyboard, the AI (any archetype personality) or nothing (idle), switched live
+
+Progress on the rest of Milestone 8 is tracked in [`docs/ai/m8-status.md`](docs/ai/m8-status.md).
+
 ## Keyboard bindings
 
 - Arrow keys — steer / move (connected — drives the Milestone 1 movement prototype)

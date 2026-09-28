@@ -84,6 +84,23 @@ export class MovementController {
     return this.headingRad;
   }
 
+  /** Debug Lab teleport/prepare (GDD section 70) — points the Bey's heading; explicit mutation, never called by gameplay. */
+  debugSetHeading(headingRad: number): void {
+    this.headingRad = headingRad;
+    this.turnRateRadPerS = 0;
+    this.lastHeadingForward = fromYaw(headingRad);
+  }
+
+  /** Debug Lab "reset cooldowns" (GDD section 70) — explicit mutation, never called by gameplay. */
+  debugResetCooldown(): void {
+    this.postImpactCooldownRemainingS = 0;
+  }
+
+  /** Read-only steering internals for Debug Lab inspection (GDD section 69). No gameplay code may branch on this. */
+  getDebugState(): { turnRateRadPerS: number; postImpactCooldownRemainingS: number } {
+    return { turnRateRadPerS: this.turnRateRadPerS, postImpactCooldownRemainingS: this.postImpactCooldownRemainingS };
+  }
+
   /** Call before physics.step(). Reads/writes the body's linear velocity directly (the "hybrid" model GDD section 16 permits). */
   applyPreStep(body: RAPIER.RigidBody, input: MovementPreStepInput): void {
     const { actions, fixedDeltaSeconds, grounded, lateralGripOverridePerS, staminaAccelFactor, dashOverride } = input;

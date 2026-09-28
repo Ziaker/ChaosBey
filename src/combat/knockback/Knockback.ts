@@ -41,6 +41,19 @@ export interface KnockbackResult {
   force: number;
   impulseMagnitude: number;
   upwardImpulseMagnitude: number;
+  /** Every multiplier that produced `force`, for Debug Lab inspection (GDD section 69: "knockback calculation components"). Read-only data; applyKnockback ignores it. */
+  components?: KnockbackComponents;
+}
+
+export interface KnockbackComponents {
+  baseForce: number;
+  /** attackStat / defenseStat. */
+  statRatio: number;
+  attackerSpeedFactor: number;
+  defenderVulnerability: number;
+  stabilityReduction: number;
+  staminaVulnerability: number;
+  angleFactor: number;
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -82,6 +95,15 @@ export function computeKnockback(input: KnockbackInput): KnockbackResult {
     force,
     impulseMagnitude,
     upwardImpulseMagnitude: impulseMagnitude * KNOCKBACK_UPWARD_LAUNCH_FRACTION,
+    components: {
+      baseForce: input.baseForce,
+      statRatio: input.attackStat / input.defenseStat,
+      attackerSpeedFactor,
+      defenderVulnerability,
+      stabilityReduction,
+      staminaVulnerability,
+      angleFactor,
+    },
   };
 }
 
