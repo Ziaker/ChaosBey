@@ -22,12 +22,16 @@ import { SpeedTrail } from './SpeedTrailVfx';
 import { LANDING_MIN_MAGNITUDE_TO_SPAWN, SPARK_MIN_MAGNITUDE_TO_SPAWN, TRAIL_COLOR_FIRST_HEX, TRAIL_COLOR_SECOND_HEX } from './VfxTuning';
 import { routeImpactEventToVfx } from './VfxRouting';
 
+/** Independently hideable VFX groups — Debug Lab "toggle VFX layers" (GDD section 70). Hiding is render-only; effects still spawn and age. */
+export type VfxLayer = 'impactBursts' | 'trails' | 'speedLines';
+
 export class VfxManager {
   private activeSparkBursts: ActiveSparkBurst[] = [];
   private activeLandingBursts: ActiveLandingBurst[] = [];
   private readonly firstTrail: SpeedTrail;
   private readonly secondTrail: SpeedTrail;
   private readonly speedLines: SpeedLines;
+  private readonly layerVisible: Record<VfxLayer, boolean> = { impactBursts: true, trails: true, speedLines: true };
 
   constructor(
     private readonly scene: THREE.Object3D,
@@ -42,6 +46,23 @@ export class VfxManager {
 
     this.speedLines = new SpeedLines();
     camera.add(this.speedLines.object3D);
+  }
+
+  setLayerVisible(layer: VfxLayer, visible: boolean): void {
+    this.layerVisible[layer] = visible;
+    if (layer === 'impactBursts') {
+      for (const burst of this.activeSparkBursts) burst.points.visible = visible;
+      for (const burst of this.activeLandingBursts) burst.mesh.visible = visible;
+    } else if (layer === 'trails') {
+      this.firstTrail.object3D.visible = visible;
+      this.secondTrail.object3D.visible = visible;
+    } else {
+      this.speedLines.object3D.visible = visible;
+    }
+  }
+
+  isLayerVisible(layer: VfxLayer): boolean {
+    return this.layerVisible[layer];
   }
 
   /** Live one-shot effect counts, for Debug Lab performance inspection (GDD section 69/79). */
@@ -89,11 +110,13 @@ export class VfxManager {
       if (route === 'landing') {
         if (event.magnitude < LANDING_MIN_MAGNITUDE_TO_SPAWN) continue;
         const burst = createLandingBurst(event.magnitude, event.worldPositionM, particleProfile.landingTintHex);
+        burst.mesh.visible = this.layerVisible.impactBursts;
         this.scene.add(burst.mesh);
         this.activeLandingBursts.push(burst);
       } else if (route === 'spark') {
         if (event.magnitude < SPARK_MIN_MAGNITUDE_TO_SPAWN) continue;
         const burst = createSparkBurst(event.magnitude, event.worldPositionM, particleProfile.sparkTintHex);
+        burst.points.visible = this.layerVisible.impactBursts;
         this.scene.add(burst.points);
         this.activeSparkBursts.push(burst);
       }

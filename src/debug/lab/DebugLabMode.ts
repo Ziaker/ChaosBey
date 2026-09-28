@@ -31,7 +31,9 @@ import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import { generateRandomSeedText } from '../../rng/stringSeed';
 import { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 import { buildInspection } from '../inspectors/buildInspection';
-import { DEBUG_LAB_MULTI_STEP_TICKS, DebugLabPanel } from './DebugLabPanel';
+import { DEBUG_LAB_MULTI_STEP_TICKS, DebugLabPanel, checkbox, labeled } from './DebugLabPanel';
+import { DEBUG_LAYERS, DebugVisualLayers, type DebugLayerId } from '../visualization/DebugVisualLayers';
+import type { VfxLayer } from '../../vfx/VfxManager';
 
 // ============================================================
 // DEBUG LAB MODE — TUNING
@@ -55,6 +57,11 @@ export interface DebugLabHandle {
   restart(seedText: string | null): Promise<void>;
   setController(side: Side, spec: SideControllerSpec): void;
   setSpeed(ticksPerFixedStep: number): void;
+  setLayer(id: DebugLayerId, on: boolean): void;
+  getLayers(): DebugVisualLayers | null;
+  setVfxLayer(layer: VfxLayer, visible: boolean): void;
+  setCameraEffects(on: boolean): void;
+  setCameraView(view: 'game' | 'overview'): void;
 }
 
 declare global {
@@ -82,6 +89,12 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   let framesSinceInspector = 0;
   let lastRenderTimeMs: number | null = null;
   const controllers = { ...INITIAL_CONTROLLERS };
+  // Visualization/presentation choices outlive a restart.
+  let layers: DebugVisualLayers | null = null;
+  const enabledLayers = new Set<DebugLayerId>();
+  const vfxLayers: Record<VfxLayer, boolean> = { impactBursts: true, trails: true, speedLines: true };
+  let cameraEffects = true;
+  let cameraView: 'game' | 'overview' = 'game';
 
   recordAppBoot(telemetry);
   recordUncaughtErrors(() => telemetry);
@@ -128,6 +141,8 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
 
   const createSession = async (seedText: string): Promise<void> => {
     restarting = true;
+    layers?.dispose();
+    layers = null;
     session?.dispose();
     session = null;
     telemetry = new TelemetryRecorder();
@@ -146,6 +161,8 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
         keyboard,
       });
       matchState.transitionTo(GameState.Combat);
+      layers = new DebugVisualLayers(session, enabledLayers);
+      for (const layer of Object.keys(vfxLayers) as VfxLayer[]) session.getVfxManager().setLayerVisible(layer, vfxLayers[layer]);
       message = null;
     } finally {
       restarting = false;
@@ -179,7 +196,50 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
       speed = Math.max(1, Math.floor(ticksPerFixedStep));
       refreshPanel(0, 0);
     },
+    setLayer: (id, on) => {
+      if (on) enabledLayers.add(id);
+      else enabledLayers.delete(id);
+      layers?.setEnabled(id, on);
+    },
+    getLayers: () => layers,
+    setVfxLayer: (layer, visible) => {
+      vfxLayers[layer] = visible;
+      session?.getVfxManager().setLayerVisible(layer, visible);
+    },
+    setCameraEffects: (on) => {
+      cameraEffects = on;
+    },
+    setCameraView: (view) => {
+      cameraView = view;
+    },
   };
+
+  panel.addGroup(
+    'Visualization (GDD 70/71)',
+    DEBUG_LAYERS.map((layer) => checkbox(layer.label, `debug-lab-layer-${layer.id}`, false, (on) => handle.setLayer(layer.id, on))),
+  );
+  const viewSelect = document.createElement('select');
+  viewSelect.setAttribute('data-testid', 'debug-lab-camera-view');
+  for (const [value, text] of [
+    ['game', 'Game camera'],
+    ['overview', 'Overview (fixed, whole arena)'],
+  ] as const) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = text;
+    viewSelect.append(option);
+  }
+  viewSelect.addEventListener('change', () => {
+    handle.setCameraView(viewSelect.value === 'overview' ? 'overview' : 'game');
+    viewSelect.blur();
+  });
+  panel.addGroup('Presentation (render-only)', [
+    labeled('Camera', viewSelect),
+    checkbox('Camera effects (shake, FOV)', 'debug-lab-camera-effects', true, (on) => handle.setCameraEffects(on)),
+    checkbox('VFX: impact sparks / landing', 'debug-lab-vfx-impactBursts', true, (on) => handle.setVfxLayer('impactBursts', on)),
+    checkbox('VFX: speed trails', 'debug-lab-vfx-trails', true, (on) => handle.setVfxLayer('trails', on)),
+    checkbox('VFX: speed lines', 'debug-lab-vfx-speedLines', true, (on) => handle.setVfxLayer('speedLines', on)),
+  ]);
 
   await createSession(generateRandomSeedText());
 
@@ -189,7 +249,8 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
     },
     onRenderFrame: (frameDeltaSeconds) => {
       if (session && !restarting) {
-        session.renderFrame(frameDeltaSeconds, appRenderer.camera);
+        session.renderFrame(frameDeltaSeconds, appRenderer.camera, { cameraView, cameraEffects });
+        layers?.update();
       }
       const renderStart = performance.now();
       appRenderer.render();
@@ -235,6 +296,7 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   window.addEventListener('beforeunload', () => {
     loop.stop();
     keyboard.detach();
+    layers?.dispose();
     session?.dispose();
     appRenderer.dispose();
   });

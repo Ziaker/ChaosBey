@@ -74,6 +74,13 @@ export class ClashController {
   private secondSpeedMps = 0;
   private lastResult: ClashResult | null = null;
 
+  /** Debug Lab "reset cooldowns" (GDD section 70) — ends a Clash cooldown early. Explicit mutation, never called by gameplay; an Active Clash is left alone. */
+  debugResetCooldown(): void {
+    if (this.state !== ClashState.Cooldown) return;
+    this.state = ClashState.Idle;
+    this.cooldownRemainingS = 0;
+  }
+
   getState(): ClashState {
     return this.state;
   }

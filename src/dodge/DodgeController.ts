@@ -65,6 +65,12 @@ export class DodgeController {
     return this.state;
   }
 
+  /** Debug Lab "reset cooldowns" (GDD section 70) — explicit mutation, never called by gameplay. */
+  debugResetCooldown(): void {
+    if (this.state === DodgeState.Cooldown) this.state = DodgeState.Idle;
+    this.cooldownTimerS = 0;
+  }
+
   /** Read-only timers for Debug Lab inspection (GDD section 69). No gameplay code may branch on this. */
   getDebugTimers(): { activeTimerS: number; cooldownRemainingS: number; airRecoveryAvailable: boolean; launchPending: boolean } {
     return {

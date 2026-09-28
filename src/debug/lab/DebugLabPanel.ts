@@ -218,6 +218,22 @@ export function button(label: string, testId: string, onClick: () => void): HTML
   return element;
 }
 
+export function checkbox(labelText: string, testId: string, initial: boolean, onChange: (checked: boolean) => void): HTMLElement {
+  const wrapper = el('label', 'debug-lab__check');
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = initial;
+  input.setAttribute('data-testid', testId);
+  input.addEventListener('change', () => {
+    onChange(input.checked);
+    input.blur();
+  });
+  const span = document.createElement('span');
+  span.textContent = labelText;
+  wrapper.append(input, span);
+  return wrapper;
+}
+
 export function labeled(labelText: string, control: HTMLElement): HTMLElement {
   const wrapper = el('label', 'debug-lab__labeled');
   const span = document.createElement('span');
@@ -253,6 +269,7 @@ function injectStyles(): void {
     .debug-lab button:hover { background: #26304d; }
     .debug-lab button[data-danger="true"] { border-color: #c0504d; color: #ffb4b0; }
     .debug-lab__seed { width: 100%; box-sizing: border-box; }
+    .debug-lab__check { display: flex; align-items: center; gap: 4px; width: 100%; cursor: pointer; }
     .debug-lab__labeled { display: flex; flex-direction: column; width: 100%; gap: 2px; }
     .debug-lab__labeled > span { color: #8a93a8; }
     .debug-lab__section summary { cursor: pointer; color: #9fb3ff; margin-top: 4px; }

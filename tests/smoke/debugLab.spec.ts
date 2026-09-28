@@ -90,5 +90,20 @@ test('Debug Lab: pause, step, restart, seeds, speed and controller switching on 
   await page.waitForTimeout(1000);
   expect((await readTick(page)) - before).toBeGreaterThan(90);
 
+  // Visualization layers (GDD 70/71) and render-only presentation toggles.
+  for (const layer of ['colliders', 'hitboxes', 'ringOut', 'velocity', 'angular', 'forces', 'contacts', 'lockOn', 'targetPath']) {
+    await page.getByTestId(`debug-lab-layer-${layer}`).check();
+  }
+  await page.getByTestId('debug-lab-camera-view').selectOption('overview');
+  await page.getByTestId('debug-lab-camera-effects').uncheck();
+  for (const vfx of ['impactBursts', 'trails', 'speedLines']) await page.getByTestId(`debug-lab-vfx-${vfx}`).uncheck();
+  await page.waitForTimeout(1500);
+  const visibleColliders = await page.evaluate(() => window.__chaosBeyDebugLab!.getLayers()!.countVisibleObjects('colliders'));
+  expect(visibleColliders).toBeGreaterThan(30);
+  // Layers survive a restart.
+  await page.getByTestId('debug-lab-restart').click();
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.__chaosBeyDebugLab!.getLayers()!.getEnabled().length)).toBe(9);
+
   expect(consoleErrors).toEqual([]);
 });

@@ -65,6 +65,18 @@ export class StabilitySystem {
     return { causedBreak, isQualifyingKoHit };
   }
 
+  /**
+   * Debug Lab "set Stability" (GDD section 70) — an explicit mutation, never
+   * called by gameplay. 0 enters Broken exactly like a hit would; a value at
+   * or above the Broken recovery floor exits it; anything in between keeps
+   * the current Broken state.
+   */
+  debugSetValue(value: number): void {
+    this.resource.set(value);
+    if (this.resource.isEmpty) this.broken = true;
+    else if (this.resource.value >= STABILITY_BROKEN_RECOVERY_FLOOR) this.broken = false;
+  }
+
   /** Only round-rules calls this, once a KO has actually been resolved — resets Broken for the next round. */
   resetForNewRound(): void {
     this.broken = false;

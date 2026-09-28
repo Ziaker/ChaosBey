@@ -30,6 +30,8 @@ export enum TelemetryEventKind {
   ClashResult = 'ClashResult',
   ClashEnd = 'ClashEnd',
   AiDecision = 'AiDecision',
+  /** A Debug Lab mutation (teleport, set resource, forced input...) — the run is no longer a pure seed replay from here on. */
+  DebugMutation = 'DebugMutation',
 }
 
 export interface TelemetryEventBase {
@@ -50,6 +52,11 @@ export interface ErrorEvent extends TelemetryEventBase {
   kind: TelemetryEventKind.Error;
   message: string;
   stack: string | null;
+}
+
+export interface DebugMutationEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.DebugMutation;
+  description: string;
 }
 
 export interface PhysicsAnomalyEvent extends TelemetryEventBase {
@@ -195,4 +202,5 @@ export type TelemetryEvent =
   | ClashMashInputEvent
   | ClashResultEvent
   | ClashEndEvent
-  | AiDecisionEvent;
+  | AiDecisionEvent
+  | DebugMutationEvent;

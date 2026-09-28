@@ -27,6 +27,7 @@ import { CombatCameraController, type CombatCameraOutput } from '../../camera/Co
 import { ClashCameraDirector } from '../../camera/ClashCameraDirector';
 import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../../camera/ImpactEvents';
 import { CLASH_RESOLVED_MAGNITUDE } from '../../camera/ImpactMagnitude';
+import { CAMERA_FOV_BASE_DEG } from '../../camera/CameraTuning';
 import type { MatchConfig } from '../../config/match/MatchConfig';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { Bey } from '../../bey/core/Bey';
@@ -39,6 +40,8 @@ import { createRngStreams, type RngStreams } from '../../rng/SeededRng';
 import { TelemetryEventKind } from '../../telemetry/events/TelemetryEvent';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 import { VfxManager } from '../../vfx/VfxManager';
+import { ForcedInputController } from '../../automation/scripted-scenarios/ForcedInputController';
+import type { ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
 import { createSideController, describeControllerSpec, type SideControllerSpec, type SideControllerDeps } from './SideControllers';
 
 export type Side = 'first' | 'second';
@@ -82,6 +85,19 @@ export interface LastKnockback {
   readonly directionXZ: { x: number; z: number } | null;
 }
 
+/** How renderFrame() presents the match. Render-only: never changes what a tick computes. */
+export interface SessionRenderView {
+  /** `game` = the combat camera directors; `overview` = a fixed high debug view of the whole arena. */
+  readonly cameraView: 'game' | 'overview';
+  /** Shake plus speed/impact FOV changes. */
+  readonly cameraEffects: boolean;
+}
+
+const DEFAULT_RENDER_VIEW: SessionRenderView = { cameraView: 'game', cameraEffects: true };
+/** Debug overview camera: high over the arena's near edge, whole bowl in frame. */
+const OVERVIEW_CAMERA_POSITION_M = { x: 0, y: 24, z: 17 } as const;
+const OVERVIEW_CAMERA_FOV_DEG = 50;
+
 export class MatchSession {
   readonly matchId: string;
   readonly seedText: string;
@@ -102,7 +118,9 @@ export class MatchSession {
   private readonly keyboard: CombatController;
 
   private readonly controllerSpecs: Record<Side, SideControllerSpec>;
-  private readonly controllers: Record<Side, CombatController>;
+  /** Each side's driver, wrapped so the Debug Lab can force short input bursts. */
+  private readonly drivers: Record<Side, ForcedInputController>;
+  private readonly debugMutations: { tickIndex: number; description: string }[] = [];
 
   private tickIndex = 0;
   private lastMatchResult: MatchTickResult | null = null;
@@ -138,9 +156,9 @@ export class MatchSession {
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
 
     this.controllerSpecs = { first: options.controllers.first, second: options.controllers.second };
-    this.controllers = {
-      first: createSideController(options.controllers.first, this.controllerDeps('first')),
-      second: createSideController(options.controllers.second, this.controllerDeps('second')),
+    this.drivers = {
+      first: new ForcedInputController(createSideController(options.controllers.first, this.controllerDeps('first'))),
+      second: new ForcedInputController(createSideController(options.controllers.second, this.controllerDeps('second'))),
     };
   }
 
@@ -187,8 +205,38 @@ export class MatchSession {
     return this.lastAcceleration[side];
   }
 
+  /** The controller the side was given (keyboard / AI / idle / script) — never the forced-input wrapper. */
   getController(side: Side): CombatController {
-    return this.controllers[side];
+    return this.drivers[side].getInner();
+  }
+
+  isForcingInput(side: Side): boolean {
+    return this.drivers[side].isForcing();
+  }
+
+  /**
+   * Debug Lab "force attack state" (GDD section 70): overrides this side's
+   * input with `frames` for `durationTicks`, through the real systems.
+   * Logged as a debug mutation.
+   */
+  forceInput(side: Side, label: string, frames: readonly ScriptedFrame[], durationTicks: number): void {
+    this.drivers[side].force(frames, durationTicks);
+    this.recordDebugMutation(`${side}: forced input "${label}" for ${durationTicks} ticks`);
+  }
+
+  /**
+   * Records an explicit Debug Lab mutation (GDD section 160: mutation tools
+   * are explicit actions). From the first one on, the run is no longer a
+   * pure replay of its seed; reports say so.
+   */
+  recordDebugMutation(description: string): void {
+    this.debugMutations.push({ tickIndex: this.tickIndex, description });
+    this.telemetry.setCurrentTick(this.tickIndex);
+    this.telemetry.record({ kind: TelemetryEventKind.DebugMutation, description });
+  }
+
+  getDebugMutations(): readonly { tickIndex: number; description: string }[] {
+    return this.debugMutations;
   }
 
   getControllerSpec(side: Side): SideControllerSpec {
@@ -202,7 +250,7 @@ export class MatchSession {
   /** Swaps who drives one side (GDD section 70: toggle AI / automated controller, change AI profile). Takes effect on the next tick. */
   setController(side: Side, spec: SideControllerSpec): void {
     this.controllerSpecs[side] = spec;
-    this.controllers[side] = createSideController(spec, this.controllerDeps(side));
+    this.drivers[side].setInner(createSideController(spec, this.controllerDeps(side)));
   }
 
   /** Advances the match by exactly one fixed tick. */
@@ -227,8 +275,8 @@ export class MatchSession {
     // regardless, so the freeze actually ends.
     const isFrozenByHitstop = this.lastCameraOutput?.isHitstopActive ?? false;
 
-    const firstActions = this.controllers.first.sampleActions({ fixedDeltaSeconds, simulationFrozen: isFrozenByHitstop });
-    const secondActions = this.controllers.second.sampleActions({ fixedDeltaSeconds, simulationFrozen: isFrozenByHitstop });
+    const firstActions = this.drivers.first.sampleActions({ fixedDeltaSeconds, simulationFrozen: isFrozenByHitstop });
+    const secondActions = this.drivers.second.sampleActions({ fixedDeltaSeconds, simulationFrozen: isFrozenByHitstop });
     this.lastActions = { first: firstActions, second: secondActions };
 
     let result: MatchTickResult;
@@ -367,19 +415,23 @@ export class MatchSession {
   }
 
   /** Syncs visuals, camera and frame-rate VFX to the current state. Call once per rendered frame, before renderer.render(). */
-  renderFrame(frameDeltaSeconds: number, camera: THREE.PerspectiveCamera): void {
+  renderFrame(frameDeltaSeconds: number, camera: THREE.PerspectiveCamera, view: SessionRenderView = DEFAULT_RENDER_VIEW): void {
     const match = this.match;
     match.syncVisualsToPhysics(this.lastVisual.first.spin, this.lastVisual.first.wobble, this.lastVisual.second.spin, this.lastVisual.second.wobble);
 
     const cameraOutput = this.lastCameraOutput;
-    if (cameraOutput) {
-      camera.position.set(
-        cameraOutput.cameraPositionM.x + cameraOutput.shakeOffsetM.x,
-        cameraOutput.cameraPositionM.y + cameraOutput.shakeOffsetM.y,
-        cameraOutput.cameraPositionM.z + cameraOutput.shakeOffsetM.z,
-      );
+    if (view.cameraView === 'overview') {
+      camera.position.set(OVERVIEW_CAMERA_POSITION_M.x, OVERVIEW_CAMERA_POSITION_M.y, OVERVIEW_CAMERA_POSITION_M.z);
+      camera.lookAt(0, 0, 0);
+      camera.fov = OVERVIEW_CAMERA_FOV_DEG;
+      camera.updateProjectionMatrix();
+    } else if (cameraOutput) {
+      // Camera effects off (Debug Lab, GDD section 70): no shake and the
+      // base FOV, so the director's framing can be judged on its own.
+      const shake = view.cameraEffects ? cameraOutput.shakeOffsetM : { x: 0, y: 0, z: 0 };
+      camera.position.set(cameraOutput.cameraPositionM.x + shake.x, cameraOutput.cameraPositionM.y + shake.y, cameraOutput.cameraPositionM.z + shake.z);
       camera.lookAt(cameraOutput.focusPositionM.x, cameraOutput.focusPositionM.y, cameraOutput.focusPositionM.z);
-      camera.fov = cameraOutput.fovDeg;
+      camera.fov = view.cameraEffects ? cameraOutput.fovDeg : CAMERA_FOV_BASE_DEG;
       camera.updateProjectionMatrix();
     }
 
