@@ -1,0 +1,101 @@
+// ============================================================
+// REPLAY CONTRACTS (Milestone 9 — GDD sections 75, 76, 77, 145, 153)
+// The small set of types and version numbers every M9 lane shares:
+// canonical state + hash (lane A), replay format + recording (lane B),
+// playback + divergence (lane C). Frozen before the lanes start, so they
+// can be built in parallel without two definitions of the same thing.
+// Changing anything here is a contract change: bump the matching version.
+//
+// Owner decisions this encodes (docs/ai/m9-status.md):
+// - one simulation: hitstop is simulation state, not camera state;
+// - per-side AI RNG streams derived from one canonical root seed;
+// - a replay carries the resolved deterministic config, never reads
+//   localStorage;
+// - the official hash comes from an explicit, versioned canonical state,
+//   not a physics-engine snapshot;
+// - strict float hashing (only -0 and NaN canonicalized, no rounding);
+// - record/playback at ControllerActions, per side, per fixed tick;
+// - Chromium is the only reference browser.
+// ============================================================
+
+import type { Action } from '../input/actions/Action';
+import type { MatchConfig } from '../config/match/MatchConfig';
+import type { BeyAttackProfileSettings } from '../config/attack-profile/AttackProfileSettings';
+import type { SpawnPositionM } from '../app/bootstrap/matchSpawns';
+
+/** Replay file format id (GDD 77: "ChaosBeyReplayV1"). */
+export const REPLAY_FORMAT = 'ChaosBeyReplayV1';
+
+/** Version of CanonicalMatchState (lane A). Bump when a field is added, removed or reordered. */
+export const STATE_SCHEMA_VERSION = 1;
+
+/**
+ * How RNG streams are derived from the root seed.
+ * 1 = pre-M9: one `ai` stream shared by both AIs live; `${seed}/first|second` headless.
+ * 2 = M9: gameplay, ai:first, ai:second, cosmetic — the same derivation live,
+ *     in the Debug Lab and headless.
+ */
+export const RNG_SCHEME_VERSION = 2;
+
+/** Hash algorithm id carried in the replay, so the algorithm can change without guessing. */
+export const STATE_HASH_ALGORITHM = 'fnv1a-64';
+
+/** A state hash: 16 lowercase hex characters (64 bits) of STATE_HASH_ALGORITHM over CanonicalMatchState. */
+export type StateHash = string;
+
+/**
+ * A fixed-tick index. Tick 0 is the first tick of the round. Ticks frozen by
+ * hitstop or a Clash still count: controllers are sampled on every tick, so
+ * a replay records every tick.
+ */
+export type Tick = number;
+
+export type { Side } from '../app/session/MatchSession';
+
+/**
+ * One side's ControllerActions for one tick, lossless and JSON-safe.
+ * `held` and `pressed` are sorted so equal inputs serialize identically.
+ * Hold durations are the exact numbers the controller produced.
+ */
+export interface RecordedActions {
+  readonly held: readonly Action[];
+  readonly pressed: readonly Action[];
+  readonly attackHoldS: number;
+  readonly jumpDriftHoldS: number;
+}
+
+/** One side's Bey, identified well enough to refuse a replay whose definition changed. */
+export interface RecordedBey {
+  readonly definitionId: string;
+  /** StateHash-style digest of the BeyDefinition's full content, so an edited definition is detected even under the same id. */
+  readonly definitionDigest: string;
+}
+
+/**
+ * Everything, besides the inputs, that decides how the match plays out.
+ * Playback builds the match from this alone (never from localStorage or the
+ * current defaults).
+ */
+export interface DeterministicConfigSnapshot {
+  readonly seedText: string;
+  readonly rngScheme: number;
+  readonly stateSchema: number;
+  readonly matchConfig: MatchConfig;
+  readonly attackProfileSettings: BeyAttackProfileSettings;
+  readonly spawns: { readonly first: SpawnPositionM; readonly second: SpawnPositionM };
+  readonly beys: { readonly first: RecordedBey; readonly second: RecordedBey };
+  readonly fixedTicksPerSecond: number;
+}
+
+/** General compatibility metadata. A mismatch is reported, never silently ignored (GDD 77). */
+export interface RuntimeFingerprint {
+  readonly buildVersion: string;
+  readonly commit: string | null;
+  readonly rapierVersion: string;
+}
+
+/** A state hash taken at a tick. */
+export interface StateCheckpoint {
+  readonly tick: Tick;
+  readonly hash: StateHash;
+}
