@@ -285,6 +285,8 @@ Entre os itens ainda explicitamente não fechados no documento detalhado estão:
 
 Consultar a seção “Continua em aberto” de `camera-approval.md` antes de decidir qualquer um deles.
 
+**Já decidido:** durante o Clash a câmera é sempre a **B — Cinematic Hybrid**, sem órbita, mesmo que o jogador tenha escolhido A ou C (§9 e `clash-presentation-approval.md` §5).
+
 ---
 
 # 8. Movimento do Bey — aprovado em parte, NÃO confundir com tuning final
@@ -359,6 +361,8 @@ A, B do Clash Lab continuam apenas referências; não são opções de jogador p
 - sem texto/números no HUD do Clash;
 - geometria/vórtice giratório entre os Beys foi descartada;
 - câmera não orbita durante o Clash;
+- **o Clash sempre força a câmera B**, qualquer que seja a câmera A/B/C escolhida pelo jogador (owner, 2026-09-28);
+- fórmula da barra `0,5 + 0,5 × vantagem × 4` e metades em `palette.glow` fazem parte do comportamento aprovado (ganho ajustável só por playtest, GDD 167);
 - bowl visual aprovado usado na apresentação.
 
 ## 9.3 Valores da direção C
@@ -370,12 +374,12 @@ O documento detalhado registra os valores do Overdrive: entrada em slow motion, 
 Não fechar silenciosamente:
 
 - estilo final de empate;
-- se o Clash sempre força câmera B ou respeita a câmera A/B/C escolhida pelo jogador, sem órbita;
 - sobreposição dos Beys no enquadramento;
-- ganho final da barra e cores finais, se ainda exigirem validação;
 - variante reduzida para jogadores sensíveis;
 - eventual shake próprio do pulso além do Camera Director;
 - integração física real do bowl.
+
+> **Fechados em 2026-09-28 (não reabrir):** câmera do Clash (sempre B) e ganho ×4/cores da barra (parte da revisão 2 aprovada).
 
 ---
 

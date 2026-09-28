@@ -114,6 +114,7 @@ Valores exatos de `prototypes/clash-presentation-concepts/src/presentation/direc
 
 - É o preset B **exatamente como aprovado** em `camera-approval.md` (43 valores), com a única diferença da seção 3.6: sem órbita durante o Clash.
 - A direção C sugeria a câmera C (Hyper Dynamic). O dono escolheu a B.
+- **O Clash sempre força a câmera B** (decisão do dono, 2026-09-28), qualquer que seja a câmera A, B ou C escolhida pelo jogador nas Configurações. Fora do Clash vale a câmera escolhida pelo jogador.
 
 ---
 
@@ -127,9 +128,9 @@ Valores exatos de `prototypes/clash-presentation-concepts/src/presentation/direc
 ## 7. O que continua em aberto
 
 1. **Estilo de empate:** Espelho Partido, Sobrecarga Estática ou Nocaute Duplo. O padrão da direção C (Nocaute Duplo) **não** foi aprovado junto; nenhum dos três usa banner ou pausa.
-2. **Câmera do Clash × câmera do jogador.** A `camera-approval.md` deixa o jogador escolher A, B ou C nas Configurações. Falta decidir se o Clash **sempre** usa a B ou se usa a câmera escolhida pelo jogador, sem órbita.
+2. ~~**Câmera do Clash × câmera do jogador.**~~ **RESOLVIDO (2026-09-28):** o Clash **sempre força a câmera B**, sem órbita, qualquer que seja a câmera escolhida pelo jogador (seção 5).
 3. **Sobreposição na tela:** as câmeras aprovadas ficam atrás do jogador no eixo da luta, então os dois Beys se sobrepõem parcialmente durante o Clash. Um ajuste de enquadramento seria uma decisão de câmera.
-4. **Ganho ×4 da barra do HUD e cores finais.** O ganho existe porque a diferença real de ClashPower costuma ser de poucos por cento.
+4. ~~**Ganho ×4 da barra do HUD e cores finais.**~~ **NÃO está em aberto:** a fórmula `0,5 + 0,5 × vantagem × 4` e as metades em `palette.glow` fazem parte do comportamento aprovado da revisão 2 (seção 3.5). O valor do ganho só pode mudar como ajuste de playtest (GDD 167, item 9).
 5. **Leitura do comeback:** em viradas muito tardias (últimos ~0,15 s), o HUD mostra a recuperação e a resolução completa a virada.
 6. **Intensidade para jogadores sensíveis:** a C tem câmera lenta forte na entrada e hitstop de 0,07 s por mash. Uma variante reduzida (GDD 121) não foi definida.
 7. **`pulse.shakeMeters` (0,22 na C)** está declarado na configuração, mas o lab não aplica. O shake do Clash vem do diretor de câmera. Falta decidir se a direção deve somar um shake próprio.
@@ -146,6 +147,6 @@ Esta integração **não** está autorizada por este documento. Quando for:
    - a pose de contato (`contactPose.ts`);
    - as speedlines, a poeira e o HUD de força;
    - os valores da seção 4.
-3. Aplicar `{ clashOrbit: false }` ao diretor de câmera integrado.
+3. Aplicar `{ clashOrbit: false }` ao diretor de câmera integrado e forçar o preset B durante o Clash, independentemente da câmera escolhida pelo jogador.
 4. Garantir que a resolução não pede hitstop ou câmera lenta.
 5. Portar os testes do lab: contato, sem pausa, HUD seguindo o ClashPower.
