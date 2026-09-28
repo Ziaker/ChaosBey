@@ -5,12 +5,15 @@
 // here (GDD section 1.4: no giant GameManager).
 //
 // Modes (URL query `mode`):
-// - default: the Player-vs-AI match (app/modes/playMode.ts);
+// - default (no `mode`): the Main Menu (app/menu/MainMenu.ts), whose
+//   entries load the URLs below;
+// - `play`: the Player-vs-AI match (app/modes/playMode.ts);
 // - `debug-lab`: the Debug Lab developer tool (debug/lab/DebugLabMode.ts);
 // - `self-test`: the browser Self Test (debug/self-test-ui/SelfTestMode.ts).
 // ============================================================
 
 import { createRenderer } from './app/bootstrap/createRenderer';
+import { startMainMenu } from './app/menu/MainMenu';
 import { startPlayMode } from './app/modes/playMode';
 import { resolveAppMode } from './app/modes/appMode';
 import { startDebugLabMode } from './debug/lab/DebugLabMode';
@@ -25,6 +28,12 @@ async function bootstrap(): Promise<void> {
   }
 
   const mode = resolveAppMode(window.location.search);
+  if (mode === 'menu') {
+    // A plain DOM menu: no renderer or physics world is created for it.
+    canvas.style.display = 'none';
+    startMainMenu(debugOverlayRoot);
+    return;
+  }
   if (mode === 'self-test') {
     // Headless core + 2D minimap: the 3D renderer is not created at all.
     canvas.style.display = 'none';

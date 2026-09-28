@@ -288,7 +288,7 @@ describe('Debug Lab inspection (GDD section 69)', () => {
 describe('app mode routing', () => {
   it('opens the Debug Lab only for ?mode=debug-lab', () => {
     expect(resolveAppMode('?mode=debug-lab')).toBe('debug-lab');
-    expect(resolveAppMode('')).toBe('play');
-    expect(resolveAppMode('?mode=unknown')).toBe('play');
+    expect(resolveAppMode('')).toBe('menu');
+    expect(resolveAppMode('?mode=unknown')).toBe('menu');
   });
 });
