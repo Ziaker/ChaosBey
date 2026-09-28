@@ -141,6 +141,7 @@ describe('summarizeAiBatch', () => {
     warningCount: 0,
     maxTickMs: 1,
     slowTicks: 0,
+    finalStateHash: '0123456789abcdef',
     ...over,
   });
 

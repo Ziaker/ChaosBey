@@ -19,6 +19,8 @@ import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
 import { RoundOutcome } from '../combat/round-rules/RoundState';
 import { FIXED_DELTA_SECONDS } from '../physics/fixed-step/FixedTimestepLoop';
 import { NullAiMashSource } from '../combat/clash/ClashMash';
+import type { StateHash } from '../replay/contracts';
+import { stateHash } from '../replay/state/stateHash';
 import { SelfTestMatchWorld } from './SelfTestMatchWorld';
 import {
   DEFAULT_AI_MATCH_MAX_TICKS,
@@ -77,6 +79,12 @@ export interface AiBatchMatchEntry {
   readonly warningCount: number;
   readonly maxTickMs: number;
   readonly slowTicks: number;
+  /**
+   * M9: the canonical state hash when the match ended (null if it
+   * crashed). The same seed gives the same hash in Node and in Chromium,
+   * at any acceleration; a different one means the simulation diverged.
+   */
+  readonly finalStateHash: StateHash | null;
 }
 
 /**
@@ -145,7 +153,7 @@ function isKo(outcome: RoundOutcome): boolean {
   return outcome === RoundOutcome.FirstWinsByKo || outcome === RoundOutcome.SecondWinsByKo;
 }
 
-function entryFromRecord(seed: string, matchup: string, record: AiMatchRecord): AiBatchMatchEntry {
+function entryFromRecord(seed: string, matchup: string, record: AiMatchRecord, finalStateHash: StateHash): AiBatchMatchEntry {
   const failureReasons: AiBatchFailureReason[] = [];
   if (record.anomalyCount > 0 || record.invalidDetectionCount > 0) failureReasons.push('invalid-state');
   if (record.stats.outcome === RoundOutcome.Ongoing) failureReasons.push('hang');
@@ -165,6 +173,7 @@ function entryFromRecord(seed: string, matchup: string, record: AiMatchRecord): 
     warningCount: record.warningCount,
     maxTickMs: record.timing.maxTickMs,
     slowTicks: record.timing.slowTicks,
+    finalStateHash,
   };
 }
 
@@ -185,6 +194,7 @@ function crashEntry(seed: string, matchup: string, error: unknown): AiBatchMatch
     warningCount: 0,
     maxTickMs: 0,
     slowTicks: 0,
+    finalStateHash: null,
   };
 }
 
@@ -337,7 +347,8 @@ export class AiBatchSession {
           const next = run.steps.next();
           budget--;
           if (next.done) {
-            this.finish(entryFromRecord(run.job.seed, run.job.label, next.value));
+            const finalStateHash = stateHash(run.world.getCanonicalState(next.value.stats.ticks));
+            this.finish(entryFromRecord(run.job.seed, run.job.label, next.value, finalStateHash));
           } else {
             run.tick = next.value + 1;
           }
