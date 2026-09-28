@@ -32,6 +32,18 @@ export class SeededRng {
     return this.canonicalSeedText;
   }
 
+  /**
+   * The generator's raw internal counter — for M9's CanonicalMatchStateV1
+   * only, never for gameplay. Two runs can diverge here before it's
+   * visible in any physics/resource value (a draw consumed one tick
+   * earlier/later than expected shifts every later value this stream
+   * produces), so a state hash that includes it can localize a divergence
+   * to its root cause instead of only the tick it first became visible.
+   */
+  getInternalStateUint32(): number {
+    return this.state;
+  }
+
   /** Returns a float in [0, 1). */
   nextFloat(): number {
     this.state |= 0;

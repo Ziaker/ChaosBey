@@ -131,6 +131,20 @@ export class SpinController {
     return Math.sin(this.wobbleTimeAccumulatorS * WOBBLE_FREQUENCY_HZ * Math.PI * 2) * WOBBLE_AMPLITUDE_RAD * this.wobbleEnergy;
   }
 
+  /**
+   * The wobble oscillation's raw phase accumulator — for M9's
+   * CanonicalMatchStateV1 only. Not exposed by getSnapshot()'s
+   * wobbleOffsetRad: that value is sin(accumulator) * wobbleEnergy, which
+   * is not invertible (e.g. it reads 0 whenever wobbleEnergy is 0,
+   * regardless of the accumulator's actual phase), yet the accumulator
+   * keeps advancing every tick independent of wobbleEnergy — real state a
+   * hash must cover to catch a divergence that hasn't produced a visible
+   * wobble yet.
+   */
+  getWobbleTimeAccumulatorS(): number {
+    return this.wobbleTimeAccumulatorS;
+  }
+
   getSnapshot(body: RAPIER.RigidBody): SpinSnapshot {
     // Recomputed fresh from the body's current orientation (rather than a
     // value cached from tick()'s pre-physics.step() call) so callers get

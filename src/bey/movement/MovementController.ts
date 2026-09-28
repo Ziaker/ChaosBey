@@ -66,6 +66,23 @@ export interface MovementSnapshot {
   impactDirection: Vec2;
 }
 
+/**
+ * Every private field this controller carries across a tick BOUNDARY, raw
+ * and undecorated — for M9's CanonicalMatchStateV1, never for gameplay or
+ * UI (see getDebugState() for the latter, whose shape is allowed to change
+ * independently). lastHeadingForward/lastLateralGripPerS/
+ * intendedVelocityThisTick are deliberately excluded: applyPreStep()
+ * always overwrites all three before anything reads them again, so their
+ * value between one tick's end and the next tick's applyPreStep() call
+ * never affects the outcome — they're per-tick scratch, not state a
+ * canonical snapshot needs to resume from.
+ */
+export interface MovementCanonicalState {
+  readonly headingRad: number;
+  readonly turnRateRadPerS: number;
+  readonly postImpactCooldownRemainingS: number;
+}
+
 export class MovementController {
   private headingRad = 0;
   private turnRateRadPerS = 0;
@@ -99,6 +116,14 @@ export class MovementController {
   /** Read-only steering internals for Debug Lab inspection (GDD section 69). No gameplay code may branch on this. */
   getDebugState(): { turnRateRadPerS: number; postImpactCooldownRemainingS: number } {
     return { turnRateRadPerS: this.turnRateRadPerS, postImpactCooldownRemainingS: this.postImpactCooldownRemainingS };
+  }
+
+  getCanonicalState(): MovementCanonicalState {
+    return {
+      headingRad: this.headingRad,
+      turnRateRadPerS: this.turnRateRadPerS,
+      postImpactCooldownRemainingS: this.postImpactCooldownRemainingS,
+    };
   }
 
   /** Call before physics.step(). Reads/writes the body's linear velocity directly (the "hybrid" model GDD section 16 permits). */

@@ -45,6 +45,15 @@ export interface ActiveHitbox {
   stabilityDamage: number;
 }
 
+/** Every private field this controller carries across ticks, raw and undecorated — for M9's CanonicalMatchStateV1, never for gameplay or UI (see getDebugState() for the latter, whose shape is allowed to change independently). */
+export interface AttackCanonicalState {
+  readonly state: AttackState;
+  readonly bufferTimerS: number;
+  readonly chargeTimerS: number;
+  readonly activeTimerS: number;
+  readonly recoveryTimerS: number;
+}
+
 export interface AttackTickResult {
   state: AttackState;
   activeHitbox: ActiveHitbox | null;
@@ -101,6 +110,16 @@ export class AttackController {
       activeTimerS: this.activeTimerS,
       recoveryTimerS: this.recoveryTimerS,
       activeHitbox: this.computeActiveHitbox(),
+    };
+  }
+
+  getCanonicalState(): AttackCanonicalState {
+    return {
+      state: this.state,
+      bufferTimerS: this.bufferTimerS,
+      chargeTimerS: this.chargeTimerS,
+      activeTimerS: this.activeTimerS,
+      recoveryTimerS: this.recoveryTimerS,
     };
   }
 

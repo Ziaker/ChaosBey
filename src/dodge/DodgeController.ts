@@ -38,6 +38,17 @@ export enum DodgeState {
   Cooldown = 'Cooldown',
 }
 
+/** Every private field this controller carries across ticks, raw and undecorated — for M9's CanonicalMatchStateV1, never for gameplay or UI (see getDebugTimers() for the latter, whose shape is allowed to change independently). */
+export interface DodgeCanonicalState {
+  readonly state: DodgeState;
+  readonly activeTimerS: number;
+  readonly cooldownTimerS: number;
+  readonly wasGrounded: boolean;
+  readonly airRecoveryAvailable: boolean;
+  readonly launchPending: boolean;
+  readonly launchPendingRemainingS: number;
+}
+
 export interface DodgeTickResult {
   state: DodgeState;
   /** Passed straight to MovementController.applyPreStep's lateralGripOverridePerS parameter; null means "defer to whatever else wants it (e.g. Drift)". */
@@ -78,6 +89,18 @@ export class DodgeController {
       cooldownRemainingS: this.state === DodgeState.Cooldown ? Math.max(0, DODGE_COOLDOWN_S - this.cooldownTimerS) : 0,
       airRecoveryAvailable: this.isAirRecoveryAvailable(),
       launchPending: this.launchPending,
+    };
+  }
+
+  getCanonicalState(): DodgeCanonicalState {
+    return {
+      state: this.state,
+      activeTimerS: this.activeTimerS,
+      cooldownTimerS: this.cooldownTimerS,
+      wasGrounded: this.wasGrounded,
+      airRecoveryAvailable: this.airRecoveryAvailable,
+      launchPending: this.launchPending,
+      launchPendingRemainingS: this.launchPendingRemainingS,
     };
   }
 

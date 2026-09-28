@@ -41,6 +41,16 @@ export enum DriftState {
   Recovering = 'Recovering',
 }
 
+/** Every private field this controller carries across ticks, raw and undecorated — for M9's CanonicalMatchStateV1, never for gameplay or UI (see getDebugTimers() for the latter, whose shape is allowed to change independently). */
+export interface DriftCanonicalState {
+  readonly state: DriftState;
+  readonly hopTimerS: number;
+  readonly recoveryTimerS: number;
+  readonly jumpAssistElapsedS: number;
+  readonly wasGrounded: boolean;
+  readonly lastAirborneVerticalVelocityMps: number;
+}
+
 export interface DriftTickResult {
   /** Passed straight to MovementController.applyPreStep's lateralGripOverridePerS parameter; null means "use normal grip". */
   lateralGripOverridePerS: number | null;
@@ -84,6 +94,17 @@ export class DriftController {
       recoveryTimerS: this.recoveryTimerS,
       jumpAssistElapsedS: this.jumpAssistElapsedS,
       jumpVerticalSpeedAddedMps: this.state === DriftState.Hopping ? HOP_IMPULSE_MPS + JUMP_ASSIST_ACCEL_MPS2 * this.jumpAssistElapsedS : 0,
+    };
+  }
+
+  getCanonicalState(): DriftCanonicalState {
+    return {
+      state: this.state,
+      hopTimerS: this.hopTimerS,
+      recoveryTimerS: this.recoveryTimerS,
+      jumpAssistElapsedS: this.jumpAssistElapsedS,
+      wasGrounded: this.wasGrounded,
+      lastAirborneVerticalVelocityMps: this.lastAirborneVerticalVelocityMps,
     };
   }
 
