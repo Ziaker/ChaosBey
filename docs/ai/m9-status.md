@@ -46,10 +46,10 @@ Status values: **DONE** (merged and tested), **IN PROGRESS** (PR named),
 
 | Lane | Scope | Depends on | Touches `MatchSession.ts` | Status |
 |---|---|---|---|---|
-| Contracts | `src/replay/contracts.ts` + this file | — | no | IN PROGRESS |
-| A | M9-0 (hitstop into the simulation, RNG scheme 2) + `CanonicalMatchStateV1` + state hash | Contracts | yes (hitstop wiring, RNG) | IN PROGRESS (branch `claude/m9-a-canonical-state`) |
+| Contracts | `src/replay/contracts.ts` + this file | — | no | DONE (#39) |
+| A | M9-0 (hitstop into the simulation, RNG scheme 2) + `CanonicalMatchStateV1` + state hash | Contracts | yes (hitstop wiring, RNG) | DONE (#40) |
 | B | `ChaosBeyReplayV1` format, encode/decode/validate, recorder, config snapshot — pure modules, no call-site hooks | Contracts | no | TODO |
-| C | `ReplayController`, recorder hooks at the three `tickMatch` callers, headless replay runner, checkpoint compare, first-divergence bisect | A + B | yes (after A) | TODO |
+| C | `ReplayController`, recorder hooks at the three `tickMatch` callers, headless replay runner, checkpoint compare, first-divergence bisect | A + B | yes (after A) | IN PROGRESS (branch `claude/m9-c-playback`; the B-dependent parts wait for B on `main`) |
 | D | `replay-reproduction` preset, batch divergence, Debug Lab and Self Test integration | C | via `DebugLabMode` | TODO |
 | E | Deterministic hardening in Chromium: long AI-vs-AI replays, 1× vs max acceleration, headless vs browser | A/B partly, rest parallel with D | no | TODO |
 
@@ -101,6 +101,60 @@ Frozen ticks (hitstop or Clash) count in both.
 - **Baseline changes (accepted):** the `clash-cooldown-collision` preset's
   second Dash moved from 7 s to 8 s; the ext-32 reproduction seed is now
   `self-test-32/defense-prototype-vs-stamina-prototype`.
+
+## Lane C notes
+
+Owner go-ahead (2026-09-28): lane C may build everything that doesn't
+depend on lane B now; anything that consumes B's format or recorder is
+integrated only after B is merged and `main` is green.
+
+**Done without B (`src/replay/playback/`):**
+- `ReplayController`: a `CombatController` that returns frame n for
+  `TickIndex` n. It ignores `simulationFrozen`, because a recorded frame is
+  already what the original controller returned after handling the freeze,
+  and the replayed match freezes on the same ticks. It refuses to run past
+  the recording (`ReplayExhaustedError`) and keeps its own copy of the
+  frames.
+- A `replay` `SideControllerSpec`, so a live `MatchSession` (and later the
+  Debug Lab) plays back through the same path as play.
+- `HeadlessReplayRun`: plays frames through `SelfTestMatchWorld` (the same
+  `MatchStepper`) and emits `StateCheckpoint`s every N ticks plus the final
+  state. The world must be built like the live match, including
+  `NullAiMashSource`: a recorded AI's Clash presses are already in its
+  frames.
+- `compareCheckpoints()`: match, `diverged` (the last matching and the first
+  mismatching `TicksCompleted`, which bound the window), or `incomplete`.
+- `locateFirstDivergence()`: steps two runs in lockstep and returns the
+  exact first differing `TicksCompleted`, the `TickIndex` that produced it,
+  and the differing field paths. Runs are deterministic and a match is a
+  few thousand ticks, so a linear re-run replaces snapshot bisection.
+
+**Proofs (`tests/deterministic/replayPlayback.test.ts`):**
+- A live AI-vs-AI match (1403 ticks, 211 of them frozen by hitstop) plays
+  back headless with every per-tick checkpoint identical; the sparse
+  checkpoints agree too.
+- The same recording plays back in a live `MatchSession` with the identical
+  hash on every tick.
+- A single flipped movement input at a tick ≥ 900 is caught at exactly
+  `TicksCompleted` k + 1: per-tick checkpoints close the window there, and
+  the locator reports `TickIndex` k with the paths under `beys.first`. The
+  mutated tick must be one where movement input is read: not frozen, no
+  Active Clash, attack Neutral, and outside `MovementController`'s
+  post-impact window, where input is deliberately ignored.
+- Mutation checks, each caught: frame reuse on frozen ticks, an off-by-one
+  in the locator's `TickIndex`, a compare that ignores mismatches, and a
+  controller that doesn't copy its frames.
+
+**Waiting for B:**
+- recorder hooks at the three `tickMatch` callers (`MatchSession`, the
+  headless batches, the scenario runner), feeding B's `ReplayRecorder`;
+- decoding `ChaosBeyReplayV1` into frames;
+- building the playback world from `DeterministicConfigSnapshot`;
+- refusing a replay whose fingerprint or versions don't match (GDD 77).
+
+**Note for B/D:** a Debug Lab session with state mutations can't be
+reproduced from its inputs alone (`MatchSession.getDebugMutations()`), so a
+recording from such a session must be marked non-reproducible.
 
 ## Known architecture facts (main@972f65d)
 
