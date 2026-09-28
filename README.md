@@ -44,9 +44,13 @@ Smoke-test environment variables:
 - `CHAOSBEY_PW_CHROMIUM_PATH=/path/to/chrome` runs the smoke tests with an existing Chromium binary. Use it when a sandboxed container ships a Chromium revision that doesn't match what `@playwright/test` expects and can't download another one. CI leaves it unset and installs its own browser.
 - `CHAOSBEY_PW_INCLUDE_FIREFOX=1` adds the Firefox project, which runs only the game's smoke specs; the prototype labs stay Chromium-only. Run it with `npx playwright install firefox` first, then `CHAOSBEY_PW_INCLUDE_FIREFOX=1 npx playwright test -c tests/smoke/playwright.config.ts --project=firefox`. CI runs it as its own parallel job.
 
+## Main Menu
+
+The game URL (`/ChaosBey/`) opens the Main Menu (GDD 56). **PLAY** starts the Player-vs-AI match. The developer tools are kept apart from the player flow, in a separate **Developer / Debug** section with **DEBUG LAB** and **SELF TEST** (Back or `Esc` returns). Each entry loads the same URL a direct link uses — `?mode=play`, `?mode=debug-lab`, `?mode=self-test` — so the browser Back button returns to the menu. The menu's look is provisional until its visual approval.
+
 ## Debug Lab
 
-Open the game with `?mode=debug-lab` (for example `/ChaosBey/?mode=debug-lab`) to get the Debug Lab: the real match with a raw-state inspector (GDD section 69) and developer controls (GDD section 70). Its panel is a temporary developer UI, not the final HUD or menu.
+Open the Debug Lab from the Main Menu (Developer / Debug → DEBUG LAB) or with `?mode=debug-lab` (for example `/ChaosBey/?mode=debug-lab`) to get the Debug Lab: the real match with a raw-state inspector (GDD section 69) and developer controls (GDD section 70). Its panel is a temporary developer UI, not the final HUD or menu.
 
 - `P` pause / resume · `N` step one fixed tick · `M` step ten ticks
 - `R` restart with the same seed · `T` restart with a new seed (a typed seed can also be applied from the panel)
@@ -57,7 +61,7 @@ The panel also loads the GDD 68 scenario presets into the live match and shows t
 
 ## Self Test
 
-Open the game with `?mode=self-test` for the browser Self Test (GDD 66, 162–164): AI-vs-AI batches over any matchups and seeds, the GDD 68 scenario presets (scripted vs scripted, or with one side swapped for the AI), the GDD 67 anomaly detector on every tick, and the GDD 163 report (download as JSON; failing seeds can be replayed). It runs the shared headless core in `src/self-test/`, 1× (real time) to 64× or as fast as the CPU allows — always more fixed ticks, never a bigger timestep — with a 2D minimap instead of the 3D renderer.
+Open the Self Test from the Main Menu (Developer / Debug → SELF TEST) or with `?mode=self-test` for the browser Self Test (GDD 66, 162–164): AI-vs-AI batches over any matchups and seeds, the GDD 68 scenario presets (scripted vs scripted, or with one side swapped for the AI), the GDD 67 anomaly detector on every tick, and the GDD 163 report (download as JSON; failing seeds can be replayed). It runs the shared headless core in `src/self-test/`, 1× (real time) to 64× or as fast as the CPU allows — always more fixed ticks, never a bigger timestep — with a 2D minimap instead of the 3D renderer.
 
 Progress on the rest of Milestone 8 is tracked in [`docs/ai/m8-status.md`](docs/ai/m8-status.md).
 

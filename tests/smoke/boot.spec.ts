@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('production build boots under /ChaosBey/, renders and produces no fatal errors', async ({ page }) => {
+test('production build boots under /ChaosBey/ to the Main Menu, PLAY starts the match, no fatal errors', async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') {
@@ -28,6 +28,12 @@ test('production build boots under /ChaosBey/, renders and produces no fatal err
   // could pass while testing the wrong (unscoped) URL.
   await page.goto('/ChaosBey/');
   expect(new URL(page.url()).pathname).toBe('/ChaosBey/');
+
+  // The plain game URL opens the Main Menu (GDD 56); PLAY is the normal
+  // player flow into the match, through the same ?mode=play route a direct
+  // link uses.
+  await page.getByTestId('main-menu-play').click();
+  await expect(page).toHaveURL(/\/ChaosBey\/\?mode=play$/);
 
   // Debug overlay is visible on boot by default (RuntimeConfig) and reports
   // the Combat state once bootstrap() has finished wiring physics/render and

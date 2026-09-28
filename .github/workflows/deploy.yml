@@ -11,10 +11,6 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -73,6 +69,13 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [build, smoke-firefox]
     runs-on: ubuntu-latest
+    # Only Pages deploys are serialized. At workflow level this group put
+    # every run (each PR's CI included) in one repo-wide queue: runs waited
+    # on each other, and a newly queued run cancelled the one already
+    # waiting, so parallel PRs cancelled each other's CI.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

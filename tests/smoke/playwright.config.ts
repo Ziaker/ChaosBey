@@ -17,7 +17,7 @@ const INCLUDE_FIREFOX = process.env.CHAOSBEY_PW_INCLUDE_FIREFOX === '1';
 // Firefox runs the game's own smokes only. The prototype labs are isolated
 // approval pages, not the product, and render minutes of software WebGL
 // each; they stay Chromium-only so the Firefox job doesn't double CI time.
-const GAME_SMOKE_SPECS = /(^|\/)(boot|inputFocusLoss|matchFlow|repeatedMatchStability|aiRuntime|debugLab|selfTest|webgl2Unavailable)\.spec\.ts$/;
+const GAME_SMOKE_SPECS = /(^|\/)(boot|inputFocusLoss|matchFlow|repeatedMatchStability|aiRuntime|debugLab|selfTest|mainMenu|webgl2Unavailable)\.spec\.ts$/;
 
 export default defineConfig({
   testDir: './',
