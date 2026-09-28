@@ -32,15 +32,18 @@ describe('GDD 68 scenario presets', () => {
     expect(new Set(SCENARIO_PRESETS.map((p) => p.id)).size).toBe(SCENARIO_PRESETS.length);
   });
 
-  it('every supported preset reproduces its scenario with no invalid state; replay reproduction is explicitly unsupported (M9)', async () => {
+  it('every preset reproduces its scenario with no invalid state, replay reproduction included (M9)', async () => {
     const report = await runScenarioSuite();
     const failures = report.results.filter((r) => r.status === 'failed').map((r) => `${r.id}: ${r.detail}`);
     expect(failures).toEqual([]);
-    expect(report.unsupported).toBe(1);
+    expect(report.unsupported).toBe(0);
+    expect(report.passed).toBe(report.total);
     const replay = report.results.find((r) => r.id === 'replay-reproduction')!;
-    expect(replay.status).toBe('unsupported');
-    expect(replay.detail).toMatch(/Milestone 9/);
-    expect(report.passed).toBe(report.total - 1);
+    // A real replay, and both negative self-checks caught.
+    expect(replay.ticks).toBeGreaterThan(180);
+    expect(replay.detail).toMatch(/replayed \d+ ticks, \d+ checkpoints identical/);
+    expect(replay.detail).toMatch(/edited inputs caught at TicksCompleted (\d+)/);
+    expect(replay.detail).toMatch(/altered checkpoint caught at TicksCompleted (\d+)/);
   }, 300_000);
 
   it('is deterministic: every supported preset gives the same run twice (not just a hand-picked sample)', async () => {

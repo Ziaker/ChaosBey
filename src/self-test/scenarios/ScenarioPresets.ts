@@ -20,6 +20,7 @@ import { JUMP_ASSIST_MAX_DURATION_S } from '../../drift/DriftTuning';
 import { Action } from '../../input/actions/Action';
 import { FIXED_TICKS_PER_SECOND } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
+import { runReplayReproduction } from './replayReproduction';
 import type { ScenarioTrace } from './ScenarioTrace';
 
 // ============================================================
@@ -63,6 +64,12 @@ export interface ScenarioPreset {
   /** Stop early once this is true (the scenario already happened). */
   readonly doneWhen?: (trace: ScenarioTrace) => boolean;
   readonly check: (trace: ScenarioTrace) => ScenarioCheck;
+  /**
+   * A preset that isn't a scripted fight (M9 replay-reproduction): the
+   * runner calls this instead of stepping the scripts, and it decides
+   * pass/fail itself.
+   */
+  readonly run?: () => Promise<{ readonly passed: boolean; readonly detail: string; readonly ticks: number }>;
 }
 
 // ---- building blocks ----
@@ -388,13 +395,13 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
   {
     id: 'replay-reproduction',
     label: 'Test Replay Reproduction',
-    description: 'Record, export, import and replay a scenario and compare periodic state hashes.',
-    supported: false,
-    unsupportedReason: 'replay export/import/playback and state hashes arrive with Milestone 9 (GDD sections 76, 145, 153)',
+    description: 'Record an AI-vs-AI match, export and re-import it as ChaosBeyReplayV1, replay it and compare every state hash; edited inputs and an altered checkpoint must be caught.',
+    supported: true,
     durationTicks: 0,
     first: idle,
     second: idle,
-    check: () => ok(false, 'unsupported until Milestone 9'),
+    check: () => ok(false, 'decided by run()'),
+    run: runReplayReproduction,
   },
 ];
 
