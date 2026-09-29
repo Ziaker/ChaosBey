@@ -15,7 +15,7 @@ import { scenarioById } from '../../prototypes/camera-concepts/src/fight/scenari
 import type { FightFrame } from '../../prototypes/camera-concepts/src/fight/FightFrame';
 import { CameraDirector } from '../../src/camera/director/CameraDirector';
 import { PRESETS, PRESET_IDS, type PresetId } from '../../src/camera/director/CameraParams';
-import { CameraRig, CLASH_FORCED_PRESET, PRESET_SWITCH_BLEND_S, type CameraRigOutput } from '../../src/camera/director/CameraRig';
+import { CameraRig, CLASH_FORCED_PRESET, PRESET_SWITCH_BLEND_S, RIG_DIRECTOR_OPTIONS, type CameraRigOutput } from '../../src/camera/director/CameraRig';
 import { inFrame } from '../../src/camera/director/frameMath';
 import { GameStateMachine } from '../../src/app/lifecycle/GameState';
 import { MatchSession } from '../../src/app/session/MatchSession';
@@ -114,13 +114,13 @@ describe('ported director = the approved Camera Lab', () => {
 describe('CameraRig — Clash forces B without orbit', () => {
   it('for A and C the Clash shows camera B (no orbit), then hands back to the player preset exactly', async () => {
     const frames = await framesOf('clash-setup');
-    const forced = new CameraDirector(PRESETS[CLASH_FORCED_PRESET], 16 / 9, { clashOrbit: false });
+    const forced = new CameraDirector(PRESETS[CLASH_FORCED_PRESET], 16 / 9, RIG_DIRECTOR_OPTIONS);
     const forcedOut = frames.map((f) => {
       const o = forced.tick(f as never, DT);
       return { eye: { ...o.eye }, clash: o.weights.Clash };
     });
     for (const preset of ['A', 'C'] as const) {
-      const own = new CameraDirector(PRESETS[preset], 16 / 9, { clashOrbit: false });
+      const own = new CameraDirector(PRESETS[preset], 16 / 9, RIG_DIRECTOR_OPTIONS);
       const ownOut = frames.map((f) => ({ ...own.tick(f as never, DT).eye }));
       const rig = runRig(frames, preset);
       const full = rig.map((o, i) => ({ o, i })).filter(({ o }) => o.clashBlend > 0.999);
@@ -140,7 +140,7 @@ describe('CameraRig — Clash forces B without orbit', () => {
 
   it('a player on B sees exactly the B director (forced camera = own camera)', async () => {
     const frames = await framesOf('clash-setup');
-    const own = new CameraDirector(PRESETS.B, 16 / 9, { clashOrbit: false });
+    const own = new CameraDirector(PRESETS.B, 16 / 9, RIG_DIRECTOR_OPTIONS);
     const rig = runRig(frames, 'B');
     frames.forEach((f, i) => expect(rig[i]!.eye).toEqual(own.tick(f as never, DT).eye));
   }, 60_000);
@@ -149,8 +149,8 @@ describe('CameraRig — Clash forces B without orbit', () => {
     const frames = await framesOf('clash-setup');
     for (const preset of PRESET_IDS) {
       const rig = runRig(frames, preset);
-      const own = new CameraDirector(PRESETS[preset], 16 / 9, { clashOrbit: false });
-      const forced = new CameraDirector(PRESETS.B, 16 / 9, { clashOrbit: false });
+      const own = new CameraDirector(PRESETS[preset], 16 / 9, RIG_DIRECTOR_OPTIONS);
+      const forced = new CameraDirector(PRESETS.B, 16 / 9, RIG_DIRECTOR_OPTIONS);
       let prevOwn: { x: number; y: number; z: number } | null = null;
       let prevForced: { x: number; y: number; z: number } | null = null;
       let maxDirectorStep = 0;
@@ -199,9 +199,9 @@ describe('CameraRig — preset switch mid-match', () => {
     const rig = runRig(frames, 'A', (i, r) => {
       if (i === switchAt) r.setPreset('C');
     });
-    const c = new CameraDirector(PRESETS.C, 16 / 9, { clashOrbit: false });
+    const c = new CameraDirector(PRESETS.C, 16 / 9, RIG_DIRECTOR_OPTIONS);
     const cOut = frames.map((f) => ({ ...c.tick(f as never, DT).eye }));
-    const a = new CameraDirector(PRESETS.A, 16 / 9, { clashOrbit: false });
+    const a = new CameraDirector(PRESETS.A, 16 / 9, RIG_DIRECTOR_OPTIONS);
     const aOut = frames.map((f) => ({ ...a.tick(f as never, DT).eye }));
     // The tick of the switch is still (almost exactly) A; one crossfade later it is C.
     expect(dist(rig[switchAt]!.eye, aOut[switchAt]!)).toBeLessThan(0.05);
@@ -247,4 +247,57 @@ describe('presentation only', () => {
     expect(hashes[1]).toEqual(hashes[0]);
     expect(hashes[2]).toEqual(hashes[0]);
   }, 120_000);
+});
+
+describe('in-game arena camera (owner playtest, M11)', () => {
+  const fighter = (x: number, z: number, vx = 0, vz = 0) => ({ position: { x, y: 0.2, z }, velocity: { x: vx, y: 0, z: vz }, speed: Math.hypot(vx, vz), airborne: false, attack: 'none' as const, broken: false });
+  const frame = (t: number, p: ReturnType<typeof fighter>, o: ReturnType<typeof fighter>) => ({ tick: t, time: t / 60, first: p, second: o, intents: [], clashActive: false, clashProgress: 0, roundOver: false, ringOutIsFirst: null });
+
+  it('never leaves the arena and the wall never hides a Bey, even with the player against the wall', () => {
+    for (const preset of PRESET_IDS) {
+      for (const [px, pz, ox, oz] of [[10.5, 0, 0, 0], [0, -10.5, 3, 5], [-8, 7, -9, 6], [7.4, 7.4, -7.4, -7.4]] as const) {
+        const d = new CameraDirector(PRESETS[preset], 16 / 9, RIG_DIRECTOR_OPTIONS);
+        for (let t = 0; t < 240; t++) {
+          const o = d.tick(frame(t, fighter(px, pz), fighter(ox, oz)) as never, DT);
+          expect(Math.hypot(o.eye.x, o.eye.z), `${preset} (${px},${pz})`).toBeLessThanOrEqual(10.5 + 1e-9);
+        }
+      }
+    }
+  });
+
+  it('real fights: the eye stays inside the arena on every tick, for every preset', async () => {
+    for (const scenario of ['normal-duel', 'wall-ricochet', 'heavy-knockback', 'clash-setup']) {
+      const frames = await framesOf(scenario);
+      for (const preset of PRESET_IDS) {
+        const out = runRig(frames, preset);
+        const worst = Math.max(...out.map((o) => Math.hypot(o.eye.x, o.eye.z)));
+        expect(worst, `${scenario} ${preset}`).toBeLessThanOrEqual(10.5 + 1e-9);
+      }
+    }
+  }, 120_000);
+
+  it('does not follow every move: small turns of the fight are ignored, and the Beys passing each other does not swing it round', () => {
+    const d = new CameraDirector(PRESETS.C, 16 / 9, RIG_DIRECTOR_OPTIONS);
+    // The player circles 50° around the opponent: inside the dead zone, the camera holds its angle.
+    let first = 0;
+    let last = 0;
+    for (let t = 0; t < 180; t++) {
+      const a = (t / 180) * (50 * Math.PI) / 180;
+      const o = d.tick(frame(t, fighter(-4 * Math.cos(a), -4 * Math.sin(a)), fighter(0, 0)) as never, DT);
+      if (t === 20) first = o.debug.yawDeg;
+      last = o.debug.yawDeg;
+    }
+    expect(Math.abs(last - first)).toBeLessThan(3);
+    // The player runs straight past the opponent (the axis flips 180°): the camera does not do a half-turn.
+    const e = new CameraDirector(PRESETS.C, 16 / 9, RIG_DIRECTOR_OPTIONS);
+    let start = 0;
+    let maxTurn = 0;
+    for (let t = 0; t < 240; t++) {
+      const x = -6 + (12 * t) / 240;
+      const o = e.tick(frame(t, fighter(x, 0.5, 3, 0), fighter(0, 0)) as never, DT);
+      if (t === 10) start = o.debug.yawDeg;
+      if (t > 10) maxTurn = Math.max(maxTurn, Math.abs(((o.debug.yawDeg - start + 540) % 360) - 180));
+    }
+    expect(maxTurn).toBeLessThan(45);
+  });
 });
