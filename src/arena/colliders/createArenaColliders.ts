@@ -120,8 +120,15 @@ export function createArenaColliders(
     const angle = (i / ARENA_WALL_SEGMENT_COUNT) * Math.PI * 2;
     const x = Math.cos(angle) * ARENA_FLOOR_RADIUS;
     const z = Math.sin(angle) * ARENA_FLOOR_RADIUS;
-    // Segment's local X axis (its width) must run tangent to the circle at this angle.
-    const tangentYaw = angle + Math.PI / 2;
+    // Segment's local X axis (its width) must run tangent to the circle at
+    // this angle, and its local Z (thickness) radially. A yaw θ about +Y maps
+    // local X to (cos θ, 0, −sin θ); the tangent at (cos a, 0, sin a) is
+    // parallel to (sin a, 0, −cos a), so θ = π/2 − a. (ext-32: this was
+    // `a + π/2`, which is only right on the four axes — the error is 2a —
+    // so around ±45°/±135° the segments stood radially like fins with open
+    // gaps between them: a Bey could slip through, wedge between two
+    // segments, or end up past the floor edge and fall with no ring-out.)
+    const tangentYaw = Math.PI / 2 - angle;
 
     const segmentBody = physics.rapierWorld.createRigidBody(
       RAPIER.RigidBodyDesc.fixed()

@@ -63,7 +63,7 @@ describe('Self Test report view', () => {
     const json = JSON.parse(selfTestReportJson(report, []));
     expect(json.format).toBe('ChaosBeySelfTestReportV1');
     expect(json.batch.matches).toBe(1);
-    expect(json.knownIssues['ext-32']).toMatch(/wall/);
+    expect(json.knownIssues).toEqual({}); // none open since ext-32 was fixed (M11 lane 3)
   }, 60_000);
 });
 

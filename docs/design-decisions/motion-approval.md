@@ -264,7 +264,8 @@ Essas medições confirmam que os três presets divergem na direção que seus n
 - **Bey fisicamente preso além da borda por aproximadamente 23,5 s**, a partir de t ≈ 11,9 s, com r ≈ 12,1 m (além do raio de 12 m do chão), quase sem se mover: cunhado no colisor de parede da borda.
 - Exportado do jogo (`m7-ext-32.json`) e reproduzido no Lab com os mesmos overlays.
 - **O replay do Lab identificou o Bey preso como o Attack Bey**, usando a convenção de seed usada pelo Motion Lab. O relatório original do M7 havia nomeado o Bey de Defense; a diferença vem da convenção de seed do harness do Lab, não de uma nova investigação sobre qual arquétipo trava.
-- **Classificação mantida:** problema de colisão / interação com a parede, não bug de IA. O cenário análogo `m7-ext32-analog` no Lab mostra o comportamento de contato pretendido (parede como círculo limpo), para comparação com o replay real — ele não corrige o colisor do jogo.
+- **Classificação mantida:** problema de colisão / interação com a parede, não bug de IA.
+- **Corrigido no M11 (lane 3):** a causa era o colisor da parede — os segmentos estavam girados `angle + π/2` em vez de `π/2 − angle`, deixando frestas em torno de ±45°/±135° (detalhes e evidência em `docs/ai/m11-status.md`). O `ext-0` (lançamento de ~28 m/s por counter) continua em aberto. O cenário análogo `m7-ext32-analog` no Lab mostra o comportamento de contato pretendido (parede como círculo limpo), para comparação com o replay real — ele não corrige o colisor do jogo.
 
 ---
 

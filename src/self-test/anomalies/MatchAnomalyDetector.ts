@@ -136,20 +136,19 @@ export interface DetectedAnomaly {
 }
 
 /**
- * Recorded bugs a detection can be matched to.
- * - `ext-32`: a Bey wedged in / pushed through the arena's edge wall
- *   collider (M7 closure audit; docs/design-decisions/motion-approval.md
- *   §10.2 and §13.6 — a collider fix for the integration, not an M8 change).
- *   The Self-Test also observed its consequence: a Bey that ends up between
- *   the floor edge (ARENA_FLOOR_RADIUS) and the ring-out radius
- *   (RINGOUT_RADIUS_M, larger) falls off the world with no ring-out.
+ * Recorded bugs a detection can be matched to, so a batch can tell a known
+ * problem from a new one. None open today.
+ * - `ext-32` (the arena wall: a Bey wedged in or past the edge wall, then
+ *   falling off the rim with no ring-out) was FIXED in M11 lane 3: the wall
+ *   segments were rotated `angle + π/2` instead of `π/2 − angle`, so around
+ *   ±45°/±135° they stood radially with open gaps between them
+ *   (arena/colliders/createArenaColliders.ts). Its detections are no longer
+ *   tagged: a Bey in the wall or off the rim is an unknown invalid state
+ *   again and fails the batch.
  */
-export type KnownIssueId = 'ext-32';
+export type KnownIssueId = never;
 
-export const KNOWN_ISSUES: Readonly<Record<KnownIssueId, string>> = {
-  'ext-32':
-    'Bey wedged in or pushed through the arena edge wall collider (docs/design-decisions/motion-approval.md §10.2, §13.6); a Bey past the floor edge but inside the ring-out radius then falls with no ring-out.',
-};
+export const KNOWN_ISSUES: Readonly<Record<KnownIssueId, string>> = {};
 
 export const ANOMALY_SEVERITY: Readonly<Record<DetectedAnomalyKind, AnomalySeverity>> = {
   'invalid-rotation': 'invalid-state',
@@ -261,8 +260,9 @@ export class MatchAnomalyDetector {
         emit('left-world', side, `centre ${radius.toFixed(2)} m from the arena centre (limit ${t.leftWorldRadiusM.toFixed(2)} m) with no ring-out declared`);
       }
       if (this.latch(key('floor'), p.y < t.belowFloorYM)) {
-        // Past the floor's edge (outside the wall) it fell off the rim — the
-        // ext-32 wall problem's consequence; inside it, it went through the floor.
+        // Past the floor's edge (outside the wall) it fell off the rim (what
+        // the fixed ext-32 wall gaps used to cause); inside it, it went
+        // through the floor.
         const offTheRim = radius > ARENA_FLOOR_RADIUS;
         emit(
           'below-floor',
@@ -270,12 +270,12 @@ export class MatchAnomalyDetector {
           offTheRim
             ? `centre height ${p.y.toFixed(3)} m at r = ${radius.toFixed(2)} m: fell off the floor edge outside the wall with no ring-out (ring-out radius ${RINGOUT_RADIUS_M} m > floor radius ${ARENA_FLOOR_RADIUS} m)`
             : `centre height ${p.y.toFixed(3)} m is below ${t.belowFloorYM} m — through the floor`,
-          offTheRim ? 'ext-32' : null,
+          null,
         );
       }
       const insideWall = roundRunning && radius > t.insideWallRadiusM && radius < RINGOUT_RADIUS_M && p.y < t.wallHeightM;
       if (this.streak(key('wall'), insideWall, t.stuckInWallTicks, frozen)) {
-        emit('stuck-in-wall', side, `centre inside the wall band (r = ${radius.toFixed(2)} m > ${t.insideWallRadiusM.toFixed(2)} m, y = ${p.y.toFixed(2)} m) for ${t.stuckInWallTicks} ticks`, 'ext-32');
+        emit('stuck-in-wall', side, `centre inside the wall band (r = ${radius.toFixed(2)} m > ${t.insideWallRadiusM.toFixed(2)} m, y = ${p.y.toFixed(2)} m) for ${t.stuckInWallTicks} ticks`, null);
       }
 
       for (const [name, resource] of [
