@@ -36,7 +36,7 @@ async function createSession(controllers: { first: SideControllerSpec; second: S
 const toSpec = (id: string, side: ScenarioSideScript): SideControllerSpec => (side.kind === 'script' ? { kind: 'scripted', label: id, frames: side.frames } : { kind: 'idle' });
 
 describe('live session anomaly detection (GDD 67 in the Debug Lab)', () => {
-  it('flags a Bey held inside the wall, tags it ext-32, and records it in telemetry and the inspector', async () => {
+  it('flags a Bey held inside the wall (an unknown invalid state since ext-32 was fixed), and records it in telemetry and the inspector', async () => {
     const session = await createSession({ first: { kind: 'idle' }, second: { kind: 'idle' } });
     for (let i = 0; i < 60; i++) {
       session.getBey('second').body.setTranslation({ x: 12.1, y: 0.3, z: 0 }, true);
@@ -45,10 +45,10 @@ describe('live session anomaly detection (GDD 67 in the Debug Lab)', () => {
     }
     const found = session.getDetectedAnomalies().filter((d) => d.kind === 'stuck-in-wall');
     expect(found).toHaveLength(1);
-    expect(found[0]!.knownIssue).toBe('ext-32');
+    expect(found[0]!.knownIssue).toBeNull();
     expect(session.telemetry.getEvents().some((e) => e.kind === TelemetryEventKind.PhysicsAnomaly && e.anomalyKind === 'stuck-in-wall')).toBe(true);
     const match = buildInspection(session, { gameState: 't', fps: 0, frameTimeMs: 0, renderTimeMs: null, drawCalls: null, triangles: null, paused: true, ticksPerFixedStep: 1 })[0]!;
-    expect(match.rows.find((r) => r.label === 'Anomalies (GDD 67)')?.value).toMatch(/stuck-in-wall \[known ext-32\]/);
+    expect(match.rows.find((r) => r.label === 'Anomalies (GDD 67)')?.value).toMatch(/stuck-in-wall$/);
     session.dispose();
   });
 

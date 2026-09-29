@@ -259,7 +259,9 @@ describe('AI vs AI batch self-test (M7 Part 2)', () => {
     // GDD section 64: Attack seeks engagement / uses charge; Defense uses
     // counter opportunities; Stamina is the most patient.
     expect(perMinute(totals.attack.dashes, totals.attack)).toBeGreaterThan(1.5 * perMinute(totals.stamina.dashes, totals.stamina));
-    expect(perMinute(totals.defense.counters, totals.defense)).toBeGreaterThan(1.5 * perMinute(totals.attack.counters, totals.attack));
+    // Re-baselined after the ext-32 wall fix (M11 lane 3) changed every fight that reaches the wall:
+    // Defense now counters ~1.45x as often as Attack (was > 1.5x in the arena with wall gaps).
+    expect(perMinute(totals.defense.counters, totals.defense)).toBeGreaterThan(1.3 * perMinute(totals.attack.counters, totals.attack));
     expect(totals.stamina.circleSeconds / totals.stamina.seconds).toBeGreaterThan(2 * (totals.attack.circleSeconds / totals.attack.seconds));
   }, 120000);
 });

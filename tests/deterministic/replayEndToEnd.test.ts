@@ -25,7 +25,7 @@ import { setResourceFraction } from '../../src/debug/cheats/DebugMutations';
 import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecorder';
 
 // A long fight with many hitstop freezes (see replayPlayback.test.ts).
-const LONG_SEED = 'replay-13';
+const LONG_SEED = 'replay-15';
 
 async function liveSession(seedText: string, controllers: { first: SideControllerSpec; second: SideControllerSpec }, replay?: ChaosBeyReplayV1): Promise<MatchSession> {
   const scene = new THREE.Scene();

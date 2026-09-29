@@ -126,3 +126,54 @@ Owner order for M11:
   - Settings A/B/C with B as default, persisted;
   - a match on each preset;
   - Debug Lab Clash preset: a player on A sees B with no orbit, then A again.
+
+## Lane 3 — ext-32: root cause and fix
+
+### Root cause
+
+The arena's edge wall is 32 flat box colliders (`src/arena/colliders/createArenaColliders.ts`). Each segment's rotation was `yaw = angle + π/2`, but the yaw that turns a box's width along the circle's tangent is `π/2 − angle`.
+
+- With a yaw θ about +Y, the width axis becomes (cos θ, 0, −sin θ). The old code gave (−sin a, −cos a), where the tangent is (−sin a, +cos a).
+- The two agree only on the four axes; the error is 2a.
+- Around ±45°/±135°, the segments stood **radially, like fins, with open gaps between them**.
+- The rendered wall is one smooth cylinder, so the gaps were invisible.
+
+Measured before the fix (first wall hit along a ray from the centre, per angle):
+- no wall at all at 40°, 50°, 130°, 140°, 220°, 230°, 310° and 320°;
+- elsewhere a jagged ring between 10.65 m and 12.12 m instead of an even ~11.7 m.
+
+The ext-32 trace (seed `self-test-32/defense-prototype-vs-stamina-prototype`) shows the mechanism. At −39°, a Bey drifting outward at 4.4 m/s passed from r = 11.06 to 12.6 m with no wall contact at all, ended up past the floor edge (12 m) but inside the ring-out radius (12.9 m), and fell with no ring-out. Wedges between two fins are the "stuck in the wall" half of the same bug.
+
+This is a collider bug, not an AI one (as the M7 audit suspected) and not solver penetration.
+
+### Fix
+
+One line: `const tangentYaw = Math.PI / 2 - angle;`. After the fix, the wall is a closed ring at 11.70–11.74 m in every direction; the spread is only the 32-sided polygon's own.
+
+Nothing is masked:
+- no teleport, no clamp, no velocity cap;
+- the playing area is unchanged (inner face still at 11.7 m);
+- wall height, thickness, bounce and segment count are unchanged.
+
+### Evidence
+
+- **Sweep of 270 AI matches** (9 pairings × 30 seeds), every GDD 67 anomaly counted:
+  - before: 48 (47 stuck-in-wall, 1 fell off the rim), in several pairings;
+  - after: **0 anomalies of any kind**.
+- **`tests/deterministic/arenaWall.test.ts`** passes with the fix, and all three of its checks fail on the old code:
+  - rays every 0.5° at three heights all hit the wall at the inner face;
+  - every segment is tangent;
+  - a Bey thrown outward at the old gap angles and on the axes is stopped by the wall and stays on the floor. The throws cover 8, 15 and 28 m/s along the ground (28 m/s is the ext-0 launch size), plus the ext-32 airborne case.
+- **The seed that reproduced ext-32** now plays with no anomaly, deterministically (`matchAnomalyDetector.test.ts`).
+
+### Consequences (reported, not hidden)
+
+- **The known-issue label is retired.** `ext-32` is no longer tagged, so a Bey in the wall or off the rim is again an *unknown* invalid state and fails a Self-Test batch. The known-issue registry is empty.
+- **Every fight that reaches the wall now plays differently.** This affects the tests pinned to particular fights:
+  - The replay seeds were re-pinned for the same preconditions: a long fight with many hitstop freezes. `replay-13` → `replay-15` (1301 ticks, 170 frozen) and `replay-11` → `replay-17` (1117 ticks, 151 frozen).
+  - Two AI-behaviour margins were re-baselined with the new measurements. The qualitative relationships hold; the old margins were partly produced by the broken arena:
+    - Ace vs Rookie, hits dodged: > 2× → > 1.5×. Measured 40 vs 24 (48 matches: 102 vs 61).
+    - Ace vs Rookie, dodges: > 2× → > 1.4×. Measured 20 vs 13 (48 matches: 45 vs 29).
+    - Ace errors (0.45×) and wins (17 vs 7) are unchanged in direction.
+    - Defense counters vs Attack: > 1.5× → > 1.3×. Measured ~1.45×.
+- **Old replays** recorded on an earlier build carry a different build commit in their fingerprint (already reported on import). Fights that touched the wall would diverge.

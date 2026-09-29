@@ -44,10 +44,13 @@ describe('AI difficulty tiers in real matches', () => {
         }
       }
     }
-    // Measured: errors 49 vs 106, hits dodged 51 vs 8, dodges 23 vs 7, wins 15 vs 9 (24 matches).
+    // Measured after the ext-32 wall fix (M11 lane 3), 24 matches: errors 49 vs 105, hits dodged
+    // 40 vs 24, dodges 20 vs 13, wins 17 vs 7 (48 matches: 95/216, 102/61, 45/29, 30/18). Before
+    // the fix (a wall with gaps) it was hits dodged 51 vs 8 and dodges 23 vs 7, so the 2x margins
+    // were partly the broken arena; Ace still clearly dodges more and wins more.
     expect(totals.ace.deliberateErrors).toBeLessThan(totals.rookie.deliberateErrors * 0.7);
-    expect(totals.ace.hitsDodged).toBeGreaterThan(totals.rookie.hitsDodged * 2);
-    expect(totals.ace.dodges).toBeGreaterThan(totals.rookie.dodges * 2);
+    expect(totals.ace.hitsDodged).toBeGreaterThan(totals.rookie.hitsDodged * 1.5);
+    expect(totals.ace.dodges).toBeGreaterThan(totals.rookie.dodges * 1.4);
     expect(totals.ace.wins).toBeGreaterThan(totals.rookie.wins);
   }, 300_000);
 });

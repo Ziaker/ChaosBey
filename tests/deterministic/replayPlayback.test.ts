@@ -67,11 +67,13 @@ interface Recording {
   readonly firstSteers: boolean[];
 }
 
-// Seeds pinned for long fights with many hitstop freezes (RNG scheme 2):
-// replay-13 lasts 1403 ticks with 211 frozen, replay-11 lasts 1246 with 119.
+// Seeds pinned for long fights with many hitstop freezes (RNG scheme 2),
+// re-pinned after the ext-32 wall collider fix changed every fight that
+// touches the wall: replay-15 lasts 1301 ticks with 170 frozen, replay-17
+// lasts 1117 with 151.
 // Most seeds end in a ring-out within a few hundred ticks.
-const LONG_SEED = 'replay-13';
-const MUTATION_SEED = 'replay-11';
+const LONG_SEED = 'replay-15';
+const MUTATION_SEED = 'replay-17';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {

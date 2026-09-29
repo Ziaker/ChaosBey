@@ -34,7 +34,9 @@
 //   runs out, so it isn't caught by aiArchetypeMatrix's
 //   "unresolved round" wedge check. Reproduces on attack-prototype vs
 //   defense-prototype, seed "ext-32" (defense side wedged at roughly
-//   (x=-9.2, z=4.8) from ~t960 to the match's end at t2307).
+//   (x=-9.2, z=4.8) from ~t960 to the match's end at t2307). FIXED in M11
+//   lane 3: it was the wall collider (segments rotated the wrong way,
+//   leaving gaps around ±45°/±135°), not the AI — see arenaWall.test.ts.
 // ============================================================
 
 import { describe, expect, it } from 'vitest';

@@ -1,6 +1,6 @@
 // GDD 67 anomaly detector: fault injection per condition, freeze awareness,
-// one report per episode, and the recorded ext-32 wall bug reproduced from
-// its seed.
+// one report per episode — and the ext-32 wall bug's own seed, which now
+// plays clean (M11 lane 3 fixed the wall collider; see arenaWall.test.ts).
 
 import { describe, expect, it } from 'vitest';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
@@ -95,7 +95,7 @@ describe('MatchAnomalyDetector — each GDD 67 condition is caught, once per epi
     });
     const wall = found.filter((d) => d.kind === 'stuck-in-wall');
     expect(wall).toHaveLength(1);
-    expect(wall[0]!.knownIssue).toBe('ext-32');
+    expect(wall[0]!.knownIssue).toBeNull(); // ext-32 is fixed: a Bey in the wall is an unknown invalid state again
     expect(wall[0]!.tick).toBe(DEFAULT_ANOMALY_THRESHOLDS.stuckInWallTicks - 1);
   });
 
@@ -185,19 +185,16 @@ describe('MatchAnomalyDetector — each GDD 67 condition is caught, once per epi
   });
 });
 
-describe('recorded ext-32 wall bug, reproduced from its seed', () => {
-  // Seed re-pinned for RNG scheme 2 + headless hitstop (M9): the M8 seed
-  // (self-test-5/stamina-prototype-vs-defense-prototype, RNG scheme 1) now
-  // plays a different match. This one reproduces the same two ext-32 facts.
-  it('self-test-32/defense-vs-stamina: wedged in the wall, then off the rim with no ring-out — both tagged ext-32, deterministically', async () => {
+describe('ext-32 regression: the seed that reproduced the wall bug now plays clean', () => {
+  // Before M11 lane 3 this seed wedged a Bey in the wall and then dropped it
+  // off the rim with no ring-out (stuck-in-wall + below-floor, both tagged
+  // ext-32). The wall collider fix removes both; nothing else may appear.
+  it('self-test-32/defense-vs-stamina: no anomaly at all, deterministically', async () => {
     const setup = { seed: 'self-test-32/defense-prototype-vs-stamina-prototype', firstDefinition: DEFENSE_ARCHETYPE, secondDefinition: STAMINA_ARCHETYPE };
     const a = await simulateAiMatch(setup);
     const b = await simulateAiMatch(setup);
-    const shape = (d: DetectedAnomaly) => `${d.tick}/${d.side}/${d.kind}/${d.knownIssue}`;
-    expect(a.detections.map(shape)).toEqual(b.detections.map(shape));
-    const kinds = a.detections.map((d) => d.kind);
-    expect(kinds).toContain('stuck-in-wall');
-    expect(kinds).toContain('below-floor');
-    for (const d of a.detections) expect(d.knownIssue).toBe('ext-32');
+    expect(a.detections).toEqual([]);
+    expect(b.detections).toEqual([]);
+    expect(a.stats.outcome).toBe(b.stats.outcome);
   }, 60_000);
 });
