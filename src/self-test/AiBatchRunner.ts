@@ -25,6 +25,8 @@ import { currentRuntimeFingerprint } from '../replay/format/runtimeFingerprint';
 import { compareCheckpoints } from '../replay/playback/divergence';
 import { HeadlessReplayRun } from '../replay/playback/HeadlessReplayRun';
 import { buildPlaybackWorld, checkReplayCompatibility, framesFromReplay } from '../replay/playback/replayPlayback';
+import type { StateHash } from '../replay/contracts';
+import { stateHash } from '../replay/state/stateHash';
 import { SelfTestMatchWorld } from './SelfTestMatchWorld';
 import {
   DEFAULT_AI_MATCH_MAX_TICKS,
@@ -103,6 +105,16 @@ export interface AiBatchMatchEntry {
   readonly warningCount: number;
   readonly maxTickMs: number;
   readonly slowTicks: number;
+  /**
+   * M9: the canonical state hash when the match ended (null if it
+   * crashed). Within one supported environment (same build, same engine:
+   * the Chromium CI reference, or Node for the headless tests) the same
+   * seed gives the same hash at any acceleration, and a different one means
+   * the simulation diverged. Equality across JavaScript engines or browser
+   * versions is not guaranteed (Math.sin/cos/pow may differ by 1 ULP; owner
+   * decision 6 in docs/ai/m9-status.md).
+   */
+  readonly finalStateHash: StateHash | null;
   /** Null unless the batch verifies replays (AiBatchConfig.verifyReplays). */
   readonly replayCheck: AiBatchReplayCheck | null;
 }
@@ -177,7 +189,7 @@ function isKo(outcome: RoundOutcome): boolean {
   return outcome === RoundOutcome.FirstWinsByKo || outcome === RoundOutcome.SecondWinsByKo;
 }
 
-function entryFromRecord(seed: string, matchup: string, record: AiMatchRecord): AiBatchMatchEntry {
+function entryFromRecord(seed: string, matchup: string, record: AiMatchRecord, finalStateHash: StateHash): AiBatchMatchEntry {
   const failureReasons: AiBatchFailureReason[] = [];
   if (record.anomalyCount > 0 || record.invalidDetectionCount > 0) failureReasons.push('invalid-state');
   if (record.stats.outcome === RoundOutcome.Ongoing) failureReasons.push('hang');
@@ -197,6 +209,7 @@ function entryFromRecord(seed: string, matchup: string, record: AiMatchRecord): 
     warningCount: record.warningCount,
     maxTickMs: record.timing.maxTickMs,
     slowTicks: record.timing.slowTicks,
+    finalStateHash,
     replayCheck: null,
   };
 }
@@ -229,6 +242,7 @@ function crashEntry(seed: string, matchup: string, error: unknown): AiBatchMatch
     warningCount: 0,
     maxTickMs: 0,
     slowTicks: 0,
+    finalStateHash: null,
     replayCheck: null,
   };
 }
@@ -406,10 +420,11 @@ export class AiBatchSession {
         try {
           const next = run.steps.next();
           budget--;
-          if (next.done && this.config.verifyReplays) {
-            await this.startPlayback(entryFromRecord(run.job.seed, run.job.label, next.value), next.value.replay);
-          } else if (next.done) {
-            this.finish(entryFromRecord(run.job.seed, run.job.label, next.value));
+          if (next.done) {
+            // The hash is read from the match world before it's swapped for a playback world.
+            const entry = entryFromRecord(run.job.seed, run.job.label, next.value, stateHash(run.world.getCanonicalState(next.value.stats.ticks)));
+            if (this.config.verifyReplays) await this.startPlayback(entry, next.value.replay);
+            else this.finish(entry);
           } else {
             run.tick = next.value + 1;
           }
