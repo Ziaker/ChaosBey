@@ -104,7 +104,10 @@ export interface AiMatchSetup {
   /** Defaults to the archetype's own personality (as main.ts resolves it). */
   firstPersonality?: AiPersonality;
   secondPersonality?: AiPersonality;
+  /** Both sides' difficulty; firstDifficulty/secondDifficulty override it per side. */
   difficulty?: AiDifficultyProfile;
+  firstDifficulty?: AiDifficultyProfile;
+  secondDifficulty?: AiDifficultyProfile;
   maxTicks?: number;
   /** M9: record this match as a ChaosBeyReplayV1 (returned in AiMatchRecord.replay). */
   record?: Omit<HeadlessCaptureInput, 'seedText' | 'spawns'>;
@@ -319,6 +322,8 @@ function runOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThre
  */
 export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSetup, slowTickThresholdMs: number = DEFAULT_SLOW_TICK_THRESHOLD_MS): Generator<number, AiMatchRecord, void> {
   const difficulty = setup.difficulty ?? DEFAULT_AI_DIFFICULTY_PROFILE;
+  const firstDifficulty = setup.firstDifficulty ?? difficulty;
+  const secondDifficulty = setup.secondDifficulty ?? difficulty;
   const firstPersonality = setup.firstPersonality ?? personalityForBeyDefinitionId(setup.firstDefinition.id);
   const secondPersonality = setup.secondPersonality ?? personalityForBeyDefinitionId(setup.secondDefinition.id);
   // RNG scheme 2 (M9): the same per-side streams a live match with this seed uses.
@@ -329,7 +334,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     world.second,
     world.clash.controller,
     firstPersonality,
-    difficulty,
+    firstDifficulty,
     rng.aiFirst,
   );
   const secondAi = new AIController(
@@ -338,7 +343,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     world.first,
     world.clash.controller,
     secondPersonality,
-    difficulty,
+    secondDifficulty,
     rng.aiSecond,
   );
 

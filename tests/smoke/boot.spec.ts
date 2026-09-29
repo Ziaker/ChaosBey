@@ -31,7 +31,7 @@ test('production build boots under /ChaosBey/ to the Main Menu, PLAY starts the 
 
   // The plain game URL opens the Main Menu (GDD 56); PLAY opens the player
   // flow (M10) through the same ?mode=play route a direct link uses:
-  // Character Select first, then the match.
+  // Character Select, Pregame, then the match.
   await page.getByTestId('main-menu-play').click();
   await expect(page).toHaveURL(/\/ChaosBey\/\?mode=play$/);
 
@@ -48,9 +48,11 @@ test('production build boots under /ChaosBey/ to the Main Menu, PLAY starts the 
     );
   }
 
-  // Choose the focused Bey: the real match starts and reaches Combat.
+  // Choose the focused Bey, keep the Pregame defaults: the real match starts.
   await page.getByTestId('character-select-confirm').click();
   await expect(page.getByTestId('character-select')).toHaveCount(0);
+  await page.getByTestId('pregame-start').click();
+  await expect(page.getByTestId('pregame')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getScreen()), { timeout: 15_000 }).toBe('match');
   await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getSession()?.getTickIndex() ?? 0)).toBeGreaterThan(30);
 

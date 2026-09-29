@@ -17,6 +17,8 @@
 // the personality's own baseline.
 // ============================================================
 
+import type { AiPersonality } from '../personalities/AiPersonality';
+
 export interface AiDifficultyProfile {
   readonly id: string;
 
@@ -40,6 +42,33 @@ export interface AiDifficultyProfile {
 
   /** Multiplies AiPersonality.clashMashRatePerSecond (GDD section 59: "Clash mash performance"). */
   readonly clashMashRateMultiplier: number;
+
+  /** Multiplies AiPersonality.dodgeSkill, capped at MAX_SCALED_DODGE_SKILL (M10: "evasion" — how often a threatened dodge actually fires in time). */
+  readonly evasionMultiplier: number;
+
+  /** Multiplies AiPersonality.edgeCautionMultiplier, never below 1 (M10: "arena awareness" — how strongly ring-out danger weighs). */
+  readonly arenaAwarenessMultiplier: number;
+}
+
+/** Highest dodge skill a difficulty can scale a personality up to. */
+export const MAX_SCALED_DODGE_SKILL = 0.95;
+
+/**
+ * The personality a difficulty profile plays: its evasion and arena
+ * awareness scaled. With both multipliers at 1 (the default profile) the
+ * personality is returned unchanged. The other axes (reaction, errors,
+ * prediction, adaptation, Clash mash) are applied where AIController reads
+ * them.
+ */
+export function applyDifficultyTraits(personality: AiPersonality, difficulty: AiDifficultyProfile): AiPersonality {
+  if (difficulty.evasionMultiplier === 1 && difficulty.arenaAwarenessMultiplier === 1) return personality;
+  return {
+    ...personality,
+    // Never a guaranteed dodge (GDD 63: never perfect); a personality already above the cap keeps its own value.
+    dodgeSkill: Math.min(Math.max(MAX_SCALED_DODGE_SKILL, personality.dodgeSkill), Math.max(0, personality.dodgeSkill * difficulty.evasionMultiplier)),
+    // AiPersonality: no profile may ignore ring-out risk, so never below 1.
+    edgeCautionMultiplier: Math.max(1, personality.edgeCautionMultiplier * difficulty.arenaAwarenessMultiplier),
+  };
 }
 
 /**
@@ -57,4 +86,6 @@ export const DEFAULT_AI_DIFFICULTY_PROFILE: AiDifficultyProfile = {
   predictionStrength: 0.5,
   adaptationMultiplier: 1,
   clashMashRateMultiplier: 1,
+  evasionMultiplier: 1,
+  arenaAwarenessMultiplier: 1,
 };

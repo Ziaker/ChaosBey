@@ -10,6 +10,7 @@
 
 import { AIController } from '../../ai/controllers/AIController';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../ai/difficulty/AiDifficultyProfile';
+import { aiDifficultyTier, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import {
   ATTACK_AI_PERSONALITY,
   DEFENSE_AI_PERSONALITY,
@@ -32,7 +33,8 @@ export type AiPersonalityChoice = 'archetype' | 'attack' | 'defense' | 'stamina'
 
 export type SideControllerSpec =
   | { readonly kind: 'keyboard' }
-  | { readonly kind: 'ai'; readonly personality: AiPersonalityChoice }
+  /** `difficulty` omitted = the internal default profile (the Debug Lab and Self Test); set by the player flow's Pregame. */
+  | { readonly kind: 'ai'; readonly personality: AiPersonalityChoice; readonly difficulty?: AiDifficultyTierId }
   | { readonly kind: 'idle' }
   | { readonly kind: 'scripted'; readonly label: string; readonly frames: readonly ScriptedFrame[] }
   /** M9 playback: recorded ControllerActions, `frames[n]` for TickIndex n (see ReplayController). */
@@ -80,7 +82,7 @@ export function createSideController(spec: SideControllerSpec, deps: SideControl
         deps.opponentBey,
         deps.clashController,
         resolveAiPersonality(spec.personality, deps.ownBey),
-        DEFAULT_AI_DIFFICULTY_PROFILE,
+        spec.difficulty ? aiDifficultyTier(spec.difficulty).profile : DEFAULT_AI_DIFFICULTY_PROFILE,
         deps.aiRng,
         deps.telemetry,
       );
@@ -98,6 +100,6 @@ export function describeControllerSpec(spec: SideControllerSpec): string {
     case 'replay':
       return `Replay (${spec.label})`;
     case 'ai':
-      return `AI (${spec.personality})`;
+      return spec.difficulty ? `AI (${spec.personality}, ${spec.difficulty})` : `AI (${spec.personality})`;
   }
 }

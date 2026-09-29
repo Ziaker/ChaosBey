@@ -46,7 +46,14 @@ describe('Bey roster', () => {
 describe('match setup', () => {
   it('defaults to the first roster Bey against the next one, never a mirror', () => {
     const setup = createDefaultMatchSetup();
-    expect(setup).toEqual({ playerBeyId: 'attack-prototype', opponentBeyId: 'defense-prototype', seedText: null });
+    expect(setup).toEqual({
+      playerBeyId: 'attack-prototype',
+      opponentBeyId: 'defense-prototype',
+      ai: { tier: 'rival', style: 'archetype' },
+      roundsToWin: 2,
+      clashImpactMultiplier: 1,
+      seedText: null,
+    });
     // The default setup is the Debug Lab / quick-play pairing.
     expect(matchBeysFor(setup)).toEqual(DEFAULT_MATCH_BEYS);
     for (const entry of BEY_ROSTER) expect(defaultOpponentFor(entry.definition.id)).not.toBe(entry.definition.id);
@@ -54,10 +61,11 @@ describe('match setup', () => {
   });
 
   it('builds the match from the chosen definitions, player first', () => {
-    const beys = matchBeysFor({ playerBeyId: 'stamina-prototype', opponentBeyId: 'defense-prototype', seedText: 's' });
+    const base = createDefaultMatchSetup();
+    const beys = matchBeysFor({ ...base, playerBeyId: 'stamina-prototype', opponentBeyId: 'defense-prototype' });
     expect(beys.first).toBe(STAMINA_ARCHETYPE);
     expect(beys.second).toBe(DEFENSE_ARCHETYPE);
-    expect(() => matchBeysFor({ playerBeyId: 'x', opponentBeyId: 'defense-prototype', seedText: null })).toThrow(/unknown Bey/);
+    expect(() => matchBeysFor({ ...base, playerBeyId: 'x' })).toThrow(/unknown Bey/);
   });
 });
 

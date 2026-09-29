@@ -44,7 +44,7 @@ import { selectIntent, type ConsideredScore, type IntentDecision } from '../deci
 import { evaluateRisk, type RiskAssessment } from '../decision/RiskEvaluation';
 import { buildWorldState, type WorldState } from '../decision/WorldState';
 import type { AiDebugState } from '../debug/AiDebugState';
-import type { AiDifficultyProfile } from '../difficulty/AiDifficultyProfile';
+import { applyDifficultyTraits, type AiDifficultyProfile } from '../difficulty/AiDifficultyProfile';
 import { isCriticalDecision, maybeApplyIntentionalError } from '../errors/IntentionalError';
 import { ENGAGED_ATTACK_STATES, perceiveCombatant, type CombatantRawState } from '../perception/AiPerception';
 import type { AiPersonality } from '../personalities/AiPersonality';
@@ -159,11 +159,16 @@ export class AIController implements CombatController {
     private readonly ownBey: Bey,
     private readonly opponentBey: Bey,
     private readonly clashController: ClashController,
-    private readonly personality: AiPersonality,
+    personality: AiPersonality,
     private readonly difficulty: AiDifficultyProfile,
     private readonly rng: SeededRng,
     private readonly telemetry: TelemetryRecorder | null = null,
-  ) {}
+  ) {
+    this.personality = applyDifficultyTraits(personality, difficulty);
+  }
+
+  /** The archetype personality with the difficulty's evasion and arena awareness applied. */
+  private readonly personality: AiPersonality;
 
   sampleActions(context: ControllerContext): ControllerActions {
     if (context.simulationFrozen) {

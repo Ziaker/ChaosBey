@@ -29,7 +29,7 @@ Provisional player-facing AI tiers are approved for this pass as **Rookie / Riva
 | Lane | Deliverable | Dependency | Status |
 |---|---|---|---|
 | A | App flow + Character Select | main | IN PROGRESS |
-| B | Pregame Simulator + AI explanation + match-rule config | A | TODO |
+| B | Pregame Simulator + AI explanation + match-rule config | A | IN PROGRESS |
 | C | Arena presets + selected sliders | B | TODO |
 | D | Settings + Low/Medium/High quality + fullscreen/focus safety + gamepad polish | A | TODO |
 | E | HUD refinement + integration/hardening | B/C/D | TODO |
@@ -94,5 +94,41 @@ Add Firefox smoke when practical for final M10 closure; Safari remains deferred 
   as a held input.
 - **Debug overlay.** Hidden on boot in the player flow (F3 still shows it);
   shown in quick play, as before.
-- **Opponent (until lane B).** The next roster Bey, AI with its own
-  archetype personality and the internal default difficulty.
+- **Opponent.** Chosen on the Pregame screen (lane B); the default is the
+  next roster Bey, so the first match is never a mirror.
+
+## Lane B notes — Pregame Simulator, AI tiers, match rules
+
+- **Flow.** Character Select → **Pregame** → rounds → Results. Results
+  offers Rematch, Change setup, Change Bey and Main Menu; between rounds of
+  a longer match, a round result with Next round / Leave match.
+- **Pregame screen** (`PregameScreen.ts`), progressive disclosure:
+  - common choices: opponent Bey, AI level, AI style, match length;
+  - "Advanced rules" (collapsed): Clash impact multiplier (0.5–2.0, the
+    existing GDD 152 `MatchConfig` value) and a fixed seed (blank = random);
+  - "What to expect": the matchup rating by rating, the AI's capabilities
+    and style, and the rules in force. Keyboard ↑/↓ row, ←/→ change, Enter
+    start, Esc back; mouse too.
+- **AI tiers Rookie / Rival / Ace** (`ai/difficulty/AiDifficultyTiers.ts`)
+  are `AiDifficultyProfile` data only. Rival is the internal default the AI
+  has played since M7 (same multipliers), so existing AI tests describe it.
+  Two axes were added to the profile so the tiers cover the owner's list:
+  **evasion** (scales `dodgeSkill`, capped at 0.95: never a guaranteed
+  dodge) and **arena awareness** (scales `edgeCautionMultiplier`, never
+  below 1). Both are 1 in the default profile, where the personality is
+  returned unchanged. The Debug Lab and Self Test still use the default.
+- **AI explanation** (`aiExplanation.ts`): seven capabilities — reaction,
+  prediction, consistency, evasion, arena awareness, Clash power,
+  adaptation — each the effective value the AI plays with (personality ×
+  tier), as a bar and a readout ("0.12 s", "dodges 74% of threats in
+  time"). Style lines come from the personality, including resource use.
+- **Evidence the tiers matter** (`tests/deterministic/aiDifficultyTiers.test.ts`):
+  24 Ace-vs-Rookie mirror matches (all archetypes, both sides): deliberate
+  errors 49 vs 106, hits dodged 51 vs 8, dodges 23 vs 7, wins 15 vs 9. In
+  the Defense mirror alone the result is near coin-flip whatever the tier
+  (Rival vs Rookie 10–10 over 20 matches): Defense-vs-Defense outcomes are
+  dominated by collisions, not decisions. That is M7 AI territory, noted
+  for playtest, not tuned here.
+- **Match length.** 1 round, first to 2 (default) or first to 3. A draw
+  scores nobody. Each round is its own deterministic match: round 1 plays
+  the match seed, round n plays `<seed>/round-n` (`matchScore.ts`).
