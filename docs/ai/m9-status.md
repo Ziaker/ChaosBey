@@ -4,6 +4,9 @@ Checklist for Milestone 9 (GDD sections 75, 76, 77, 145, 153). Updated by
 every M9 PR. Shared contracts live in `src/replay/contracts.ts`; changing one
 is a contract change and bumps its version.
 
+**M9 is complete on `main@827976a`.** Every lane is DONE (#39–#44); the
+items the owner moved out of M9 are DEFERRED (decision 8). See "Closure".
+
 Status values: **DONE** (merged and tested), **IN PROGRESS** (PR named),
 **TODO**, **DEFERRED** (owner moved it out of M9).
 
@@ -58,7 +61,7 @@ Status values: **DONE** (merged and tested), **IN PROGRESS** (PR named),
 | A | M9-0 (hitstop into the simulation, RNG scheme 2) + `CanonicalMatchStateV1` + state hash | Contracts | yes (hitstop wiring, RNG) | DONE (#40) |
 | B | `ChaosBeyReplayV1` format, encode/decode/validate, recorder, config snapshot — pure modules, no call-site hooks | Contracts | no | DONE (#41) |
 | C | `ReplayController`, recorder hooks at the three `tickMatch` callers, headless replay runner, checkpoint compare, first-divergence bisect | A + B | yes (after A) | DONE (#42) |
-| D | `replay-reproduction` preset, batch divergence, Debug Lab and Self Test integration | C | via `DebugLabMode` | IN PROGRESS (#44) |
+| D | `replay-reproduction` preset, batch divergence, Debug Lab and Self Test integration | C | via `DebugLabMode` | DONE (#44) |
 | E | Deterministic hardening in Chromium: long AI-vs-AI replays, 1× vs max acceleration, headless vs browser | A/B partly, rest parallel with D | no | DONE (#43) |
 
 A and B run in parallel: they share only `contracts.ts`. Only one lane at a
@@ -359,6 +362,40 @@ integrated only after B is merged and `main` is green.
     tick 15.
   - Rapier's WASM is not involved.
   - Per the revised decision 6, this is a known limitation, not a bug.
+
+## Closure
+
+| PR | Lane | Merge commit |
+|---|---|---|
+| #39 | Contracts + decision record | `8e06c15` |
+| #40 | A: one simulation (hitstop, RNG scheme 2), `CanonicalMatchStateV1` | `2954ddc` |
+| #41 | B: `ChaosBeyReplayV1` format, validation, recorder, config snapshot | `1cc0f77` |
+| #42 | C: `ReplayController`, recording at the tick callers, verified playback | `f72a202` |
+| #43 | E: same result at any speed, revised decision 6 | `3e0b3a8` |
+| #44 | D: `replay-reproduction` preset, Self Test divergence, Debug Lab replay | `827976a` |
+
+GDD 145 M9 items and where they stand:
+
+| Item | Where | Status |
+|---|---|---|
+| Versioned replay schema | `ChaosBeyReplayV1`, strict decode with path + code per error | DONE (#41) |
+| Recording | `ReplayCapture` at `MatchSession`, `stepAiMatchOnWorld`, `runScenario` | DONE (#42) |
+| Playback through the real runtime | `ReplayController`, `playReplayHeadless`, Debug Lab "Import & play" | DONE (#42, #44) |
+| State hashes | `CanonicalMatchStateV1` + FNV-1a 64, strict floats | DONE (#40) |
+| Divergence detection | checkpoint compare, first-divergence bisect, Self Test "divergence N of M replays" | DONE (#42, #44) |
+| Replay reproduction preset (GDD 68) | `replay-reproduction`: AI match + `clash` scenario, with negative self-checks | DONE (#44) |
+| Deterministic hardening | 1× vs max vs repeat in Chromium; acceleration independence | DONE (#43) |
+| IndexedDB, match-history browser, player-facing history UX | — | DEFERRED (decision 8) |
+
+Known limitations and follow-ups (not M9 blockers):
+
+- Node and Chromium differ by up to 1 ULP in `Math.sin`/`cos`/`pow`, so a
+  replay recorded in one may report `diverged` in the other (decision 6).
+- A scenario replay doesn't record which preset set it up; playback must
+  be given the same `setup` (bound by `replay-reproduction`).
+- Import cycle `ScenarioPresets → replayReproduction → ScenarioRunner →
+  ScenarioPresets`. Safe today (every reference is read at call time);
+  worth untangling later.
 
 ## Known architecture facts (main@972f65d)
 
