@@ -161,6 +161,8 @@ export class CharacterSelectScreen {
   private readonly handleKey = (event: KeyboardEvent): void => {
     const intent = navigationIntent(event.code);
     if (!intent) return;
+    // Enter/Space on Back or Choose activates that button, not "choose the focused Bey".
+    if (intent === 'confirm' && event.code !== 'KeyZ' && isFooterButton(event.target)) return;
     event.preventDefault();
     switch (intent) {
       case 'previous':
@@ -179,6 +181,11 @@ export class CharacterSelectScreen {
         break;
     }
   };
+}
+
+/** A plain button (not a Bey card) that should keep its native Enter/Space activation. */
+function isFooterButton(target: EventTarget | null): boolean {
+  return target instanceof HTMLButtonElement && !target.classList.contains('cb-select__card');
 }
 
 function cardContent(entry: RosterEntry): DocumentFragment {

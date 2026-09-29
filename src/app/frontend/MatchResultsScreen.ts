@@ -66,6 +66,9 @@ export class MatchResultsScreen {
       const node = button(action.label, action.primary ? 'cb-button--primary' : '', `${id}-${action.id}`, () => {
         if (!this.closed) action.run();
       });
+      // Tab or a click moves focus too: Enter must act on the button actually focused.
+      const index = this.buttons.length;
+      node.addEventListener('focus', () => (this.focusIndex = index));
       this.buttons.push(node);
       row.append(node);
     });
