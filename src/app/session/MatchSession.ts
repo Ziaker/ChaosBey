@@ -51,7 +51,8 @@ import { ForcedInputController } from '../../automation/scripted-scenarios/Force
 import { AIController } from '../../ai/controllers/AIController';
 import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector, type DetectedAnomaly } from '../../self-test/anomalies/MatchAnomalyDetector';
 import type { ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
-import { FIRST_SPAWN, SECOND_SPAWN } from '../bootstrap/matchSpawns';
+import { matchSpawnsFor } from '../bootstrap/matchSpawns';
+import { floorHeightAt, floorRimHeight } from '../../arena/floor/ArenaFloorProfile';
 import type { ChaosBeyReplayV1 } from '../../replay/format/ChaosBeyReplayV1';
 import { captureDeterministicConfig } from '../../replay/format/configSnapshot';
 import { ReplayCapture, type ReplayCaptureOptions } from '../../replay/recording/ReplayCapture';
@@ -161,7 +162,7 @@ export class MatchSession {
       seedText: this.seedText,
       matchConfig: this.matchConfig,
       attackProfileSettings: this.attackProfileSettings,
-      spawns: { first: FIRST_SPAWN, second: SECOND_SPAWN },
+      spawns: matchSpawnsFor(this.matchConfig.arenaFloor ?? 'flat'),
       beys: { first: this.match.first.definition, second: this.match.second.definition },
     });
     // Called inside tick() before this.tickIndex advances, so the count comes from the capture, not from this.tickIndex.
@@ -249,11 +250,12 @@ export class MatchSession {
     });
     this.headingArrow = new HeadingArrow(this.root);
     this.camera = options.camera;
-    this.cameraRig = new CameraRig(options.cameraPreset ?? 'B', options.camera.aspect);
+    const arenaFloor = options.matchConfig.arenaFloor ?? 'flat';
+    this.cameraRig = new CameraRig(options.cameraPreset ?? 'B', options.camera.aspect, arenaFloor === 'flat' ? undefined : (x, z) => floorHeightAt(arenaFloor, x, z));
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
-    this.anomalyDetector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: options.matchConfig.arenaWallHeightM });
+    this.anomalyDetector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(options.matchConfig.arenaFloor ?? 'flat') + options.matchConfig.arenaWallHeightM });
 
     this.controllerSpecs = { first: options.controllers.first, second: options.controllers.second };
     this.drivers = {

@@ -6,7 +6,7 @@
 // at TicksCompleted N" while you watch it happen.
 // ============================================================
 
-import { FIRST_SPAWN, SECOND_SPAWN } from '../../app/bootstrap/matchSpawns';
+import { matchSpawnsFor } from '../../app/bootstrap/matchSpawns';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
 import type { StateHash, TicksCompleted } from '../../replay/contracts';
 import type { ChaosBeyReplayV1 } from '../../replay/format/ChaosBeyReplayV1';
@@ -55,6 +55,7 @@ export function liveLabIncompatibility(replay: ChaosBeyReplayV1, compatibility: 
   const ids = [compatibility.beys.first.id, compatibility.beys.second.id];
   if (ids[0] !== ATTACK_ARCHETYPE.id || ids[1] !== DEFENSE_ARCHETYPE.id) return `this replay is ${ids.join(' vs ')}; the Debug Lab plays ${ATTACK_ARCHETYPE.id} vs ${DEFENSE_ARCHETYPE.id} (replay it headless in the Self Test instead)`;
   const same = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) => a.x === b.x && a.y === b.y && a.z === b.z;
-  if (!same(replay.config.spawns.first, FIRST_SPAWN) || !same(replay.config.spawns.second, SECOND_SPAWN)) return 'this replay uses non-live spawns (replay it headless in the Self Test instead)';
+  const live = matchSpawnsFor(replay.config.matchConfig.arenaFloor ?? 'flat');
+  if (!same(replay.config.spawns.first, live.first) || !same(replay.config.spawns.second, live.second)) return 'this replay uses non-live spawns (replay it headless in the Self Test instead)';
   return null;
 }

@@ -5,6 +5,8 @@
 // same numbers.
 // ============================================================
 
+import { ARENA_FLOORS } from '../../arena/floor/ArenaFloorProfile';
+import { floorReadout } from '../../arena/floor/floorReadout';
 import { CAMERA_PRESET_NAMES } from '../../camera/director/CameraRig';
 import { AIController } from '../../ai/controllers/AIController';
 import type { MatchSession } from '../../app/session/MatchSession';
@@ -29,6 +31,7 @@ export function buildCombatOverlayFields(session: MatchSession): CombatOverlayFi
     speedMps: result.first.movement.speedMps,
     headingRad: result.first.movement.headingRad,
     desiredMoveIntent: session.getLastActions('first')?.moveIntent ?? null,
+    floorLine: floorLineFor(session),
     slipAngleRad: result.first.movement.slipAngleRad,
     lateralGripPerS: result.first.movement.lateralGripPerS,
     longitudinalDragPerS: result.first.movement.longitudinalDragPerS,
@@ -78,4 +81,11 @@ export function buildCombatOverlayFields(session: MatchSession): CombatOverlayFi
     clashImpactMultiplier: session.matchConfig.clashImpactMultiplier,
     aiDebug: secondController instanceof AIController ? secondController.getDebugState() : null,
   };
+}
+
+/** The player's Bey floor: profile, floor height under it, slope and downhill pull (M11 lane 4). */
+function floorLineFor(session: MatchSession): string {
+  const bey = session.getBey('first');
+  const r = floorReadout(bey.arenaFloor, bey.body.translation());
+  return `${ARENA_FLOORS[bey.arenaFloor].label} · h ${r.floorHeightM.toFixed(2)} m · slope ${r.slopeDeg.toFixed(1)}° · pull ${r.downhillPullMps2.toFixed(2)} m/s²`;
 }

@@ -75,11 +75,13 @@ export class CameraRig {
   private fromPreset: PresetId;
   private switchElapsedS = PRESET_SWITCH_BLEND_S;
 
-  constructor(preset: PresetId, aspect = 16 / 9) {
+  /** `floorHeightAt`: the arena floor under (x, z) for the directors' floor guard (M11 bowls); omit for the flat arena. */
+  constructor(preset: PresetId, aspect = 16 / 9, floorHeightAt?: (x: number, z: number) => number) {
+    const options = { clashOrbit: false, floorHeightAt };
     this.directors = {
-      A: new CameraDirector(PRESETS.A, aspect, { clashOrbit: false }),
-      B: new CameraDirector(PRESETS.B, aspect, { clashOrbit: false }),
-      C: new CameraDirector(PRESETS.C, aspect, { clashOrbit: false }),
+      A: new CameraDirector(PRESETS.A, aspect, options),
+      B: new CameraDirector(PRESETS.B, aspect, options),
+      C: new CameraDirector(PRESETS.C, aspect, options),
     };
     this.preset = preset;
     this.fromPreset = preset;

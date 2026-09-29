@@ -19,6 +19,7 @@
 // ended, rather than letting the fight silently continue in the background.
 // ============================================================
 
+import { floorNormalAt } from '../../arena/floor/ArenaFloorProfile';
 import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { detectHits, type HitEvent } from '../../combat/hit-detection/HitDetection';
@@ -248,6 +249,7 @@ export function tickMatch(
     lateralGripOverridePerS: firstDodge.lateralGripOverridePerS ?? firstDrift.lateralGripOverridePerS,
     staminaAccelFactor: firstCondition.accelFactor,
     dashOverride: firstAttack.dashOverride,
+    floorNormal: floorNormalUnder(first, firstGrounded),
   });
   second.movement.applyPreStep(second.body, {
     actions: secondActions,
@@ -256,6 +258,7 @@ export function tickMatch(
     lateralGripOverridePerS: secondDodge.lateralGripOverridePerS ?? secondDrift.lateralGripOverridePerS,
     staminaAccelFactor: secondCondition.accelFactor,
     dashOverride: secondAttack.dashOverride,
+    floorNormal: floorNormalUnder(second, secondGrounded),
   });
 
   first.spin.tick(first.body, fixedDeltaSeconds, firstCondition);
@@ -471,4 +474,21 @@ export function tickMatch(
     ringOutSecond,
     clashResolvedThisTick: null,
   };
+}
+
+/**
+ * The floor's normal where a grounded Bey touches a bowl (M11 lane 4); null
+ * on the flat arena or in the air. An upright flat base in a concave floor
+ * rests on its outer rim (the side farther from the centre, where the floor
+ * is higher), so that is where the slope that carries it is measured — the
+ * slope under its centre is shallower, and following it would lift the rim
+ * off the floor when rolling downhill.
+ */
+function floorNormalUnder(bey: Bey, grounded: boolean): { x: number; y: number; z: number } | null {
+  if (!grounded || bey.arenaFloor === 'flat') return null;
+  const p = bey.body.translation();
+  const r = Math.hypot(p.x, p.z);
+  if (r < 1e-6) return floorNormalAt(bey.arenaFloor, p.x, p.z);
+  const rim = (r + bey.definition.physical.colliderRadiusM) / r;
+  return floorNormalAt(bey.arenaFloor, p.x * rim, p.z * rim);
 }

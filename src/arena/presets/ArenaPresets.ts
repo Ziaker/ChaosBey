@@ -16,6 +16,7 @@
 // ring-out consequences are a separate gameplay decision, 4.3).
 // ============================================================
 
+import type { ArenaFloorId } from '../floor/ArenaFloorProfile';
 import { ARENA_WALL_HEIGHT } from '../colliders/ArenaTuning';
 import { WALL_MATERIAL } from '../../physics/materials/PhysicsMaterials';
 
@@ -45,6 +46,8 @@ export interface ArenaTheme {
 export interface ArenaGeometry {
   readonly wallHeightM: number;
   readonly wallRestitution: number;
+  /** M11 lane 4: floor profile (flat, or an approved bowl for playtest). Omitted = flat. The wall height is measured from the rim. */
+  readonly floor?: ArenaFloorId;
 }
 
 export interface ArenaPreset {

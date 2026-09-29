@@ -14,7 +14,7 @@ import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../bey/archetype/BeyArch
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import { applyAttackProfileSettings, createDefaultAttackProfileSettings, type BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
-import { FIRST_SPAWN, SECOND_SPAWN } from './matchSpawns';
+import { matchSpawnsFor } from './matchSpawns';
 
 export interface MatchScene {
   readonly first: Bey;
@@ -70,8 +70,10 @@ export function createMatchScene(
 ): MatchScene {
   createArenaColliders(scene, physics, arena.geometry, arena.theme);
 
-  const first = createBey(physics, FIRST_SPAWN, applyAttackProfileSettings(beys.first, attackProfileSettings));
-  const second = createBey(physics, SECOND_SPAWN, applyAttackProfileSettings(beys.second, attackProfileSettings));
+  const floor = arena.geometry.floor ?? 'flat';
+  const spawns = matchSpawnsFor(floor);
+  const first = createBey(physics, spawns.first, applyAttackProfileSettings(beys.first, attackProfileSettings), floor);
+  const second = createBey(physics, spawns.second, applyAttackProfileSettings(beys.second, attackProfileSettings), floor);
 
   const firstVisual = first.definition.appearance.createVisual();
   const secondVisual = second.definition.appearance.createVisual();

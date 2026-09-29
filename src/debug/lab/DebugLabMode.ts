@@ -29,6 +29,7 @@ import { loadAttackProfileOverrides } from '../../config/attack-profile/AttackPr
 import { KeyboardController } from '../../input/devices/KeyboardController';
 import { cameraYawOf, DirectionalController } from '../../input/directional/DirectionalController';
 import { loadPlayerSettings, type CameraPresetSetting } from '../../config/settings/PlayerSettings';
+import { ARENA_FLOORS, ARENA_FLOOR_IDS, isArenaFloorId, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import { generateRandomSeedText } from '../../rng/stringSeed';
 import { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
@@ -86,6 +87,8 @@ export interface DebugLabHandle {
   replayStatus(): string | null;
   /** M11: the camera the player looks through (read-only use: projecting to the screen in smoke tests). */
   getCamera(): THREE.PerspectiveCamera;
+  /** M11 lane 4: the floor profile (flat / bowl A/B/C); restarts the match on the current seed. */
+  setArenaFloor(floor: ArenaFloorId): Promise<void>;
   /** M11: the game camera preset (A/B/C), kept across restarts. Render only. */
   setCameraPreset(preset: CameraPresetSetting): void;
 }
@@ -108,7 +111,9 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   playerInput.setEnabled(loadPlayerSettings().controlScheme === 'directional');
   // M11: the game camera preset from Settings (A/B/C; the Clash forces B).
   let cameraPreset: CameraPresetSetting = loadPlayerSettings().cameraPreset;
-  const labMatchConfig = resolveMatchConfig();
+  // M11 lane 4: the floor profile to test (`&floor=bowl-a`, the panel, or the handle); flat by default.
+  const floorParam = new URLSearchParams(window.location.search).get('floor');
+  let labMatchConfig = resolveMatchConfig({ arenaFloor: isArenaFloorId(floorParam) ? floorParam : 'flat' });
   const labAttackProfileSettings = resolveAttackProfileSettings(loadAttackProfileOverrides() ?? undefined);
   /** M9: while a replay plays, the session is built from the replay's own config, never the Lab's (owner decision 3). */
   let replayCheck: LiveReplayCheck | null = null;
@@ -248,6 +253,11 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
 
   const handle: DebugLabHandle = {
     getCamera: () => appRenderer.camera,
+    setArenaFloor: async (floor) => {
+      labMatchConfig = resolveMatchConfig({ ...labMatchConfig, arenaFloor: floor });
+      floorSelect.value = floor;
+      await handle.restart(null);
+    },
     setCameraPreset: (preset) => {
       cameraPreset = preset;
       session?.setCameraPreset(preset);
@@ -366,7 +376,7 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
       const frames = framesFromReplay(replay);
       controllers.first = { kind: 'replay', label: 'replay', frames: frames.first };
       controllers.second = { kind: 'replay', label: 'replay', frames: frames.second };
-      await createSession(replay.config.seedText, { matchConfig: replay.config.matchConfig, attackProfileSettings: replay.config.attackProfileSettings });
+      await createSession(replay.config.seedText, { matchConfig: resolveMatchConfig(replay.config.matchConfig), attackProfileSettings: replay.config.attackProfileSettings });
       if (!session) return false;
       replayCheck = new LiveReplayCheck(replay);
       replayCheck.check(0, session.getStateHash());
@@ -396,6 +406,20 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
     handle.setCameraView(viewSelect.value === 'overview' ? 'overview' : 'game');
     viewSelect.blur();
   });
+  const floorSelect = document.createElement('select');
+  floorSelect.setAttribute('data-testid', 'debug-lab-arena-floor');
+  for (const id of ARENA_FLOOR_IDS) {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = ARENA_FLOORS[id].label;
+    floorSelect.append(option);
+  }
+  floorSelect.value = labMatchConfig.arenaFloor;
+  floorSelect.addEventListener('change', () => {
+    if (isArenaFloorId(floorSelect.value)) void handle.setArenaFloor(floorSelect.value);
+    floorSelect.blur();
+  });
+  panel.addGroup('Arena floor (M11 playtest — restarts the match)', [labeled('Floor', floorSelect)]);
   panel.addGroup('Presentation (render-only)', [
     labeled('Camera', viewSelect),
     checkbox('Camera effects (shake, FOV)', 'debug-lab-camera-effects', true, (on) => handle.setCameraEffects(on)),

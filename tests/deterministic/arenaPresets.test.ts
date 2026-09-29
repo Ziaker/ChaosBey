@@ -30,7 +30,8 @@ describe('arena presets', () => {
     expect(DEFAULT_ARENA_PRESET).toBe('foundry');
     expect(STANDARD_ARENA_GEOMETRY).toEqual({ wallHeightM: ARENA_WALL_HEIGHT, wallRestitution: WALL_MATERIAL.restitution });
     expect(FOUNDRY_PIT.geometry).toEqual(STANDARD_ARENA_GEOMETRY);
-    expect(arenaGeometryOf(createDefaultMatchConfig())).toEqual(STANDARD_ARENA_GEOMETRY);
+    // M11 lane 4: the default floor is flat (the bowls are playtest options).
+    expect(arenaGeometryOf(createDefaultMatchConfig())).toEqual({ ...STANDARD_ARENA_GEOMETRY, floor: 'flat' });
     expect(arenaPreset('rift')).toBe(RIFT_CRATER);
   });
 

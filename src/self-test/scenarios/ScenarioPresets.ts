@@ -15,6 +15,7 @@
 
 import type { Bey } from '../../bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../bey/core/BeyTuning';
+import { floorHeightAt } from '../../arena/floor/ArenaFloorProfile';
 import { DASH_MAX_CHARGE_S, TAP_MAX_HOLD_S } from '../../combat/attacks/AttackTuning';
 import { JUMP_ASSIST_MAX_DURATION_S } from '../../drift/DriftTuning';
 import { Action } from '../../input/actions/Action';
@@ -76,7 +77,8 @@ export interface ScenarioPreset {
 
 /** Places a Bey at (x, z), upright, stopped, facing `headingRad` (yaw 0 = +Z). */
 export function placeBey(bey: Bey, x: number, z: number, headingRad: number): void {
-  bey.body.setTranslation({ x, y: BEY_SPAWN_HEIGHT_M, z }, true);
+  // Spawn height above the floor under (x, z): on a bowl the floor isn't at y = 0 (M11).
+  bey.body.setTranslation({ x, y: BEY_SPAWN_HEIGHT_M + floorHeightAt(bey.arenaFloor, x, z), z }, true);
   bey.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
   bey.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
   bey.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
