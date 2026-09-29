@@ -1,5 +1,8 @@
 # Milestone 10 — Pregame / Presentation
 
+**M10 is complete** (PRs #48–#51). See "Closure" at the end for the
+checklist, what stayed out and why.
+
 Base: `main@aba0edc59b32a5c6fc926578ab4d9a734bfff19c` (M9 closed).
 
 ## Scope
@@ -28,12 +31,12 @@ Provisional player-facing AI tiers are approved for this pass as **Rookie / Riva
 
 | Lane | Deliverable | Dependency | Status |
 |---|---|---|---|
-| A | App flow + Character Select | main | IN PROGRESS |
-| B | Pregame Simulator + AI explanation + match-rule config | A | IN PROGRESS |
-| C | Arena presets + selected sliders | B | IN PROGRESS |
-| D | Settings + Low/Medium/High quality + fullscreen/focus safety + gamepad polish | A | IN PROGRESS |
-| E | HUD refinement + integration/hardening | B/C/D | IN PROGRESS |
-| F | M10 closure: browser smoke, GitHub Pages/base path, docs | E | TODO |
+| A | App flow + Character Select | main | DONE (#48) |
+| B | Pregame Simulator + AI explanation + match-rule config | A | DONE (#49) |
+| C | Arena presets + selected sliders | B | DONE (#50) |
+| D | Settings + Low/Medium/High quality + fullscreen/focus safety + gamepad polish | A | DONE (#50) |
+| E | HUD refinement + integration/hardening | B/C/D | DONE (#51) |
+| F | M10 closure: browser smoke, GitHub Pages/base path, docs | E | DONE (#51) |
 
 Prefer small reviewable PRs. Parallelize lanes only when their file ownership is clearly separate. Merge `main` into dependent branches; do not rebase integration branches.
 
@@ -227,3 +230,46 @@ Add Firefox smoke when practical for final M10 closure; Safari remains deferred 
   `hudAndRounds.spec.ts`: the HUD tracks the live Stamina, a real round
   ends with its banner, a first-to-2 match goes round result → round 2 with
   the score pips and a derived round seed, hints follow the setting.
+
+## Closure
+
+| Scope item | Where | Evidence | Status |
+|---|---|---|---|
+| Character Select (3D Bey, ATK/DEF/STA) | `CharacterSelectScreen`, `BeyPreviewStage`, `beyRoster` | `frontendFlow.test.ts`, `playerFlow.spec.ts` | DONE (#48) |
+| App flow (menu → select → pregame → rounds → results) | `PlayFlow`, `MatchRunner`, `MatchResultsScreen` | `boot`, `playerFlow`, `hudAndRounds` smokes | DONE (#48, #49) |
+| Pregame Simulator + explanations | `PregameScreen`, `matchSetup`, `aiExplanation` | `pregame.test.ts`, `playerFlow.spec.ts` | DONE (#49) |
+| AI tiers Rookie / Rival / Ace (data profiles) | `AiDifficultyTiers`, `applyDifficultyTraits` | `aiDifficultyTiers.test.ts` (real matches) | DONE (#49) |
+| Match rules (length, Clash impact, seed) | `matchScore`, `MatchConfig` | `pregame.test.ts`, `hudAndRounds.spec.ts` | DONE (#49) |
+| Arena presets + selected sliders | `ArenaPresets`, `MatchConfig` arena fields | `arenaPresets.test.ts` (incl. replay) | DONE (#50) |
+| Settings + Low/Medium/High quality | `SettingsScreen`, `PlayerSettings`, `quality.ts` | `settingsAndGamepad.test.ts`, `settingsPauseGamepad.spec.ts` | DONE (#50) |
+| Fullscreen + focus-loss safety + pause | `fullscreen.ts`, `PlayFlow` pause, `KeyboardController.detach` | `settingsPauseGamepad.spec.ts`, `inputFocusLoss.spec.ts` | DONE (#50) |
+| Gamepad through the action layer | `GamepadController`, `gamepadMapping`, `GamepadMenuKeys` | unit + scripted-pad smoke | DONE (#50) |
+| HUD refinement (incl. approved Clash bar) | `CombatHud`, `hudModel` | `combatHud.test.ts`, `hudAndRounds.spec.ts` | DONE (#51) |
+| Browser / GitHub Pages hardening | every smoke runs the production build under `/ChaosBey/` | `boot.spec.ts` (base path, no failed requests), full smoke | DONE |
+| Debug Lab, Self Test, replays intact | defaults unchanged (Attack vs Defense, Foundry Pit, default AI profile) | `debugLab`, `selfTest`, replay suites | DONE |
+
+**Stayed out, on purpose:**
+
+- **SFX/audio**: excluded by the owner.
+- **Six more Beys.** Nine concepts are approved as the roster; three exist as
+  gameplay definitions. New definitions are balance content, not M10. The
+  roster is data-driven.
+- **Camera preset choice.** The approved A/B/C presets aren't integrated in
+  `src/`; Settings offers camera shake on/off only.
+- **Approved bowl geometry** (12 m, 3.2 m rim): a gameplay decision
+  (gravity, ring-out) of its own; the themes paint the current flat arena.
+- **Intro / countdown / launch** presentation: not prototyped/approved; the
+  round starts with a non-blocking "ROUND n / FIGHT!" banner.
+- **Firefox smoke.** The owner made Chromium the only CI reference in M9
+  (#38 removed Firefox). Safari stays deferred by the GDD.
+
+**Follow-ups noticed (not M10 blockers):**
+
+- Defense-vs-Defense AI mirrors are near coin-flip whatever the tier
+  (collision-dominated); worth a playtest look in the AI.
+- `repeatedMatchStability` failed once on `main@f5b39a4`: one quick-play
+  round with a random seed didn't end within the smoke's 100-simulated-second
+  budget. That seed ends normally on every replay (browser and headless), so
+  the long round depends on wall-clock input timing; the next `main` run was
+  green. `?mode=play&quick&seed=…` now helps reproduce a reported round.
+- PR #47 (another session's parallel lane A, red CI) is superseded by #48.

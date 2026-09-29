@@ -10,7 +10,11 @@ Before reopening any visual/design question, read [`docs/design-decisions/README
 
 Those documents distinguish **prototyped**, **approved** and **integrated** work and record later owner overrides over older snapshots. In particular, all **9 approved Bey concepts are selectable/playable**; older text that says to choose only three final Beys is superseded on that point.
 
-## Status: Milestone 1 — Physical Movement Prototype
+## Status
+
+Milestones 0–10 are merged. M10 (Pregame / Presentation) added the player flow, the Pregame Simulator with Rookie / Rival / Ace AI, arena presets, Settings, pause, gamepad support and the combat HUD — see [`docs/ai/m10-status.md`](docs/ai/m10-status.md). The milestone history below is kept for context.
+
+## Milestone 1 — Physical Movement Prototype
 
 **Milestone 0 (Foundation)** — merged: Vite + TypeScript project under the `/ChaosBey/` GitHub Pages subpath, Three.js renderer bootstrap, Rapier 3D physics world with a fixed 60 Hz timestep loop decoupled from render FPS, seeded deterministic RNG (gameplay/AI/cosmetic streams), top-level game state machine skeleton, `CombatController` abstraction with a `KeyboardController`, runtime quality-preset config, telemetry event bus, debug overlay (`F3`), physics safety diagnostics, unit tests + a production smoke test, and a GitHub Actions workflow (typecheck → test → build → smoke test → deploy to Pages).
 
