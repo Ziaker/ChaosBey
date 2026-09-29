@@ -14,6 +14,7 @@
 // ============================================================
 
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
+import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { STANDARD_ARENA_GEOMETRY, type ArenaGeometry } from '../../arena/presets/ArenaPresets';
 
 export interface MatchConfig {
@@ -23,6 +24,13 @@ export interface MatchConfig {
   arenaWallHeightM: number;
   /** Restitution of the boundary wall's colliders. M10 arena slider (GDD 36): how hard a wall hit bounces back. */
   arenaWallRestitution: number;
+  /**
+   * M11 lane 4: the floor's profile — flat (the current arena, default) or
+   * one of the approved bowls A/B/C, for playtest (arena/floor/). Gameplay:
+   * it builds the floor collider, so it is recorded in every replay.
+   * Replays recorded before this field existed were all flat.
+   */
+  arenaFloor: ArenaFloorId;
 }
 
 export function createDefaultMatchConfig(): MatchConfig {
@@ -30,6 +38,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     clashImpactMultiplier: CLASH_IMPACT_MULTIPLIER_DEFAULT,
     arenaWallHeightM: STANDARD_ARENA_GEOMETRY.wallHeightM,
     arenaWallRestitution: STANDARD_ARENA_GEOMETRY.wallRestitution,
+    arenaFloor: DEFAULT_ARENA_FLOOR,
   };
 }
 
@@ -40,5 +49,5 @@ export function resolveMatchConfig(overrides: Partial<MatchConfig> = {}): MatchC
 
 /** The arena values of a resolved config, in the shape the arena builder takes. */
 export function arenaGeometryOf(config: MatchConfig): ArenaGeometry {
-  return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution };
+  return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution, floor: config.arenaFloor ?? DEFAULT_ARENA_FLOOR };
 }

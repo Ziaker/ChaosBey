@@ -7,6 +7,7 @@
 
 import { DEFAULT_AI_DIFFICULTY_TIER, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { DEFAULT_ARENA_PRESET, arenaPreset, type ArenaGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
+import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import { resolveMatchConfig, type MatchConfig } from '../../config/match/MatchConfig';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
@@ -71,12 +72,18 @@ export function matchConfigFor(setup: MatchSetup): MatchConfig {
     clashImpactMultiplier: setup.clashImpactMultiplier,
     arenaWallHeightM: setup.arena.geometry.wallHeightM,
     arenaWallRestitution: setup.arena.geometry.wallRestitution,
+    arenaFloor: setup.arena.geometry.floor ?? DEFAULT_ARENA_FLOOR,
   });
 }
 
-/** A new arena preset, with that preset's own walls (slider changes are reset). */
+/** A new arena preset, with that preset's own walls (slider changes are reset). The floor profile is kept: it is independent of the look. */
 export function withArenaPreset(setup: MatchSetup, presetId: ArenaPresetId): MatchSetup {
-  return { ...setup, arena: { presetId, geometry: arenaPreset(presetId).geometry } };
+  return { ...setup, arena: { presetId, geometry: { ...arenaPreset(presetId).geometry, floor: setup.arena.geometry.floor ?? DEFAULT_ARENA_FLOOR } } };
+}
+
+/** M11 lane 4: the floor profile (flat, or bowl A/B/C for playtest). */
+export function withArenaFloor(setup: MatchSetup, floor: ArenaFloorId): MatchSetup {
+  return { ...setup, arena: { ...setup.arena, geometry: { ...setup.arena.geometry, floor } } };
 }
 
 export function opponentControllerFor(setup: MatchSetup): SideControllerSpec {

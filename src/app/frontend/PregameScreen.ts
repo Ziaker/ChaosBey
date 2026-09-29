@@ -18,7 +18,8 @@ import { BEY_ROSTER, rosterEntry } from './beyRoster';
 import { button, el, ensureFrontendStyle, keyHint } from './frontendStyle';
 import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
-import { CLASH_IMPACT_RANGE, matchupLines, normalizeSeedText, withArenaPreset, type MatchSetup } from './matchSetup';
+import { CLASH_IMPACT_RANGE, matchupLines, normalizeSeedText, withArenaFloor, withArenaPreset, type MatchSetup } from './matchSetup';
+import { ARENA_FLOORS, ARENA_FLOOR_IDS, DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { ARENA_PRESETS, ARENA_WALL_BOUNCE_RANGE, ARENA_WALL_HEIGHT_RANGE, arenaPreset, isPresetGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
 
 export interface PregameOptions {
@@ -43,6 +44,14 @@ interface ChoiceRow<T> {
 
 // Heterogeneous rows share one list; each row only ever sees its own value type.
 type AnyChoiceRow = ChoiceRow<never> & ChoiceRow<unknown>;
+
+/** Compact names for the floor row's buttons (full names in the rules panel). */
+const ARENA_FLOOR_SHORT_LABELS: Readonly<Record<ArenaFloorId, string>> = {
+  flat: 'Flat',
+  'bowl-a': 'Bowl A · Dish',
+  'bowl-b': 'Bowl B · Funnel',
+  'bowl-c': 'Bowl C · Plateau',
+};
 
 const ROWS: readonly AnyChoiceRow[] = [
   row<string>({
@@ -72,6 +81,13 @@ const ROWS: readonly AnyChoiceRow[] = [
     options: ARENA_PRESETS.map((p) => ({ value: p.id, label: p.label, accentCss: `#${p.theme.rimHex.toString(16).padStart(6, '0')}` })),
     get: (s) => s.arena.presetId,
     set: (s, v) => withArenaPreset(s, v),
+  }),
+  row<ArenaFloorId>({
+    id: 'arena-floor',
+    label: 'Floor (playtest)',
+    options: ARENA_FLOOR_IDS.map((id) => ({ value: id, label: ARENA_FLOOR_SHORT_LABELS[id] })),
+    get: (s) => s.arena.geometry.floor ?? DEFAULT_ARENA_FLOOR,
+    set: (s, v) => withArenaFloor(s, v),
   }),
   row<RoundsToWin>({
     id: 'rounds',
@@ -348,6 +364,8 @@ export class PregameScreen {
     const walls = setup.arena.geometry;
     addRule(`${arena.label}: ${arena.description}`);
     if (!isPresetGeometry(arena.id, walls)) addRule(`Custom walls: ${walls.wallHeightM.toFixed(1)} m high, bounce ${walls.wallRestitution.toFixed(2)}`);
+    const floor = ARENA_FLOORS[walls.floor ?? DEFAULT_ARENA_FLOOR];
+    addRule(floor.id === 'flat' ? `Floor: ${floor.label}` : `Floor (playtest): ${floor.label} — ${floor.description} Temporary look; walls measured from the rim.`);
     addRule(describeRoundsToWin(setup.roundsToWin));
     addRule('A round ends on a ring-out or a knock-out (a hit while broken). A draw scores nobody.');
     addRule(setup.clashImpactMultiplier === 1 ? 'Standard Clash impact' : `Clash impact ×${setup.clashImpactMultiplier.toFixed(2)}`);

@@ -20,7 +20,8 @@ import { AiIntent } from '../ai/decision/Intent';
 import { DEFAULT_AI_DIFFICULTY_PROFILE, type AiDifficultyProfile } from '../ai/difficulty/AiDifficultyProfile';
 import type { AiPersonality } from '../ai/personalities/AiPersonality';
 import { personalityForBeyDefinitionId } from '../ai/personalities/AiArchetypePersonalities';
-import { FIRST_SPAWN, SECOND_SPAWN, type SpawnPositionM } from '../app/bootstrap/matchSpawns';
+import { matchSpawnsFor, type SpawnPositionM } from '../app/bootstrap/matchSpawns';
+import { floorRimHeight } from '../arena/floor/ArenaFloorProfile';
 import type { ChaosBeyReplayV1 } from '../replay/format/ChaosBeyReplayV1';
 import { startHeadlessCapture, type HeadlessCaptureInput } from '../replay/recording/ReplayCapture';
 import { resolveMatchConfig, type MatchConfig } from '../config/match/MatchConfig';
@@ -353,7 +354,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
 
   // Before the first tick: the initial state is the replay's first checkpoint.
   const capture = setup.record
-    ? startHeadlessCapture(world, { matchConfig: resolveMatchConfig(setup.matchConfigOverrides ?? {}), ...setup.record, seedText: setup.seed, spawns: { first: setup.firstSpawn ?? FIRST_SPAWN, second: setup.secondSpawn ?? SECOND_SPAWN } })
+    ? startHeadlessCapture(world, { matchConfig: resolveMatchConfig(setup.matchConfigOverrides ?? {}), ...setup.record, seedText: setup.seed, spawns: { first: setup.firstSpawn ?? matchSpawnsFor(resolveMatchConfig(setup.matchConfigOverrides ?? {}).arenaFloor).first, second: setup.secondSpawn ?? matchSpawnsFor(resolveMatchConfig(setup.matchConfigOverrides ?? {}).arenaFloor).second } })
     : null;
 
   const first = new SideTracker(firstPersonality.id);
@@ -361,7 +362,8 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
   const maxTicks = setup.maxTicks ?? DEFAULT_AI_MATCH_MAX_TICKS;
   const anomalies: MatchAnomaly[] = [];
   let anomalyCount = 0;
-  const detector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: resolveMatchConfig(setup.matchConfigOverrides ?? {}).arenaWallHeightM });
+  const resolvedArena = resolveMatchConfig(setup.matchConfigOverrides ?? {});
+  const detector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(resolvedArena.arenaFloor) + resolvedArena.arenaWallHeightM });
   const detections: DetectedAnomaly[] = [];
   let invalidDetectionCount = 0;
   let warningCount = 0;

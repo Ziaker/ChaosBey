@@ -48,6 +48,14 @@ export interface MovementPreStepInput {
    * grip override rather than writing velocity itself.
    */
   dashOverride: { headingRad: number; longitudinalSpeedMps: number } | null;
+  /**
+   * M11 lane 4: the floor's unit normal under the Bey while grounded (from
+   * the arena's floor profile), or omitted/null. On a slope the driven
+   * velocity is laid onto the floor's tangent plane, so the Bey rolls up
+   * and down the bowl instead of ramming the ramp horizontally and
+   * bouncing off it. A vertical normal (the flat arena) changes nothing.
+   */
+  floorNormal?: { x: number; y: number; z: number } | null;
 }
 
 export interface MovementSnapshot {
@@ -193,9 +201,23 @@ export class MovementController {
       this.postImpactCooldownRemainingS = Math.max(0, this.postImpactCooldownRemainingS - fixedDeltaSeconds);
       this.intendedVelocityThisTick = null;
     } else {
-      body.setLinvel({ x: newVelHoriz.x, y: currentVel.y, z: newVelHoriz.z }, true);
+      body.setLinvel({ x: newVelHoriz.x, y: this.verticalFor(newVelHoriz, currentVel, grounded ? input.floorNormal : null), z: newVelHoriz.z }, true);
       this.intendedVelocityThisTick = newVelHoriz;
     }
+  }
+
+  /**
+   * Vertical velocity to go with the driven horizontal velocity. Flat
+   * ground (or airborne): the body's own, as always. Grounded on a slope:
+   * the vertical component that keeps the velocity in the floor's tangent
+   * plane (n · v = 0), plus whatever the body already had moving away from
+   * the floor (a real bounce is kept; pushing into it is left to contact).
+   */
+  private verticalFor(horizontal: Vec2, current: { x: number; y: number; z: number }, n: { x: number; y: number; z: number } | null | undefined): number {
+    if (!n || n.y >= 1 || n.y <= 0.5) return current.y;
+    const along = -(n.x * horizontal.x + n.z * horizontal.z) / n.y;
+    const separating = Math.max(0, current.x * n.x + current.y * n.y + current.z * n.z);
+    return along + separating * n.y;
   }
 
   /**

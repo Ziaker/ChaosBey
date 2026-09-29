@@ -12,7 +12,7 @@ import {
   matchupLines,
   normalizeSeedText,
   opponentControllerFor,
-  withArenaPreset,
+  withArenaFloor, withArenaPreset,
   withPlayerBey,
 } from '../../src/app/frontend/matchSetup';
 import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
@@ -109,7 +109,12 @@ describe('match setup rules', () => {
     expect(matchConfigFor(rift)).toMatchObject({ arenaWallHeightM: 1, arenaWallRestitution: 0.4 });
     const custom = { ...rift, arena: { ...rift.arena, geometry: { wallHeightM: 0.6, wallRestitution: 0.9 } } };
     expect(matchConfigFor(custom)).toMatchObject({ arenaWallHeightM: 0.6, arenaWallRestitution: 0.9 });
-    expect(withArenaPreset(custom, 'tournament').arena).toEqual({ presetId: 'tournament', geometry: { wallHeightM: 2.6, wallRestitution: 0.7 } });
+    expect(withArenaPreset(custom, 'tournament').arena).toEqual({ presetId: 'tournament', geometry: { wallHeightM: 2.6, wallRestitution: 0.7, floor: 'flat' } });
+    // M11 lane 4: the floor profile is independent of the look: a preset change keeps it.
+    const bowl = withArenaFloor(rift, 'bowl-b');
+    expect(matchConfigFor(bowl).arenaFloor).toBe('bowl-b');
+    expect(withArenaPreset(bowl, 'foundry').arena.geometry.floor).toBe('bowl-b');
+    expect(matchConfigFor(createDefaultMatchSetup()).arenaFloor).toBe('flat');
   });
 
   it('keeps a hand-picked opponent when the player changes Bey, and follows the default otherwise', () => {

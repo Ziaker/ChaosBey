@@ -25,6 +25,8 @@ export interface DebugOverlayState {
   headingRad: number;
   /** M11: the player's desired world direction (directional control), null under classic control. Debug only — never drawn in the game view. */
   desiredMoveIntent: Vec2 | null;
+  /** M11 lane 4: e.g. "Bowl A — Parabolic dish · h 1.20 m · slope 12.3° · pull 2.10 m/s²". */
+  floorLine: string;
   slipAngleRad: number;
   lateralGripPerS: number;
   longitudinalDragPerS: number;
@@ -165,6 +167,7 @@ export class DebugOverlay {
       `heading          ${(state.headingRad * RAD_TO_DEG).toFixed(1)} deg\n` +
       `desired input    ${state.desiredMoveIntent ? `${fmtVec2(state.desiredMoveIntent)} ${fmtIntentAngle(state.desiredMoveIntent)}` : 'classic (steer/throttle)'}\n` +
       `slip angle       ${(state.slipAngleRad * RAD_TO_DEG).toFixed(1)} deg\n` +
+      `floor            ${state.floorLine}\n` +
       `lateral grip     ${state.lateralGripPerS.toFixed(2)} /s\n` +
       `longitudinal drag ${state.longitudinalDragPerS.toFixed(2)} /s\n` +
       `grounded         ${state.grounded}\n` +

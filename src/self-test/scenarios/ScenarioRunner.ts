@@ -19,11 +19,13 @@ import { AIController } from '../../ai/controllers/AIController';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../ai/difficulty/AiDifficultyProfile';
 import { personalityForBeyDefinitionId } from '../../ai/personalities/AiArchetypePersonalities';
 import { createRngStreams } from '../../rng/SeededRng';
-import { FIRST_SPAWN, SECOND_SPAWN } from '../../app/bootstrap/matchSpawns';
+import { matchSpawnsFor } from '../../app/bootstrap/matchSpawns';
+import { floorRimHeight, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import type { ChaosBeyReplayV1 } from '../../replay/format/ChaosBeyReplayV1';
 import { startHeadlessCapture, type HeadlessCaptureInput } from '../../replay/recording/ReplayCapture';
 import { SelfTestMatchWorld } from '../SelfTestMatchWorld';
-import { MatchAnomalyDetector, type DetectedAnomaly } from '../anomalies/MatchAnomalyDetector';
+import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector, type DetectedAnomaly } from '../anomalies/MatchAnomalyDetector';
+import { resolveMatchConfig } from '../../config/match/MatchConfig';
 import { SCENARIO_PRESETS, type ScenarioPreset, type ScenarioSideScript } from './ScenarioPresets';
 import { createScenarioTrace, recordScenarioTick, type ScenarioTrace } from './ScenarioTrace';
 
@@ -39,6 +41,8 @@ export interface ScenarioRunOptions {
    * passes when it neither crashes nor hits an invalid state.
    */
   readonly aiSide?: 'first' | 'second';
+  /** M11 lane 4: play the scenario on this floor profile (default flat). */
+  readonly arenaFloor?: ArenaFloorId;
   /**
    * M9: record the run as a ChaosBeyReplayV1 (returned in
    * ScenarioResult.replay). Recording starts after the preset's setup, so
@@ -87,10 +91,13 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
       return { id: preset.id, label: preset.label, status: 'failed', detail: `crashed: ${message}`, ticks: 0, detections: [], crashMessage: message };
     }
   }
+  const floor = options.arenaFloor ?? 'flat';
+  const matchConfig = resolveMatchConfig({ arenaFloor: floor });
   const world = await SelfTestMatchWorld.build({
     firstDefinition: options.firstDefinition ?? ATTACK_ARCHETYPE,
     secondDefinition: options.secondDefinition ?? DEFENSE_ARCHETYPE,
     aiMashSource: new NullAiMashSource(),
+    matchConfigOverrides: matchConfig,
   });
   const detections: DetectedAnomaly[] = [];
   let trace: ScenarioTrace = createScenarioTrace(world.first);
@@ -106,8 +113,8 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
     };
     const first = options.aiSide === 'first' ? aiFor('first') : controllerForScript(preset.first);
     const second = options.aiSide === 'second' ? aiFor('second') : controllerForScript(preset.second);
-    const detector = new MatchAnomalyDetector();
-    const capture = options.record ? startHeadlessCapture(world, { ...options.record, seedText: preset.id, spawns: { first: FIRST_SPAWN, second: SECOND_SPAWN } }) : null;
+    const detector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(floor) + matchConfig.arenaWallHeightM });
+    const capture = options.record ? startHeadlessCapture(world, { ...options.record, seedText: preset.id, spawns: matchSpawnsFor(floor), matchConfig }) : null;
     for (let tick = 0; tick < preset.durationTicks; tick++) {
       const clashStateBefore: ClashState = world.clash.controller.getState();
       // The same per-tick step as a live match, hitstop included (M9).

@@ -11,6 +11,7 @@
 
 import type { MatchSession, Side } from '../../app/session/MatchSession';
 import { BEY_SPAWN_HEIGHT_M } from '../../bey/core/BeyTuning';
+import { floorHeightAt } from '../../arena/floor/ArenaFloorProfile';
 import { DASH_MAX_CHARGE_S } from '../../combat/attacks/AttackTuning';
 import { JUMP_ASSIST_MAX_DURATION_S } from '../../drift/DriftTuning';
 import { Action } from '../../input/actions/Action';
@@ -101,10 +102,10 @@ export interface TeleportOptions {
   readonly headingRad?: number;
 }
 
-/** Places a Bey at (x, z) at spawn height, upright. */
+/** Places a Bey at (x, z) at spawn height above the floor there, upright. */
 export function teleportBey(session: MatchSession, side: Side, x: number, z: number, options: TeleportOptions = {}): void {
   const bey = session.getBey(side);
-  bey.body.setTranslation({ x, y: BEY_SPAWN_HEIGHT_M, z }, true);
+  bey.body.setTranslation({ x, y: BEY_SPAWN_HEIGHT_M + floorHeightAt(bey.arenaFloor, x, z), z }, true);
   bey.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
   if (options.stop ?? true) {
     bey.body.setLinvel({ x: 0, y: 0, z: 0 }, true);

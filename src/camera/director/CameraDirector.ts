@@ -132,6 +132,12 @@ export interface DirectorOutput {
 export interface DirectorOptions {
   /** false: no orbit while the Clash is active — the angle is held from the moment it starts (clash-presentation-approval.md 3.6). Default true (the lab's behaviour). */
   readonly clashOrbit?: boolean;
+  /**
+   * Floor height under (x, z) for the floor guard (M11 bowls). Default: the
+   * flat arena (y = 0), exactly as approved. camera-approval.md §9 asks the
+   * guard to follow the concave profile once the bowl is integrated.
+   */
+  readonly floorHeightAt?: (x: number, z: number) => number;
 }
 
 interface PendingKnock {
@@ -403,7 +409,7 @@ export class CameraDirector {
     }
 
     // ---- Guards: floor, Beys ----
-    const floorY = 0;
+    const floorY = this.options.floorHeightAt ? this.options.floorHeightAt(this.eye.x, this.eye.z) : 0;
     if (this.eye.y < floorY + P.floorClearance) {
       this.eye.y = floorY + P.floorClearance;
       this.modifiers.push('proteção: chão');

@@ -10,6 +10,8 @@
 
 import { AIController } from '../../ai/controllers/AIController';
 import type { MatchSession, Side } from '../../app/session/MatchSession';
+import { ARENA_FLOORS, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import { floorReadout } from '../../arena/floor/floorReadout';
 import { CAMERA_PRESET_NAMES } from '../../camera/director/CameraRig';
 import { AIRBORNE_ACCELERATION_FACTOR, AIRBORNE_LATERAL_GRIP_PER_S } from '../../bey/movement/MovementTuning';
 import { ClashState } from '../../combat/clash/ClashController';
@@ -141,6 +143,7 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('External impulse: impact Δv', `${f(impulses.impactDeltaSpeedMps)} m/s`),
         row('Intended steering vector', snapshot ? vec2(snapshot.movement.intendedSteeringVector) : '—'),
         row('Heading (physical)', snapshot ? `${f(snapshot.movement.headingRad * RAD_TO_DEG)}°` : '—'),
+        ...floorRows(bey.arenaFloor, bey.body.translation()),
         row('Desired input (world)', desiredInput(session.getLastActions(side)?.moveIntent)),
         row('Turn rate', `${f(movementDebug.turnRateRadPerS * RAD_TO_DEG)}°/s`),
       ],
@@ -433,4 +436,15 @@ function desiredInput(intent: { x: number; z: number } | undefined): string {
   if (!intent) return 'classic (steer/throttle)';
   const len = Math.hypot(intent.x, intent.z);
   return len < 1e-3 ? 'none (0)' : `(${f(intent.x)}, ${f(intent.z)}) → ${f(Math.atan2(intent.x, intent.z) * RAD_TO_DEG)}°, |${f(len)}|`;
+}
+
+/** M11 lane 4: the floor under this Bey (profile, height, slope, downhill pull). */
+function floorRows(floor: ArenaFloorId, position: { x: number; y: number; z: number }): ReturnType<typeof row>[] {
+  const r = floorReadout(floor, position);
+  return [
+    row('Floor profile', ARENA_FLOORS[floor].label),
+    row('Floor height under / above it', `${f(r.floorHeightM)} m / ${f(r.heightAboveFloorM)} m`),
+    row('Floor slope / normal', `${f(r.slopeDeg)}° / (${f(r.normal.x)}, ${f(r.normal.y)}, ${f(r.normal.z)})`),
+    row('Downhill pull (g·sin slope)', `${f(r.downhillPullMps2)} m/s² toward the centre`),
+  ];
 }

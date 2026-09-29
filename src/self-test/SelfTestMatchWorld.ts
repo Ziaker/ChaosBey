@@ -11,7 +11,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { FIRST_SPAWN, SECOND_SPAWN, type SpawnPositionM } from '../app/bootstrap/matchSpawns';
+import { matchSpawnsFor, type SpawnPositionM } from '../app/bootstrap/matchSpawns';
 import { ClashOrchestration } from '../app/simulation/ClashOrchestration';
 import { MatchStepper, type MatchStepControllers, type MatchStepOutput } from '../app/simulation/MatchStepper';
 import { buildCanonicalMatchState } from '../replay/state/CanonicalMatchState';
@@ -68,8 +68,10 @@ export class SelfTestMatchWorld {
     const physics = await PhysicsWorld.create();
     const config = resolveMatchConfig(options.matchConfigOverrides ?? {});
     createArenaColliders(new THREE.Scene(), physics, arenaGeometryOf(config)); // detached scene: colliders only, never rendered.
-    const first = createBey(physics, options.firstSpawn ?? FIRST_SPAWN, options.firstDefinition);
-    const second = createBey(physics, options.secondSpawn ?? SECOND_SPAWN, options.secondDefinition);
+    const floor = config.arenaFloor;
+    const spawns = matchSpawnsFor(floor);
+    const first = createBey(physics, options.firstSpawn ?? spawns.first, options.firstDefinition, floor);
+    const second = createBey(physics, options.secondSpawn ?? spawns.second, options.secondDefinition, floor);
     const clash = options.aiMashSource !== undefined ? new ClashOrchestration(config, options.aiMashSource) : new ClashOrchestration(config);
     return { physics, first, second, roundState: new RoundState(), clash };
   }

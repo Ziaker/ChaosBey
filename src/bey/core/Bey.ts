@@ -17,6 +17,7 @@ import { SpinController } from '../spin/SpinController';
 import { StabilitySystem } from '../stability/StabilitySystem';
 import { StaminaSystem } from '../stamina/StaminaSystem';
 import { createBeyRigidBody } from './BeyRigidBody';
+import type { ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { DEFAULT_BEY_DEFINITION, type BeyDefinition } from '../archetype/BeyDefinition';
 import { resolveBeyStats } from '../archetype/BeyStatsResolution';
 import type { BeyStats } from '../archetype/BeyStats';
@@ -41,12 +42,15 @@ export interface Bey {
   readonly stability: StabilitySystem;
   readonly attackEnergy: AttackEnergySystem;
   readonly attack: AttackController;
+  /** M11: the floor profile of the arena this Bey plays on (placement helpers put it on the floor). Not simulation state. */
+  readonly arenaFloor: ArenaFloorId;
 }
 
 export function createBey(
   physics: PhysicsWorld,
   spawnPosition: { x: number; y: number; z: number },
   definition: BeyDefinition = DEFAULT_BEY_DEFINITION,
+  arenaFloor: ArenaFloorId = 'flat',
 ): Bey {
   const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical);
   const stats = resolveBeyStats(definition.ratings);
@@ -63,5 +67,6 @@ export function createBey(
     stability: new StabilitySystem(),
     attackEnergy: new AttackEnergySystem(),
     attack: new AttackController(definition.attack),
+    arenaFloor,
   };
 }
