@@ -42,13 +42,20 @@ test('Character Select and Pregame set up the match that really runs, and Result
   await page.getByTestId('pregame-ai-level-ace').click();
   await expect(reaction).toContainText('0.12 s'); // 0.22 × 0.55
   await expect(page.getByTestId('pregame-ai')).toContainText('Ace');
-  // Keyboard from the AI level row (the click focused it): ↓↓ to Match length, ← to a single round.
+  // Keyboard from the AI level row (the click focused it): ↓↓↓ (style, arena) to Match length, ← to a single round.
+  await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowLeft');
   await expect(page.getByTestId('pregame-rounds-1')).toHaveAttribute('aria-checked', 'true');
-  // Advanced rules: a fixed seed.
+  // Arena: Rift Crater, then a moved wall slider (custom walls).
+  await page.getByTestId('pregame-arena-rift').click();
+  await expect(page.getByTestId('pregame-rules')).toContainText('Rift Crater');
+  // Advanced rules: a lower wall and a fixed seed.
   await page.getByTestId('pregame-advanced').locator('summary').click();
+  await page.getByTestId('pregame-wall-height').fill('0.8');
+  await expect(page.getByTestId('pregame-wall-height-value')).toHaveText('0.8 m');
+  await expect(page.getByTestId('pregame-rules')).toContainText('Custom walls: 0.8 m high, bounce 0.40');
   await page.getByTestId('pregame-seed').fill('flow-seed');
   await expect(page.getByTestId('pregame-rules')).toContainText('Fixed seed "flow-seed"');
   await page.getByTestId('pregame-start').click();
@@ -62,12 +69,14 @@ test('Character Select and Pregame set up the match that really runs, and Result
       beys: [session.getBey('first').definition.id, session.getBey('second').definition.id],
       seed: session.seedText,
       opponent: session.describeController('second'),
+      walls: [session.matchConfig.arenaWallHeightM, session.matchConfig.arenaWallRestitution],
     };
   });
   // The pick plays first; the default opponent is the next roster entry (no mirror).
   expect(match.beys).toEqual(['stamina-prototype', 'attack-prototype']);
   expect(match.seed).toBe('flow-seed');
   expect(match.opponent).toBe('AI (archetype, ace)');
+  expect(match.walls).toEqual([0.8, 0.4]);
 
   // Play the round for real (F3 shows the overlay the helper reads).
   await page.keyboard.press('F3');
