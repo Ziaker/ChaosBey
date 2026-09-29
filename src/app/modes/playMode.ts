@@ -14,6 +14,7 @@ import { GameStateMachine } from '../lifecycle/GameState';
 import { MatchRunner } from '../frontend/MatchRunner';
 import { PlayFlow } from '../frontend/PlayFlow';
 import { resolveMatchConfig } from '../../config/match/MatchConfig';
+import { quickPlaySeed } from './appMode';
 import { resolveAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import { loadAttackProfileOverrides } from '../../config/attack-profile/AttackProfileStorage';
 import { createDefaultRuntimeConfig } from '../../config/runtime/RuntimeConfig';
@@ -61,7 +62,7 @@ export async function startPlayMode(appRenderer: AppRenderer, mounts: PlayModeMo
     // Milestone 7: the opponent is a real AIController whose personality
     // matches its own Bey's archetype (GDD section 64).
     const runner = await MatchRunner.start(deps, {
-      seedText: generateRandomSeedText(),
+      seedText: quickPlaySeed(window.location.search) ?? generateRandomSeedText(),
       beys: DEFAULT_MATCH_BEYS,
       matchConfig: resolveMatchConfig(),
       attackProfileSettings,

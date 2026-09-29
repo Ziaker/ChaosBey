@@ -138,7 +138,11 @@ Add Firefox smoke when practical for final M10 closure; Safari remains deferred 
 - **Presets** (`arena/presets/ArenaPresets.ts`): the three approved arena
   directions — **Foundry Pit**, **Rift Crater**, **Tournament Stadium** —
   each a render-only theme (floor, markings, wall, emissive rim, lights,
-  backdrop) plus two gameplay values: wall height and wall bounce.
+  sky color) plus two gameplay values: wall height and wall bounce. The sky
+  is the scene's clear color while the match owns the renderer
+  (`MatchRunner`), not geometry: a first version used a 200 m backdrop
+  sphere, which cost every pixel under software GL and pushed the Debug
+  Lab smoke from 22 s to 30 s (its timeout).
 - **Default arena: Foundry Pit**, with exactly the arena every earlier
   milestone played (wall 2.0 m, restitution 0.55). The owner left the
   default open; this pick changes nothing for existing matches, tests or

@@ -32,3 +32,9 @@ export function appModeHref(mode: AppMode, current: { readonly pathname: string;
 export function isQuickPlay(search: string): boolean {
   return new URLSearchParams(search).has('quick');
 }
+
+/** `?mode=play&quick&seed=…`: quick play with a fixed seed (reproducing a reported round). */
+export function quickPlaySeed(search: string): string | null {
+  const seed = new URLSearchParams(search).get('seed');
+  return seed !== null && seed.trim() !== '' ? seed.trim() : null;
+}

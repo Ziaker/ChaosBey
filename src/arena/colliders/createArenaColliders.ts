@@ -44,9 +44,6 @@ export function createArenaColliders(
   sun.position.set(5, 10, 3);
   scene.add(sun);
 
-  // Backdrop: a large inside-out sphere in the theme's sky color, owned by this arena (removed with it).
-  const backdrop = new THREE.Mesh(new THREE.SphereGeometry(200, 24, 12), new THREE.MeshBasicMaterial({ color: theme.backgroundHex, side: THREE.BackSide }));
-  group.add(backdrop);
 
   const floorMesh = new THREE.Mesh(
     new THREE.CylinderGeometry(ARENA_FLOOR_RADIUS, ARENA_FLOOR_RADIUS, ARENA_FLOOR_THICKNESS, 48),

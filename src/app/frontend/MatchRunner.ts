@@ -7,6 +7,7 @@
 // This is the match loop playMode.ts used to own, unchanged in behavior.
 // ============================================================
 
+import * as THREE from 'three';
 import type { AppRenderer } from '../bootstrap/createRenderer';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
@@ -144,6 +145,11 @@ export class MatchRunner {
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
     deps.stateMachine.transitionTo(GameState.Combat);
     const runner = new MatchRunner(session, keyboard, gamepad, deps, events);
+    // The arena's sky: the scene's clear color while this match owns the renderer (restored on stop).
+    if (start.arenaTheme) {
+      runner.savedBackground = deps.appRenderer.scene.background;
+      deps.appRenderer.scene.background = new THREE.Color(start.arenaTheme.backgroundHex);
+    }
     if (start.presentation) runner.setPresentation(start.presentation);
     return runner;
   }
@@ -191,5 +197,9 @@ export class MatchRunner {
     this.stopped = true;
     this.pause();
     this.session.dispose();
+    if (this.savedBackground !== undefined) this.deps.appRenderer.scene.background = this.savedBackground;
   }
+
+  /** The scene background before this match set the arena's (undefined = untouched). */
+  private savedBackground: THREE.Scene['background'] | undefined = undefined;
 }
