@@ -49,6 +49,10 @@ import { ForcedInputController } from '../../automation/scripted-scenarios/Force
 import { AIController } from '../../ai/controllers/AIController';
 import { MatchAnomalyDetector, type DetectedAnomaly } from '../../self-test/anomalies/MatchAnomalyDetector';
 import type { ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
+import { FIRST_SPAWN, SECOND_SPAWN } from '../bootstrap/matchSpawns';
+import type { ChaosBeyReplayV1 } from '../../replay/format/ChaosBeyReplayV1';
+import { captureDeterministicConfig } from '../../replay/format/configSnapshot';
+import { ReplayCapture, type ReplayCaptureOptions } from '../../replay/recording/ReplayCapture';
 import { createSideController, describeControllerSpec, type SideControllerSpec, type SideControllerDeps } from './SideControllers';
 
 export type Side = 'first' | 'second';
@@ -132,6 +136,46 @@ export class MatchSession {
     return stateHash(this.getCanonicalState());
   }
 
+  /**
+   * Starts recording this match as a ChaosBeyReplayV1 (M9). Only before
+   * the first tick: a replay always starts from the initial state. The
+   * config recorded is the one this session was built with.
+   */
+  startReplayCapture(options: ReplayCaptureOptions): void {
+    if (this.tickIndex !== 0) throw new Error(`MatchSession.startReplayCapture(): must start before the first tick (already at TickIndex ${this.tickIndex}).`);
+    if (this.replayCapture) throw new Error('MatchSession.startReplayCapture(): already recording.');
+    const config = captureDeterministicConfig({
+      seedText: this.seedText,
+      matchConfig: this.matchConfig,
+      attackProfileSettings: this.attackProfileSettings,
+      spawns: { first: FIRST_SPAWN, second: SECOND_SPAWN },
+      beys: { first: this.match.first.definition, second: this.match.second.definition },
+    });
+    // Called inside tick() before this.tickIndex advances, so the count comes from the capture, not from this.tickIndex.
+    const capture = new ReplayCapture(config, options, (ticksCompleted) =>
+      stateHash(buildCanonicalMatchState({ ticksCompleted, world: this.stepWorld(), hitstop: this.stepper.hitstop })),
+    );
+    this.replayCapture = { capture, stateEdits: [] };
+  }
+
+  isCapturingReplay(): boolean {
+    return this.replayCapture !== null;
+  }
+
+  /**
+   * Ends the recording. `debugMutations` lists the Debug Lab state edits
+   * made while recording: they aren't inputs, so a replay with any of them
+   * can't reproduce the match and playback will diverge where they happened.
+   * Forced inputs aren't listed: they reach the match through the
+   * controllers, so the recorded frames already contain them.
+   */
+  finishReplayCapture(): { readonly replay: ChaosBeyReplayV1; readonly debugMutations: readonly { tickIndex: number; description: string }[] } {
+    const recording = this.replayCapture;
+    if (!recording) throw new Error('MatchSession.finishReplayCapture(): not recording.');
+    this.replayCapture = null;
+    return { replay: recording.capture.finish(), debugMutations: recording.stateEdits };
+  }
+
   private stepWorld(): MatchStepWorld {
     return { physics: this.physics, first: this.match.first, second: this.match.second, roundState: this.roundState, clash: this.clash };
   }
@@ -148,6 +192,9 @@ export class MatchSession {
   /** Each side's driver, wrapped so the Debug Lab can force short input bursts. */
   private readonly drivers: Record<Side, ForcedInputController>;
   private readonly debugMutations: { tickIndex: number; description: string }[] = [];
+  private readonly attackProfileSettings: BeyAttackProfileSettings;
+  /** M9 recording, when started (startReplayCapture). */
+  private replayCapture: { readonly capture: ReplayCapture; readonly stateEdits: { tickIndex: number; description: string }[] } | null = null;
   /** GDD 67 checks on the live match, the same detector the Self-Test batches use. */
   private readonly anomalyDetector = new MatchAnomalyDetector();
   private readonly detectedAnomalies: DetectedAnomaly[] = [];
@@ -170,6 +217,7 @@ export class MatchSession {
     this.rngStreams = createRngStreams(options.seedText);
     this.physics = physics;
     this.matchConfig = options.matchConfig;
+    this.attackProfileSettings = options.attackProfileSettings;
     this.telemetry = options.telemetry;
     this.stateMachine = options.stateMachine;
     this.keyboard = options.keyboard;
@@ -251,7 +299,7 @@ export class MatchSession {
    */
   forceInput(side: Side, label: string, frames: readonly ScriptedFrame[], durationTicks: number): void {
     this.drivers[side].force(frames, durationTicks);
-    this.recordDebugMutation(`${side}: forced input "${label}" for ${durationTicks} ticks`);
+    this.logDebugMutation(`${side}: forced input "${label}" for ${durationTicks} ticks`, false);
   }
 
   /**
@@ -260,6 +308,11 @@ export class MatchSession {
    * pure replay of its seed; reports say so.
    */
   recordDebugMutation(description: string): void {
+    this.logDebugMutation(description, true);
+  }
+
+  private logDebugMutation(description: string, editsState: boolean): void {
+    if (editsState) this.replayCapture?.stateEdits.push({ tickIndex: this.tickIndex, description });
     this.debugMutations.push({ tickIndex: this.tickIndex, description });
     this.telemetry.setCurrentTick(this.tickIndex);
     this.telemetry.record({ kind: TelemetryEventKind.DebugMutation, description });
@@ -327,6 +380,8 @@ export class MatchSession {
     const { firstActions, secondActions, result } = step;
     const isFrozenByHitstop = !step.advanced;
     this.lastActions = { first: firstActions, second: secondActions };
+    // Right after the step, before anything else reads or changes the state.
+    this.replayCapture?.capture.afterTick(tickIndex, firstActions, secondActions);
 
     if (step.advanced) {
       this.lastPhysicsStepTimeMs = performance.now() - stepStart;

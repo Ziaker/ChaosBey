@@ -19,6 +19,9 @@ import { AIController } from '../../ai/controllers/AIController';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../ai/difficulty/AiDifficultyProfile';
 import { personalityForBeyDefinitionId } from '../../ai/personalities/AiArchetypePersonalities';
 import { createRngStreams } from '../../rng/SeededRng';
+import { FIRST_SPAWN, SECOND_SPAWN } from '../../app/bootstrap/matchSpawns';
+import type { ChaosBeyReplayV1 } from '../../replay/format/ChaosBeyReplayV1';
+import { startHeadlessCapture, type HeadlessCaptureInput } from '../../replay/recording/ReplayCapture';
 import { SelfTestMatchWorld } from '../SelfTestMatchWorld';
 import { MatchAnomalyDetector, type DetectedAnomaly } from '../anomalies/MatchAnomalyDetector';
 import { SCENARIO_PRESETS, type ScenarioPreset, type ScenarioSideScript } from './ScenarioPresets';
@@ -36,6 +39,14 @@ export interface ScenarioRunOptions {
    * passes when it neither crashes nor hits an invalid state.
    */
   readonly aiSide?: 'first' | 'second';
+  /**
+   * M9: record the run as a ChaosBeyReplayV1 (returned in
+   * ScenarioResult.replay). Recording starts after the preset's setup, so
+   * the replay's first checkpoint is the post-setup state: playing it back
+   * needs the same setup applied first (the checkpoint at TicksCompleted 0
+   * verifies that).
+   */
+  readonly record?: Omit<HeadlessCaptureInput, 'seedText' | 'spawns'>;
 }
 
 export interface ScenarioResult {
@@ -47,6 +58,8 @@ export interface ScenarioResult {
   /** GDD 67 detections during the run (any invalid state also fails the scenario). */
   readonly detections: readonly DetectedAnomaly[];
   readonly crashMessage: string | null;
+  /** Present when the run was recorded and didn't crash (M9). */
+  readonly replay?: ChaosBeyReplayV1;
 }
 
 export interface ScenarioSuiteReport {
@@ -85,10 +98,12 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
     const first = options.aiSide === 'first' ? aiFor('first') : controllerForScript(preset.first);
     const second = options.aiSide === 'second' ? aiFor('second') : controllerForScript(preset.second);
     const detector = new MatchAnomalyDetector();
+    const capture = options.record ? startHeadlessCapture(world, { ...options.record, seedText: preset.id, spawns: { first: FIRST_SPAWN, second: SECOND_SPAWN } }) : null;
     for (let tick = 0; tick < preset.durationTicks; tick++) {
       const clashStateBefore: ClashState = world.clash.controller.getState();
       // The same per-tick step as a live match, hitstop included (M9).
       const { firstActions, secondActions, result, advanced } = world.step({ first, second });
+      capture?.afterTick(tick, firstActions, secondActions);
       recordScenarioTick(trace, { tick, first: world.first, second: world.second, result, roundState: world.roundState, clash: world.clash.controller, clashStateBefore, advanced });
       detections.push(
         ...detector.check({
@@ -112,7 +127,16 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
     const passed = (checkDecides ? check.passed : true) && invalid.length === 0;
     const checkText = checkDecides ? check.detail : `vs AI (${options.aiSide}) — scripted expectation ${check.passed ? 'met' : 'not met'}: ${check.detail}`;
     const detail = invalid.length === 0 ? checkText : `${checkText}; invalid states: ${invalid.map((d) => d.kind).join(', ')}`;
-    return { id: preset.id, label: preset.label, status: passed ? 'passed' : 'failed', detail, ticks: trace.ticks, detections, crashMessage: null };
+    return {
+      id: preset.id,
+      label: preset.label,
+      status: passed ? 'passed' : 'failed',
+      detail,
+      ticks: trace.ticks,
+      detections,
+      crashMessage: null,
+      ...(capture ? { replay: capture.finish() } : {}),
+    };
   } catch (error) {
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
     return { id: preset.id, label: preset.label, status: 'failed', detail: `crashed: ${message}`, ticks: trace.ticks, detections, crashMessage: message };
