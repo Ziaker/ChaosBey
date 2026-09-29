@@ -14,7 +14,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { createMatchScene, type MatchScene } from '../bootstrap/createMatchScene';
+import { createMatchScene, type MatchBeys, type MatchScene } from '../bootstrap/createMatchScene';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
 import type { MatchTickResult } from '../simulation/tickMatch';
 import { MatchStepper, type MatchStepWorld } from '../simulation/MatchStepper';
@@ -70,6 +70,8 @@ export interface MatchSessionOptions {
   readonly controllers: { readonly first: SideControllerSpec; readonly second: SideControllerSpec };
   /** Shared, already-attached keyboard device; only used by a side whose spec is `keyboard`. */
   readonly keyboard: CombatController;
+  /** Which Bey each side plays. Omit for DEFAULT_MATCH_BEYS (Attack vs Defense). */
+  readonly beys?: MatchBeys;
 }
 
 export interface SessionTickOutput {
@@ -228,7 +230,7 @@ export class MatchSession {
     this.clash = new ClashOrchestration(options.matchConfig, new NullAiMashSource());
 
     options.scene.add(this.root);
-    this.match = createMatchScene(this.root, physics, options.attackProfileSettings);
+    this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys);
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };

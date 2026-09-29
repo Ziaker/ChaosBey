@@ -23,7 +23,7 @@ test('a real Player-vs-AI match reaches RoundEnd with a real terminal outcome (K
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto('/ChaosBey/?mode=play&quick');
   const overlay = page.locator('#debug-overlay-root pre');
   await expect(overlay).toContainText('Combat', { timeout: 15_000 });
 
