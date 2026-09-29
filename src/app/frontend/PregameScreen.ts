@@ -391,6 +391,8 @@ export class PregameScreen {
     }
     // The sliders and the Advanced toggle keep their own keys.
     if ((this.sliders.some((sl) => sl.input === event.target) && (intent === 'decrease' || intent === 'increase')) || (event.target instanceof HTMLElement && event.target.tagName === 'SUMMARY' && intent === 'confirm')) return;
+    // Enter/Space on Back or Start activates that button (Z still means "start").
+    if (intent === 'confirm' && event.code !== 'KeyZ' && event.target instanceof HTMLButtonElement && !event.target.classList.contains('cb-segment')) return;
     event.preventDefault();
     switch (intent) {
       case 'previous':
