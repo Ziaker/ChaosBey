@@ -27,6 +27,10 @@ import { EMPTY_SCORE, matchWinner, roundSeed, scoreRound, type MatchScore } from
 import { createDefaultMatchSetup, matchBeysFor, matchConfigFor, opponentControllerFor, withPlayerBey, type MatchSetup } from './matchSetup';
 import { PregameScreen } from './PregameScreen';
 import { SettingsScreen } from './SettingsScreen';
+import { CombatHud } from './CombatHud';
+import { roundEndBanner } from './hudModel';
+import { aiDifficultyTier } from '../../ai/difficulty/AiDifficultyTiers';
+import { AI_STYLE_LABELS } from './aiExplanation';
 import { applyQuality, presentationFor } from './quality';
 import { Action } from '../../input/actions/Action';
 import { GamepadMenuKeys } from '../../input/devices/GamepadMenuKeys';
@@ -76,6 +80,7 @@ export class PlayFlow {
   private results: MatchResultsScreen | null = null;
   private pauseMenu: MatchResultsScreen | null = null;
   private settingsScreen: SettingsScreen | null = null;
+  private hud: CombatHud | null = null;
   private settings: PlayerSettings;
   /** Game state to restore on resume (Combat or Clash). */
   private stateBeforePause: GameState = GameState.Combat;
@@ -167,7 +172,11 @@ export class PlayFlow {
         presentation: presentationFor(this.settings),
       },
       {
-        onRoundOver: (outcome) => this.scheduleRoundResult(outcome),
+        onRoundOver: (outcome) => {
+          this.hud?.showBanner(roundEndBanner(outcome) ?? '');
+          this.scheduleRoundResult(outcome);
+        },
+        onFrame: (session, frameDeltaSeconds) => this.hud?.update(session, this.deps.appRenderer.camera, frameDeltaSeconds),
         onTick: (session, firstActions) => {
           if (firstActions.pressedThisFrame.has(Action.Pause) && !session.roundState.isOver) queueMicrotask(() => this.openPause());
         },
@@ -180,6 +189,16 @@ export class PlayFlow {
     this.runner = runner;
     this.screen = 'match';
     this.padMenu.stop();
+    const player = rosterEntry(this.setup.playerBeyId);
+    const opponent = rosterEntry(this.setup.opponentBeyId);
+    this.hud = new CombatHud(this.deps.screenRoot, {
+      player: { label: player.label, accentCss: player.accentCss },
+      opponent: { label: opponent.label, accentCss: opponent.accentCss, subtitle: `${aiDifficultyTier(this.setup.ai.tier).label} AI · ${AI_STYLE_LABELS[this.setup.ai.style]}` },
+      roundNumber: this.score.rounds + 1,
+      score: { player: this.score.player, opponent: this.score.opponent },
+      roundsToWin: this.setup.roundsToWin,
+      controlHints: this.settings.controlHints,
+    });
   }
 
   // --- Pause (Esc / Start, or focus loss) --------------------------------
@@ -236,6 +255,7 @@ export class PlayFlow {
     savePlayerSettings(settings);
     applyQuality(this.deps.appRenderer, settings);
     this.runner?.setPresentation(presentationFor(settings));
+    this.hud?.setControlHints(settings.controlHints);
     this.runner?.redraw();
   }
 
@@ -326,6 +346,8 @@ export class PlayFlow {
     this.pauseMenu = null;
     this.settingsScreen?.close();
     this.settingsScreen = null;
+    this.hud?.dispose();
+    this.hud = null;
     this.runner?.stop();
     this.runner = null;
   }
