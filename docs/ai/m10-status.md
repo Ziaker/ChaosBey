@@ -31,7 +31,7 @@ Provisional player-facing AI tiers are approved for this pass as **Rookie / Riva
 | A | App flow + Character Select | main | IN PROGRESS |
 | B | Pregame Simulator + AI explanation + match-rule config | A | IN PROGRESS |
 | C | Arena presets + selected sliders | B | IN PROGRESS |
-| D | Settings + Low/Medium/High quality + fullscreen/focus safety + gamepad polish | A | TODO |
+| D | Settings + Low/Medium/High quality + fullscreen/focus safety + gamepad polish | A | IN PROGRESS |
 | E | HUD refinement + integration/hardening | B/C/D | TODO |
 | F | M10 closure: browser smoke, GitHub Pages/base path, docs | E | TODO |
 
@@ -160,3 +160,39 @@ Add Firefox smoke when practical for final M10 closure; Safari remains deferred 
 - **Not in scope**: the approved 12 m bowl geometry and its gravity/
   ring-out consequences (VISUAL_APPROVALS_MASTER.md 4.3) stay a separate
   gameplay decision; the themes paint the current flat arena.
+
+## Lane D notes — Settings, quality, fullscreen, focus safety, gamepad
+
+- **Settings** (`app/frontend/SettingsScreen.ts`, `config/settings/PlayerSettings.ts`):
+  the Main Menu's SETTINGS entry (`?mode=settings`, a plain-DOM page) and
+  the Pause menu open the same screen. Options: quality Low/Medium/High,
+  camera shake & zoom, fullscreen, pause on focus loss, HUD control hints,
+  developer overlay on start; plus the keyboard/gamepad controls table and
+  a live gamepad status. Saved per browser (`chaosbey.settings.player.v1`),
+  read field by field (anything unusable falls back to its default).
+- **Quality** changes render cost only (GDD 89): the device pixel ratio cap
+  (1 / 1.5 / 2) and, on Low, no speed trails. Applied at boot and live from
+  the Pause menu. Nothing reaches the simulation.
+- **Not offered**: a camera-preset choice. The three approved camera presets
+  (A/B/C, `camera-approval.md`) are not integrated in `src/` yet (one Camera
+  Director today); integrating their 43 × 3 values is its own task.
+- **Pause** (Esc / Start): the loop stops (no ticks), keyboard released,
+  held pad buttons forgotten. Resume / Restart round / Settings / Leave
+  match / Main Menu; Esc resumes. The game state goes to `Pause` and back
+  to what it was (Combat or Clash).
+- **Focus-loss safety** (GDD 131): losing window focus or hiding the tab
+  pauses the match (setting, on by default); stuck keys were already
+  cleared on blur. `KeyboardController.detach()` now also clears held keys,
+  so a key released while paused can't stay stuck and swallow its next
+  press.
+- **Fullscreen** (`fullscreen.ts`): Settings button; a refused request just
+  stays windowed (logged as a warning, not an error).
+- **Gamepad** (`input/devices/`): the standard layout mirrors the keyboard
+  (stick/D-pad steer and move, RT/LT forward/back, A attack, X/LB hop-jump-
+  drift, B/RB dodge, Start pause). `GamepadController` feeds the same
+  `ActionSampleBuffer` as the keyboard (press edges, hold durations,
+  hitstop buffering); `CombinedController` merges keyboard + pad for the
+  player. A button still held when a match starts or resumes is ignored
+  until released. `GamepadMenuKeys` drives every menu (arrows, A = Enter,
+  B = Esc, key repeat), with a focus/click fallback for plain DOM menus.
+  Replays are unaffected: they record actions, whatever the device.

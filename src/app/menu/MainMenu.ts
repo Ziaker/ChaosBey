@@ -32,12 +32,12 @@ export interface MainMenuModel {
   readonly developer: readonly MainMenuEntry[];
 }
 
-/**
- * GDD 56 lists PLAY, SELF TEST, DEBUG LAB and SETTINGS. SETTINGS has no
- * screen yet (Milestone 10), so it is not shown rather than shown dead.
- */
+/** GDD 56: PLAY, SETTINGS (M10), SELF TEST and DEBUG LAB. */
 export const MAIN_MENU: MainMenuModel = {
-  player: [{ id: 'play', label: 'PLAY', mode: 'play' }],
+  player: [
+    { id: 'play', label: 'PLAY', mode: 'play' },
+    { id: 'settings', label: 'SETTINGS', mode: 'settings' },
+  ],
   developerSectionLabel: 'Developer / Debug',
   developer: [
     { id: 'debug-lab', label: 'DEBUG LAB', mode: 'debug-lab' },

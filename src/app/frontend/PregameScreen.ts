@@ -158,15 +158,15 @@ export class PregameScreen {
 
   private buildRow(choiceRow: AnyChoiceRow, rowIndex: number): HTMLElement {
     const wrapper = el('div', 'cb-pregame__row');
-    const label = el('span', 'cb-pregame__label');
+    const label = el('span', 'cb-field-label');
     label.id = `pregame-label-${choiceRow.id}`;
     label.textContent = choiceRow.label;
-    const group = el('div', 'cb-pregame__segments', `pregame-${choiceRow.id}`);
+    const group = el('div', 'cb-segments', `pregame-${choiceRow.id}`);
     group.setAttribute('role', 'radiogroup');
     group.setAttribute('aria-labelledby', label.id);
     const buttons: HTMLButtonElement[] = [];
     for (const option of choiceRow.options) {
-      const node = el('button', 'cb-pregame__segment', `pregame-${choiceRow.id}-${String(option.value)}`);
+      const node = el('button', 'cb-segment', `pregame-${choiceRow.id}-${String(option.value)}`);
       node.type = 'button';
       node.setAttribute('role', 'radio');
       node.textContent = option.label;
@@ -220,7 +220,7 @@ export class PregameScreen {
     );
 
     const seedRow = el('label', 'cb-pregame__row');
-    const seedLabel = el('span', 'cb-pregame__label');
+    const seedLabel = el('span', 'cb-field-label');
     seedLabel.textContent = 'Seed';
     this.seedInput.type = 'text';
     this.seedInput.placeholder = 'random each match';
@@ -246,7 +246,7 @@ export class PregameScreen {
   }): DocumentFragment {
     const fragment = document.createDocumentFragment();
     const wrapper = el('label', 'cb-pregame__row cb-pregame__row--slider');
-    const label = el('span', 'cb-pregame__label');
+    const label = el('span', 'cb-field-label');
     label.textContent = spec.label;
     const input = el('input', 'cb-pregame__slider', `pregame-${spec.id}`);
     input.type = 'range';
@@ -439,14 +439,9 @@ function injectPregameStyle(): void {
     .cb-pregame__footer { grid-area: footer; position: sticky; bottom: 0; padding: 12px 0 4px; background: linear-gradient(transparent, var(--cb-bg) 35%); }
     .cb-pregame__row { display: flex; flex-direction: column; gap: 6px; }
     .cb-pregame__row--slider { display: grid; grid-template-columns: 1fr 64px; grid-template-areas: "label label" "slider value"; align-items: center; }
-    .cb-pregame__row--slider .cb-pregame__label { grid-area: label; }
+    .cb-pregame__row--slider .cb-field-label { grid-area: label; }
     .cb-pregame__slider { grid-area: slider; accent-color: var(--cb-accent); }
     .cb-pregame__value { grid-area: value; font: 600 13px/1 var(--cb-mono); text-align: right; }
-    .cb-pregame__label { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--cb-text-dim); }
-    .cb-pregame__segments { display: flex; flex-wrap: wrap; gap: 6px; }
-    .cb-pregame__segment { --bey-accent: var(--cb-accent); flex: 1 1 0; min-width: 88px; font: 600 13px/1 var(--cb-font); letter-spacing: 0.08em; color: var(--cb-text-dim); background: #111522; border: 1px solid var(--cb-line); border-radius: 4px; padding: 11px 10px; cursor: pointer; }
-    .cb-pregame__segment:hover { color: var(--cb-text); border-color: var(--cb-line-strong); }
-    .cb-pregame__segment[aria-checked="true"] { color: #fff; border-color: var(--bey-accent); background: color-mix(in srgb, var(--bey-accent) 16%, #111522); box-shadow: inset 0 -2px 0 var(--bey-accent); }
     .cb-pregame__advanced { border-top: 1px solid var(--cb-line); padding-top: 12px; display: block; }
     .cb-pregame__advanced summary { cursor: pointer; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cb-text-dim); }
     .cb-pregame__advanced[open] summary { margin-bottom: 12px; }

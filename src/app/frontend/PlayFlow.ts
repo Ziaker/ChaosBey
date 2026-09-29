@@ -26,6 +26,11 @@ import { MatchRunner } from './MatchRunner';
 import { EMPTY_SCORE, matchWinner, roundSeed, scoreRound, type MatchScore } from './matchScore';
 import { createDefaultMatchSetup, matchBeysFor, matchConfigFor, opponentControllerFor, withPlayerBey, type MatchSetup } from './matchSetup';
 import { PregameScreen } from './PregameScreen';
+import { SettingsScreen } from './SettingsScreen';
+import { applyQuality, presentationFor } from './quality';
+import { Action } from '../../input/actions/Action';
+import { GamepadMenuKeys } from '../../input/devices/GamepadMenuKeys';
+import { savePlayerSettings, type PlayerSettings } from '../../config/settings/PlayerSettings';
 
 /** Time a finished round stays on screen (ring-out / finisher camera) before its result. */
 const RESULTS_DELAY_MS = 1400;
@@ -38,12 +43,14 @@ export interface PlayFlowDeps {
   readonly debugOverlay: DebugOverlay;
   readonly attackProfileSettingsPanel: AttackProfileSettingsPanel;
   readonly attackProfileSettings: BeyAttackProfileSettings;
+  /** The player's settings at boot (the flow keeps them current and saves changes). */
+  readonly settings: PlayerSettings;
   /** Loads another page (the Main Menu). */
   readonly navigate: (href: string) => void;
   readonly location: { readonly pathname: string; readonly search: string };
 }
 
-export type PlayFlowScreen = 'character-select' | 'pregame' | 'loading' | 'match' | 'round-result' | 'results';
+export type PlayFlowScreen = 'character-select' | 'pregame' | 'loading' | 'match' | 'paused' | 'settings' | 'round-result' | 'results';
 
 /** Read-only view for smoke tests: window.__chaosBeyPlay. */
 export interface PlayFlowHandle {
@@ -67,6 +74,12 @@ export class PlayFlow {
   private characterSelect: CharacterSelectScreen | null = null;
   private pregame: PregameScreen | null = null;
   private results: MatchResultsScreen | null = null;
+  private pauseMenu: MatchResultsScreen | null = null;
+  private settingsScreen: SettingsScreen | null = null;
+  private settings: PlayerSettings;
+  /** Game state to restore on resume (Combat or Clash). */
+  private stateBeforePause: GameState = GameState.Combat;
+  private readonly padMenu = new GamepadMenuKeys();
   private runner: MatchRunner | null = null;
   private resultsTimer: ReturnType<typeof setTimeout> | null = null;
   private score: MatchScore = EMPTY_SCORE;
@@ -75,6 +88,10 @@ export class PlayFlow {
   private generation = 0;
 
   constructor(private readonly deps: PlayFlowDeps) {
+    this.settings = deps.settings;
+    applyQuality(deps.appRenderer, this.settings);
+    window.addEventListener('blur', this.handleFocusLoss);
+    document.addEventListener('visibilitychange', this.handleVisibility);
     window.__chaosBeyPlay = {
       getScreen: () => this.screen,
       getSetup: () => this.setup,
@@ -88,10 +105,16 @@ export class PlayFlow {
     this.openCharacterSelect();
   }
 
+  /** The player's current settings (Settings changes included). */
+  getSettings(): PlayerSettings {
+    return this.settings;
+  }
+
   private openCharacterSelect(): void {
     this.leaveCurrent();
     this.screen = 'character-select';
     this.deps.stateMachine.transitionTo(GameState.CharacterSelect);
+    this.padMenu.start();
     this.characterSelect = new CharacterSelectScreen(this.deps.screenRoot, this.deps.appRenderer, {
       initialBeyId: this.setup.playerBeyId,
       onConfirm: (beyId) => {
@@ -106,6 +129,7 @@ export class PlayFlow {
     this.leaveCurrent();
     this.screen = 'pregame';
     this.deps.stateMachine.transitionTo(GameState.PregameSetup);
+    this.padMenu.start();
     this.pregame = new PregameScreen(this.deps.screenRoot, {
       setup: this.setup,
       onStart: (setup) => {
@@ -140,8 +164,14 @@ export class PlayFlow {
         attackProfileSettings: this.deps.attackProfileSettings,
         opponent: opponentControllerFor(this.setup),
         arenaTheme: arenaPreset(this.setup.arena.presetId).theme,
+        presentation: presentationFor(this.settings),
       },
-      { onRoundOver: (outcome) => this.scheduleRoundResult(outcome) },
+      {
+        onRoundOver: (outcome) => this.scheduleRoundResult(outcome),
+        onTick: (session, firstActions) => {
+          if (firstActions.pressedThisFrame.has(Action.Pause) && !session.roundState.isOver) queueMicrotask(() => this.openPause());
+        },
+      },
     );
     if (generation !== this.generation) {
       runner.stop();
@@ -149,7 +179,83 @@ export class PlayFlow {
     }
     this.runner = runner;
     this.screen = 'match';
+    this.padMenu.stop();
   }
+
+  // --- Pause (Esc / Start, or focus loss) --------------------------------
+
+  private openPause(): void {
+    const runner = this.runner;
+    if (this.screen !== 'match' || !runner || runner.isRoundOver()) return;
+    runner.pause();
+    this.stateBeforePause = this.deps.stateMachine.getCurrentState();
+    this.deps.stateMachine.transitionTo(GameState.Pause);
+    this.showPauseMenu();
+  }
+
+  private showPauseMenu(): void {
+    this.screen = 'paused';
+    this.padMenu.start();
+    const player = rosterEntry(this.setup.playerBeyId);
+    const opponent = rosterEntry(this.setup.opponentBeyId);
+    this.pauseMenu = new MatchResultsScreen(this.deps.screenRoot, {
+      tone: 'neutral',
+      headline: 'PAUSED',
+      subline: `Round ${this.score.rounds + 1} · ${this.score.player} – ${this.score.opponent} · first to ${this.setup.roundsToWin}`,
+      details: [`You (${player.label}) vs CPU (${opponent.label})`],
+      testId: 'pause-menu',
+      onBack: () => this.resume(),
+      actions: [
+        { id: 'resume', label: 'Resume', primary: true, run: () => this.resume() },
+        { id: 'restart', label: 'Restart round', run: () => void this.startRound() },
+        { id: 'settings', label: 'Settings', run: () => this.openPauseSettings() },
+        { id: 'leave', label: 'Leave match', run: () => this.openPregame() },
+        { id: 'main-menu', label: 'Main Menu', run: () => this.goToMainMenu() },
+      ],
+    });
+  }
+
+  private openPauseSettings(): void {
+    this.pauseMenu?.close();
+    this.pauseMenu = null;
+    this.screen = 'settings';
+    this.settingsScreen = new SettingsScreen(this.deps.screenRoot, {
+      settings: this.settings,
+      overlay: true,
+      onChange: (settings) => this.changeSettings(settings),
+      onBack: () => {
+        this.settingsScreen?.close();
+        this.settingsScreen = null;
+        this.showPauseMenu();
+      },
+    });
+  }
+
+  private changeSettings(settings: PlayerSettings): void {
+    this.settings = settings;
+    savePlayerSettings(settings);
+    applyQuality(this.deps.appRenderer, settings);
+    this.runner?.setPresentation(presentationFor(settings));
+    this.runner?.redraw();
+  }
+
+  private resume(): void {
+    if (this.screen !== 'paused' || !this.runner) return;
+    this.pauseMenu?.close();
+    this.pauseMenu = null;
+    this.padMenu.stop();
+    this.screen = 'match';
+    this.deps.stateMachine.transitionTo(this.stateBeforePause);
+    this.runner.resume();
+  }
+
+  private readonly handleFocusLoss = (): void => {
+    if (this.settings.pauseOnFocusLoss) this.openPause();
+  };
+
+  private readonly handleVisibility = (): void => {
+    if (document.visibilityState === 'hidden') this.handleFocusLoss();
+  };
 
   private scheduleRoundResult(outcome: RoundOutcome): void {
     const generation = this.generation;
@@ -170,12 +276,15 @@ export class PlayFlow {
     const matchup = `You (${player.label}) vs CPU (${opponent.label})`;
     const seedLine = `Match seed ${this.matchSeed}`;
 
+    this.padMenu.start();
     if (winner === null) {
       // The match goes on: this round's result, then the next round.
       this.screen = 'round-result';
       this.deps.stateMachine.transitionTo(GameState.RoundEnd);
       this.results = new MatchResultsScreen(this.deps.screenRoot, {
-        outcome: { ...text, headline: `ROUND ${this.score.rounds}: ${text.headline}` },
+        tone: text.result,
+        headline: `ROUND ${this.score.rounds}: ${text.headline}`,
+        subline: text.finish,
         details: [`Score ${scoreLine} · first to ${this.setup.roundsToWin}`, matchup],
         actions: [
           { id: 'next-round', label: 'Next round', primary: true, run: () => void this.startRound() },
@@ -187,7 +296,6 @@ export class PlayFlow {
 
     this.screen = 'results';
     this.deps.stateMachine.transitionTo(GameState.MatchEnd);
-    const matchOutcome = winner === 'player' ? { ...text, result: 'win' as const, headline: 'VICTORY' } : { ...text, result: 'loss' as const, headline: 'DEFEAT' };
     const actions: MatchResultsAction[] = [
       { id: 'rematch', label: 'Rematch', primary: true, run: () => this.startMatch() },
       { id: 'change-setup', label: 'Change setup', run: () => this.openPregame() },
@@ -195,7 +303,9 @@ export class PlayFlow {
       { id: 'main-menu', label: 'Main Menu', run: () => this.goToMainMenu() },
     ];
     this.results = new MatchResultsScreen(this.deps.screenRoot, {
-      outcome: { ...matchOutcome, finish: `Final round — ${text.finish}` },
+      tone: winner === 'player' ? 'win' : 'loss',
+      headline: winner === 'player' ? 'VICTORY' : 'DEFEAT',
+      subline: `Final round — ${text.finish}`,
       details: [this.setup.roundsToWin > 1 ? `Final score ${scoreLine}` : 'Single round', matchup, seedLine],
       actions,
     });
@@ -212,6 +322,10 @@ export class PlayFlow {
     this.pregame = null;
     this.results?.close();
     this.results = null;
+    this.pauseMenu?.close();
+    this.pauseMenu = null;
+    this.settingsScreen?.close();
+    this.settingsScreen = null;
     this.runner?.stop();
     this.runner = null;
   }

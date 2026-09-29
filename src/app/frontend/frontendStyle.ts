@@ -45,6 +45,11 @@ const CSS = `
 .cb-bar__fill { position: absolute; inset: 0 auto 0 0; background: var(--cb-accent); border-radius: 4px; transition: width 120ms linear; }
 .cb-footer { display: flex; gap: 12px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 .cb-footer__hints { margin-right: auto; display: flex; gap: 14px; flex-wrap: wrap; }
+.cb-field-label { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--cb-text-dim); }
+.cb-segments { display: flex; flex-wrap: wrap; gap: 6px; }
+.cb-segment { --bey-accent: var(--cb-accent); flex: 1 1 0; min-width: 88px; font: 600 13px/1 var(--cb-font); letter-spacing: 0.08em; color: var(--cb-text-dim); background: #111522; border: 1px solid var(--cb-line); border-radius: 4px; padding: 11px 10px; cursor: pointer; }
+.cb-segment:hover { color: var(--cb-text); border-color: var(--cb-line-strong); }
+.cb-segment[aria-checked="true"] { color: #fff; border-color: var(--bey-accent); background: color-mix(in srgb, var(--bey-accent) 16%, #111522); box-shadow: inset 0 -2px 0 var(--bey-accent); }
 `;
 
 /** Adds the shared stylesheet once. */
@@ -82,4 +87,39 @@ export function keyHint(keys: readonly string[], meaning: string): HTMLElement {
   }
   hint.append(meaning);
   return hint;
+}
+
+export interface SegmentOption<T> {
+  readonly value: T;
+  readonly label: string;
+}
+
+/**
+ * A single-choice row of buttons (role=radiogroup). Returns the group and a
+ * refresh function that marks `current` checked.
+ */
+export function segmentedControl<T>(testId: string, labelledBy: string, options: readonly SegmentOption<T>[], onPick: (value: T) => void): { readonly group: HTMLElement; readonly buttons: HTMLButtonElement[]; refresh(current: T): void } {
+  const group = el('div', 'cb-segments', testId);
+  group.setAttribute('role', 'radiogroup');
+  group.setAttribute('aria-labelledby', labelledBy);
+  const buttons = options.map((option) => {
+    const node = el('button', 'cb-segment', `${testId}-${String(option.value)}`);
+    node.type = 'button';
+    node.setAttribute('role', 'radio');
+    node.textContent = option.label;
+    node.addEventListener('click', () => onPick(option.value));
+    group.append(node);
+    return node;
+  });
+  return {
+    group,
+    buttons,
+    refresh(current: T): void {
+      options.forEach((option, i) => {
+        const checked = option.value === current;
+        buttons[i]!.setAttribute('aria-checked', String(checked));
+        buttons[i]!.tabIndex = checked ? 0 : -1;
+      });
+    },
+  };
 }

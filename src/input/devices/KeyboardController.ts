@@ -70,6 +70,10 @@ export class KeyboardController implements CombatController {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
     window.removeEventListener('blur', this.handleWindowBlur);
+    // A key released while detached (e.g. during a pause menu) never sends
+    // its keyup here: forget everything, as on focus loss, so it can't stay
+    // stuck held and swallow its next press.
+    this.handleWindowBlur();
   }
 
   sampleActions(context: ControllerContext): ControllerActions {
