@@ -44,6 +44,9 @@ describe('GDD 68 scenario presets', () => {
     expect(replay.detail).toMatch(/replayed \d+ ticks, \d+ checkpoints identical/);
     expect(replay.detail).toMatch(/edited inputs caught at TicksCompleted (\d+)/);
     expect(replay.detail).toMatch(/altered checkpoint caught at TicksCompleted (\d+)/);
+    // A real scenario preset: verified with its setup re-applied, caught at the initial state without it.
+    expect(replay.detail).toMatch(/scenario "clash" replayed with its setup: \d+ ticks identical/);
+    expect(replay.detail).toContain('scenario "clash" without its setup caught at TicksCompleted 0');
   }, 300_000);
 
   it('is deterministic: every supported preset gives the same run twice (not just a hand-picked sample)', async () => {

@@ -7,6 +7,12 @@
 // range, and a copy with one altered checkpoint must diverge at exactly
 // that checkpoint (both re-sealed, so they pass the file's integrity
 // check and only playback can catch them).
+//
+// It also binds a real GDD 68 scenario preset: a scenario is recorded
+// after its `setup` places the Beys, and the file doesn't say which preset
+// it came from, so playback must re-apply that same setup. The scenario
+// replay must verify with the preset's setup and diverge at TicksCompleted
+// 0 without it.
 // ============================================================
 
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
@@ -16,6 +22,11 @@ import { decodeReplay, encodeReplay, sealReplay, type ChaosBeyReplayV1, type Rep
 import { currentRuntimeFingerprint } from '../../replay/format/runtimeFingerprint';
 import { playReplayHeadless, type ReplayVerdict } from '../../replay/playback/replayPlayback';
 import { simulateAiMatch } from '../AiMatchSimulation';
+import { findScenarioPreset } from './ScenarioPresets';
+import { runScenario } from './ScenarioRunner';
+
+/** The GDD 68 preset whose setup the scenario half binds (Beys placed face to face, a real Clash). */
+export const REPLAY_REPRODUCTION_SCENARIO = 'clash';
 
 /**
  * A long Attack-vs-Defense fight with many hitstop freezes under RNG scheme
@@ -104,6 +115,28 @@ export async function runReplayReproduction(fingerprint?: RuntimeFingerprint): P
       notes.push(`altered checkpoint caught at TicksCompleted ${target}`);
     } else {
       failures.push(`altered checkpoint at TicksCompleted ${target}: ${describe(cpVerdict)}`);
+    }
+  }
+
+  // A real scenario preset: recorded after its setup, replayed with and without that setup.
+  const preset = findScenarioPreset(REPLAY_REPRODUCTION_SCENARIO);
+  if (!preset?.setup) {
+    failures.push(`scenario preset "${REPLAY_REPRODUCTION_SCENARIO}" not found or has no setup`);
+  } else {
+    const scenario = await runScenario(preset, { record: { fingerprint: current } });
+    if (!scenario.replay) {
+      failures.push(`scenario "${preset.id}" was not recorded (${scenario.status}: ${scenario.detail})`);
+    } else {
+      const scenarioReplay = reimport(encodeReplay(scenario.replay));
+      const withSetup = await playReplayHeadless(scenarioReplay, current, { setup: preset.setup });
+      if (withSetup.status === 'verified') notes.push(`scenario "${preset.id}" replayed with its setup: ${scenarioReplay.frames.length} ticks identical`);
+      else failures.push(`scenario "${preset.id}" replayed with its setup: ${describe(withSetup)}`);
+      const withoutSetup = await playReplayHeadless(scenarioReplay, current);
+      if (withoutSetup.status === 'diverged' && withoutSetup.comparison.status === 'diverged' && withoutSetup.comparison.firstMismatch.ticksCompleted === 0) {
+        notes.push(`scenario "${preset.id}" without its setup caught at TicksCompleted 0`);
+      } else {
+        failures.push(`scenario "${preset.id}" without its setup: ${describe(withoutSetup)} (expected a divergence at TicksCompleted 0)`);
+      }
     }
   }
 
