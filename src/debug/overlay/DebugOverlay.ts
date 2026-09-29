@@ -23,6 +23,8 @@ export interface DebugOverlayState {
   actualVelocityVector: Vec2;
   speedMps: number;
   headingRad: number;
+  /** M11: the player's desired world direction (directional control), null under classic control. Debug only — never drawn in the game view. */
+  desiredMoveIntent: Vec2 | null;
   slipAngleRad: number;
   lateralGripPerS: number;
   longitudinalDragPerS: number;
@@ -157,6 +159,7 @@ export class DebugOverlay {
       `actual velocity  ${fmtVec2(state.actualVelocityVector)}\n` +
       `speed            ${state.speedMps.toFixed(2)} m/s\n` +
       `heading          ${(state.headingRad * RAD_TO_DEG).toFixed(1)} deg\n` +
+      `desired input    ${state.desiredMoveIntent ? `${fmtVec2(state.desiredMoveIntent)} ${fmtIntentAngle(state.desiredMoveIntent)}` : 'classic (steer/throttle)'}\n` +
       `slip angle       ${(state.slipAngleRad * RAD_TO_DEG).toFixed(1)} deg\n` +
       `lateral grip     ${state.lateralGripPerS.toFixed(2)} /s\n` +
       `longitudinal drag ${state.longitudinalDragPerS.toFixed(2)} /s\n` +
@@ -226,4 +229,10 @@ export class DebugOverlay {
   private applyVisibility(): void {
     this.root.style.display = this.visible ? 'block' : 'none';
   }
+}
+
+/** A desired direction's length and yaw (same convention as heading), e.g. "|1.00| 90.0 deg". */
+function fmtIntentAngle(v: Vec2): string {
+  const len = Math.hypot(v.x, v.z);
+  return len < 1e-3 ? '|0.00|' : `|${len.toFixed(2)}| ${(Math.atan2(v.x, v.z) * RAD_TO_DEG).toFixed(1)} deg`;
 }

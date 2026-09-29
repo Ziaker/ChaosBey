@@ -16,12 +16,15 @@ export class GamepadController implements CombatController {
   /** Buttons down when the controller was (re)started: ignored until released, like a key held from a menu. */
   private readonly ignored = new Set<Action>();
   private ignoreHeldOnNextSample = true;
+  /** Left stick axes read on the last sample ([0, 0] with no pad): the directional control reads the stick continuously. */
+  private stick: readonly [number, number] = [0, 0];
 
   constructor(private readonly readPads: () => readonly (Gamepad | null)[] = currentGamepads) {}
 
   sampleActions(context: ControllerContext): ControllerActions {
     const pad = readFirstGamepad(this.readPads());
     const raw = pad ? gamepadHeldActions(pad.snapshot) : new Set<Action>();
+    this.stick = pad && !this.ignoreHeldOnNextSample ? [pad.snapshot.axes[0] ?? 0, pad.snapshot.axes[1] ?? 0] : [0, 0];
     if (this.ignoreHeldOnNextSample) {
       this.ignoreHeldOnNextSample = false;
       raw.forEach((a) => this.ignored.add(a));
@@ -41,8 +44,14 @@ export class GamepadController implements CombatController {
     };
   }
 
+  /** Left stick [x, y] (y down) from the last sample. */
+  getStick(): readonly [number, number] {
+    return this.stick;
+  }
+
   /** Forgets every held button (pause/resume): a button still down must be released and pressed again. */
   reset(): void {
+    this.stick = [0, 0];
     this.held.clear();
     this.buffer.clearHoldTracking();
     this.ignoreHeldOnNextSample = true;

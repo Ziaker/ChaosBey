@@ -206,7 +206,7 @@ test('Debug Lab: record a match, download the replay, import it and watch it ver
   expect(download.suggestedFilename()).toMatch(/^chaosbey-replay-.*\.json$/);
   const file = await download.path();
   const text = (await import('node:fs')).readFileSync(file!, 'utf8');
-  expect(JSON.parse(text).format).toBe('ChaosBeyReplayV1');
+  expect(JSON.parse(text).format).toBe('ChaosBeyReplayV2'); // M11: new recordings are V2
 
   // Import it through the panel and let it play out: every checkpoint must match.
   await page.getByTestId('debug-lab-replay-file').setInputFiles(file!);

@@ -7,7 +7,7 @@
 // Keyboard: ↑/↓ row, ←/→ change, Esc back.
 // ============================================================
 
-import { QUALITY_PROFILES, DEFAULT_PLAYER_SETTINGS, type PlayerSettings } from '../../config/settings/PlayerSettings';
+import { QUALITY_PROFILES, DEFAULT_PLAYER_SETTINGS, type ControlScheme, type PlayerSettings } from '../../config/settings/PlayerSettings';
 import { QualityPreset } from '../../config/runtime/QualityPreset';
 import { GAMEPAD_BINDINGS, currentGamepads, readFirstGamepad } from '../../input/devices/gamepadMapping';
 import { button, el, ensureFrontendStyle, keyHint, segmentedControl } from './frontendStyle';
@@ -39,6 +39,22 @@ const KEYBOARD_BINDINGS: readonly { readonly label: string; readonly keys: strin
   { label: 'Pause', keys: 'Esc' },
 ];
 
+/** The control scheme's note and its two movement rows (action, keyboard, gamepad) in the controls table. */
+const CONTROL_TEXT: Readonly<Record<ControlScheme, { readonly note: string; readonly rows: readonly (readonly [string, string, string])[] }>> = {
+  directional: {
+    note: '↑ goes up the screen, → to the right, and so on. The Bey turns toward the direction with its own weight and grip. The arrow on the floor shows where it is facing.',
+    // One movement row: the second (throttle) is Classic only and hidden here.
+    rows: [['Move toward (screen direction)', '← → ↑ ↓', 'Left stick / D-pad']],
+  },
+  classic: {
+    note: 'Tank steering: ← → turn the Bey, ↑ ↓ drive forward and back. The arrow on the floor shows where it is facing.',
+    rows: [
+      ['Steer', '← →', 'Left stick ← → / D-pad ← →'],
+      ['Forward / back', '↑ ↓', 'Left stick ↑ ↓ / D-pad ↑ ↓ / RT, LT'],
+    ],
+  },
+};
+
 const QUALITY_NOTES: Readonly<Record<QualityPreset, string>> = {
   [QualityPreset.Low]: 'Lowest resolution, no speed trails. For slow machines.',
   [QualityPreset.Medium]: 'Balanced resolution with every effect.',
@@ -49,6 +65,9 @@ export class SettingsScreen {
   private readonly root: HTMLElement;
   private readonly rows: Row[] = [];
   private readonly qualityNote = el('p', 'cb-hint', 'settings-quality-note');
+  private readonly controlNote = el('p', 'cb-hint', 'settings-control-note');
+  /** The first two rows of the controls table (movement), which depend on the control scheme. */
+  private readonly movementRows: HTMLTableCellElement[][] = [];
   private readonly fullscreenButton: HTMLButtonElement;
   private readonly padStatus = el('p', 'cb-hint', 'settings-gamepad-status');
   private readonly padTimer: ReturnType<typeof setInterval>;
@@ -89,6 +108,17 @@ export class SettingsScreen {
 
     const play = this.section('Play');
     play.append(
+      this.choiceRow<ControlScheme>(
+        'control-scheme',
+        'Control',
+        [
+          { value: 'directional', label: 'Directional' },
+          { value: 'classic', label: 'Classic' },
+        ],
+        (s) => s.controlScheme,
+        (s, v) => ({ ...s, controlScheme: v }),
+      ),
+      this.controlNote,
       this.toggleRow('pause-on-focus-loss', 'Pause when the window loses focus', 'pauseOnFocusLoss'),
       this.toggleRow('control-hints', 'Control hints on the HUD', 'controlHints'),
       this.toggleRow('debug-overlay', 'Developer overlay (F3) on start', 'debugOverlayOnStart'),
@@ -106,11 +136,14 @@ export class SettingsScreen {
     KEYBOARD_BINDINGS.forEach((binding, i) => {
       const tr = el('tr');
       const pad = GAMEPAD_BINDINGS[i]!;
+      const cells: HTMLTableCellElement[] = [];
       for (const text of [binding.label, binding.keys, pad.buttons]) {
         const td = el('td');
         td.textContent = text;
         tr.append(td);
+        cells.push(td);
       }
+      if (i < 2) this.movementRows.push(cells);
       table.append(tr);
     });
     controls.append(table, this.padStatus);
@@ -190,6 +223,13 @@ export class SettingsScreen {
     for (const row of this.rows) row.refresh(this.settings);
     const profile = QUALITY_PROFILES[this.settings.quality];
     this.qualityNote.textContent = `${QUALITY_NOTES[this.settings.quality]} (pixel ratio up to ${profile.maxPixelRatio}, speed trails ${profile.trails ? 'on' : 'off'})`;
+    const scheme = CONTROL_TEXT[this.settings.controlScheme];
+    this.controlNote.textContent = scheme.note;
+    this.movementRows.forEach((cells, i) => {
+      const texts = scheme.rows[i];
+      cells[0]!.parentElement!.hidden = !texts;
+      texts?.forEach((text, j) => (cells[j]!.textContent = text));
+    });
     this.refreshFullscreen();
     this.refreshPadStatus();
   }

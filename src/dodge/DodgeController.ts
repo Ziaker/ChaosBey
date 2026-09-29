@@ -32,6 +32,7 @@ import {
   LAUNCH_PENDING_WINDOW_S,
 } from './DodgeTuning';
 import type { CanonicalRecord } from '../replay/state/CanonicalValue';
+import { intentMagnitude } from '../bey/movement/directionalIntent';
 
 export enum DodgeState {
   Idle = 'Idle',
@@ -214,12 +215,17 @@ export class DodgeController {
     const forward = fromYaw(headingRad);
     const right = perpendicular(forward);
 
-    const lateralInput = (actions.held.has(Action.SteerRight) ? 1 : 0) - (actions.held.has(Action.SteerLeft) ? 1 : 0);
-    const forwardInput = (actions.held.has(Action.MoveForward) ? 1 : 0) - (actions.held.has(Action.MoveBackward) ? 1 : 0);
-
-    let direction: Vec2 = add(scale(forward, forwardInput), scale(right, lateralInput));
-    if (lateralInput === 0 && forwardInput === 0) direction = forward; // no direction held — default to forward.
-    direction = normalize(direction);
+    let direction: Vec2;
+    if (actions.moveIntent) {
+      // Directional control (M11): dodge toward the held world direction.
+      direction = intentMagnitude(actions.moveIntent) > 0 ? normalize(actions.moveIntent) : forward;
+    } else {
+      const lateralInput = (actions.held.has(Action.SteerRight) ? 1 : 0) - (actions.held.has(Action.SteerLeft) ? 1 : 0);
+      const forwardInput = (actions.held.has(Action.MoveForward) ? 1 : 0) - (actions.held.has(Action.MoveBackward) ? 1 : 0);
+      direction = add(scale(forward, forwardInput), scale(right, lateralInput));
+      if (lateralInput === 0 && forwardInput === 0) direction = forward; // no direction held — default to forward.
+      direction = normalize(direction);
+    }
 
     const vel = body.linvel();
     const burst = scale(direction, DODGE_BURST_SPEED_MPS);

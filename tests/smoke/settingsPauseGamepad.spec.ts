@@ -132,11 +132,18 @@ test('a standard gamepad drives the menus, the Bey and the pause', async ({ page
   await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getScreen()), { timeout: 15_000 }).toBe('match');
   expect(await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getBey('first').definition.id)).toBe('stamina-prototype');
 
-  // The stick steers the Bey: the match reads it as the same actions as the keyboard.
+  // The stick drives the Bey (M11 directional default): full tilt up-right is a
+  // full-strength world direction, and no turn/throttle actions are held.
   await page.evaluate(() => ((window as unknown as { __pad: { axes: number[] } }).__pad.axes = [1, -1, 0, 0]));
   await expect
-    .poll(() => page.evaluate(() => [...(window.__chaosBeyPlay!.getSession()!.getLastActions('first')?.held ?? [])].sort()))
-    .toEqual(['MoveForward', 'SteerRight']);
+    .poll(() =>
+      page.evaluate(() => {
+        const actions = window.__chaosBeyPlay!.getSession()!.getLastActions('first');
+        const move = actions?.moveIntent;
+        return { held: [...(actions?.held ?? [])], strength: move ? Math.round(Math.hypot(move.x, move.z) * 100) / 100 : null };
+      }),
+    )
+    .toEqual({ held: [], strength: 1 });
   await page.evaluate(() => ((window as unknown as { __pad: { axes: number[] } }).__pad.axes = [0, 0, 0, 0]));
 
   // Start pauses; B (back) resumes.

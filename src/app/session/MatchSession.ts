@@ -45,6 +45,7 @@ import { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { createRngStreams, type RngStreams } from '../../rng/SeededRng';
 import { TelemetryEventKind } from '../../telemetry/events/TelemetryEvent';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
+import { HeadingArrow } from '../../vfx/HeadingArrow';
 import { VfxManager } from '../../vfx/VfxManager';
 import { ForcedInputController } from '../../automation/scripted-scenarios/ForcedInputController';
 import { AIController } from '../../ai/controllers/AIController';
@@ -107,6 +108,8 @@ export interface SessionRenderView {
   readonly cameraView: 'game' | 'overview';
   /** Shake plus speed/impact FOV changes. */
   readonly cameraEffects: boolean;
+  /** M11: the floor arrow showing the player's Bey's physical heading (default on). */
+  readonly headingArrow?: boolean;
 }
 
 const DEFAULT_RENDER_VIEW: SessionRenderView = { cameraView: 'game', cameraEffects: true };
@@ -194,6 +197,7 @@ export class MatchSession {
   private readonly keyboard: CombatController;
 
   private readonly controllerSpecs: Record<Side, SideControllerSpec>;
+  private readonly headingArrow: HeadingArrow;
   /** Each side's driver, wrapped so the Debug Lab can force short input bursts. */
   private readonly drivers: Record<Side, ForcedInputController>;
   private readonly debugMutations: { tickIndex: number; description: string }[] = [];
@@ -237,6 +241,7 @@ export class MatchSession {
       geometry: arenaGeometryOf(options.matchConfig),
       theme: options.arenaTheme ?? FOUNDRY_PIT.theme,
     });
+    this.headingArrow = new HeadingArrow(this.root);
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
@@ -546,6 +551,15 @@ export class MatchSession {
   renderFrame(frameDeltaSeconds: number, camera: THREE.PerspectiveCamera, view: SessionRenderView = DEFAULT_RENDER_VIEW): void {
     const match = this.match;
     match.syncVisualsToPhysics(this.lastVisual.first.spin, this.lastVisual.first.wobble, this.lastVisual.second.spin, this.lastVisual.second.wobble);
+
+    // The player's Bey (the keyboard/pad side) gets the heading arrow.
+    const playerSide: Side | null = this.controllerSpecs.first.kind === 'keyboard' ? 'first' : this.controllerSpecs.second.kind === 'keyboard' ? 'second' : null;
+    if (playerSide && view.headingArrow !== false) {
+      const bey = this.getBey(playerSide);
+      this.headingArrow.update(bey.body.translation(), bey.movement.getHeadingRad(), bey.definition.physical.colliderRadiusM, bey.definition.physical.colliderHalfHeightM);
+    } else {
+      this.headingArrow.hide();
+    }
 
     const cameraOutput = this.lastCameraOutput;
     if (view.cameraView === 'overview') {

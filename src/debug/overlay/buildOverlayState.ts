@@ -27,6 +27,7 @@ export function buildCombatOverlayFields(session: MatchSession): CombatOverlayFi
     actualVelocityVector: result.first.movement.actualVelocityVector,
     speedMps: result.first.movement.speedMps,
     headingRad: result.first.movement.headingRad,
+    desiredMoveIntent: session.getLastActions('first')?.moveIntent ?? null,
     slipAngleRad: result.first.movement.slipAngleRad,
     lateralGripPerS: result.first.movement.lateralGripPerS,
     longitudinalDragPerS: result.first.movement.longitudinalDragPerS,

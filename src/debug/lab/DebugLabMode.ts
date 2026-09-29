@@ -17,6 +17,7 @@
 // Developer / Debug section (app/menu/MainMenu.ts), which loads that URL.
 // ============================================================
 
+import type * as THREE from 'three';
 import type { AppRenderer } from '../../app/bootstrap/createRenderer';
 import { GameState, GameStateMachine } from '../../app/lifecycle/GameState';
 import { MatchSession, type Side } from '../../app/session/MatchSession';
@@ -26,6 +27,8 @@ import { resolveMatchConfig } from '../../config/match/MatchConfig';
 import { resolveAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import { loadAttackProfileOverrides } from '../../config/attack-profile/AttackProfileStorage';
 import { KeyboardController } from '../../input/devices/KeyboardController';
+import { cameraYawOf, DirectionalController } from '../../input/directional/DirectionalController';
+import { loadPlayerSettings } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import { generateRandomSeedText } from '../../rng/stringSeed';
 import { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
@@ -81,6 +84,8 @@ export interface DebugLabHandle {
   playReplay(text: string): Promise<boolean>;
   /** M9: the playback check's status line, or null when not replaying. */
   replayStatus(): string | null;
+  /** M11: the camera the player looks through (read-only use: projecting to the screen in smoke tests). */
+  getCamera(): THREE.PerspectiveCamera;
 }
 
 declare global {
@@ -95,6 +100,10 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
 
   const keyboard = new KeyboardController();
   keyboard.attach();
+  // M11: the player's control scheme from Settings (directional by
+  // default), resolved against whichever camera view the Lab shows.
+  const playerInput = new DirectionalController(keyboard, { cameraYaw: () => cameraYawOf(appRenderer.camera) });
+  playerInput.setEnabled(loadPlayerSettings().controlScheme === 'directional');
   const labMatchConfig = resolveMatchConfig();
   const labAttackProfileSettings = resolveAttackProfileSettings(loadAttackProfileOverrides() ?? undefined);
   /** M9: while a replay plays, the session is built from the replay's own config, never the Lab's (owner decision 3). */
@@ -212,7 +221,7 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
         telemetry,
         stateMachine: matchState,
         controllers: { first: controllers.first, second: controllers.second },
-        keyboard,
+        keyboard: playerInput,
       });
       if (myToken !== restartToken) {
         // A newer restart (Restart/New Seed/loadPreset clicked again before
@@ -233,6 +242,7 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   };
 
   const handle: DebugLabHandle = {
+    getCamera: () => appRenderer.camera,
     getSession: () => session,
     isPaused: () => paused,
     setPaused: (next) => {

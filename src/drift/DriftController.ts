@@ -24,6 +24,7 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { Action, type ControllerActions } from '../input/actions/Action';
 import { LATERAL_GRIP_PER_S } from '../bey/movement/MovementTuning';
+import { isSteering } from '../bey/movement/directionalIntent';
 import {
   DRIFT_GRIP_RECOVERY_DURATION_S,
   DRIFT_LATERAL_GRIP_PER_S,
@@ -88,12 +89,13 @@ export class DriftController {
     };
   }
 
-  tick(body: RAPIER.RigidBody, actions: ControllerActions, grounded: boolean, fixedDeltaSeconds: number): DriftTickResult {
+  /** `headingRad` (the Bey's current heading) is only read for directional-control frames (ControllerActions.moveIntent). */
+  tick(body: RAPIER.RigidBody, actions: ControllerActions, grounded: boolean, fixedDeltaSeconds: number, headingRad = 0): DriftTickResult {
     const jumpDriftHeld = actions.held.has(Action.JumpDrift);
     const jumpDriftPressed = actions.pressedThisFrame.has(Action.JumpDrift);
     // The approved control is hop, then hold JumpDrift *while steering* to
     // slide (GDD section 19) — holding JumpDrift straight must not drift.
-    const steering = actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight);
+    const steering = isSteering(actions, headingRad);
 
     if (!grounded) {
       // Keep sampling this every tick while airborne so the last value
