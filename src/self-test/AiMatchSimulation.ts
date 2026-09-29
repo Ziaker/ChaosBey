@@ -20,7 +20,9 @@ import { AiIntent } from '../ai/decision/Intent';
 import { DEFAULT_AI_DIFFICULTY_PROFILE, type AiDifficultyProfile } from '../ai/difficulty/AiDifficultyProfile';
 import type { AiPersonality } from '../ai/personalities/AiPersonality';
 import { personalityForBeyDefinitionId } from '../ai/personalities/AiArchetypePersonalities';
-import type { SpawnPositionM } from '../app/bootstrap/matchSpawns';
+import { FIRST_SPAWN, SECOND_SPAWN, type SpawnPositionM } from '../app/bootstrap/matchSpawns';
+import type { ChaosBeyReplayV1 } from '../replay/format/ChaosBeyReplayV1';
+import { startHeadlessCapture, type HeadlessCaptureInput } from '../replay/recording/ReplayCapture';
 import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
 import { ARENA_FLOOR_RADIUS } from '../arena/colliders/ArenaTuning';
 import { AttackState } from '../combat/attacks/AttackController';
@@ -104,6 +106,8 @@ export interface AiMatchSetup {
   secondPersonality?: AiPersonality;
   difficulty?: AiDifficultyProfile;
   maxTicks?: number;
+  /** M9: record this match as a ChaosBeyReplayV1 (returned in AiMatchRecord.replay). */
+  record?: Omit<HeadlessCaptureInput, 'seedText' | 'spawns'>;
   /** Called every tick after the match advanced — for extra invariant checks. */
   onTick?: (tick: number, world: SelfTestMatchWorld, firstActions: ControllerActions, secondActions: ControllerActions, firstAi: AIController, secondAi: AIController) => void;
 }
@@ -253,6 +257,8 @@ export interface AiMatchRecord {
   /** Detector findings that are only warnings (e.g. ai-inactive). */
   readonly warningCount: number;
   readonly timing: AiMatchTiming;
+  /** Present when the setup asked to record (M9). */
+  readonly replay?: ChaosBeyReplayV1;
 }
 
 /** One frame at 60 fps: a tick slower than this can't keep a real-time match fed. Diagnostic only. */
@@ -336,6 +342,11 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     rng.aiSecond,
   );
 
+  // Before the first tick: the initial state is the replay's first checkpoint.
+  const capture = setup.record
+    ? startHeadlessCapture(world, { ...setup.record, seedText: setup.seed, spawns: { first: setup.firstSpawn ?? FIRST_SPAWN, second: setup.secondSpawn ?? SECOND_SPAWN } })
+    : null;
+
   const first = new SideTracker(firstPersonality.id);
   const second = new SideTracker(secondPersonality.id);
   const maxTicks = setup.maxTicks ?? DEFAULT_AI_MATCH_MAX_TICKS;
@@ -369,6 +380,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     // hitstop-frozen tick the result is the previous tick's: its events
     // were already counted.
     const { firstActions, secondActions, result, advanced } = world.step({ first: firstAi, second: secondAi });
+    capture?.afterTick(tick, firstActions, secondActions);
     ticks = tick + 1;
 
     const clashActive = world.clash.controller.getState() === ClashState.Active;
@@ -448,6 +460,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     invalidDetectionCount,
     warningCount,
     timing: { wallMs, meanTickMs: wallMs / Math.max(1, ticks), maxTickMs, slowTicks },
+    ...(capture ? { replay: capture.finish() } : {}),
   };
 }
 

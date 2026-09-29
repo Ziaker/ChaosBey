@@ -21,7 +21,8 @@ import type { Bey } from '../../bey/core/Bey';
 import type { ClashController } from '../../combat/clash/ClashController';
 import { IdleController } from '../../automation/scripted-scenarios/IdleController';
 import { ScriptedController, type ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
-import type { CombatController } from '../../input/actions/Action';
+import type { CombatController, ControllerActions } from '../../input/actions/Action';
+import { ReplayController } from '../../replay/playback/ReplayController';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import type { SeededRng } from '../../rng/SeededRng';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
@@ -33,7 +34,9 @@ export type SideControllerSpec =
   | { readonly kind: 'keyboard' }
   | { readonly kind: 'ai'; readonly personality: AiPersonalityChoice }
   | { readonly kind: 'idle' }
-  | { readonly kind: 'scripted'; readonly label: string; readonly frames: readonly ScriptedFrame[] };
+  | { readonly kind: 'scripted'; readonly label: string; readonly frames: readonly ScriptedFrame[] }
+  /** M9 playback: recorded ControllerActions, `frames[n]` for TickIndex n (see ReplayController). */
+  | { readonly kind: 'replay'; readonly label: string; readonly frames: readonly ControllerActions[] };
 
 export interface SideControllerDeps {
   readonly physics: PhysicsWorld;
@@ -68,6 +71,8 @@ export function createSideController(spec: SideControllerSpec, deps: SideControl
       return new IdleController();
     case 'scripted':
       return new ScriptedController([...spec.frames]);
+    case 'replay':
+      return new ReplayController(spec.frames, spec.label);
     case 'ai':
       return new AIController(
         deps.physics,
@@ -90,6 +95,8 @@ export function describeControllerSpec(spec: SideControllerSpec): string {
       return 'Idle';
     case 'scripted':
       return `Scripted (${spec.label})`;
+    case 'replay':
+      return `Replay (${spec.label})`;
     case 'ai':
       return `AI (${spec.personality})`;
   }
