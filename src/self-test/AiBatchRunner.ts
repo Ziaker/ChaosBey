@@ -81,8 +81,12 @@ export interface AiBatchMatchEntry {
   readonly slowTicks: number;
   /**
    * M9: the canonical state hash when the match ended (null if it
-   * crashed). The same seed gives the same hash in Node and in Chromium,
-   * at any acceleration; a different one means the simulation diverged.
+   * crashed). Within one supported environment (same build, same engine:
+   * the Chromium CI reference, or Node for the headless tests) the same
+   * seed gives the same hash at any acceleration, and a different one means
+   * the simulation diverged. Equality across JavaScript engines or browser
+   * versions is not guaranteed (Math.sin/cos/pow may differ by 1 ULP; owner
+   * decision 6 in docs/ai/m9-status.md).
    */
   readonly finalStateHash: StateHash | null;
 }
