@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChaosBey SFX Lab</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #05050a;
+        --panel: #0c1017;
+        --panel-2: #121823;
+        --line: #1f2835;
+        --text: #e9eef5;
+        --muted: #8894a6;
+        --soft: #c6cfdb;
+        --accent: #ffb347;
+        --dir-a: #6fd3ff;
+        --dir-b: #ffb347;
+        --dir-c: #ff4fa3;
+        --none: #5d6878;
+        --ok: #7fe07f;
+        --danger: #ff3b4e;
+        font-family: 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+      .lab { display: grid; grid-template-columns: 300px minmax(0, 1fr) 380px; height: 100%; min-height: 600px; }
+      .panel, .side { background: var(--panel); padding: 16px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+      .panel { border-right: 1px solid var(--line); }
+      .side { border-left: 1px solid var(--line); }
+      .events { overflow-y: auto; padding: 14px 18px 40px; display: flex; flex-direction: column; gap: 18px; }
+      .kicker { font: 600 11px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+      h1 { margin: 6px 0 8px; font-size: 21px; text-wrap: balance; }
+      h2 { margin: 0; font-size: 15px; }
+      h3 { margin: 0 0 8px; font: 700 11px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.16em; color: var(--muted); text-transform: uppercase; }
+      .warn { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+      .hint { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+      kbd { font: 10px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--muted); background: var(--bg); }
+      :is(button, select, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      button { font-family: inherit; }
+
+      .presets { display: grid; gap: 6px; }
+      .preset { display: grid; grid-template-columns: 28px 1fr; align-items: start; gap: 10px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 8px 10px; cursor: pointer; font-size: 12.5px; }
+      .preset strong { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; color: #0b0d12; font-size: 14px; }
+      .preset[data-id='A'] strong { background: var(--dir-a); }
+      .preset[data-id='B'] strong { background: var(--dir-b); }
+      .preset[data-id='C'] strong { background: var(--dir-c); }
+      .preset span small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; line-height: 1.35; }
+      .preset[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, var(--panel-2)); }
+      .preset:hover, .scenario:hover { border-color: #3a4658; }
+
+      .vol { display: grid; grid-template-columns: 1fr 40px; gap: 2px 8px; align-items: center; font-size: 11.5px; color: var(--muted); }
+      .vol input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+      .vol output { text-align: right; font: 600 11px ui-monospace, Consolas, monospace; color: var(--soft); }
+      .vols { display: grid; gap: 8px; }
+
+      .scenarios { display: grid; gap: 4px; }
+      .scenario { display: grid; gap: 2px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 7px 9px; cursor: pointer; font-size: 12.5px; }
+      .scenario small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+      .scenario[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); }
+
+      .counts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+      .count { border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); padding: 5px 4px; text-align: center; font: 600 15px ui-monospace, Consolas, monospace; }
+      .count small { display: block; font: 10px 'Segoe UI', system-ui, sans-serif; color: var(--muted); margin-top: 2px; }
+      .count[data-k='A'] { color: var(--dir-a); }
+      .count[data-k='B'] { color: var(--dir-b); }
+      .count[data-k='C'] { color: var(--dir-c); }
+      .count[data-k='none'] { color: var(--soft); }
+      .count[data-k='pending'] { color: var(--muted); }
+      .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      .actions button, .chip { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 7px 8px; font: 600 11.5px/1.2 inherit; font-family: inherit; cursor: pointer; }
+      .actions button.primary { grid-column: 1 / -1; background: color-mix(in srgb, var(--accent) 28%, var(--panel-2)); border-color: var(--accent); }
+      .chip[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+      .status { font-size: 11.5px; color: var(--soft); min-height: 1.4em; margin: 0; }
+      .keys { font-size: 11.5px; color: var(--muted); line-height: 1.8; }
+
+      .category h2 { display: flex; align-items: baseline; gap: 10px; }
+      .category h2 small { font-weight: 400; font-size: 11.5px; color: var(--muted); }
+      .rows { display: grid; gap: 6px; margin-top: 8px; }
+      .event { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 9px 11px; display: grid; gap: 6px; }
+      .event:focus-visible, .event.focused { border-color: #3a4658; background: var(--panel-2); outline: none; }
+      .event.live { box-shadow: inset 3px 0 0 var(--accent); }
+      .ev-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .ev-head strong { font-size: 13.5px; }
+      .tag { font: 600 10px ui-monospace, Consolas, monospace; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+      .tag.pending { border-color: #3a4658; }
+      .tag.decided-A { color: #0b0d12; background: var(--dir-a); border-color: var(--dir-a); }
+      .tag.decided-B { color: #0b0d12; background: var(--dir-b); border-color: var(--dir-b); }
+      .tag.decided-C { color: #0b0d12; background: var(--dir-c); border-color: var(--dir-c); }
+      .tag.decided-none { color: var(--text); background: var(--none); border-color: var(--none); }
+      .ev-trigger { margin: 0; font-size: 12px; color: var(--soft); line-height: 1.4; }
+      .ev-source { margin: 0; font: 10.5px ui-monospace, Consolas, monospace; color: #6d7a8d; }
+      .ev-note { margin: 0; font-size: 11.5px; color: var(--muted); font-style: italic; }
+      .ev-controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+      .group { display: inline-flex; gap: 4px; align-items: center; }
+      .group-label { font-size: 10.5px; color: var(--muted); margin-right: 2px; }
+      .pick-btn, .play-btn, .mag-btn, .cycle-btn { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 5px; padding: 5px 9px; font: 700 12px/1 inherit; font-family: inherit; cursor: pointer; min-width: 34px; }
+      .pick-btn[data-choice='A'][aria-pressed='true'] { background: var(--dir-a); color: #0b0d12; border-color: var(--dir-a); }
+      .pick-btn[data-choice='B'][aria-pressed='true'] { background: var(--dir-b); color: #0b0d12; border-color: var(--dir-b); }
+      .pick-btn[data-choice='C'][aria-pressed='true'] { background: var(--dir-c); color: #0b0d12; border-color: var(--dir-c); }
+      .pick-btn[data-choice='none'][aria-pressed='true'] { background: var(--none); color: var(--text); border-color: var(--none); }
+      .pick-btn[data-choice='none'] { font-size: 10.5px; font-weight: 600; }
+      .play-btn[data-dir='A'] { border-color: color-mix(in srgb, var(--dir-a) 45%, var(--line)); }
+      .play-btn[data-dir='B'] { border-color: color-mix(in srgb, var(--dir-b) 45%, var(--line)); }
+      .play-btn[data-dir='C'] { border-color: color-mix(in srgb, var(--dir-c) 45%, var(--line)); }
+      .play-btn.playing, .cycle-btn.playing { background: color-mix(in srgb, var(--accent) 30%, var(--panel-2)); }
+      .mag-btn { font-weight: 600; font-size: 11px; min-width: 0; }
+      .mag-btn[aria-pressed='true'] { border-color: var(--soft); background: #1b2330; }
+      .pick-btn:hover, .play-btn:hover, .mag-btn:hover, .cycle-btn:hover, .chip:hover, .actions button:hover { border-color: #3a4658; }
+
+      .arena { width: 100%; aspect-ratio: 1; display: block; border: 1px solid var(--line); border-radius: 8px; background: #000; }
+      .live-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font: 12px inherit; font-family: inherit; }
+      .mix { margin: 0; font: 11px/1.55 ui-monospace, Consolas, monospace; color: var(--soft); white-space: pre-wrap; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-variant-numeric: tabular-nums; min-height: 88px; }
+      .log { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font: 11px/1.4 ui-monospace, Consolas, monospace; max-height: 300px; overflow-y: auto; }
+      .log li { display: grid; grid-template-columns: 48px 18px 1fr auto; gap: 6px; color: var(--soft); padding: 1px 4px; border-radius: 3px; }
+      .log li .d { font-weight: 700; }
+      .log li .d.A { color: var(--dir-a); }
+      .log li .d.B { color: var(--dir-b); }
+      .log li .d.C { color: var(--dir-c); }
+      .log li.dropped { color: #5d6878; }
+      .log li.dropped .why { color: #b38a5a; }
+      .log li.silent { color: #5d6878; font-style: italic; }
+      .log .why { color: var(--muted); }
+
+      @media (max-width: 1180px) {
+        .lab { grid-template-columns: 280px minmax(0, 1fr); }
+        .side { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+        .lab { height: auto; }
+        .events { overflow: visible; }
+      }
+      @media (max-width: 760px) {
+        .lab { grid-template-columns: 1fr; }
+        .panel { border-right: 0; border-bottom: 1px solid var(--line); }
+        .side { grid-template-columns: 1fr; }
+        .keys { display: none; }
+        .events { padding: 12px 16px 32px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="lab" id="lab">
+      <aside class="panel">
+        <header>
+          <div class="kicker">ChaosBey · Protótipo de som</div>
+          <h1>SFX Lab</h1>
+          <p class="warn">Três direções sonoras coerentes (A, B, C) para escolher evento por evento, ou deixar SEM SOM. Tudo é síntese procedural no navegador, sem arquivos nem serviços externos. Nada foi aprovado e nada foi integrado ao jogo.</p>
+        </header>
+        <section>
+          <h3>Direções</h3>
+          <div class="presets" id="directions"></div>
+          <p class="hint" style="margin-top: 6px">A direção marcada é a <b>pré-escuta</b>: ela toca no lugar dos eventos ainda pendentes (na luta ao vivo e nas sequências). Não conta como escolha.</p>
+        </section>
+        <section>
+          <h3>Volume</h3>
+          <div class="vols" id="volumes"></div>
+        </section>
+        <section>
+          <h3>Sequências de contexto</h3>
+          <div class="scenarios" id="sequences"></div>
+        </section>
+        <section>
+          <h3>Resumo das escolhas</h3>
+          <div class="counts" id="counts"></div>
+          <div class="actions" style="margin-top: 8px">
+            <button type="button" class="primary" id="copy">Copiar escolhas (JSON)</button>
+            <button type="button" id="download">Baixar JSON</button>
+            <button type="button" id="clear">Limpar escolhas</button>
+          </div>
+          <p class="status" id="status" aria-live="polite"></p>
+        </section>
+        <section class="keys" aria-label="Atalhos">
+          Evento focado: <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> escolhe A/B/C · <kbd>0</kbd> SEM SOM<br />
+          <kbd>Enter</kbd> toca a escolha · <kbd>Q</kbd> A→B→C · <kbd>↑</kbd> <kbd>↓</kbd> muda o evento<br />
+          <kbd>L</kbd> luta ao vivo · <kbd>Esc</kbd> silencia tudo
+        </section>
+      </aside>
+      <main class="events" id="events" aria-label="Eventos sonoros"></main>
+      <aside class="side">
+        <section>
+          <h3>Luta real ao vivo</h3>
+          <div class="live-controls">
+            <button type="button" class="chip" id="live-toggle">Ouvir luta <kbd>L</kbd></button>
+            <select id="matchup" aria-label="Arquétipos"></select>
+            <button type="button" class="chip" id="live-next">Nova luta</button>
+            <button type="button" class="chip" id="live-auto" aria-pressed="true">Emendar lutas</button>
+            <button type="button" class="chip" id="live-distance" aria-pressed="true" title="O ouvinte acompanha o Bey do jogador (como a câmera do jogo): os sons do oponente ficam mais baixos quanto mais longe ele está (até −8 dB)">Distância</button>
+          </div>
+          <p class="hint" style="margin: 6px 0 8px">Simulação real do jogo (física, tickMatch, Clash, hitstop e duas IAs), só ouvida: o Lab não muda nada na luta.</p>
+          <canvas class="arena" id="arena" aria-label="Arena vista de cima"></canvas>
+        </section>
+        <section>
+          <h3>Mixagem</h3>
+          <pre class="mix" id="mix" aria-live="off"></pre>
+          <h3 style="margin-top: 12px">O que tocou (e o que o mix cortou)</h3>
+          <ol class="log" id="log"></ol>
+        </section>
+      </aside>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

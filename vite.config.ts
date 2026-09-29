@@ -30,7 +30,8 @@ export default defineConfig(({ command, isPreview }) => ({
     // Multi-page build: the game plus isolated visual prototypes. Prototype
     // pages never change the game and ship under their own path (e.g.
     // /ChaosBey/prototypes/bey-visual-concepts/). Most import nothing from
-    // it; the Camera Lab reads the game's simulation to run real fights.
+    // it; the Camera Lab and the SFX Lab read the game's simulation to run
+    // real fights.
     rolldownOptions: {
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
@@ -41,6 +42,7 @@ export default defineConfig(({ command, isPreview }) => ({
         conditionVisualConcepts: fileURLToPath(new URL('./prototypes/condition-visual-concepts/index.html', import.meta.url)),
         cameraConcepts: fileURLToPath(new URL('./prototypes/camera-concepts/index.html', import.meta.url)),
         beyMotionConcepts: fileURLToPath(new URL('./prototypes/bey-motion-concepts/index.html', import.meta.url)),
+        sfxConcepts: fileURLToPath(new URL('./prototypes/sfx-concepts/index.html', import.meta.url)),
       },
     },
   },
