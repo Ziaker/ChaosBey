@@ -1,0 +1,53 @@
+// M10: the player-facing AI tiers change how the AI really plays, not just
+// what the Pregame screen says. Ace vs Rookie mirror matches (every
+// archetype, both sides) through the real headless runtime.
+
+import { describe, expect, it } from 'vitest';
+import { ACE_TIER, ROOKIE_TIER } from '../../src/ai/difficulty/AiDifficultyTiers';
+import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
+import { simulateAiMatch } from '../../src/self-test/AiMatchSimulation';
+
+interface TierTotals {
+  deliberateErrors: number;
+  hitsDodged: number;
+  dodges: number;
+  wins: number;
+}
+
+describe('AI difficulty tiers in real matches', () => {
+  it('Ace hesitates less, dodges more and wins more than Rookie', async () => {
+    const totals: Record<'ace' | 'rookie', TierTotals> = {
+      ace: { deliberateErrors: 0, hitsDodged: 0, dodges: 0, wins: 0 },
+      rookie: { deliberateErrors: 0, hitsDodged: 0, dodges: 0, wins: 0 },
+    };
+    for (const definition of [ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE]) {
+      for (let i = 0; i < 4; i++) {
+        for (const aceFirst of [true, false]) {
+          const record = await simulateAiMatch({
+            seed: `tier-${definition.id}-${i}`,
+            firstDefinition: definition,
+            secondDefinition: definition,
+            firstDifficulty: aceFirst ? ACE_TIER.profile : ROOKIE_TIER.profile,
+            secondDifficulty: aceFirst ? ROOKIE_TIER.profile : ACE_TIER.profile,
+          });
+          const sides = aceFirst ? { ace: record.stats.first, rookie: record.stats.second } : { ace: record.stats.second, rookie: record.stats.first };
+          for (const tier of ['ace', 'rookie'] as const) {
+            totals[tier].deliberateErrors += sides[tier].deliberateErrors;
+            totals[tier].hitsDodged += sides[tier].hitsDodged;
+            totals[tier].dodges += sides[tier].dodges;
+          }
+          const outcome = String(record.stats.outcome);
+          const firstWon = outcome.startsWith('FirstWins');
+          const secondWon = outcome.startsWith('SecondWins');
+          if ((aceFirst && firstWon) || (!aceFirst && secondWon)) totals.ace.wins++;
+          else if (firstWon || secondWon) totals.rookie.wins++;
+        }
+      }
+    }
+    // Measured: errors 49 vs 106, hits dodged 51 vs 8, dodges 23 vs 7, wins 15 vs 9 (24 matches).
+    expect(totals.ace.deliberateErrors).toBeLessThan(totals.rookie.deliberateErrors * 0.7);
+    expect(totals.ace.hitsDodged).toBeGreaterThan(totals.rookie.hitsDodged * 2);
+    expect(totals.ace.dodges).toBeGreaterThan(totals.rookie.dodges * 2);
+    expect(totals.ace.wins).toBeGreaterThan(totals.rookie.wins);
+  }, 300_000);
+});
