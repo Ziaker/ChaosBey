@@ -40,6 +40,22 @@ export interface ControllerActions {
   readonly attackHoldDurationSeconds: number;
   /** Seconds Action.JumpDrift has been continuously held (0 when not held); drives tap-hop vs. hold-jump. */
   readonly jumpDriftHoldDurationSeconds: number;
+  /**
+   * M11 directional control: where the player wants to go, as a world X/Z
+   * vector of length 0..1 (0 = no direction). When present, movement,
+   * drift and dodge read it instead of SteerLeft/SteerRight/MoveForward/
+   * MoveBackward, which are then never held. The input layer resolves it
+   * from screen directions; the simulation never sees the camera. Absent
+   * (undefined) = the classic tank semantics: AI, scripted tests, the
+   * Classic control setting and every V1 replay.
+   */
+  readonly moveIntent?: MoveIntent;
+}
+
+/** A world-space X/Z direction, length 0..1. */
+export interface MoveIntent {
+  readonly x: number;
+  readonly z: number;
 }
 
 export interface ControllerContext {

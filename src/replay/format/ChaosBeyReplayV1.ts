@@ -1,5 +1,8 @@
 // ============================================================
-// ChaosBeyReplayV1 (M9 lane B — GDD 77)
+// ChaosBeyReplayV1 / V2 (M9 lane B — GDD 77; V2 in M11)
+// V2 is V1 plus a required `move` on every action frame (the
+// directional-control intent, or null). New recordings are V2; V1 files
+// still decode, and their frames keep the classic control semantics.
 // The replay file: the resolved deterministic config, the recording
 // build's fingerprint, one frame per fixed tick (both sides'
 // ControllerActions, indexed by TickIndex) and state checkpoints (keyed by
@@ -24,6 +27,8 @@ import { createDefaultMatchConfig } from '../../config/match/MatchConfig';
 import { FIXED_TICKS_PER_SECOND } from '../../physics/fixed-step/FixedTimestepLoop';
 import {
   REPLAY_FORMAT,
+  REPLAY_FORMAT_V1,
+  type ReplayFormat,
   RNG_SCHEME_VERSION,
   STATE_HASH_ALGORITHM,
   STATE_SCHEMA_VERSION,
@@ -45,7 +50,8 @@ export interface ReplayFrame {
 }
 
 export interface ChaosBeyReplayV1 {
-  readonly format: typeof REPLAY_FORMAT;
+  /** V1 (classic control only) or V2 (adds `move` to every action frame). */
+  readonly format: ReplayFormat;
   readonly stateHashAlgorithm: typeof STATE_HASH_ALGORITHM;
   readonly fingerprint: RuntimeFingerprint;
   readonly config: DeterministicConfigSnapshot;
@@ -147,7 +153,11 @@ export function validateReplay(value: unknown): ReplayValidationError[] {
   const root = v.record(value, '(root)', ['format', 'stateHashAlgorithm', 'fingerprint', 'config', 'frames', 'checkpoints', 'integrity']);
   if (!root) return v.errors;
 
-  if (root.format !== REPLAY_FORMAT) v.fail('wrong-format', 'format', `expected "${REPLAY_FORMAT}", got ${describe(root.format)}`);
+  if (root.format !== REPLAY_FORMAT && root.format !== REPLAY_FORMAT_V1) {
+    v.fail('wrong-format', 'format', `expected "${REPLAY_FORMAT}" or "${REPLAY_FORMAT_V1}", got ${describe(root.format)}`);
+  }
+  // An unknown format is checked against the newest shape (its one error is the format itself).
+  v.hasMove = root.format !== REPLAY_FORMAT_V1;
   if (root.stateHashAlgorithm !== STATE_HASH_ALGORITHM) {
     v.fail('unsupported-version', 'stateHashAlgorithm', `expected "${STATE_HASH_ALGORITHM}", got ${describe(root.stateHashAlgorithm)}`);
   }
@@ -232,8 +242,16 @@ function validateFrames(v: Validator, value: unknown): number | null {
 }
 
 function validateActions(v: Validator, value: unknown, path: string): void {
-  const actions = v.record(value, path, ['held', 'pressed', 'attackHoldS', 'jumpDriftHoldS']);
+  const actions = v.record(value, path, v.hasMove ? ['held', 'pressed', 'attackHoldS', 'jumpDriftHoldS', 'move'] : ['held', 'pressed', 'attackHoldS', 'jumpDriftHoldS']);
   if (!actions) return;
+  if (v.hasMove && actions.move !== null && actions.move !== undefined) {
+    const move = actions.move;
+    if (!Array.isArray(move) || move.length !== 2) {
+      v.fail('wrong-type', `${path}.move`, 'expected null or an [x, z] pair');
+    } else if (v.finite(move[0], `${path}.move[0]`) && v.finite(move[1], `${path}.move[1]`) && Math.hypot(move[0] as number, move[1] as number) > 1 + 1e-9) {
+      v.fail('wrong-type', `${path}.move`, 'length must not exceed 1');
+    }
+  }
   for (const key of ['held', 'pressed'] as const) {
     const list = actions[key];
     if (!Array.isArray(list)) {
@@ -285,6 +303,8 @@ function describe(value: unknown): string {
  */
 class Validator {
   readonly errors: ReplayValidationError[] = [];
+  /** V2: every action frame carries `move`. */
+  hasMove = true;
 
   fail(code: ReplayErrorCode, path: string, message: string): void {
     this.errors.push({ code, path, message });
@@ -299,7 +319,7 @@ class Validator {
     }
     const record = value as Record<string, unknown>;
     for (const key of keys) if (!(key in record)) this.fail('missing-field', join(path, key), 'missing');
-    for (const key of Object.keys(record)) if (!keys.includes(key)) this.fail('unknown-field', join(path, key), 'not part of ChaosBeyReplayV1');
+    for (const key of Object.keys(record)) if (!keys.includes(key)) this.fail('unknown-field', join(path, key), 'not part of this replay format');
     return record;
   }
 

@@ -197,8 +197,8 @@ export function tickMatch(
   const firstGrounded = isGrounded(physics, first.collider);
   const secondGrounded = isGrounded(physics, second.collider);
 
-  const firstDrift = first.drift.tick(first.body, firstActions, firstGrounded, fixedDeltaSeconds);
-  const secondDrift = second.drift.tick(second.body, secondActions, secondGrounded, fixedDeltaSeconds);
+  const firstDrift = first.drift.tick(first.body, firstActions, firstGrounded, fixedDeltaSeconds, first.movement.getHeadingRad());
+  const secondDrift = second.drift.tick(second.body, secondActions, secondGrounded, fixedDeltaSeconds, second.movement.getHeadingRad());
 
   const firstDodge = first.dodge.tick(
     first.body,

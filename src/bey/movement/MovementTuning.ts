@@ -49,3 +49,14 @@ export const POST_IMPACT_GRIP_SUPPRESSION_S = 0.35;
 // our own model intended) counts as "a real impact" rather than ordinary
 // per-tick correction.
 export const IMPACT_VELOCITY_DELTA_THRESHOLD_MPS = 2.5;
+
+// Directional control (M11): the player's stick/arrows give a desired
+// world direction and the heading turns toward it through the same
+// turn-rate limit and easing as the classic steering. The target turn
+// rate is proportional to the heading error (rad/s per rad), capped at
+// the Bey's turn rate, so the heading settles on the direction instead of
+// overshooting it.
+export const DIRECTIONAL_STEER_GAIN_PER_S = 3;
+// Heading error (rad) beyond which a held direction counts as "steering"
+// for drift (hop, then hold JumpDrift while steering).
+export const DIRECTIONAL_STEERING_THRESHOLD_RAD = 0.25;

@@ -1,16 +1,29 @@
 // ============================================================
 // PLAYER SETTINGS (M10, GDD 55/56/89/131)
 // The options on the Settings screen, persisted per browser. Every one is
-// presentation or comfort: none changes what a fixed tick computes (GDD
-// 89: quality may only scale rendering/VFX cost, never simulation).
+// presentation, comfort or input mapping: none changes what a fixed tick
+// computes from its inputs (GDD 89: quality may only scale rendering/VFX
+// cost, never simulation). The control scheme only changes which
+// ControllerActions the player's devices produce, and those are what a
+// replay records.
 // Reading is forgiving: a missing, old or corrupted value falls back to
 // its default field by field.
 // ============================================================
 
 import { DEFAULT_QUALITY_PRESET, QualityPreset } from '../runtime/QualityPreset';
 
+/**
+ * How the arrows / stick drive the Bey (M11).
+ * - directional (default): ↑ = up the screen, and so on; the Bey turns
+ *   toward that direction physically (turn rate, momentum, grip).
+ * - classic: tank steering — ←/→ turn the heading, ↑/↓ throttle.
+ */
+export type ControlScheme = 'directional' | 'classic';
+export const CONTROL_SCHEMES: readonly ControlScheme[] = ['directional', 'classic'];
+
 export interface PlayerSettings {
   readonly quality: QualityPreset;
+  readonly controlScheme: ControlScheme;
   /** Camera shake and the speed/impact FOV kick (off = steadier camera). */
   readonly cameraEffects: boolean;
   /** Pause the match when the window or tab loses focus (GDD 131). */
@@ -23,6 +36,7 @@ export interface PlayerSettings {
 
 export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   quality: DEFAULT_QUALITY_PRESET,
+  controlScheme: 'directional',
   cameraEffects: true,
   pauseOnFocusLoss: true,
   controlHints: true,
@@ -46,10 +60,12 @@ export const QUALITY_PROFILES: Readonly<Record<QualityPreset, QualityProfile>> =
 /** Field-by-field validation: anything unusable becomes the default. */
 export function sanitizePlayerSettings(value: unknown): PlayerSettings {
   const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
-  const bool = (key: keyof PlayerSettings): boolean => (typeof input[key] === 'boolean' ? (input[key] as boolean) : (DEFAULT_PLAYER_SETTINGS[key] as boolean));
+  const bool = (key: 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart'): boolean => (typeof input[key] === 'boolean' ? (input[key] as boolean) : (DEFAULT_PLAYER_SETTINGS[key] as boolean));
   const quality = Object.values(QualityPreset).find((q) => q === input.quality) ?? DEFAULT_PLAYER_SETTINGS.quality;
+  const controlScheme = CONTROL_SCHEMES.find((c) => c === input.controlScheme) ?? DEFAULT_PLAYER_SETTINGS.controlScheme;
   return {
     quality,
+    controlScheme,
     cameraEffects: bool('cameraEffects'),
     pauseOnFocusLoss: bool('pauseOnFocusLoss'),
     controlHints: bool('controlHints'),

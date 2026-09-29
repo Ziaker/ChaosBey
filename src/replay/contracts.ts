@@ -23,8 +23,16 @@ import type { MatchConfig } from '../config/match/MatchConfig';
 import type { BeyAttackProfileSettings } from '../config/attack-profile/AttackProfileSettings';
 import type { SpawnPositionM } from '../app/bootstrap/matchSpawns';
 
-/** Replay file format id (GDD 77: "ChaosBeyReplayV1"). */
-export const REPLAY_FORMAT = 'ChaosBeyReplayV1';
+/**
+ * Replay file format id new recordings are written in. V2 (M11) adds the
+ * directional-control `move` field to every recorded action frame; V1
+ * files (GDD 77: "ChaosBeyReplayV1") still decode and play back with the
+ * classic semantics they were recorded under.
+ */
+export const REPLAY_FORMAT = 'ChaosBeyReplayV2';
+/** Every format this build decodes. */
+export const REPLAY_FORMAT_V1 = 'ChaosBeyReplayV1';
+export type ReplayFormat = typeof REPLAY_FORMAT | typeof REPLAY_FORMAT_V1;
 
 /** Version of CanonicalMatchState (lane A). Bump when a field is added, removed or reordered. */
 export const STATE_SCHEMA_VERSION = 1;
@@ -85,6 +93,12 @@ export interface RecordedActions {
   readonly pressed: readonly Action[];
   readonly attackHoldS: number;
   readonly jumpDriftHoldS: number;
+  /**
+   * V2 only (required there, absent in V1): the directional-control intent
+   * as a world [x, z] vector, or null for a classic-semantics frame (AI,
+   * scripted, the Classic control setting). Absent = V1 = classic.
+   */
+  readonly move?: readonly [number, number] | null;
 }
 
 /** One side's Bey, identified well enough to refuse a replay whose definition changed. */

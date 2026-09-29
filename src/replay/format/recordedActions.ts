@@ -26,6 +26,7 @@ export function toRecordedActions(actions: ControllerActions): RecordedActions {
     pressed: [...actions.pressedThisFrame].sort(),
     attackHoldS: actions.attackHoldDurationSeconds,
     jumpDriftHoldS: actions.jumpDriftHoldDurationSeconds,
+    move: actions.moveIntent ? [actions.moveIntent.x, actions.moveIntent.z] : null,
   };
 }
 
@@ -35,5 +36,7 @@ export function fromRecordedActions(recorded: RecordedActions): ControllerAction
     pressedThisFrame: new Set(recorded.pressed),
     attackHoldDurationSeconds: recorded.attackHoldS,
     jumpDriftHoldDurationSeconds: recorded.jumpDriftHoldS,
+    // A V1 frame has no `move`: classic semantics, never reinterpreted.
+    ...(recorded.move ? { moveIntent: { x: recorded.move[0], z: recorded.move[1] } } : {}),
   };
 }

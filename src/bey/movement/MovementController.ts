@@ -19,6 +19,7 @@ import { add, dot, fromYaw, length, scale, signedAngleBetween, type Vec2 } from 
 import {
   AIRBORNE_ACCELERATION_FACTOR,
   AIRBORNE_LATERAL_GRIP_PER_S,
+  DIRECTIONAL_STEER_GAIN_PER_S,
   IMPACT_VELOCITY_DELTA_THRESHOLD_MPS,
   LONGITUDINAL_DRAG_PER_S,
   OVERSPEED_DRAG_PER_MPS_OVER,
@@ -27,6 +28,7 @@ import {
 } from './MovementTuning';
 import { DEFAULT_HANDLING_PROFILE, type BeyHandlingProfile } from '../archetype/BeyHandlingProfile';
 import { vec2, type CanonicalRecord } from '../../replay/state/CanonicalValue';
+import { headingErrorRad, intentMagnitude } from './directionalIntent';
 
 export interface MovementPreStepInput {
   actions: ControllerActions;
@@ -106,20 +108,45 @@ export class MovementController {
   applyPreStep(body: RAPIER.RigidBody, input: MovementPreStepInput): void {
     const { actions, fixedDeltaSeconds, grounded, lateralGripOverridePerS, staminaAccelFactor, dashOverride } = input;
 
+    const intent = actions.moveIntent;
     let headingForward: Vec2;
     if (dashOverride) {
       this.headingRad = dashOverride.headingRad;
       this.turnRateRadPerS = 0;
       headingForward = fromYaw(this.headingRad);
     } else {
-      const steerInput = (actions.held.has(Action.SteerRight) ? 1 : 0) - (actions.held.has(Action.SteerLeft) ? 1 : 0);
-      const targetTurnRate = steerInput * this.handling.turnRateRadS;
+      // Classic: a turn key asks for the full turn rate. Directional (M11):
+      // the heading turns toward the desired direction, asking for a turn
+      // rate proportional to the error and capped at the Bey's own — same
+      // easing, same limit, so a new direction still takes physical time.
+      let targetTurnRate: number;
+      if (intent) {
+        const error = intentMagnitude(intent) > 0 ? headingErrorRad(intent, this.headingRad) : 0;
+        targetTurnRate = Math.max(-this.handling.turnRateRadS, Math.min(this.handling.turnRateRadS, error * DIRECTIONAL_STEER_GAIN_PER_S));
+      } else {
+        const steerInput = (actions.held.has(Action.SteerRight) ? 1 : 0) - (actions.held.has(Action.SteerLeft) ? 1 : 0);
+        targetTurnRate = steerInput * this.handling.turnRateRadS;
+      }
       this.turnRateRadPerS += (targetTurnRate - this.turnRateRadPerS) * Math.min(1, STEERING_RESPONSE_PER_S * fixedDeltaSeconds);
       this.headingRad += this.turnRateRadPerS * fixedDeltaSeconds;
       headingForward = fromYaw(this.headingRad);
     }
 
-    const throttleInput = (actions.held.has(Action.MoveForward) ? 1 : 0) - (actions.held.has(Action.MoveBackward) ? 1 : 0);
+    // Classic: forward/back keys, full thrust. Directional: thrust scaled
+    // by how hard the stick is pushed and by how well the heading already
+    // faces the direction (cos of the error) — reverse thrust while the
+    // direction is behind, none at 90°, full once facing it. Never above
+    // one key's worth, so a diagonal is not faster.
+    let throttleInput: number;
+    let throttleScale = 1;
+    if (intent) {
+      const magnitude = intentMagnitude(intent);
+      const drive = magnitude > 0 ? magnitude * Math.cos(headingErrorRad(intent, this.headingRad)) : 0;
+      throttleInput = Math.sign(drive);
+      throttleScale = Math.abs(drive);
+    } else {
+      throttleInput = (actions.held.has(Action.MoveForward) ? 1 : 0) - (actions.held.has(Action.MoveBackward) ? 1 : 0);
+    }
 
     const currentVel = body.linvel();
     const velHoriz: Vec2 = { x: currentVel.x, z: currentVel.z };
@@ -136,9 +163,9 @@ export class MovementController {
       const accelFactor = (grounded ? 1 : AIRBORNE_ACCELERATION_FACTOR) * staminaAccelFactor;
       newLongitudinalSpeed = longitudinalSpeed;
       if (throttleInput > 0) {
-        newLongitudinalSpeed += this.handling.accelerationMps2 * accelFactor * fixedDeltaSeconds;
+        newLongitudinalSpeed += this.handling.accelerationMps2 * accelFactor * fixedDeltaSeconds * throttleScale;
       } else if (throttleInput < 0) {
-        newLongitudinalSpeed -= this.handling.reverseAccelerationMps2 * accelFactor * fixedDeltaSeconds;
+        newLongitudinalSpeed -= this.handling.reverseAccelerationMps2 * accelFactor * fixedDeltaSeconds * throttleScale;
       }
 
       const speedAbs = Math.abs(newLongitudinalSpeed);

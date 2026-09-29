@@ -24,6 +24,8 @@ import type { AttackProfileSettingsPanel } from '../../debug/settings/AttackProf
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { KeyboardController } from '../../input/devices/KeyboardController';
 import { CombinedController, GamepadController } from '../../input/devices/GamepadController';
+import { cameraYawOf, DirectionalController, type DirectionalDebug } from '../../input/directional/DirectionalController';
+import type { ControlScheme } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 
@@ -46,6 +48,8 @@ export interface MatchRunnerStart {
   readonly arenaTheme?: ArenaTheme;
   /** Render-only presentation settings; omit for everything on. */
   readonly presentation?: MatchPresentation;
+  /** How the player's arrows / stick drive the Bey; default directional. */
+  readonly controlScheme?: ControlScheme;
 }
 
 /** Player settings that change how the match is drawn, never what it computes. */
@@ -77,6 +81,7 @@ export class MatchRunner {
     readonly session: MatchSession,
     private readonly keyboard: KeyboardController,
     private readonly gamepad: GamepadController,
+    private readonly directional: DirectionalController,
     private readonly deps: MatchRunnerDeps,
     private readonly events: MatchRunnerEvents,
   ) {
@@ -129,6 +134,13 @@ export class MatchRunner {
     // player drives with the keyboard and/or the first gamepad.
     const keyboard = new KeyboardController();
     const gamepad = new GamepadController();
+    // M11: arrows / stick = a screen direction (default), resolved to a
+    // world direction with the camera the player is looking through.
+    const directional = new DirectionalController(new CombinedController([keyboard, gamepad]), {
+      cameraYaw: () => cameraYawOf(deps.appRenderer.camera),
+      stick: () => gamepad.getStick(),
+    });
+    directional.setEnabled((start.controlScheme ?? 'directional') === 'directional');
     const session = await MatchSession.create({
       scene: deps.appRenderer.scene,
       camera: deps.appRenderer.camera,
@@ -138,13 +150,13 @@ export class MatchRunner {
       telemetry: deps.telemetry,
       stateMachine: deps.stateMachine,
       controllers: { first: { kind: 'keyboard' }, second: start.opponent },
-      keyboard: new CombinedController([keyboard, gamepad]),
+      keyboard: directional,
       beys: start.beys,
       arenaTheme: start.arenaTheme,
     });
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
     deps.stateMachine.transitionTo(GameState.Combat);
-    const runner = new MatchRunner(session, keyboard, gamepad, deps, events);
+    const runner = new MatchRunner(session, keyboard, gamepad, directional, deps, events);
     // The arena's sky: the scene's clear color while this match owns the renderer (restored on stop).
     if (start.arenaTheme) {
       runner.savedBackground = deps.appRenderer.scene.background;
@@ -159,6 +171,7 @@ export class MatchRunner {
     if (this.stopped || this.running) return;
     this.running = true;
     this.gamepad.reset();
+    this.directional.reset();
     this.keyboard.attach();
     this.loop.start();
   }
@@ -179,6 +192,16 @@ export class MatchRunner {
   setPresentation(presentation: MatchPresentation): void {
     this.presentation = presentation;
     this.session.getVfxManager().setLayerVisible('trails', presentation.trails);
+  }
+
+  /** Switches Directional / Classic control live (from the Pause menu's settings). */
+  setControlScheme(scheme: ControlScheme): void {
+    this.directional.setEnabled(scheme === 'directional');
+  }
+
+  /** The player's directional input (screen + world), null under Classic control. Debug overlay only. */
+  getDirectionalDebug(): DirectionalDebug | null {
+    return this.directional.isEnabled() ? this.directional.getDebug() : null;
   }
 
   /** Draws one frame without ticking (behind a pause menu, after a settings change). */

@@ -170,6 +170,7 @@ export class PlayFlow {
         opponent: opponentControllerFor(this.setup),
         arenaTheme: arenaPreset(this.setup.arena.presetId).theme,
         presentation: presentationFor(this.settings),
+        controlScheme: this.settings.controlScheme,
       },
       {
         onRoundOver: (outcome) => {
@@ -255,6 +256,7 @@ export class PlayFlow {
     savePlayerSettings(settings);
     applyQuality(this.deps.appRenderer, settings);
     this.runner?.setPresentation(presentationFor(settings));
+    this.runner?.setControlScheme(settings.controlScheme);
     this.hud?.setControlHints(settings.controlHints);
     this.runner?.redraw();
   }

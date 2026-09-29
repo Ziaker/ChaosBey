@@ -37,6 +37,7 @@ export function copyControllerActions(actions: ControllerActions): ControllerAct
     pressedThisFrame: new Set<Action>(actions.pressedThisFrame),
     attackHoldDurationSeconds: actions.attackHoldDurationSeconds,
     jumpDriftHoldDurationSeconds: actions.jumpDriftHoldDurationSeconds,
+    ...(actions.moveIntent ? { moveIntent: { x: actions.moveIntent.x, z: actions.moveIntent.z } } : {}),
   };
 }
 

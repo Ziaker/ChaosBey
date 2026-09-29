@@ -97,7 +97,7 @@ describe('RecordedActions round-trip', () => {
     const b = toRecordedActions(actions([Action.Attack, Action.SteerLeft]));
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
     const uiOnly = toRecordedActions(actions([], [Action.Pause]));
-    expect(uiOnly).toEqual({ held: [], pressed: [Action.Pause], attackHoldS: 0, jumpDriftHoldS: 0 });
+    expect(uiOnly).toEqual({ held: [], pressed: [Action.Pause], attackHoldS: 0, jumpDriftHoldS: 0, move: null });
   });
 });
 
@@ -262,7 +262,7 @@ describe('strict validation', () => {
 
   it('rejects a wrong format and incompatible versions', () => {
     const cases: [(raw: any) => void, ReplayErrorCode, string][] = [
-      [(r) => (r.format = 'ChaosBeyReplayV2'), 'wrong-format', 'format'],
+      [(r) => (r.format = 'ChaosBeyReplayV3'), 'wrong-format', 'format'],
       [(r) => (r.stateHashAlgorithm = 'sha-256'), 'unsupported-version', 'stateHashAlgorithm'],
       [(r) => (r.config.rngScheme = 1), 'unsupported-version', 'config.rngScheme'],
       [(r) => (r.config.stateSchema = 2), 'unsupported-version', 'config.stateSchema'],

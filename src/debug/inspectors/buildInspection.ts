@@ -139,7 +139,8 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('External impulse: knockback force', f(impulses.knockbackForce)),
         row('External impulse: impact Δv', `${f(impulses.impactDeltaSpeedMps)} m/s`),
         row('Intended steering vector', snapshot ? vec2(snapshot.movement.intendedSteeringVector) : '—'),
-        row('Heading', snapshot ? `${f(snapshot.movement.headingRad * RAD_TO_DEG)}°` : '—'),
+        row('Heading (physical)', snapshot ? `${f(snapshot.movement.headingRad * RAD_TO_DEG)}°` : '—'),
+        row('Desired input (world)', desiredInput(session.getLastActions(side)?.moveIntent)),
         row('Turn rate', `${f(movementDebug.turnRateRadPerS * RAD_TO_DEG)}°/s`),
       ],
     },
@@ -421,4 +422,11 @@ function localAxes(q: { x: number; y: number; z: number; w: number }): {
     up: { x: 2 * (x * y - w * z), y: 1 - 2 * (x * x + z * z), z: 2 * (y * z + w * x) },
     forward: { x: 2 * (x * z + w * y), y: 2 * (y * z - w * x), z: 1 - 2 * (x * x + y * y) },
   };
+}
+
+/** M11 directional control: the desired world direction and its yaw, or "classic" for a steer/throttle frame. */
+function desiredInput(intent: { x: number; z: number } | undefined): string {
+  if (!intent) return 'classic (steer/throttle)';
+  const len = Math.hypot(intent.x, intent.z);
+  return len < 1e-3 ? 'none (0)' : `(${f(intent.x)}, ${f(intent.z)}) → ${f(Math.atan2(intent.x, intent.z) * RAD_TO_DEG)}°, |${f(len)}|`;
 }
