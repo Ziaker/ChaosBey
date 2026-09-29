@@ -45,7 +45,12 @@ Smoke-test environment variables:
 
 ## Main Menu
 
-The game URL (`/ChaosBey/`) opens the Main Menu (GDD 56). **PLAY** opens the player flow: Character Select, the Player-vs-AI match, then Results (Rematch / Change Bey / Main Menu). `?mode=play&quick` skips the screens and starts the default match with the debug overlay up. The developer tools are kept apart from the player flow, in a separate **Developer / Debug** section with **DEBUG LAB** and **SELF TEST** (Back or `Esc` returns). Each entry loads the same URL a direct link uses — `?mode=play`, `?mode=debug-lab`, `?mode=self-test` — so the browser Back button returns to the menu. The menu's look is provisional until its visual approval.
+The game URL (`/ChaosBey/`) opens the Main Menu (GDD 56).
+
+- **PLAY** opens the player flow: Character Select (the Bey spins in 3D next to its ratings), the Pregame Simulator (opponent Bey, AI level Rookie / Rival / Ace and style, arena, match length, and advanced rules: wall height and bounce, Clash impact, fixed seed, with a "What to expect" explanation of the opponent), then rounds with the combat HUD until someone wins the match, then Results (Rematch / Change setup / Change Bey / Main Menu). `Esc` (or Start on a pad) pauses; losing window focus pauses too.
+- **SETTINGS** (`?mode=settings`): quality Low / Medium / High, camera shake, fullscreen, pause on focus loss, HUD hints, developer overlay, and the controls.
+- A standard gamepad works everywhere: stick / D-pad to move, A attack, X or LB hop / jump / drift, B or RB dodge, Start pause; in menus A confirms and B goes back.
+- `?mode=play&quick` skips the screens and starts the default match with the debug overlay up (`&seed=…` fixes the seed). The developer tools are kept apart from the player flow, in a separate **Developer / Debug** section with **DEBUG LAB** and **SELF TEST** (Back or `Esc` returns). Each entry loads the same URL a direct link uses — `?mode=play`, `?mode=debug-lab`, `?mode=self-test` — so the browser Back button returns to the menu. The menu's look is provisional until its visual approval.
 
 ## Debug Lab
 

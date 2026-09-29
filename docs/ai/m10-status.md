@@ -32,7 +32,7 @@ Provisional player-facing AI tiers are approved for this pass as **Rookie / Riva
 | B | Pregame Simulator + AI explanation + match-rule config | A | IN PROGRESS |
 | C | Arena presets + selected sliders | B | IN PROGRESS |
 | D | Settings + Low/Medium/High quality + fullscreen/focus safety + gamepad polish | A | IN PROGRESS |
-| E | HUD refinement + integration/hardening | B/C/D | TODO |
+| E | HUD refinement + integration/hardening | B/C/D | IN PROGRESS |
 | F | M10 closure: browser smoke, GitHub Pages/base path, docs | E | TODO |
 
 Prefer small reviewable PRs. Parallelize lanes only when their file ownership is clearly separate. Merge `main` into dependent branches; do not rebase integration branches.
@@ -200,3 +200,30 @@ Add Firefox smoke when practical for final M10 closure; Safari remains deferred 
   until released. `GamepadMenuKeys` drives every menu (arrows, A = Enter,
   B = Esc, key repeat), with a focus/click fallback for plain DOM menus.
   Replays are unaffected: they record actions, whatever the device.
+
+## Lane E notes — combat HUD, integration
+
+- **Combat HUD** (`app/frontend/CombatHud.ts`, `hudModel.ts`), player flow
+  only (quick play and the Debug Lab keep the developer overlay):
+  - a card per side in its Bey's color: Stamina, Stability (red, pulsing and
+    tagged BROKEN while broken), Attack Energy; the player's Dash charge
+    while charging; a state tag (CHARGING / DASH / SPIN);
+  - round number and score pips (first to N);
+  - banners: "ROUND n / FIGHT!" at the start, "RING OUT!" / "K.O.!" /
+    "DRAW" at the end of a round — never at a Clash resolution;
+  - the approved **Clash tug-of-war bar** (clash-presentation-approval.md
+    3.5): 320 × 22 px, −18°, glowing, between the two Beys on screen just
+    above their midpoint and kept in frame; one half per Bey in its color,
+    on that Bey's side (decided when the Clash starts); share
+    `0.5 + 0.5 × advantage × 4` of the live ClashPower, limited to 4–96%,
+    following at 8/s; lands on the real result at resolution; no text;
+  - control hints for the keyboard or the connected pad (Settings).
+  Render-only: it reads the session after each frame. The combat HUD had no
+  approved final visual; this is the M10 owner-authorized pass.
+- **Colors.** The Clash halves and cards use each Bey's prototype color:
+  `palette.glow` in the approved concepts belongs to the nine concept Beys,
+  which are not gameplay definitions yet.
+- **Tests.** `combatHud.test.ts` (bar rule, follow rate, readouts, banners);
+  `hudAndRounds.spec.ts`: the HUD tracks the live Stamina, a real round
+  ends with its banner, a first-to-2 match goes round result → round 2 with
+  the score pips and a derived round seed, hints follow the setting.
