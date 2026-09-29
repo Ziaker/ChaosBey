@@ -7,6 +7,7 @@
 // This is the match loop playMode.ts used to own, unchanged in behavior.
 // ============================================================
 
+import * as THREE from 'three';
 import type { AppRenderer } from '../bootstrap/createRenderer';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
@@ -15,12 +16,14 @@ import type { SideControllerSpec } from '../session/SideControllers';
 import { recordError } from '../modes/appTelemetry';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { MatchConfig } from '../../config/match/MatchConfig';
+import type { ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { RoundOutcome } from '../../combat/round-rules/RoundState';
 import type { DebugOverlay } from '../../debug/overlay/DebugOverlay';
 import { buildCombatOverlayFields, type CombatOverlayFields } from '../../debug/overlay/buildOverlayState';
 import type { AttackProfileSettingsPanel } from '../../debug/settings/AttackProfileSettingsPanel';
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { KeyboardController } from '../../input/devices/KeyboardController';
+import { CombinedController, GamepadController } from '../../input/devices/GamepadController';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 
@@ -39,6 +42,18 @@ export interface MatchRunnerStart {
   readonly attackProfileSettings: BeyAttackProfileSettings;
   /** The opponent's controller (the player is always the keyboard, first side). */
   readonly opponent: SideControllerSpec;
+  /** Render-only arena look; omit for the default arena's. */
+  readonly arenaTheme?: ArenaTheme;
+  /** Render-only presentation settings; omit for everything on. */
+  readonly presentation?: MatchPresentation;
+}
+
+/** Player settings that change how the match is drawn, never what it computes. */
+export interface MatchPresentation {
+  /** Camera shake and speed/impact FOV. */
+  readonly cameraEffects: boolean;
+  /** Speed trails (off on Low quality). */
+  readonly trails: boolean;
 }
 
 export interface MatchRunnerEvents {
@@ -53,12 +68,15 @@ export interface MatchRunnerEvents {
 export class MatchRunner {
   private readonly loop: FixedTimestepLoop;
   private roundOverReported = false;
+  private presentation: MatchPresentation = { cameraEffects: true, trails: true };
   private overlayFields: CombatOverlayFields | null = null;
   private stopped = false;
+  private running = false;
 
   private constructor(
     readonly session: MatchSession,
     private readonly keyboard: KeyboardController,
+    private readonly gamepad: GamepadController,
     private readonly deps: MatchRunnerDeps,
     private readonly events: MatchRunnerEvents,
   ) {
@@ -76,7 +94,7 @@ export class MatchRunner {
         }
       },
       onRenderFrame: (frameDeltaSeconds) => {
-        session.renderFrame(frameDeltaSeconds, appRenderer.camera);
+        session.renderFrame(frameDeltaSeconds, appRenderer.camera, { cameraView: 'game', cameraEffects: this.presentation.cameraEffects });
         appRenderer.render();
         this.events.onFrame?.(session, frameDeltaSeconds);
         if (this.overlayFields) {
@@ -107,8 +125,10 @@ export class MatchRunner {
 
   private static async create(deps: MatchRunnerDeps, start: MatchRunnerStart, events: MatchRunnerEvents): Promise<MatchRunner> {
     // Attached only while the match runs, so a key still down from a menu
-    // (Enter/Z to confirm) never reaches the match as a held input.
+    // (Enter/Z to confirm) never reaches the match as a held input. The
+    // player drives with the keyboard and/or the first gamepad.
     const keyboard = new KeyboardController();
+    const gamepad = new GamepadController();
     const session = await MatchSession.create({
       scene: deps.appRenderer.scene,
       camera: deps.appRenderer.camera,
@@ -118,25 +138,53 @@ export class MatchRunner {
       telemetry: deps.telemetry,
       stateMachine: deps.stateMachine,
       controllers: { first: { kind: 'keyboard' }, second: start.opponent },
-      keyboard,
+      keyboard: new CombinedController([keyboard, gamepad]),
       beys: start.beys,
+      arenaTheme: start.arenaTheme,
     });
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
     deps.stateMachine.transitionTo(GameState.Combat);
-    return new MatchRunner(session, keyboard, deps, events);
+    const runner = new MatchRunner(session, keyboard, gamepad, deps, events);
+    // The arena's sky: the scene's clear color while this match owns the renderer (restored on stop).
+    if (start.arenaTheme) {
+      runner.savedBackground = deps.appRenderer.scene.background;
+      deps.appRenderer.scene.background = new THREE.Color(start.arenaTheme.backgroundHex);
+    }
+    if (start.presentation) runner.setPresentation(start.presentation);
+    return runner;
   }
 
   /** Starts (or restarts after pause()) the loop and listens to the keyboard. */
   resume(): void {
-    if (this.stopped) return;
+    if (this.stopped || this.running) return;
+    this.running = true;
+    this.gamepad.reset();
     this.keyboard.attach();
     this.loop.start();
   }
 
-  /** Freezes the match: no ticks, no frames, keyboard released. */
+  /** Freezes the match: no ticks, no frames, keyboard released, held pad buttons forgotten. */
   pause(): void {
+    this.running = false;
     this.loop.stop();
     this.keyboard.detach();
+    this.gamepad.reset();
+  }
+
+  isRunning(): boolean {
+    return this.running;
+  }
+
+  /** Applies presentation settings live (e.g. changed from the Pause menu). */
+  setPresentation(presentation: MatchPresentation): void {
+    this.presentation = presentation;
+    this.session.getVfxManager().setLayerVisible('trails', presentation.trails);
+  }
+
+  /** Draws one frame without ticking (behind a pause menu, after a settings change). */
+  redraw(): void {
+    this.session.renderFrame(0, this.deps.appRenderer.camera, { cameraView: 'game', cameraEffects: this.presentation.cameraEffects });
+    this.deps.appRenderer.render();
   }
 
   isRoundOver(): boolean {
@@ -149,5 +197,9 @@ export class MatchRunner {
     this.stopped = true;
     this.pause();
     this.session.dispose();
+    if (this.savedBackground !== undefined) this.deps.appRenderer.scene.background = this.savedBackground;
   }
+
+  /** The scene background before this match set the arena's (undefined = untouched). */
+  private savedBackground: THREE.Scene['background'] | undefined = undefined;
 }

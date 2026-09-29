@@ -9,6 +9,7 @@
 //   entries load the URLs below;
 // - `play`: the player flow — Character Select, the Player-vs-AI match,
 //   Results (app/modes/playMode.ts); `play&quick` starts the match directly;
+// - `settings`: the Settings screen (app/modes/settingsMode.ts);
 // - `debug-lab`: the Debug Lab developer tool (debug/lab/DebugLabMode.ts);
 // - `self-test`: the browser Self Test (debug/self-test-ui/SelfTestMode.ts).
 // ============================================================
@@ -16,7 +17,9 @@
 import { WebGl2UnavailableError, showWebGl2UnavailableScreen } from './app/bootstrap/bootFailureScreen';
 import { createRenderer } from './app/bootstrap/createRenderer';
 import { startMainMenu } from './app/menu/MainMenu';
+import { GamepadMenuKeys } from './input/devices/GamepadMenuKeys';
 import { startPlayMode } from './app/modes/playMode';
+import { startSettingsMode } from './app/modes/settingsMode';
 import { isQuickPlay, resolveAppMode } from './app/modes/appMode';
 import { startDebugLabMode } from './debug/lab/DebugLabMode';
 import { startSelfTestMode } from './debug/self-test-ui/SelfTestMode';
@@ -35,6 +38,12 @@ async function bootstrap(): Promise<void> {
     // A plain DOM menu: no renderer or physics world is created for it.
     canvas.style.display = 'none';
     startMainMenu(debugOverlayRoot);
+    new GamepadMenuKeys().start();
+    return;
+  }
+  if (mode === 'settings') {
+    canvas.style.display = 'none';
+    startSettingsMode(screenRoot);
     return;
   }
   if (mode === 'self-test') {

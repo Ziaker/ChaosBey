@@ -12,6 +12,7 @@ import {
   matchupLines,
   normalizeSeedText,
   opponentControllerFor,
+  withArenaPreset,
   withPlayerBey,
 } from '../../src/app/frontend/matchSetup';
 import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
@@ -101,6 +102,14 @@ describe('match setup rules', () => {
     expect(matchConfigFor(setup)).toEqual({ ...createDefaultMatchConfig(), clashImpactMultiplier: 1.5 });
     expect(matchConfigFor(createDefaultMatchSetup())).toEqual(createDefaultMatchConfig());
     expect(opponentControllerFor(setup)).toEqual({ kind: 'ai', personality: 'defense', difficulty: 'ace' });
+  });
+
+  it('builds the arena walls from the preset, and a preset change resets moved sliders', () => {
+    const rift = withArenaPreset(createDefaultMatchSetup(), 'rift');
+    expect(matchConfigFor(rift)).toMatchObject({ arenaWallHeightM: 1, arenaWallRestitution: 0.4 });
+    const custom = { ...rift, arena: { ...rift.arena, geometry: { wallHeightM: 0.6, wallRestitution: 0.9 } } };
+    expect(matchConfigFor(custom)).toMatchObject({ arenaWallHeightM: 0.6, arenaWallRestitution: 0.9 });
+    expect(withArenaPreset(custom, 'tournament').arena).toEqual({ presetId: 'tournament', geometry: { wallHeightM: 2.6, wallRestitution: 0.7 } });
   });
 
   it('keeps a hand-picked opponent when the player changes Bey, and follows the default otherwise', () => {

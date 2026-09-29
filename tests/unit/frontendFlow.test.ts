@@ -51,6 +51,7 @@ describe('match setup', () => {
       opponentBeyId: 'defense-prototype',
       ai: { tier: 'rival', style: 'archetype' },
       roundsToWin: 2,
+      arena: { presetId: 'foundry', geometry: { wallHeightM: 2, wallRestitution: 0.55 } },
       clashImpactMultiplier: 1,
       seedText: null,
     });

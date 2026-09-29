@@ -14,9 +14,11 @@ import { GameStateMachine } from '../lifecycle/GameState';
 import { MatchRunner } from '../frontend/MatchRunner';
 import { PlayFlow } from '../frontend/PlayFlow';
 import { resolveMatchConfig } from '../../config/match/MatchConfig';
+import { quickPlaySeed } from './appMode';
 import { resolveAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import { loadAttackProfileOverrides } from '../../config/attack-profile/AttackProfileStorage';
 import { createDefaultRuntimeConfig } from '../../config/runtime/RuntimeConfig';
+import { loadPlayerSettings } from '../../config/settings/PlayerSettings';
 import { DebugOverlay } from '../../debug/overlay/DebugOverlay';
 import { AttackProfileSettingsPanel } from '../../debug/settings/AttackProfileSettingsPanel';
 import { generateRandomSeedText } from '../../rng/stringSeed';
@@ -45,9 +47,10 @@ export async function startPlayMode(appRenderer: AppRenderer, mounts: PlayModeMo
   // Resolved once at boot from whatever the settings panel last persisted.
   const attackProfileSettings = resolveAttackProfileSettings(loadAttackProfileOverrides() ?? undefined);
 
-  // The F3 overlay is a developer tool: up on boot in quick play, hidden
-  // (still one F3 away) in the player flow.
-  const debugOverlay = new DebugOverlay(mounts.debugOverlayRoot, options.quick && runtimeConfig.debugOverlayVisibleOnBoot);
+  // The F3 overlay is a developer tool: up on boot in quick play; in the
+  // player flow only if Settings asks for it (still one F3 away).
+  const settings = loadPlayerSettings();
+  const debugOverlay = new DebugOverlay(mounts.debugOverlayRoot, options.quick ? runtimeConfig.debugOverlayVisibleOnBoot : settings.debugOverlayOnStart);
   const attackProfileSettingsPanel = new AttackProfileSettingsPanel(mounts.attackSettingsRoot);
 
   recordAppBoot(telemetry);
@@ -59,7 +62,7 @@ export async function startPlayMode(appRenderer: AppRenderer, mounts: PlayModeMo
     // Milestone 7: the opponent is a real AIController whose personality
     // matches its own Bey's archetype (GDD section 64).
     const runner = await MatchRunner.start(deps, {
-      seedText: generateRandomSeedText(),
+      seedText: quickPlaySeed(window.location.search) ?? generateRandomSeedText(),
       beys: DEFAULT_MATCH_BEYS,
       matchConfig: resolveMatchConfig(),
       attackProfileSettings,
@@ -76,6 +79,7 @@ export async function startPlayMode(appRenderer: AppRenderer, mounts: PlayModeMo
     ...deps,
     screenRoot: mounts.screenRoot,
     attackProfileSettings,
+    settings,
     navigate: (href) => window.location.assign(href),
     location: window.location,
   });

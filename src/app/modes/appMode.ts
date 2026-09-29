@@ -6,9 +6,9 @@
 // the game's front door.
 // ============================================================
 
-export type AppMode = 'menu' | 'play' | 'debug-lab' | 'self-test';
+export type AppMode = 'menu' | 'play' | 'settings' | 'debug-lab' | 'self-test';
 
-const LINKED_MODES: readonly AppMode[] = ['play', 'debug-lab', 'self-test'];
+const LINKED_MODES: readonly AppMode[] = ['play', 'settings', 'debug-lab', 'self-test'];
 
 export function resolveAppMode(search: string): AppMode {
   const mode = new URLSearchParams(search).get('mode');
@@ -31,4 +31,10 @@ export function appModeHref(mode: AppMode, current: { readonly pathname: string;
 /** `?mode=play&quick`: start the default match directly, skipping the player screens. */
 export function isQuickPlay(search: string): boolean {
   return new URLSearchParams(search).has('quick');
+}
+
+/** `?mode=play&quick&seed=…`: quick play with a fixed seed (reproducing a reported round). */
+export function quickPlaySeed(search: string): string | null {
+  const seed = new URLSearchParams(search).get('seed');
+  return seed !== null && seed.trim() !== '' ? seed.trim() : null;
 }

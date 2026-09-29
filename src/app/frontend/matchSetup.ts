@@ -6,6 +6,7 @@
 // ============================================================
 
 import { DEFAULT_AI_DIFFICULTY_TIER, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
+import { DEFAULT_ARENA_PRESET, arenaPreset, type ArenaGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import { resolveMatchConfig, type MatchConfig } from '../../config/match/MatchConfig';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
@@ -18,6 +19,8 @@ export interface MatchSetup {
   readonly opponentBeyId: string;
   readonly ai: { readonly tier: AiDifficultyTierId; readonly style: AiPersonalityChoice };
   readonly roundsToWin: RoundsToWin;
+  /** Arena preset (look + default walls) and the walls actually played (the preset's, or moved sliders). */
+  readonly arena: { readonly presetId: ArenaPresetId; readonly geometry: ArenaGeometry };
   /** Advanced rules (GDD 152): scales the knockback a Clash resolution applies. */
   readonly clashImpactMultiplier: number;
   /** Fixed match seed text, or null for a fresh random seed every match. */
@@ -44,6 +47,7 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
     opponentBeyId: defaultOpponentFor(playerBeyId),
     ai: { tier: DEFAULT_AI_DIFFICULTY_TIER, style: 'archetype' },
     roundsToWin: 2,
+    arena: { presetId: DEFAULT_ARENA_PRESET, geometry: arenaPreset(DEFAULT_ARENA_PRESET).geometry },
     clashImpactMultiplier: CLASH_IMPACT_MULTIPLIER_DEFAULT,
     seedText: null,
   };
@@ -63,7 +67,16 @@ export function matchBeysFor(setup: MatchSetup): MatchBeys {
 
 /** The resolved match rules (the one MatchConfig path, GDD 101/166). */
 export function matchConfigFor(setup: MatchSetup): MatchConfig {
-  return resolveMatchConfig({ clashImpactMultiplier: setup.clashImpactMultiplier });
+  return resolveMatchConfig({
+    clashImpactMultiplier: setup.clashImpactMultiplier,
+    arenaWallHeightM: setup.arena.geometry.wallHeightM,
+    arenaWallRestitution: setup.arena.geometry.wallRestitution,
+  });
+}
+
+/** A new arena preset, with that preset's own walls (slider changes are reset). */
+export function withArenaPreset(setup: MatchSetup, presetId: ArenaPresetId): MatchSetup {
+  return { ...setup, arena: { presetId, geometry: arenaPreset(presetId).geometry } };
 }
 
 export function opponentControllerFor(setup: MatchSetup): SideControllerSpec {

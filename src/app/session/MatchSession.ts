@@ -33,7 +33,8 @@ import { ClashCameraDirector } from '../../camera/ClashCameraDirector';
 import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../../camera/ImpactEvents';
 import { CLASH_RESOLVED_MAGNITUDE } from '../../camera/ImpactMagnitude';
 import { CAMERA_FOV_BASE_DEG } from '../../camera/CameraTuning';
-import type { MatchConfig } from '../../config/match/MatchConfig';
+import { arenaGeometryOf, type MatchConfig } from '../../config/match/MatchConfig';
+import { FOUNDRY_PIT, type ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { Bey } from '../../bey/core/Bey';
 import type { KnockbackComponents } from '../../combat/knockback/Knockback';
@@ -47,7 +48,7 @@ import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecor
 import { VfxManager } from '../../vfx/VfxManager';
 import { ForcedInputController } from '../../automation/scripted-scenarios/ForcedInputController';
 import { AIController } from '../../ai/controllers/AIController';
-import { MatchAnomalyDetector, type DetectedAnomaly } from '../../self-test/anomalies/MatchAnomalyDetector';
+import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector, type DetectedAnomaly } from '../../self-test/anomalies/MatchAnomalyDetector';
 import type { ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
 import { FIRST_SPAWN, SECOND_SPAWN } from '../bootstrap/matchSpawns';
 import type { ChaosBeyReplayV1 } from '../../replay/format/ChaosBeyReplayV1';
@@ -72,6 +73,8 @@ export interface MatchSessionOptions {
   readonly keyboard: CombatController;
   /** Which Bey each side plays. Omit for DEFAULT_MATCH_BEYS (Attack vs Defense). */
   readonly beys?: MatchBeys;
+  /** How the arena looks (render only; its gameplay values come from matchConfig). Omit for Foundry Pit's. */
+  readonly arenaTheme?: ArenaTheme;
 }
 
 export interface SessionTickOutput {
@@ -198,7 +201,7 @@ export class MatchSession {
   /** M9 recording, when started (startReplayCapture). */
   private replayCapture: { readonly capture: ReplayCapture; readonly stateEdits: { tickIndex: number; description: string }[] } | null = null;
   /** GDD 67 checks on the live match, the same detector the Self-Test batches use. */
-  private readonly anomalyDetector = new MatchAnomalyDetector();
+  private readonly anomalyDetector: MatchAnomalyDetector;
   private readonly detectedAnomalies: DetectedAnomaly[] = [];
 
   private tickIndex = 0;
@@ -230,10 +233,14 @@ export class MatchSession {
     this.clash = new ClashOrchestration(options.matchConfig, new NullAiMashSource());
 
     options.scene.add(this.root);
-    this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys);
+    this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys, {
+      geometry: arenaGeometryOf(options.matchConfig),
+      theme: options.arenaTheme ?? FOUNDRY_PIT.theme,
+    });
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
+    this.anomalyDetector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: options.matchConfig.arenaWallHeightM });
 
     this.controllerSpecs = { first: options.controllers.first, second: options.controllers.second };
     this.drivers = {
