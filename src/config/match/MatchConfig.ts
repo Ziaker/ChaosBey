@@ -14,19 +14,31 @@
 // ============================================================
 
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
+import { STANDARD_ARENA_GEOMETRY, type ArenaGeometry } from '../../arena/presets/ArenaPresets';
 
 export interface MatchConfig {
   /** Multiplies the real knockback/Stability consequence a Clash resolution applies (both the FirstWins/SecondWins loser's knockback and a Tie's symmetric repulsion) — GDD section 152's "configurable impact multiplier". */
   clashImpactMultiplier: number;
+  /** Height of the arena's boundary wall (m). M10 arena slider (GDD 36); a lower wall lets a launched Bey fly out. */
+  arenaWallHeightM: number;
+  /** Restitution of the boundary wall's colliders. M10 arena slider (GDD 36): how hard a wall hit bounces back. */
+  arenaWallRestitution: number;
 }
 
 export function createDefaultMatchConfig(): MatchConfig {
   return {
     clashImpactMultiplier: CLASH_IMPACT_MULTIPLIER_DEFAULT,
+    arenaWallHeightM: STANDARD_ARENA_GEOMETRY.wallHeightM,
+    arenaWallRestitution: STANDARD_ARENA_GEOMETRY.wallRestitution,
   };
 }
 
 /** Merges a pre-match override on top of the defaults, producing the single resolved MatchConfig the rest of the app consumes. */
 export function resolveMatchConfig(overrides: Partial<MatchConfig> = {}): MatchConfig {
   return { ...createDefaultMatchConfig(), ...overrides };
+}
+
+/** The arena values of a resolved config, in the shape the arena builder takes. */
+export function arenaGeometryOf(config: MatchConfig): ArenaGeometry {
+  return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution };
 }

@@ -22,7 +22,7 @@ import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
 import { createBey, type Bey } from '../bey/core/Bey';
 import type { ClashAiMashSource } from '../combat/clash/ClashMash';
 import { RoundState } from '../combat/round-rules/RoundState';
-import { resolveMatchConfig, type MatchConfig } from '../config/match/MatchConfig';
+import { arenaGeometryOf, resolveMatchConfig, type MatchConfig } from '../config/match/MatchConfig';
 import type { ControllerActions } from '../input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../physics/fixed-step/FixedTimestepLoop';
 import { PhysicsWorld } from '../physics/world/PhysicsWorld';
@@ -66,10 +66,10 @@ export class SelfTestMatchWorld {
     clash: ClashOrchestration;
   }> {
     const physics = await PhysicsWorld.create();
-    createArenaColliders(new THREE.Scene(), physics); // detached scene: colliders only, never rendered.
+    const config = resolveMatchConfig(options.matchConfigOverrides ?? {});
+    createArenaColliders(new THREE.Scene(), physics, arenaGeometryOf(config)); // detached scene: colliders only, never rendered.
     const first = createBey(physics, options.firstSpawn ?? FIRST_SPAWN, options.firstDefinition);
     const second = createBey(physics, options.secondSpawn ?? SECOND_SPAWN, options.secondDefinition);
-    const config = resolveMatchConfig(options.matchConfigOverrides ?? {});
     const clash = options.aiMashSource !== undefined ? new ClashOrchestration(config, options.aiMashSource) : new ClashOrchestration(config);
     return { physics, first, second, roundState: new RoundState(), clash };
   }

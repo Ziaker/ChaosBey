@@ -30,7 +30,7 @@ Provisional player-facing AI tiers are approved for this pass as **Rookie / Riva
 |---|---|---|---|
 | A | App flow + Character Select | main | IN PROGRESS |
 | B | Pregame Simulator + AI explanation + match-rule config | A | IN PROGRESS |
-| C | Arena presets + selected sliders | B | TODO |
+| C | Arena presets + selected sliders | B | IN PROGRESS |
 | D | Settings + Low/Medium/High quality + fullscreen/focus safety + gamepad polish | A | TODO |
 | E | HUD refinement + integration/hardening | B/C/D | TODO |
 | F | M10 closure: browser smoke, GitHub Pages/base path, docs | E | TODO |
@@ -132,3 +132,31 @@ Add Firefox smoke when practical for final M10 closure; Safari remains deferred 
 - **Match length.** 1 round, first to 2 (default) or first to 3. A draw
   scores nobody. Each round is its own deterministic match: round 1 plays
   the match seed, round n plays `<seed>/round-n` (`matchScore.ts`).
+
+## Lane C notes — arena presets + selected sliders
+
+- **Presets** (`arena/presets/ArenaPresets.ts`): the three approved arena
+  directions — **Foundry Pit**, **Rift Crater**, **Tournament Stadium** —
+  each a render-only theme (floor, markings, wall, emissive rim, lights,
+  backdrop) plus two gameplay values: wall height and wall bounce.
+- **Default arena: Foundry Pit**, with exactly the arena every earlier
+  milestone played (wall 2.0 m, restitution 0.55). The owner left the
+  default open; this pick changes nothing for existing matches, tests or
+  replays.
+- **Selected sliders** (Pregame → Advanced rules): wall height 0.6–3.0 m
+  and wall bounce 0.20–0.90. Picking a preset resets them to its values;
+  moved sliders show as "Custom walls" in the rules.
+- **Gameplay path.** The two values are `MatchConfig` fields
+  (`arenaWallHeightM`, `arenaWallRestitution`), built into the wall
+  colliders by `createArenaColliders` for the live match and every headless
+  world, and recorded in replays (`config.matchConfig`). Playback rebuilds
+  the recorded walls; a replay whose walls are changed diverges (tested).
+  The GDD 67 "stuck in wall" check uses the match's own wall height.
+- **Measured effect** (15 AI matches each, `arenaPresets.test.ts`): Rift
+  Crater (1.0 m, 0.40) ends 15/15 by ring-out in 6338 ticks; Tournament
+  Stadium (2.6 m, 0.70) 10/15 in 13190. The slider extremes stay clean (no
+  new anomaly kinds; only the known ext-32 wall-collider episodes, which a
+  low wall makes rarer).
+- **Not in scope**: the approved 12 m bowl geometry and its gravity/
+  ring-out consequences (VISUAL_APPROVALS_MASTER.md 4.3) stay a separate
+  gameplay decision; the themes paint the current flat arena.

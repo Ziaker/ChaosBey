@@ -13,7 +13,7 @@
 // match is seeded or simulated, so every existing seed plays the same fight.
 // ============================================================
 
-import { MatchAnomalyDetector, type DetectedAnomaly } from './anomalies/MatchAnomalyDetector';
+import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector, type DetectedAnomaly } from './anomalies/MatchAnomalyDetector';
 import { AIController } from '../ai/controllers/AIController';
 import { AI_DASH_ATTACK_MAX_RANGE_M } from '../ai/decision/AiCombatRanges';
 import { AiIntent } from '../ai/decision/Intent';
@@ -23,6 +23,7 @@ import { personalityForBeyDefinitionId } from '../ai/personalities/AiArchetypePe
 import { FIRST_SPAWN, SECOND_SPAWN, type SpawnPositionM } from '../app/bootstrap/matchSpawns';
 import type { ChaosBeyReplayV1 } from '../replay/format/ChaosBeyReplayV1';
 import { startHeadlessCapture, type HeadlessCaptureInput } from '../replay/recording/ReplayCapture';
+import { resolveMatchConfig, type MatchConfig } from '../config/match/MatchConfig';
 import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
 import { ARENA_FLOOR_RADIUS } from '../arena/colliders/ArenaTuning';
 import { AttackState } from '../combat/attacks/AttackController';
@@ -109,6 +110,8 @@ export interface AiMatchSetup {
   firstDifficulty?: AiDifficultyProfile;
   secondDifficulty?: AiDifficultyProfile;
   maxTicks?: number;
+  /** Match rules (M10: arena wall height/bounce, Clash impact). Omit for the defaults. A recording captures them. */
+  matchConfigOverrides?: Partial<MatchConfig>;
   /** M9: record this match as a ChaosBeyReplayV1 (returned in AiMatchRecord.replay). */
   record?: Omit<HeadlessCaptureInput, 'seedText' | 'spawns'>;
   /** Called every tick after the match advanced — for extra invariant checks. */
@@ -298,6 +301,7 @@ export async function simulateAiMatch(setup: AiMatchSetup & { slowTickThresholdM
     aiMashSource: new NullAiMashSource(),
     firstDefinition: setup.firstDefinition,
     secondDefinition: setup.secondDefinition,
+    matchConfigOverrides: setup.matchConfigOverrides,
   });
   try {
     return runOnWorld(world, setup, setup.slowTickThresholdMs ?? DEFAULT_SLOW_TICK_THRESHOLD_MS);
@@ -349,7 +353,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
 
   // Before the first tick: the initial state is the replay's first checkpoint.
   const capture = setup.record
-    ? startHeadlessCapture(world, { ...setup.record, seedText: setup.seed, spawns: { first: setup.firstSpawn ?? FIRST_SPAWN, second: setup.secondSpawn ?? SECOND_SPAWN } })
+    ? startHeadlessCapture(world, { matchConfig: resolveMatchConfig(setup.matchConfigOverrides ?? {}), ...setup.record, seedText: setup.seed, spawns: { first: setup.firstSpawn ?? FIRST_SPAWN, second: setup.secondSpawn ?? SECOND_SPAWN } })
     : null;
 
   const first = new SideTracker(firstPersonality.id);
@@ -357,7 +361,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
   const maxTicks = setup.maxTicks ?? DEFAULT_AI_MATCH_MAX_TICKS;
   const anomalies: MatchAnomaly[] = [];
   let anomalyCount = 0;
-  const detector = new MatchAnomalyDetector();
+  const detector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: resolveMatchConfig(setup.matchConfigOverrides ?? {}).arenaWallHeightM });
   const detections: DetectedAnomaly[] = [];
   let invalidDetectionCount = 0;
   let warningCount = 0;

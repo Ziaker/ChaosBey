@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { createArenaColliders } from '../../arena/colliders/createArenaColliders';
+import { FOUNDRY_PIT, STANDARD_ARENA_GEOMETRY, type ArenaGeometry, type ArenaTheme } from '../../arena/presets/ArenaPresets';
 import { createBey, type Bey } from '../../bey/core/Bey';
 import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
@@ -54,13 +55,20 @@ export interface MatchBeys {
  */
 export const DEFAULT_MATCH_BEYS: MatchBeys = { first: ATTACK_ARCHETYPE, second: DEFENSE_ARCHETYPE };
 
+/** The arena a match is built in: gameplay geometry (from MatchConfig) and a render-only theme. */
+export interface MatchArena {
+  readonly geometry: ArenaGeometry;
+  readonly theme: ArenaTheme;
+}
+
 export function createMatchScene(
   scene: THREE.Object3D,
   physics: PhysicsWorld,
   attackProfileSettings: BeyAttackProfileSettings = createDefaultAttackProfileSettings(),
   beys: MatchBeys = DEFAULT_MATCH_BEYS,
+  arena: MatchArena = { geometry: STANDARD_ARENA_GEOMETRY, theme: FOUNDRY_PIT.theme },
 ): MatchScene {
-  createArenaColliders(scene, physics);
+  createArenaColliders(scene, physics, arena.geometry, arena.theme);
 
   const first = createBey(physics, FIRST_SPAWN, applyAttackProfileSettings(beys.first, attackProfileSettings));
   const second = createBey(physics, SECOND_SPAWN, applyAttackProfileSettings(beys.second, attackProfileSettings));

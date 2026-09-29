@@ -17,6 +17,7 @@ import type { DebugOverlay } from '../../debug/overlay/DebugOverlay';
 import type { AttackProfileSettingsPanel } from '../../debug/settings/AttackProfileSettingsPanel';
 import { generateRandomSeedText } from '../../rng/stringSeed';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
+import { arenaPreset } from '../../arena/presets/ArenaPresets';
 import { rosterEntry } from './beyRoster';
 import { CharacterSelectScreen } from './CharacterSelectScreen';
 import { outcomeText } from './matchOutcome';
@@ -138,6 +139,7 @@ export class PlayFlow {
         matchConfig: matchConfigFor(this.setup),
         attackProfileSettings: this.deps.attackProfileSettings,
         opponent: opponentControllerFor(this.setup),
+        arenaTheme: arenaPreset(this.setup.arena.presetId).theme,
       },
       { onRoundOver: (outcome) => this.scheduleRoundResult(outcome) },
     );

@@ -15,6 +15,7 @@ import type { SideControllerSpec } from '../session/SideControllers';
 import { recordError } from '../modes/appTelemetry';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { MatchConfig } from '../../config/match/MatchConfig';
+import type { ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { RoundOutcome } from '../../combat/round-rules/RoundState';
 import type { DebugOverlay } from '../../debug/overlay/DebugOverlay';
 import { buildCombatOverlayFields, type CombatOverlayFields } from '../../debug/overlay/buildOverlayState';
@@ -39,6 +40,8 @@ export interface MatchRunnerStart {
   readonly attackProfileSettings: BeyAttackProfileSettings;
   /** The opponent's controller (the player is always the keyboard, first side). */
   readonly opponent: SideControllerSpec;
+  /** Render-only arena look; omit for the default arena's. */
+  readonly arenaTheme?: ArenaTheme;
 }
 
 export interface MatchRunnerEvents {
@@ -120,6 +123,7 @@ export class MatchRunner {
       controllers: { first: { kind: 'keyboard' }, second: start.opponent },
       keyboard,
       beys: start.beys,
+      arenaTheme: start.arenaTheme,
     });
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
     deps.stateMachine.transitionTo(GameState.Combat);

@@ -1,8 +1,9 @@
 // ============================================================
 // PREGAME SIMULATOR (M10, GDD 56/59)
 // The match setup between Character Select and the fight. Common choices
-// first (opponent Bey, AI level, AI style, match length); experimental
-// rules behind "Advanced rules" (Clash impact, fixed seed). The right
+// first (opponent Bey, AI level, AI style, arena, match length); the
+// selected sliders and experimental rules behind "Advanced rules" (wall
+// height, wall bounce, Clash impact, fixed seed). The right
 // column explains, from the real numbers, what the chosen opponent can do
 // and how the matchup looks. Keyboard: ↑/↓ row, ←/→ change, Enter start,
 // Esc back.
@@ -17,7 +18,8 @@ import { BEY_ROSTER, rosterEntry } from './beyRoster';
 import { button, el, ensureFrontendStyle, keyHint } from './frontendStyle';
 import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
-import { CLASH_IMPACT_RANGE, matchupLines, normalizeSeedText, type MatchSetup } from './matchSetup';
+import { CLASH_IMPACT_RANGE, matchupLines, normalizeSeedText, withArenaPreset, type MatchSetup } from './matchSetup';
+import { ARENA_PRESETS, ARENA_WALL_BOUNCE_RANGE, ARENA_WALL_HEIGHT_RANGE, arenaPreset, isPresetGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
 
 export interface PregameOptions {
   readonly setup: MatchSetup;
@@ -64,6 +66,13 @@ const ROWS: readonly AnyChoiceRow[] = [
     get: (s) => s.ai.style,
     set: (s, v) => ({ ...s, ai: { ...s.ai, style: v } }),
   }),
+  row<ArenaPresetId>({
+    id: 'arena',
+    label: 'Arena',
+    options: ARENA_PRESETS.map((p) => ({ value: p.id, label: p.label, accentCss: `#${p.theme.rimHex.toString(16).padStart(6, '0')}` })),
+    get: (s) => s.arena.presetId,
+    set: (s, v) => withArenaPreset(s, v),
+  }),
   row<RoundsToWin>({
     id: 'rounds',
     label: 'Match length',
@@ -81,8 +90,7 @@ export class PregameScreen {
   private readonly root = el('div', 'cb-screen cb-screen--opaque cb-pregame', 'pregame');
   private readonly rowButtons: HTMLButtonElement[][] = [];
   private readonly explanation = el('div', 'cb-pregame__explain', 'pregame-explanation');
-  private readonly clashValue = el('output', 'cb-pregame__value', 'pregame-clash-value');
-  private readonly clashSlider = el('input', 'cb-pregame__slider', 'pregame-clash-impact');
+  private readonly sliders: { readonly input: HTMLInputElement; readonly output: HTMLOutputElement; readonly read: (setup: MatchSetup) => number; readonly format: (value: number) => string }[] = [];
   private readonly seedInput = el('input', 'cb-pregame__seed', 'pregame-seed');
   private setup: MatchSetup;
   private focusRow = 0;
@@ -181,17 +189,35 @@ export class PregameScreen {
     summary.textContent = 'Advanced rules';
     details.append(summary);
 
-    const clashRow = el('label', 'cb-pregame__row cb-pregame__row--slider');
-    const clashLabel = el('span', 'cb-pregame__label');
-    clashLabel.textContent = 'Clash impact';
-    this.clashSlider.type = 'range';
-    this.clashSlider.min = String(CLASH_IMPACT_RANGE.min);
-    this.clashSlider.max = String(CLASH_IMPACT_RANGE.max);
-    this.clashSlider.step = String(CLASH_IMPACT_RANGE.step);
-    this.clashSlider.addEventListener('input', () => this.update({ ...this.setup, clashImpactMultiplier: Number(this.clashSlider.value) }));
-    clashRow.append(clashLabel, this.clashSlider, this.clashValue);
-    const clashNote = el('p', 'cb-hint');
-    clashNote.textContent = 'How hard the loser of a Clash is knocked back and how much Stability it loses.';
+    details.append(
+      this.slider({
+        id: 'wall-height',
+        label: 'Wall height',
+        range: ARENA_WALL_HEIGHT_RANGE,
+        read: (s) => s.arena.geometry.wallHeightM,
+        write: (s, v) => ({ ...s, arena: { ...s.arena, geometry: { ...s.arena.geometry, wallHeightM: v } } }),
+        format: (v) => `${v.toFixed(1)} m`,
+        note: 'A low wall lets a launched Bey fly out of the arena; a tall one keeps it in.',
+      }),
+      this.slider({
+        id: 'wall-bounce',
+        label: 'Wall bounce',
+        range: ARENA_WALL_BOUNCE_RANGE,
+        read: (s) => s.arena.geometry.wallRestitution,
+        write: (s, v) => ({ ...s, arena: { ...s.arena, geometry: { ...s.arena.geometry, wallRestitution: v } } }),
+        format: (v) => v.toFixed(2),
+        note: 'How hard the wall throws a Bey back into the fight.',
+      }),
+      this.slider({
+        id: 'clash-impact',
+        label: 'Clash impact',
+        range: CLASH_IMPACT_RANGE,
+        read: (s) => s.clashImpactMultiplier,
+        write: (s, v) => ({ ...s, clashImpactMultiplier: v }),
+        format: (v) => `×${v.toFixed(2)}`,
+        note: 'How hard the loser of a Clash is knocked back and how much Stability it loses.',
+      }),
+    );
 
     const seedRow = el('label', 'cb-pregame__row');
     const seedLabel = el('span', 'cb-pregame__label');
@@ -205,8 +231,36 @@ export class PregameScreen {
     const seedNote = el('p', 'cb-hint');
     seedNote.textContent = 'Same seed, same inputs, same match. Leave blank for a new one every time.';
 
-    details.append(clashRow, clashNote, seedRow, seedNote);
+    details.append(seedRow, seedNote);
     return details;
+  }
+
+  private slider(spec: {
+    id: string;
+    label: string;
+    range: { readonly min: number; readonly max: number; readonly step: number };
+    read: (setup: MatchSetup) => number;
+    write: (setup: MatchSetup, value: number) => MatchSetup;
+    format: (value: number) => string;
+    note: string;
+  }): DocumentFragment {
+    const fragment = document.createDocumentFragment();
+    const wrapper = el('label', 'cb-pregame__row cb-pregame__row--slider');
+    const label = el('span', 'cb-pregame__label');
+    label.textContent = spec.label;
+    const input = el('input', 'cb-pregame__slider', `pregame-${spec.id}`);
+    input.type = 'range';
+    input.min = String(spec.range.min);
+    input.max = String(spec.range.max);
+    input.step = String(spec.range.step);
+    const output = el('output', 'cb-pregame__value', `pregame-${spec.id}-value`);
+    input.addEventListener('input', () => this.update(spec.write(this.setup, Number(input.value))));
+    this.sliders.push({ input, output, read: spec.read, format: spec.format });
+    wrapper.append(label, input, output);
+    const note = el('p', 'cb-hint');
+    note.textContent = spec.note;
+    fragment.append(wrapper, note);
+    return fragment;
   }
 
   private update(next: MatchSetup): void {
@@ -224,8 +278,11 @@ export class PregameScreen {
         node.tabIndex = checked ? 0 : -1;
       });
     });
-    this.clashSlider.value = String(this.setup.clashImpactMultiplier);
-    this.clashValue.textContent = `×${this.setup.clashImpactMultiplier.toFixed(2)}`;
+    for (const slider of this.sliders) {
+      const value = slider.read(this.setup);
+      slider.input.value = String(value);
+      slider.output.textContent = slider.format(value);
+    }
     if (normalizeSeedText(this.seedInput.value) !== this.setup.seedText) this.seedInput.value = this.setup.seedText ?? '';
     this.renderExplanation();
   }
@@ -287,6 +344,10 @@ export class PregameScreen {
       item.textContent = text;
       rulesList.append(item);
     };
+    const arena = arenaPreset(setup.arena.presetId);
+    const walls = setup.arena.geometry;
+    addRule(`${arena.label}: ${arena.description}`);
+    if (!isPresetGeometry(arena.id, walls)) addRule(`Custom walls: ${walls.wallHeightM.toFixed(1)} m high, bounce ${walls.wallRestitution.toFixed(2)}`);
     addRule(describeRoundsToWin(setup.roundsToWin));
     addRule('A round ends on a ring-out or a knock-out (a hit while broken). A draw scores nobody.');
     addRule(setup.clashImpactMultiplier === 1 ? 'Standard Clash impact' : `Clash impact ×${setup.clashImpactMultiplier.toFixed(2)}`);
@@ -328,8 +389,8 @@ export class PregameScreen {
         return;
       }
     }
-    // The Clash slider and the Advanced toggle keep their own arrow keys.
-    if ((event.target === this.clashSlider && (intent === 'decrease' || intent === 'increase')) || (event.target instanceof HTMLElement && event.target.tagName === 'SUMMARY' && intent === 'confirm')) return;
+    // The sliders and the Advanced toggle keep their own keys.
+    if ((this.sliders.some((sl) => sl.input === event.target) && (intent === 'decrease' || intent === 'increase')) || (event.target instanceof HTMLElement && event.target.tagName === 'SUMMARY' && intent === 'confirm')) return;
     event.preventDefault();
     switch (intent) {
       case 'previous':

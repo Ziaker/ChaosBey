@@ -61,6 +61,8 @@ export interface AnomalyThresholds {
   readonly belowFloorYM: number;
   /** A Bey centre farther than this from the centre, below the wall's top, is inside the wall (m) — the wall's inner face is ARENA_FLOOR_RADIUS − ARENA_WALL_THICKNESS / 2. */
   readonly insideWallRadiusM: number;
+  /** Top of the boundary wall (m): above it a Bey is flying over the wall, not stuck in it. The match's own wall (M10 arena slider). */
+  readonly wallHeightM: number;
   /** Ticks inside the wall before it counts as stuck. */
   readonly stuckInWallTicks: number;
   /** Tolerance for a resource below 0 or above its max. */
@@ -88,6 +90,7 @@ export const DEFAULT_ANOMALY_THRESHOLDS: AnomalyThresholds = {
   leftWorldRadiusM: RINGOUT_RADIUS_M + 1,
   belowFloorYM: -1,
   insideWallRadiusM: ARENA_FLOOR_RADIUS - ARENA_WALL_THICKNESS / 2,
+  wallHeightM: ARENA_WALL_HEIGHT,
   stuckInWallTicks: Math.round(0.5 * FIXED_TICKS_PER_SECOND),
   resourceTolerance: 1e-6,
   maxDodgingTicks: Math.round(DODGE_ACTIVE_DURATION_S * FIXED_TICKS_PER_SECOND) + SLACK_TICKS,
@@ -270,7 +273,7 @@ export class MatchAnomalyDetector {
           offTheRim ? 'ext-32' : null,
         );
       }
-      const insideWall = roundRunning && radius > t.insideWallRadiusM && radius < RINGOUT_RADIUS_M && p.y < ARENA_WALL_HEIGHT;
+      const insideWall = roundRunning && radius > t.insideWallRadiusM && radius < RINGOUT_RADIUS_M && p.y < t.wallHeightM;
       if (this.streak(key('wall'), insideWall, t.stuckInWallTicks, frozen)) {
         emit('stuck-in-wall', side, `centre inside the wall band (r = ${radius.toFixed(2)} m > ${t.insideWallRadiusM.toFixed(2)} m, y = ${p.y.toFixed(2)} m) for ${t.stuckInWallTicks} ticks`, 'ext-32');
       }
