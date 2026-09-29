@@ -162,7 +162,7 @@ test('Debug Lab: restart() with an empty/whitespace seed does not crash or stran
   // stay robust on its own. An empty/blank string reaching
   // normalizeSeedText() throws ("seed text must not be empty"), which used
   // to escape createSession() uncaught and leave `session` stuck at null.
-  await page.goto('/?mode=debug-lab');
+  await page.goto('/ChaosBey/?mode=debug-lab');
   await page.waitForFunction(() => window.__chaosBeyDebugLab?.getSession() !== null);
 
   for (const blank of ['', '   ']) {
