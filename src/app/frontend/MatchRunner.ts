@@ -25,7 +25,7 @@ import { Action, type ControllerActions } from '../../input/actions/Action';
 import { KeyboardController } from '../../input/devices/KeyboardController';
 import { CombinedController, GamepadController } from '../../input/devices/GamepadController';
 import { cameraYawOf, DirectionalController, type DirectionalDebug } from '../../input/directional/DirectionalController';
-import type { ControlScheme } from '../../config/settings/PlayerSettings';
+import type { CameraPresetSetting, ControlScheme } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 
@@ -58,6 +58,8 @@ export interface MatchPresentation {
   readonly cameraEffects: boolean;
   /** Speed trails (off on Low quality). */
   readonly trails: boolean;
+  /** M11: the player's camera preset (A/B/C); the Clash forces B regardless. Default B. */
+  readonly cameraPreset?: CameraPresetSetting;
 }
 
 export interface MatchRunnerEvents {
@@ -153,6 +155,7 @@ export class MatchRunner {
       keyboard: directional,
       beys: start.beys,
       arenaTheme: start.arenaTheme,
+      cameraPreset: start.presentation?.cameraPreset,
     });
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
     deps.stateMachine.transitionTo(GameState.Combat);
@@ -192,6 +195,7 @@ export class MatchRunner {
   setPresentation(presentation: MatchPresentation): void {
     this.presentation = presentation;
     this.session.getVfxManager().setLayerVisible('trails', presentation.trails);
+    if (presentation.cameraPreset) this.session.setCameraPreset(presentation.cameraPreset);
   }
 
   /** Switches Directional / Classic control live (from the Pause menu's settings). */

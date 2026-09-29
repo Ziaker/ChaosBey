@@ -29,7 +29,7 @@ function fakePad(state: { pressed: number[]; axes?: number[] }): () => (Gamepad 
 
 describe('player settings', () => {
   it('default to Medium quality with every comfort option on and the developer overlay off', () => {
-    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ quality: QualityPreset.Medium, controlScheme: 'directional', cameraEffects: true, pauseOnFocusLoss: true, controlHints: true, debugOverlayOnStart: false });
+    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ quality: QualityPreset.Medium, cameraPreset: 'B', controlScheme: 'directional', cameraEffects: true, pauseOnFocusLoss: true, controlHints: true, debugOverlayOnStart: false });
   });
 
   it('fall back field by field on missing, old or corrupted values', () => {

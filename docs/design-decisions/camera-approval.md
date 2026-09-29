@@ -18,7 +18,7 @@ Este documento registra **o que já foi decidido** sobre a câmera de combate, p
 2. **Sem alterações.** Os valores aprovados são os 43 parâmetros de cada preset (seção 6, JSON exato na seção 12) e as constantes do diretor, compartilhadas pelas três (seção 2.9).
 3. **Elas vão para o jogo como opção nas Configurações.** O jogador escolhe **uma das três**. Diferente das camadas de Stamina e Stability, que se somam, a câmera só pode seguir uma direção por vez.
 4. **O que foi aprovado é o comportamento visto no lab:** um único diretor de câmera com sete modos e proteções de leitura (seção 2), rodando cada um dos três conjuntos de valores. As três opções são **três presets do mesmo diretor**, não três câmeras diferentes.
-5. **Nada foi integrado ainda.** `src/camera/` está intacto. A integração segue a seção 11 quando o dono pedir, e os pontos da seção 10 precisam de resposta antes ou durante ela.
+5. **Integração (M11, lane 2):** o diretor e os três presets estão no jogo, em `src/camera/director/`, sem alteração de valores, com a escolha A/B/C nas Configurações e o Clash forçando a B sem órbita. As escolhas provisórias para os itens em aberto da seção 10 estão em `docs/ai/m11-status.md` e aguardam confirmação do dono.
 
 ---
 

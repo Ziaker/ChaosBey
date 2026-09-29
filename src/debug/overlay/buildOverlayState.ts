@@ -5,6 +5,7 @@
 // same numbers.
 // ============================================================
 
+import { CAMERA_PRESET_NAMES } from '../../camera/director/CameraRig';
 import { AIController } from '../../ai/controllers/AIController';
 import type { MatchSession } from '../../app/session/MatchSession';
 import { computeClashPower, computeMashPerformance, computeStaminaFactor, computeVelocityFactor } from '../../combat/clash/ClashFormula';
@@ -49,6 +50,8 @@ export function buildCombatOverlayFields(session: MatchSession): CombatOverlayFi
     secondStabilityFraction: result.second.stabilityFraction,
     secondIsBroken: result.second.isBroken,
     roundResult: session.roundState.result,
+    cameraPresetMode: `${camera.preset} ${CAMERA_PRESET_NAMES[camera.preset]} · ${camera.mode}`,
+    cameraClashBlend: camera.clashBlend,
     cameraFovDeg: camera.fovDeg,
     cameraShakeOffsetM: camera.shakeOffsetM,
     isHitstopActive: camera.isHitstopActive,

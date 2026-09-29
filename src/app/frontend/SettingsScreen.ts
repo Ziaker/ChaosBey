@@ -7,7 +7,8 @@
 // Keyboard: ↑/↓ row, ←/→ change, Esc back.
 // ============================================================
 
-import { QUALITY_PROFILES, DEFAULT_PLAYER_SETTINGS, type ControlScheme, type PlayerSettings } from '../../config/settings/PlayerSettings';
+import { CAMERA_PRESET_SETTINGS, QUALITY_PROFILES, DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ControlScheme, type PlayerSettings } from '../../config/settings/PlayerSettings';
+import { CAMERA_PRESET_NAMES, CAMERA_PRESET_NOTES } from '../../camera/director/CameraRig';
 import { QualityPreset } from '../../config/runtime/QualityPreset';
 import { GAMEPAD_BINDINGS, currentGamepads, readFirstGamepad } from '../../input/devices/gamepadMapping';
 import { button, el, ensureFrontendStyle, keyHint, segmentedControl } from './frontendStyle';
@@ -66,6 +67,7 @@ export class SettingsScreen {
   private readonly rows: Row[] = [];
   private readonly qualityNote = el('p', 'cb-hint', 'settings-quality-note');
   private readonly controlNote = el('p', 'cb-hint', 'settings-control-note');
+  private readonly cameraNote = el('p', 'cb-hint', 'settings-camera-note');
   /** The first two rows of the controls table (movement), which depend on the control scheme. */
   private readonly movementRows: HTMLTableCellElement[][] = [];
   private readonly fullscreenButton: HTMLButtonElement;
@@ -96,6 +98,14 @@ export class SettingsScreen {
     graphics.append(
       this.choiceRow<QualityPreset>('quality', 'Quality', [QualityPreset.Low, QualityPreset.Medium, QualityPreset.High].map((q) => ({ value: q, label: q })), (s) => s.quality, (s, v) => ({ ...s, quality: v })),
       this.qualityNote,
+      this.choiceRow<CameraPresetSetting>(
+        'camera',
+        'Camera',
+        CAMERA_PRESET_SETTINGS.map((id) => ({ value: id, label: CAMERA_PRESET_NAMES[id] })),
+        (s) => s.cameraPreset,
+        (s, v) => ({ ...s, cameraPreset: v }),
+      ),
+      this.cameraNote,
       this.toggleRow('camera-effects', 'Camera shake & zoom', 'cameraEffects'),
     );
     this.fullscreenButton = button('Fullscreen', '', 'settings-fullscreen', () => void toggleFullscreen().then(() => this.refresh()));
@@ -223,6 +233,7 @@ export class SettingsScreen {
     for (const row of this.rows) row.refresh(this.settings);
     const profile = QUALITY_PROFILES[this.settings.quality];
     this.qualityNote.textContent = `${QUALITY_NOTES[this.settings.quality]} (pixel ratio up to ${profile.maxPixelRatio}, speed trails ${profile.trails ? 'on' : 'off'})`;
+    this.cameraNote.textContent = `${CAMERA_PRESET_NOTES[this.settings.cameraPreset]} Clashes always use Cinematic Hybrid.`;
     const scheme = CONTROL_TEXT[this.settings.controlScheme];
     this.controlNote.textContent = scheme.note;
     this.movementRows.forEach((cells, i) => {

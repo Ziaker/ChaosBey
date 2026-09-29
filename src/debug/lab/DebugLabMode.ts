@@ -28,7 +28,7 @@ import { resolveAttackProfileSettings } from '../../config/attack-profile/Attack
 import { loadAttackProfileOverrides } from '../../config/attack-profile/AttackProfileStorage';
 import { KeyboardController } from '../../input/devices/KeyboardController';
 import { cameraYawOf, DirectionalController } from '../../input/directional/DirectionalController';
-import { loadPlayerSettings } from '../../config/settings/PlayerSettings';
+import { loadPlayerSettings, type CameraPresetSetting } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import { generateRandomSeedText } from '../../rng/stringSeed';
 import { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
@@ -86,6 +86,8 @@ export interface DebugLabHandle {
   replayStatus(): string | null;
   /** M11: the camera the player looks through (read-only use: projecting to the screen in smoke tests). */
   getCamera(): THREE.PerspectiveCamera;
+  /** M11: the game camera preset (A/B/C), kept across restarts. Render only. */
+  setCameraPreset(preset: CameraPresetSetting): void;
 }
 
 declare global {
@@ -104,6 +106,8 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   // default), resolved against whichever camera view the Lab shows.
   const playerInput = new DirectionalController(keyboard, { cameraYaw: () => cameraYawOf(appRenderer.camera) });
   playerInput.setEnabled(loadPlayerSettings().controlScheme === 'directional');
+  // M11: the game camera preset from Settings (A/B/C; the Clash forces B).
+  let cameraPreset: CameraPresetSetting = loadPlayerSettings().cameraPreset;
   const labMatchConfig = resolveMatchConfig();
   const labAttackProfileSettings = resolveAttackProfileSettings(loadAttackProfileOverrides() ?? undefined);
   /** M9: while a replay plays, the session is built from the replay's own config, never the Lab's (owner decision 3). */
@@ -222,6 +226,7 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
         stateMachine: matchState,
         controllers: { first: controllers.first, second: controllers.second },
         keyboard: playerInput,
+        cameraPreset,
       });
       if (myToken !== restartToken) {
         // A newer restart (Restart/New Seed/loadPreset clicked again before
@@ -243,6 +248,10 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
 
   const handle: DebugLabHandle = {
     getCamera: () => appRenderer.camera,
+    setCameraPreset: (preset) => {
+      cameraPreset = preset;
+      session?.setCameraPreset(preset);
+    },
     getSession: () => session,
     isPaused: () => paused,
     setPaused: (next) => {

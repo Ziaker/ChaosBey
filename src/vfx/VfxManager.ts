@@ -128,7 +128,7 @@ export class VfxManager {
    * one-shot effects and updates the persistent per-Bey trails + camera
    * speed lines. `speedLinesScreenDirection` is the player's movement
    * direction already projected onto the camera's own axes (see
-   * CombatCameraController) — camera-relative, not world space — so the
+   * camera/director/sessionCamera.ts) — camera-relative, not world space — so the
    * streaks track real travel direction (GDD requirement) instead of
    * sitting as a fixed radial overlay.
    */

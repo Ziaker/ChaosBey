@@ -79,7 +79,7 @@ export class SpeedLines {
     return this.group;
   }
 
-  /** `directionXZ` is the player's movement direction projected onto the camera's own right/up axes (see CombatCameraController.speedLinesScreenDirection) — camera-relative, not world space. */
+  /** `directionXZ` is the player's movement direction projected onto the camera's own right/up axes (see camera/director/sessionCamera.ts speedLinesScreenDirection) — camera-relative, not world space. */
   update(speedMps: number, directionXZ: { x: number; z: number }): void {
     this.baseAngleRad = computeSpeedLineBaseAngleRad(directionXZ, this.baseAngleRad);
     const opacity = computeSpeedLinesOpacityFraction(speedMps) * SPEED_LINES_MAX_OPACITY;

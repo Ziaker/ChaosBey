@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest';
 import { GameStateMachine } from '../../src/app/lifecycle/GameState';
 import { MatchSession, type Side } from '../../src/app/session/MatchSession';
 import { IdleController } from '../../src/automation/scripted-scenarios/IdleController';
-import { CAMERA_FOV_BASE_DEG } from '../../src/camera/CameraTuning';
 import { createDefaultAttackProfileSettings } from '../../src/config/attack-profile/AttackProfileSettings';
 import { resolveMatchConfig } from '../../src/config/match/MatchConfig';
 import { DEBUG_LAYERS, DebugVisualLayers, type DebugLayerId } from '../../src/debug/visualization/DebugVisualLayers';
@@ -116,7 +115,9 @@ describe('render-only presentation toggles', () => {
     expect(camera.position.y).toBeGreaterThan(20);
 
     session.renderFrame(1 / 60, camera, { cameraView: 'game', cameraEffects: false });
-    expect(camera.fov).toBe(CAMERA_FOV_BASE_DEG);
+    // Effects off: the director's FOV without the impact punch (M11 camera).
+    const output = session.getLastCameraOutput()!;
+    expect(camera.fov).toBe(output.fovDeg - output.fovPunchDeg);
     const focus = session.getLastCameraOutput()!.cameraPositionM;
     expect(camera.position.x).toBeCloseTo(focus.x, 9);
     expect(camera.position.y).toBeCloseTo(focus.y, 9);

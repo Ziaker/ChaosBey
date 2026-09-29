@@ -28,11 +28,11 @@ import { RoundState } from '../../combat/round-rules/RoundState';
 import { ClashOutcome, ClashState } from '../../combat/clash/ClashController';
 import { NullAiMashSource } from '../../combat/clash/ClashMash';
 import { CLASH_PROGRESSIVE_VFX_INTERVAL_TICKS, CLASH_TARGET_DURATION_S } from '../../combat/clash/ClashTuning';
-import { CombatCameraController, type CombatCameraOutput } from '../../camera/CombatCameraController';
-import { ClashCameraDirector } from '../../camera/ClashCameraDirector';
+import { CameraRig } from '../../camera/director/CameraRig';
+import { buildFightFrame, speedLinesScreenDirection, type FightFrameBey, type SessionCameraOutput } from '../../camera/director/sessionCamera';
+import type { PresetId } from '../../camera/director/CameraParams';
 import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../../camera/ImpactEvents';
 import { CLASH_RESOLVED_MAGNITUDE } from '../../camera/ImpactMagnitude';
-import { CAMERA_FOV_BASE_DEG } from '../../camera/CameraTuning';
 import { arenaGeometryOf, type MatchConfig } from '../../config/match/MatchConfig';
 import { FOUNDRY_PIT, type ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
@@ -76,6 +76,8 @@ export interface MatchSessionOptions {
   readonly beys?: MatchBeys;
   /** How the arena looks (render only; its gameplay values come from matchConfig). Omit for Foundry Pit's. */
   readonly arenaTheme?: ArenaTheme;
+  /** M11: the player's camera preset (Settings). Render only; default B. */
+  readonly cameraPreset?: PresetId;
 }
 
 export interface SessionTickOutput {
@@ -130,7 +132,10 @@ export class MatchSession {
 
   private readonly root = new THREE.Group();
   private readonly vfxManager: VfxManager;
-  private readonly cameraDirector = new CombatCameraController();
+  /** M11: the approved camera director running the three presets; the Clash forces B without orbit. Render only. */
+  private readonly cameraRig: CameraRig;
+  /** The render camera, read only for its aspect ratio (the director's off-screen check). */
+  private readonly camera: THREE.PerspectiveCamera;
   private readonly stepper = new MatchStepper();
 
   /** CanonicalMatchStateV1 after the ticks run so far (M9: the official state-hash input). */
@@ -191,7 +196,6 @@ export class MatchSession {
   private hitstopView(): { isFreezing: boolean; remainingS: number } {
     return { isFreezing: this.stepper.hitstop.isFreezing(), remainingS: this.stepper.hitstop.getRemainingS() };
   }
-  private readonly clashCameraDirector = new ClashCameraDirector();
   private readonly clashPresentationTracker = new ClashPresentationTracker();
   private readonly stateMachine: GameStateMachine;
   private readonly keyboard: CombatController;
@@ -210,7 +214,9 @@ export class MatchSession {
 
   private tickIndex = 0;
   private lastMatchResult: MatchTickResult | null = null;
-  private lastCameraOutput: CombatCameraOutput | null = null;
+  private lastCameraOutput: SessionCameraOutput | null = null;
+  /** Which Bey left the ring, once the round ended by ring-out (camera only). */
+  private ringOutIsFirst: boolean | null = null;
   private lastPhysicsStepTimeMs = 0;
   private lastImpulses: Record<Side, SideTickImpulses> = { first: emptyImpulses(), second: emptyImpulses() };
   private lastKnockback: Record<Side, LastKnockback | null> = { first: null, second: null };
@@ -242,6 +248,8 @@ export class MatchSession {
       theme: options.arenaTheme ?? FOUNDRY_PIT.theme,
     });
     this.headingArrow = new HeadingArrow(this.root);
+    this.camera = options.camera;
+    this.cameraRig = new CameraRig(options.cameraPreset ?? 'B', options.camera.aspect);
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
@@ -271,7 +279,16 @@ export class MatchSession {
     return this.lastMatchResult;
   }
 
-  getLastCameraOutput(): CombatCameraOutput | null {
+  /** M11: the player's camera preset (A/B/C). Render only; a change mid-match crossfades. */
+  setCameraPreset(preset: PresetId): void {
+    this.cameraRig.setPreset(preset);
+  }
+
+  getCameraPreset(): PresetId {
+    return this.cameraRig.getPreset();
+  }
+
+  getLastCameraOutput(): SessionCameraOutput | null {
     return this.lastCameraOutput;
   }
 
@@ -490,7 +507,6 @@ export class MatchSession {
         secondSpeedMps: result.second.movement.speedMps,
       });
       this.stateMachine.transitionTo(GameState.Clash);
-      this.clashCameraDirector.reset();
     }
     if (presentationEvents.clashResult) {
       const clashResult = presentationEvents.clashResult;
@@ -521,7 +537,7 @@ export class MatchSession {
       second: { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad },
     };
 
-    this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState);
+    this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents.clashStarted);
 
     for (const detection of this.anomalyDetector.check({
       tick: tickIndex,
@@ -573,7 +589,8 @@ export class MatchSession {
       const shake = view.cameraEffects ? cameraOutput.shakeOffsetM : { x: 0, y: 0, z: 0 };
       camera.position.set(cameraOutput.cameraPositionM.x + shake.x, cameraOutput.cameraPositionM.y + shake.y, cameraOutput.cameraPositionM.z + shake.z);
       camera.lookAt(cameraOutput.focusPositionM.x, cameraOutput.focusPositionM.y, cameraOutput.focusPositionM.z);
-      camera.fov = view.cameraEffects ? cameraOutput.fovDeg : CAMERA_FOV_BASE_DEG;
+      // Camera effects off: no shake and no impact FOV punch; the framing itself (speed FOV, contexts) is the preset's.
+      camera.fov = view.cameraEffects ? cameraOutput.fovDeg : cameraOutput.fovDeg - cameraOutput.fovPunchDeg;
       camera.updateProjectionMatrix();
     }
 
@@ -663,6 +680,7 @@ export class MatchSession {
     isFrozenByHitstop: boolean,
     clashResolvedThisTick: MatchTickResult['clashResolvedThisTick'],
     currentClashState: ClashState,
+    clashStarted: boolean,
   ): void {
     const match = this.match;
     const fixedDeltaSeconds = FIXED_DELTA_SECONDS;
@@ -674,75 +692,80 @@ export class MatchSession {
       z: (firstPositionM.z + secondPositionM.z) / 2,
     };
 
+    let impactEvents: ImpactEvent[];
     if (clashResolvedThisTick) {
       // Resolution beat (owner decision): a strong, dedicated impact event
-      // at the clash point drives Milestone 4's hitstop/shake/FOV-punch
-      // pipeline like any other big moment. Follow biases toward whichever
-      // side actually got launched; a Tie has no loser, so null keeps the
-      // framing central/symmetric as approved.
+      // at the clash point drives the hitstop/shake/FOV-punch pipeline like
+      // any other big moment. Follow biases toward whichever side actually
+      // got launched; a Tie has no loser, so null keeps the framing
+      // central/symmetric as approved.
       const loserIsFirst =
         clashResolvedThisTick.outcome === ClashOutcome.FirstWins ? false : clashResolvedThisTick.outcome === ClashOutcome.SecondWins ? true : null;
-      const resolutionEvent: ImpactEvent = {
-        kind: 'clashResolved',
-        magnitude: CLASH_RESOLVED_MAGNITUDE,
-        worldPositionM: midpointM,
-        isFirst: loserIsFirst ?? true,
-        followTargetIsFirst: loserIsFirst,
-      };
-      this.vfxManager.onImpactEvents([resolutionEvent]);
-      this.lastCameraOutput = this.cameraDirector.tick({
-        firstPositionM,
-        secondPositionM,
-        firstSpeedMps: result.first.movement.speedMps,
-        secondSpeedMps: result.second.movement.speedMps,
-        firstVelocityXZ: result.first.movement.actualVelocityVector,
-        impactEvents: [resolutionEvent],
-        fixedDeltaSeconds,
-        hitstop: this.hitstopView(),
-      });
+      impactEvents = [
+        {
+          kind: 'clashResolved',
+          magnitude: CLASH_RESOLVED_MAGNITUDE,
+          worldPositionM: midpointM,
+          isFirst: loserIsFirst ?? true,
+          followTargetIsFirst: loserIsFirst,
+        },
+      ];
+      this.vfxManager.onImpactEvents(impactEvents);
     } else if (currentClashState === ClashState.Active) {
-      // Dedicated Clash camera: a controlled cinematic orbit near the
-      // confrontation point, while the normal camera's smoothing keeps
-      // settling toward the (frozen) midpoint so resuming it isn't a snap.
-      this.cameraDirector.tick({
-        firstPositionM,
-        secondPositionM,
-        firstSpeedMps: 0,
-        secondSpeedMps: 0,
-        firstVelocityXZ: { x: 0, z: 0 },
-        impactEvents: [],
-        fixedDeltaSeconds,
-        hitstop: this.hitstopView(),
-      });
+      impactEvents = [];
       const progressFraction = this.clash.controller.getElapsedS() / CLASH_TARGET_DURATION_S;
-      const clashCameraOutput = this.clashCameraDirector.tick({ midpointM, progressFraction, fixedDeltaSeconds });
-      this.lastCameraOutput = {
-        cameraPositionM: clashCameraOutput.cameraPositionM,
-        focusPositionM: clashCameraOutput.focusPositionM,
-        shakeOffsetM: clashCameraOutput.shakeOffsetM,
-        fovDeg: clashCameraOutput.fovDeg,
-        isHitstopActive: false,
-        hitstopRemainingS: 0,
-        highSpeedBlend: 0,
-        speedLinesScreenDirection: { x: 0, y: 0 },
-      };
       if (tickIndex % CLASH_PROGRESSIVE_VFX_INTERVAL_TICKS === 0) {
         this.vfxManager.onImpactEvents([{ kind: 'hit', magnitude: 0.1 + progressFraction * 0.3, worldPositionM: midpointM, isFirst: true }]);
       }
     } else {
-      const impactEvents = isFrozenByHitstop ? [] : buildImpactEventsForTick(result, firstPositionM, secondPositionM);
+      impactEvents = isFrozenByHitstop ? [] : buildImpactEventsForTick(result, firstPositionM, secondPositionM);
       this.vfxManager.onImpactEvents(impactEvents);
-      this.lastCameraOutput = this.cameraDirector.tick({
-        firstPositionM,
-        secondPositionM,
-        firstSpeedMps: result.first.movement.speedMps,
-        secondSpeedMps: result.second.movement.speedMps,
-        firstVelocityXZ: result.first.movement.actualVelocityVector,
-        impactEvents,
-        fixedDeltaSeconds,
-        hitstop: this.hitstopView(),
-      });
     }
+
+    if (!isFrozenByHitstop) {
+      if (result.ringOutFirst) this.ringOutIsFirst = true;
+      else if (result.ringOutSecond) this.ringOutIsFirst = false;
+    }
+    const snapshot = this.lastMatchResult;
+    const bey = (side: Side): FightFrameBey => {
+      const b = this.getBey(side);
+      const s = snapshot ? snapshot[side] : null;
+      return { position: copy3(b.body.translation()), velocity: copy3(b.body.linvel()), grounded: s ? s.grounded : null, attackState: s ? s.attackState : null, isBroken: s ? s.isBroken : false };
+    };
+    // The camera runs every tick, hitstop included (shake and FOV punch keep decaying in real time; camera-approval.md 10.6).
+    this.cameraRig.setAspect(this.camera.aspect);
+    const frame = buildFightFrame({
+      tick: tickIndex,
+      first: bey('first'),
+      second: bey('second'),
+      impactEvents,
+      clashStarted,
+      clashActive: currentClashState === ClashState.Active,
+      clashProgress: this.clash.controller.getElapsedS() / CLASH_TARGET_DURATION_S,
+      roundOver: this.roundState.isOver,
+      ringOutIsFirst: this.ringOutIsFirst,
+    });
+    const out = this.cameraRig.tick(frame, fixedDeltaSeconds);
+    const hitstop = this.hitstopView();
+    this.lastCameraOutput = {
+      cameraPositionM: out.eye,
+      focusPositionM: out.focus,
+      shakeOffsetM: out.shake,
+      fovDeg: out.fov,
+      fovPunchDeg: out.fovPunch,
+      isHitstopActive: hitstop.isFreezing,
+      hitstopRemainingS: hitstop.remainingS,
+      highSpeedBlend: out.player.weights.HighSpeed,
+      speedLinesScreenDirection: speedLinesScreenDirection(out.eye, out.focus, frame.first.velocity),
+      mode: out.mode,
+      preset: out.preset,
+      clashBlend: out.clashBlend,
+      presetSwitch: out.presetSwitch,
+      distanceM: out.player.debug.distance,
+      yawDeg: out.player.debug.yawDeg,
+      side: out.player.debug.side,
+      modifiers: [...out.player.debug.modifiers],
+    };
   }
 }
 

@@ -10,6 +10,7 @@
 
 import { AIController } from '../../ai/controllers/AIController';
 import type { MatchSession, Side } from '../../app/session/MatchSession';
+import { CAMERA_PRESET_NAMES } from '../../camera/director/CameraRig';
 import { AIRBORNE_ACCELERATION_FACTOR, AIRBORNE_LATERAL_GRIP_PER_S } from '../../bey/movement/MovementTuning';
 import { ClashState } from '../../combat/clash/ClashController';
 import { computeClashPower, computeMashPerformance, computeStaminaFactor, computeVelocityFactor } from '../../combat/clash/ClashFormula';
@@ -321,7 +322,6 @@ function buildClashSection(session: MatchSession): InspectorSection {
 function buildCameraSection(session: MatchSession): InspectorSection {
   const camera = session.getLastCameraOutput();
   if (!camera) return { id: 'camera', title: 'Camera', rows: [row('Camera', 'no tick yet')] };
-  const clashActive = session.clash.controller.getState() === ClashState.Active;
   const distance = Math.hypot(
     camera.cameraPositionM.x - camera.focusPositionM.x,
     camera.cameraPositionM.y - camera.focusPositionM.y,
@@ -331,12 +331,16 @@ function buildCameraSection(session: MatchSession): InspectorSection {
     id: 'camera',
     title: 'Camera',
     rows: [
-      row('Active mode', clashActive ? 'Clash (ClashCameraDirector)' : camera.isHitstopActive ? 'CombatFollow (hitstop)' : 'CombatFollow'),
-      row('FOV', `${f(camera.fovDeg)}°`),
+      row('Preset (player)', `${camera.preset} — ${CAMERA_PRESET_NAMES[camera.preset]}${camera.presetSwitch < 1 ? ` (switching ${f(camera.presetSwitch * 100)}%)` : ''}`),
+      row('Active mode', `${camera.mode}${camera.isHitstopActive ? ' (hitstop)' : ''}`),
+      row('Clash camera (forced B, no orbit)', camera.clashBlend > 0.001 ? `${f(camera.clashBlend * 100)}% on screen` : 'off'),
+      row('FOV', `${f(camera.fovDeg)}° (impact punch ${f(camera.fovPunchDeg)}°)`),
       row('Target (focus)', vec3(camera.focusPositionM)),
-      row('Distance', `${f(distance)} m`),
+      row('Distance (eye → focus)', `${f(distance)} m (director ${f(camera.distanceM)} m)`),
+      row('Yaw / shoulder', `${f(camera.yawDeg)}° / ${camera.side > 0 ? 'right' : 'left'}`),
       row('Shake offset', vec3(camera.shakeOffsetM)),
-      row('Cinematic state', clashActive ? 'Clash orbit' : `high-speed blend ${f(camera.highSpeedBlend)}`),
+      row('High-speed context', f(camera.highSpeedBlend)),
+      row('Modifiers', camera.modifiers.length > 0 ? camera.modifiers.join(', ') : '—'),
     ],
   };
 }
