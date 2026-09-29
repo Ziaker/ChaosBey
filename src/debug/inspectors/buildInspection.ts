@@ -44,6 +44,8 @@ export interface InspectionFrameStats {
   readonly triangles: number | null;
   readonly paused: boolean;
   readonly ticksPerFixedStep: number;
+  /** M9: replay recording/playback status for the Divergence row (omitted = not replaying). */
+  readonly replayState?: string;
 }
 
 const RAD_TO_DEG = 180 / Math.PI;
@@ -53,7 +55,7 @@ export function buildInspection(session: MatchSession, frame: InspectionFrameSta
   for (const side of ['first', 'second'] as const) {
     sections.push(...buildSideSections(session, side));
   }
-  sections.push(buildClashSection(session), buildCameraSection(session), buildPerformanceSection(session, frame), buildTelemetrySection(session));
+  sections.push(buildClashSection(session), buildCameraSection(session), buildPerformanceSection(session, frame), buildTelemetrySection(session, frame));
   return sections;
 }
 
@@ -354,7 +356,7 @@ function buildPerformanceSection(session: MatchSession, frame: InspectionFrameSt
   };
 }
 
-function buildTelemetrySection(session: MatchSession): InspectorSection {
+function buildTelemetrySection(session: MatchSession, frame: InspectionFrameStats): InspectorSection {
   const events = session.telemetry.getEvents();
   const last = session.telemetry.getLastEvent();
   return {
@@ -364,8 +366,9 @@ function buildTelemetrySection(session: MatchSession): InspectorSection {
       row('Recorder state', `recording (ring buffer, ${events.length} retained)`),
       row('Last event', last ? `${last.kind} @ tick ${last.tick}` : 'none'),
       row('Event count', String(events.length)),
-      gap('Last state hash', 'state hashing arrives with replay (Milestone 9, GDD section 145)'),
-      gap('Divergence state', 'divergence detection arrives with replay playback (Milestone 9, GDD section 145)'),
+      row('Replay capture', session.isCapturingReplay() ? 'recording (ChaosBeyReplayV1)' : 'not recording'),
+      row('Last state hash', `${session.getStateHash()} @ TicksCompleted ${session.getTickIndex()}`),
+      row('Divergence state', frame.replayState ?? 'not replaying'),
     ],
   };
 }

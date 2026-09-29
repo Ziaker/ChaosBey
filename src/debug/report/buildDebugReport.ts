@@ -41,7 +41,13 @@ export interface DebugReport {
   readonly errors: readonly TelemetryEvent[];
   readonly inspection: readonly InspectorSection[];
   readonly telemetry: { readonly retainedCount: number; readonly recent: readonly TelemetryEvent[] };
-  readonly replay: { readonly status: 'unsupported'; readonly reason: string };
+  /** M9: the match's state hash now, and whether it is being recorded or replayed (full replays are separate ChaosBeyReplayV1 files). */
+  readonly replay: {
+    readonly status: 'recording' | 'replaying' | 'idle';
+    readonly stateHash: string;
+    readonly ticksCompleted: number;
+    readonly detail: string;
+  };
 }
 
 export function buildDebugReport(session: MatchSession, frame: InspectionFrameStats, now: Date = new Date()): DebugReport {
@@ -67,8 +73,10 @@ export function buildDebugReport(session: MatchSession, frame: InspectionFrameSt
     inspection: buildInspection(session, frame),
     telemetry: { retainedCount: events.length, recent: events.slice(-DEBUG_REPORT_RECENT_EVENT_COUNT) },
     replay: {
-      status: 'unsupported',
-      reason: 'input timeline, periodic state hashes and replay playback arrive with Milestone 9 (GDD sections 76, 145); reproduce with the seed + controllers above while mutated is false',
+      status: session.isCapturingReplay() ? 'recording' : frame.replayState !== undefined ? 'replaying' : 'idle',
+      stateHash: session.getStateHash(),
+      ticksCompleted: session.getTickIndex(),
+      detail: frame.replayState ?? 'not recording or replaying; record from the Debug Lab Replay panel for a ChaosBeyReplayV1 file',
     },
   };
 }

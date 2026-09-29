@@ -4,15 +4,16 @@
 // headless and reports them the way GDD section 163 asks. These checks
 // cover the report's contract: every field filled from real matches,
 // reproducible seeds, failures (crash, invalid state, hang) captured with
-// their seed preserved, divergence reported as unsupported (never 0) until
-// M9, and matches simulated faster than real time (GDD 164).
+// their seed preserved, divergence counted by replaying every match (M9) or
+// reported as not checked (never 0), and matches simulated faster than
+// real time (GDD 164).
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
 import { FIRST_SPAWN, SECOND_SPAWN } from '../../src/app/bootstrap/matchSpawns';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
-import { DIVERGENCE_UNSUPPORTED_UNTIL_M9, runAiBatch, summarizeAiBatch, type AiBatchConfig, type AiBatchMatchEntry } from '../../src/self-test/AiBatchRunner';
+import { DIVERGENCE_NOT_CHECKED, runAiBatch, summarizeAiBatch, type AiBatchConfig, type AiBatchMatchEntry } from '../../src/self-test/AiBatchRunner';
 import { SelfTestMatchWorld } from '../../src/self-test/SelfTestMatchWorld';
 
 const MATCHUPS: AiBatchConfig['matchups'] = [
@@ -58,12 +59,47 @@ describe('runAiBatch — real matches', () => {
     expect(report.timing.simulatedPerWallSecond).toBeGreaterThan(1);
   }, 120_000);
 
-  it('never claims zero divergences: divergence is explicitly unsupported until M9', async () => {
+  it('never claims zero divergences without checking: an unverified batch says "not checked"', async () => {
     const report = await runAiBatch({ matchups: MATCHUPS.slice(0, 1), seeds: SEEDS.slice(0, 1), maxTicks: 60 });
-    expect(report.divergence).toEqual(DIVERGENCE_UNSUPPORTED_UNTIL_M9);
-    expect(report.divergence.status).toBe('unsupported');
+    expect(report.divergence).toEqual(DIVERGENCE_NOT_CHECKED);
     expect(report.divergence.count).toBeNull();
+    expect(report.entries.every((e) => e.replayCheck === null)).toBe(true);
   });
+
+  it('with replay verification, every match is replayed from its own recording and the divergences counted (M9)', async () => {
+    const plain = await runAiBatch({ matchups: MATCHUPS, seeds: SEEDS, maxTicks: 900 });
+    const verified = await runAiBatch({ matchups: MATCHUPS, seeds: SEEDS, maxTicks: 900, verifyReplays: true });
+    expect(verified.divergence).toMatchObject({ status: 'checked', count: 0, checked: verified.matches, diverged: [] });
+    for (const entry of verified.entries) {
+      expect(entry.replayCheck?.status, entry.seed).toBe('verified');
+      expect(entry.replayCheck?.detail).toMatch(new RegExp(`^${entry.ticks} ticks, ${entry.ticks + 1} checkpoints identical$`));
+    }
+    // Recording and replaying change nothing about the matches themselves.
+    const strip = (e: AiBatchMatchEntry) => ({ seed: e.seed, outcome: e.outcome, ticks: e.ticks, clashes: e.clashes, passed: e.passed });
+    expect(verified.entries.map(strip)).toEqual(plain.entries.map(strip));
+  }, 300_000);
+
+  it('a state edit during a match (outside the inputs) is counted as a divergence and fails the match, at the right tick', async () => {
+    const editAt = 40;
+    const report = await runAiBatch({
+      matchups: MATCHUPS.slice(0, 1),
+      seeds: ['divergence-injection'],
+      maxTicks: 300,
+      verifyReplays: true,
+      // After tick `editAt` was recorded, nudge a Bey: not an input, so the replay can't reproduce it.
+      onTick: (tick, world) => {
+        if (tick !== editAt) return;
+        const v = world.first.body.linvel();
+        world.first.body.setLinvel({ x: v.x + 0.5, y: v.y, z: v.z }, true);
+      },
+    });
+    const entry = report.entries[0]!;
+    expect(entry.ticks).toBeGreaterThan(editAt + 1);
+    expect(entry.replayCheck).toMatchObject({ status: 'diverged', firstMismatch: editAt + 2 });
+    expect(entry.failureReasons).toContain('divergence');
+    expect(entry.passed).toBe(false);
+    expect(report.divergence).toMatchObject({ status: 'checked', count: 1, checked: 1 });
+  }, 60_000);
 
   it('is reproducible: the same config gives the same matches, seed for seed', async () => {
     const a = await runAiBatch({ matchups: MATCHUPS, seeds: SEEDS });
@@ -142,6 +178,7 @@ describe('summarizeAiBatch', () => {
     maxTickMs: 1,
     slowTicks: 0,
     finalStateHash: '0123456789abcdef',
+    replayCheck: null,
     ...over,
   });
 

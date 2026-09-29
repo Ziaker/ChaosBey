@@ -232,10 +232,14 @@ describe('Debug Lab inspection (GDD section 69)', () => {
     session.tick();
     const rows = buildInspection(session, FRAME).flatMap((s) => s.rows);
     const byLabel = (label: string) => rows.find((r) => r.label === label);
-    for (const label of ['Last state hash', 'Divergence state', 'Match score', 'Render time', 'Draw calls']) {
+    for (const label of ['Match score', 'Render time', 'Draw calls']) {
       expect(byLabel(label)?.unsupported, label).toBe(true);
       expect(byLabel(label)?.value, label).toMatch(/^UNSUPPORTED — \S/);
     }
+    // M9: the state hash and divergence rows are real now.
+    expect(byLabel('Last state hash')?.value).toBe(`${session.getStateHash()} @ TicksCompleted 1`);
+    expect(byLabel('Divergence state')?.value).toBe('not replaying');
+    expect(byLabel('Divergence state')?.unsupported).toBeFalsy();
     session.dispose();
   });
 

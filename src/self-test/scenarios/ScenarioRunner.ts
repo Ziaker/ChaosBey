@@ -78,6 +78,15 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
   if (!preset.supported) {
     return { id: preset.id, label: preset.label, status: 'unsupported', detail: preset.unsupportedReason ?? 'unsupported', ticks: 0, detections: [], crashMessage: null };
   }
+  if (preset.run) {
+    try {
+      const outcome = await preset.run();
+      return { id: preset.id, label: preset.label, status: outcome.passed ? 'passed' : 'failed', detail: outcome.detail, ticks: outcome.ticks, detections: [], crashMessage: null };
+    } catch (error) {
+      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      return { id: preset.id, label: preset.label, status: 'failed', detail: `crashed: ${message}`, ticks: 0, detections: [], crashMessage: message };
+    }
+  }
   const world = await SelfTestMatchWorld.build({
     firstDefinition: options.firstDefinition ?? ATTACK_ARCHETYPE,
     secondDefinition: options.secondDefinition ?? DEFENSE_ARCHETYPE,

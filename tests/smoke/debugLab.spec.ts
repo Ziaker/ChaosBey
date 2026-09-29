@@ -138,7 +138,8 @@ test('Debug Lab: pause, step, restart, seeds, speed and controller switching on 
   expect(report.format).toBe('ChaosBeyDebugReportV1');
   expect(report.mutated).toBe(true);
   expect(report.mutations.length).toBeGreaterThanOrEqual(10);
-  expect(report.replay.status).toBe('unsupported');
+  expect(report.replay.status).toBe('idle');
+  expect(report.replay.stateHash).toMatch(/^[0-9a-f]{16}$/);
   expect(reportText).not.toMatch(/NaN|Infinity/);
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('debug-lab-report-download').click()]);
   expect(download.suggestedFilename()).toMatch(/^chaosbey-debug-.*\.json$/);
@@ -161,7 +162,7 @@ test('Debug Lab: restart() with an empty/whitespace seed does not crash or stran
   // stay robust on its own. An empty/blank string reaching
   // normalizeSeedText() throws ("seed text must not be empty"), which used
   // to escape createSession() uncaught and leave `session` stuck at null.
-  await page.goto('/?mode=debug-lab');
+  await page.goto('/ChaosBey/?mode=debug-lab');
   await page.waitForFunction(() => window.__chaosBeyDebugLab?.getSession() !== null);
 
   for (const blank of ['', '   ']) {
@@ -179,4 +180,47 @@ test('Debug Lab: restart() with an empty/whitespace seed does not crash or stran
     await page.evaluate(() => window.__chaosBeyDebugLab!.step(5));
     expect(await page.evaluate(() => window.__chaosBeyDebugLab!.getSession()!.getTickIndex())).toBeGreaterThan(0);
   }
+});
+
+test('Debug Lab: record a match, download the replay, import it and watch it verify live (M9)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const consoleErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
+  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.waitForFunction(() => window.__chaosBeyDebugLab?.getSession() !== null);
+  const status = page.getByTestId('debug-lab-status');
+
+  // Record 400 ticks from tick 0 (AI vs AI), then stop and download the file.
+  await page.evaluate(async () => {
+    const lab = window.__chaosBeyDebugLab!;
+    lab.setController('first', { kind: 'ai', personality: 'archetype' });
+    lab.setController('second', { kind: 'ai', personality: 'archetype' });
+  });
+  await page.getByTestId('debug-lab-replay-record').click();
+  await expect(status).toContainText('recording from tick 0');
+  await page.evaluate(() => window.__chaosBeyDebugLab!.step(400));
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('debug-lab-replay-stop').click()]);
+  expect(download.suggestedFilename()).toMatch(/^chaosbey-replay-.*\.json$/);
+  const file = await download.path();
+  const text = (await import('node:fs')).readFileSync(file!, 'utf8');
+  expect(JSON.parse(text).format).toBe('ChaosBeyReplayV1');
+
+  // Import it through the panel and let it play out: every checkpoint must match.
+  await page.getByTestId('debug-lab-replay-file').setInputFiles(file!);
+  await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab!.replayStatus())).toMatch(/^replaying/);
+  await page.evaluate(() => window.__chaosBeyDebugLab!.step(1000));
+  await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab!.replayStatus())).toMatch(/^replay finished: VERIFIED/);
+  const telemetrySection = page.getByTestId('debug-lab-inspector').locator('[data-section="telemetry"]');
+  await telemetrySection.locator('summary').click();
+  await expect(telemetrySection).toContainText(/Divergence state\s+replay finished: VERIFIED/);
+
+  // A hand-edited file is refused (integrity), never played.
+  const edited = JSON.parse(text);
+  edited.frames[10].first.held = ['Dodge'];
+  expect(await page.evaluate((t) => window.__chaosBeyDebugLab!.playReplay(t), JSON.stringify(edited))).toBe(false);
+  await expect(status).toContainText('replay refused: integrity: integrity-mismatch');
+  expect(consoleErrors).toEqual([]);
 });

@@ -149,7 +149,8 @@ describe('debug report', () => {
     expect(clean.match.seed).toBe('report-seed');
     expect(clean.match.tick).toBe(60);
     expect(clean.match.controllers).toEqual({ first: 'Idle', second: 'Idle' });
-    expect(clean.replay.status).toBe('unsupported');
+    // M9: the report carries the real state hash; not recording or replaying here.
+    expect(clean.replay).toEqual({ status: 'idle', stateHash: session.getStateHash(), ticksCompleted: 60, detail: expect.stringContaining('not recording or replaying') });
     expect(clean.inspection.some((s) => s.id === 'first-transform')).toBe(true);
 
     teleportBey(session, 'first', 1, 1);

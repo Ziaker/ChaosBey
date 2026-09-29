@@ -37,7 +37,7 @@ const DEFAULT_SEED_COUNT = 3;
 const DEFAULT_MAX_TICKS = 6000;
 
 export interface SelfTestHandle {
-  runBatch(options?: { seeds?: string[]; matchups?: AiBatchMatchup[]; maxTicks?: number }): Promise<AiBatchReport>;
+  runBatch(options?: { seeds?: string[]; matchups?: AiBatchMatchup[]; maxTicks?: number; verifyReplays?: boolean }): Promise<AiBatchReport>;
   runScenarios(ids?: string[], aiSide?: 'first' | 'second'): Promise<ScenarioResult[]>;
   setSpeed(ticksPerStep: number): void;
   stop(): void;
@@ -102,6 +102,14 @@ export async function startSelfTestMode(mount: HTMLElement): Promise<SelfTestHan
   const seedPrefix = input('self-test-seed-prefix', 'text', 'self-test');
   const seedCount = input('self-test-seed-count', 'number', String(DEFAULT_SEED_COUNT));
   const maxTicks = input('self-test-max-ticks', 'number', String(DEFAULT_MAX_TICKS));
+  // M9: replay every match from its own recording and count divergences (GDD 163).
+  const verifyReplaysLabel = document.createElement('label');
+  verifyReplaysLabel.className = 'self-test__check';
+  const verifyReplays = document.createElement('input');
+  verifyReplays.type = 'checkbox';
+  verifyReplays.checked = true;
+  verifyReplays.setAttribute('data-testid', 'self-test-verify-replays');
+  verifyReplaysLabel.append(verifyReplays, text('Verify replays (divergence count)'));
   const speedSelect = document.createElement('select');
   speedSelect.setAttribute('data-testid', 'self-test-speed');
   for (const speed of SELF_TEST_SPEED_CHOICES) {
@@ -250,7 +258,12 @@ export async function startSelfTestMode(mount: HTMLElement): Promise<SelfTestHan
       lastShownCompleted = -1;
       minimap.clear();
       lastLabel = `${matchups.length} matchup(s) × ${seeds.length} seed(s)`;
-      batch = new AiBatchSession({ matchups, seeds, maxTicks: options.maxTicks ?? (Math.floor(Number(maxTicks.value)) || DEFAULT_MAX_TICKS) });
+      batch = new AiBatchSession({
+        matchups,
+        seeds,
+        maxTicks: options.maxTicks ?? (Math.floor(Number(maxTicks.value)) || DEFAULT_MAX_TICKS),
+        verifyReplays: options.verifyReplays ?? verifyReplays.checked,
+      });
       setStatus(`running batch: ${lastLabel}`);
       return new Promise<AiBatchReport>((resolve) => {
         batchResolve = resolve;
@@ -310,6 +323,7 @@ export async function startSelfTestMode(mount: HTMLElement): Promise<SelfTestHan
       labeledEl('Seed prefix', seedPrefix),
       labeledEl('Seeds per matchup', seedCount),
       labeledEl('Max ticks per match (hang limit)', maxTicks),
+      verifyReplaysLabel,
       labeledEl('Speed (GDD 164)', speedSelect),
       button('Run batch', () => void handle.runBatch(), 'self-test-run-batch'),
       button('Stop', () => handle.stop(), 'self-test-stop'),

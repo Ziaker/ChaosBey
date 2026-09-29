@@ -22,7 +22,9 @@ export function renderBatchReport(report: AiBatchReport, finished: boolean): str
     `average duration   ${report.averageDurationS.toFixed(2)} s`,
     `ring-outs / KOs    ${report.outcomes.ringOuts} / ${report.outcomes.kos} (draws ${report.outcomes.draws}, unresolved ${report.outcomes.unresolved})`,
     `Clash count        ${report.clashCount}`,
-    `divergence         UNSUPPORTED — ${report.divergence.reason}`,
+    report.divergence.status === 'checked'
+      ? `divergence         ${report.divergence.count} of ${report.divergence.checked} replays${report.divergence.diverged.map((d) => `; ${d.seed}: ${d.detail}`).join('')}`
+      : `divergence         NOT CHECKED — ${report.divergence.reason}`,
     `performance        ${report.performanceAnomalies.length} match(es) with ticks over ${report.timing.slowTickThresholdMs.toFixed(1)} ms`,
     `acceleration       ${report.timing.simulatedS.toFixed(1)} s simulated in ${(report.timing.wallMs / 1000).toFixed(2)} s busy = ${report.timing.simulatedPerWallSecond.toFixed(1)}× real time`,
   ];

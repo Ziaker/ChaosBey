@@ -56,7 +56,10 @@ describe('Self Test report view', () => {
     for (const field of ['matches', 'pass / fail', 'crashes', 'hangs', 'invalid states', 'average duration', 'ring-outs / KOs', 'Clash count', 'divergence', 'performance', 'acceleration', 'seeds']) {
       expect(textReport, field).toContain(field);
     }
-    expect(textReport).toMatch(/divergence\s+UNSUPPORTED/);
+    // An unverified batch never claims 0 divergences.
+    expect(textReport).toMatch(/divergence\s+NOT CHECKED/);
+    const verified = renderBatchReport(await runAiBatch({ matchups: MATCHUPS.slice(0, 1), seeds: SEEDS.slice(0, 1), verifyReplays: true }), true);
+    expect(verified).toMatch(/divergence\s+0 of 1 replays/);
     const json = JSON.parse(selfTestReportJson(report, []));
     expect(json.format).toBe('ChaosBeySelfTestReportV1');
     expect(json.batch.matches).toBe(1);

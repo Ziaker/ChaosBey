@@ -37,6 +37,12 @@ import { createDebugLabTools } from './DebugLabTools';
 import { SCENARIO_PRESETS, findScenarioPreset } from '../../self-test/scenarios/ScenarioPresets';
 import type { ScenarioSideScript } from '../../self-test/scenarios/ScenarioPresets';
 import { buildDebugReport } from '../report/buildDebugReport';
+import type { MatchConfig } from '../../config/match/MatchConfig';
+import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
+import { decodeReplay, encodeReplay } from '../../replay/format/ChaosBeyReplayV1';
+import { currentRuntimeFingerprint } from '../../replay/format/runtimeFingerprint';
+import { checkReplayCompatibility, framesFromReplay } from '../../replay/playback/replayPlayback';
+import { LiveReplayCheck, liveLabIncompatibility } from './DebugLabReplay';
 
 // ============================================================
 // DEBUG LAB MODE — TUNING
@@ -67,6 +73,14 @@ export interface DebugLabHandle {
   setCameraView(view: 'game' | 'overview'): void;
   /** Restarts on the current seed and sets up a GDD 68 preset (Beys placed, both sides scripted). */
   loadPreset(id: string): Promise<void>;
+  /** M9: restarts on the current seed and records the match from tick 0. */
+  startRecording(): Promise<void>;
+  /** M9: ends the recording; the ChaosBeyReplayV1 file text and the Debug Lab state edits made meanwhile (null if not recording). */
+  stopRecording(): { readonly text: string; readonly stateEdits: readonly string[] } | null;
+  /** M9: imports a replay file and plays it back live, checking every checkpoint. Resolves false (with the reason on the panel) if refused. */
+  playReplay(text: string): Promise<boolean>;
+  /** M9: the playback check's status line, or null when not replaying. */
+  replayStatus(): string | null;
 }
 
 declare global {
@@ -81,8 +95,10 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
 
   const keyboard = new KeyboardController();
   keyboard.attach();
-  const matchConfig = resolveMatchConfig();
-  const attackProfileSettings = resolveAttackProfileSettings(loadAttackProfileOverrides() ?? undefined);
+  const labMatchConfig = resolveMatchConfig();
+  const labAttackProfileSettings = resolveAttackProfileSettings(loadAttackProfileOverrides() ?? undefined);
+  /** M9: while a replay plays, the session is built from the replay's own config, never the Lab's (owner decision 3). */
+  let replayCheck: LiveReplayCheck | null = null;
 
   let session: MatchSession | null = null;
   let matchState = new GameStateMachine();
@@ -128,6 +144,7 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
       triangles: info.triangles,
       paused,
       ticksPerFixedStep: speed,
+      ...(replayCheck && session ? { replayState: replayCheck.describe(session.getTickIndex()) } : session?.isCapturingReplay() ? { replayState: 'recording (not replaying)' } : {}),
     };
   };
 
@@ -145,8 +162,9 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
       tickIndex: session.getTickIndex(),
       firstController: controllers.first,
       secondController: controllers.second,
-      // A finished round is frozen by tickMatch; say so, or ticks look stuck.
-      message: session.roundState.isOver ? `ROUND OVER (${session.roundState.result}) — frozen, restart to continue` : message,
+      // A finished round is frozen by tickMatch; say so, or ticks look stuck
+      // (after the latest message, which may be why, e.g. a refused replay).
+      message: [message, session.roundState.isOver ? `ROUND OVER (${session.roundState.result}) — frozen, restart to continue` : null].filter((m) => m !== null).join(' · ') || null,
     });
     panel.updateInspector(buildInspection(session, frameStats()));
   };
@@ -154,10 +172,27 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
 
   const runTicks = (count: number): void => {
     if (!session || restarting) return;
-    for (let i = 0; i < count; i++) session.tick();
+    for (let i = 0; i < count; i++) {
+      if (replayCheck && session.getTickIndex() >= replayCheck.length) {
+        // The recording ends here: stop instead of running past it.
+        paused = true;
+        message = replayCheck.describe(session.getTickIndex());
+        return;
+      }
+      session.tick();
+      replayCheck?.check(session.getTickIndex(), session.getStateHash());
+    }
   };
 
-  const createSession = async (seedText: string): Promise<void> => {
+  /** Leaving a replay: its controllers can't drive a fresh match. */
+  const leaveReplay = (): void => {
+    if (!replayCheck) return;
+    replayCheck = null;
+    controllers.first = INITIAL_CONTROLLERS.first;
+    controllers.second = INITIAL_CONTROLLERS.second;
+  };
+
+  const createSession = async (seedText: string, config?: { matchConfig: MatchConfig; attackProfileSettings: BeyAttackProfileSettings }): Promise<void> => {
     const myToken = ++restartToken;
     restarting = true;
     layers?.dispose();
@@ -172,8 +207,8 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
         scene: appRenderer.scene,
         camera: appRenderer.camera,
         seedText,
-        matchConfig,
-        attackProfileSettings,
+        matchConfig: config?.matchConfig ?? labMatchConfig,
+        attackProfileSettings: config?.attackProfileSettings ?? labAttackProfileSettings,
         telemetry,
         stateMachine: matchState,
         controllers: { first: controllers.first, second: controllers.second },
@@ -220,10 +255,13 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
       // `session` stuck at null with no round running. Treat blank the same
       // as null/undefined.
       const trimmed = seedText?.trim();
+      leaveReplay();
       await createSession(trimmed || session?.seedText || generateRandomSeedText());
       refreshPanel(0, 0);
     },
     setController: (side, spec) => {
+      if (replayCheck) message = 'controller changed: the replay no longer drives this side';
+      replayCheck = null;
       controllers[side] = spec;
       session?.setController(side, spec);
       // setController() may have moved the OTHER side off Keyboard too (only
@@ -259,11 +297,12 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
     },
     loadPreset: async (id) => {
       const preset = findScenarioPreset(id);
-      if (!preset || !preset.supported) {
-        message = preset ? `${preset.label}: ${preset.unsupportedReason ?? 'unsupported'}` : `unknown preset ${id}`;
+      if (!preset || !preset.supported || preset.run) {
+        message = !preset ? `unknown preset ${id}` : preset.run ? `${preset.label} runs headless: use the Self Test` : `${preset.label}: ${preset.unsupportedReason ?? 'unsupported'}`;
         refreshPanel(0, 0);
         return;
       }
+      leaveReplay();
       const toSpec = (side: ScenarioSideScript): SideControllerSpec => (side.kind === 'script' ? { kind: 'scripted', label: preset.id, frames: side.frames } : { kind: 'idle' });
       controllers.first = toSpec(preset.first);
       controllers.second = toSpec(preset.second);
@@ -274,6 +313,49 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
       message = `preset: ${preset.label}`;
       refreshPanel(0, 0);
     },
+    startRecording: async () => {
+      leaveReplay();
+      await createSession(session?.seedText ?? generateRandomSeedText());
+      if (!session) return;
+      session.startReplayCapture({ fingerprint: await currentRuntimeFingerprint() });
+      message = 'recording from tick 0 (Stop & download to save the replay)';
+      refreshPanel(0, 0);
+    },
+    stopRecording: () => {
+      if (!session?.isCapturingReplay()) return null;
+      const { replay, debugMutations } = session.finishReplayCapture();
+      const stateEdits = debugMutations.map((m) => `tick ${m.tickIndex}: ${m.description}`);
+      message = `recorded ${replay.frames.length} ticks${stateEdits.length > 0 ? ` — WARNING: ${stateEdits.length} state edit(s) while recording, this replay will diverge` : ''}`;
+      refreshPanel(0, 0);
+      return { text: encodeReplay(replay), stateEdits };
+    },
+    playReplay: async (text) => {
+      const decoded = decodeReplay(text);
+      if (!decoded.ok) {
+        message = `replay refused: ${decoded.errors.slice(0, 3).map((e) => `${e.path}: ${e.code}`).join('; ')}`;
+        refreshPanel(0, 0);
+        return false;
+      }
+      const replay = decoded.replay;
+      const compatibility = checkReplayCompatibility(replay, await currentRuntimeFingerprint());
+      const refusal = compatibility.ok ? liveLabIncompatibility(replay, compatibility) : compatibility.refusals.map((r) => r.code).join(', ');
+      if (refusal) {
+        message = `replay refused: ${refusal}`;
+        refreshPanel(0, 0);
+        return false;
+      }
+      const frames = framesFromReplay(replay);
+      controllers.first = { kind: 'replay', label: 'replay', frames: frames.first };
+      controllers.second = { kind: 'replay', label: 'replay', frames: frames.second };
+      await createSession(replay.config.seedText, { matchConfig: replay.config.matchConfig, attackProfileSettings: replay.config.attackProfileSettings });
+      if (!session) return false;
+      replayCheck = new LiveReplayCheck(replay);
+      replayCheck.check(0, session.getStateHash());
+      message = replayCheck.describe(0);
+      refreshPanel(0, 0);
+      return true;
+    },
+    replayStatus: () => (replayCheck && session ? replayCheck.describe(session.getTickIndex()) : null),
   };
 
   panel.addGroup(
@@ -312,14 +394,38 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   for (const preset of SCENARIO_PRESETS) {
     const option = document.createElement('option');
     option.value = preset.id;
-    option.textContent = preset.supported ? preset.label : `${preset.label} (unsupported until M9)`;
-    option.disabled = !preset.supported;
+    option.textContent = preset.run ? `${preset.label} (Self Test only)` : preset.supported ? preset.label : `${preset.label} (unsupported)`;
+    option.disabled = !preset.supported || preset.run !== undefined;
     presetSelect.append(option);
   }
   presetSelect.addEventListener('change', () => presetSelect.blur());
   panel.addGroup('Scenario presets (GDD 68)', [
     labeled('Preset', presetSelect),
     button('Load preset (restart + set up, both sides scripted)', 'debug-lab-preset-load', () => void handle.loadPreset(presetSelect.value)),
+  ]);
+  const replayFile = document.createElement('input');
+  replayFile.type = 'file';
+  replayFile.accept = '.json,application/json';
+  replayFile.setAttribute('data-testid', 'debug-lab-replay-file');
+  replayFile.addEventListener('change', () => {
+    const file = replayFile.files?.[0];
+    if (file) void file.text().then((text) => handle.playReplay(text));
+    replayFile.value = '';
+    replayFile.blur();
+  });
+  panel.addGroup('Replay (M9)', [
+    button('Record from start (restart + record)', 'debug-lab-replay-record', () => void handle.startRecording()),
+    button('Stop & download replay (.json)', 'debug-lab-replay-stop', () => {
+      const recorded = handle.stopRecording();
+      if (!recorded) return;
+      const url = URL.createObjectURL(new Blob([recorded.text], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `chaosbey-replay-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }),
+    labeled('Import & play', replayFile),
   ]);
   panel.addGroup('Mutations — change the simulation (GDD 70)', tools.mutationControls);
   panel.addGroup('Debug report', tools.reportControls);

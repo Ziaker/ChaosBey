@@ -28,7 +28,7 @@
 // - AI unable to act for abnormal duration ............ ai-inactive (warning)
 // - match never terminating ........................... AiBatchRunner `hang`
 // - unhandled JS error ................................ AiBatchRunner `crash`
-// - replay/state hash divergence ...................... UNSUPPORTED until Milestone 9
+// - replay/state hash divergence ...................... AiBatchRunner `divergence` (verifyReplays, M9)
 // ============================================================
 
 import type { Bey } from '../../bey/core/Bey';

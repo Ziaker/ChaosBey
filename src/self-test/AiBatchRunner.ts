@@ -19,6 +19,12 @@ import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
 import { RoundOutcome } from '../combat/round-rules/RoundState';
 import { FIXED_DELTA_SECONDS } from '../physics/fixed-step/FixedTimestepLoop';
 import { NullAiMashSource } from '../combat/clash/ClashMash';
+import type { RuntimeFingerprint, StateCheckpoint, TicksCompleted } from '../replay/contracts';
+import type { ChaosBeyReplayV1 } from '../replay/format/ChaosBeyReplayV1';
+import { currentRuntimeFingerprint } from '../replay/format/runtimeFingerprint';
+import { compareCheckpoints } from '../replay/playback/divergence';
+import { HeadlessReplayRun } from '../replay/playback/HeadlessReplayRun';
+import { buildPlaybackWorld, checkReplayCompatibility, framesFromReplay } from '../replay/playback/replayPlayback';
 import type { StateHash } from '../replay/contracts';
 import { stateHash } from '../replay/state/stateHash';
 import { SelfTestMatchWorld } from './SelfTestMatchWorld';
@@ -53,12 +59,32 @@ export interface AiBatchConfig {
   readonly slowTickThresholdMs?: number;
   /** Per-tick hook passed to every match (diagnostics, or fault injection in tests). */
   readonly onTick?: AiMatchSetup['onTick'];
+  /**
+   * M9: record every match and replay it from its own recording right
+   * after it ends (rebuilt from the replay's config, through the real
+   * runtime). A replay that doesn't verify counts as a divergence and fails
+   * the match. The replay ticks run inside the same step budget, so a
+   * stepped batch stays responsive.
+   */
+  readonly verifyReplays?: boolean;
   /** Called after each match, for progress reporting. */
   readonly onMatchComplete?: (entry: AiBatchMatchEntry, index: number, total: number) => void;
 }
 
-/** Why a match failed. `hang` = the round did not end within `maxTicks`. */
-export type AiBatchFailureReason = 'crash' | 'invalid-state' | 'hang';
+/**
+ * Why a match failed. `hang` = the round did not end within `maxTicks`.
+ * `divergence` = its own replay didn't reproduce it (only when the batch
+ * verifies replays): a determinism bug.
+ */
+export type AiBatchFailureReason = 'crash' | 'invalid-state' | 'hang' | 'divergence';
+
+/** M9: the result of replaying a batch match from its own recording. */
+export interface AiBatchReplayCheck {
+  readonly status: 'verified' | 'diverged' | 'incomplete' | 'refused' | 'crashed';
+  /** First TicksCompleted whose state differed (diverged only). */
+  readonly firstMismatch: TicksCompleted | null;
+  readonly detail: string;
+}
 
 export interface AiBatchMatchEntry {
   /** The exact seed simulateAiMatch() used: replaying it reproduces the match. */
@@ -89,23 +115,29 @@ export interface AiBatchMatchEntry {
    * decision 6 in docs/ai/m9-status.md).
    */
   readonly finalStateHash: StateHash | null;
+  /** Null unless the batch verifies replays (AiBatchConfig.verifyReplays). */
+  readonly replayCheck: AiBatchReplayCheck | null;
 }
 
 /**
- * Replay divergence needs state hashes and replay playback, which arrive
- * with Milestone 9 (GDD section 145). Until then the report says so
- * explicitly instead of claiming zero divergences.
+ * GDD 163 divergence count (M9). Only a batch that verifies replays can
+ * count divergences; otherwise the report says so instead of claiming 0.
  */
-export interface UnsupportedDivergence {
-  readonly status: 'unsupported';
-  readonly count: null;
-  readonly reason: string;
-}
+export type AiBatchDivergence =
+  | { readonly status: 'not-checked'; readonly count: null; readonly reason: string }
+  | {
+      readonly status: 'checked';
+      /** Matches whose replay did not verify. */
+      readonly count: number;
+      /** Matches whose replay was checked (crashed matches have none). */
+      readonly checked: number;
+      readonly diverged: readonly { readonly seed: string; readonly matchup: string; readonly detail: string }[];
+    };
 
-export const DIVERGENCE_UNSUPPORTED_UNTIL_M9: UnsupportedDivergence = {
-  status: 'unsupported',
+export const DIVERGENCE_NOT_CHECKED: AiBatchDivergence = {
+  status: 'not-checked',
   count: null,
-  reason: 'Divergence detection needs state hashes and replay playback, which arrive with Milestone 9 (GDD section 145).',
+  reason: 'this batch did not verify replays (enable replay verification to count divergences)',
 };
 
 export interface AiBatchReport {
@@ -127,7 +159,7 @@ export interface AiBatchReport {
     readonly unresolved: number;
   };
   readonly clashCount: number;
-  readonly divergence: UnsupportedDivergence;
+  readonly divergence: AiBatchDivergence;
   /** Matches with at least one tick slower than the threshold. Diagnostic, not a failure. */
   readonly performanceAnomalies: readonly { readonly seed: string; readonly matchup: string; readonly slowTicks: number; readonly maxTickMs: number }[];
   /** GDD 67 detections across the batch, by kind (invalid states and warnings). */
@@ -178,7 +210,19 @@ function entryFromRecord(seed: string, matchup: string, record: AiMatchRecord, f
     maxTickMs: record.timing.maxTickMs,
     slowTicks: record.timing.slowTicks,
     finalStateHash,
+    replayCheck: null,
   };
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+}
+
+/** The entry with its replay check; a replay that didn't verify fails the match as a divergence. */
+function withReplayCheck(entry: AiBatchMatchEntry, replayCheck: AiBatchReplayCheck): AiBatchMatchEntry {
+  if (replayCheck.status === 'verified') return { ...entry, replayCheck };
+  const failureReasons: AiBatchFailureReason[] = [...entry.failureReasons, 'divergence'];
+  return { ...entry, replayCheck, failureReasons, passed: false };
 }
 
 function crashEntry(seed: string, matchup: string, error: unknown): AiBatchMatchEntry {
@@ -199,6 +243,7 @@ function crashEntry(seed: string, matchup: string, error: unknown): AiBatchMatch
     maxTickMs: 0,
     slowTicks: 0,
     finalStateHash: null,
+    replayCheck: null,
   };
 }
 
@@ -228,6 +273,18 @@ export function isOnlyKnownIssues(entry: AiBatchMatchEntry): boolean {
   return invalid.length === entry.invalidDetectionCount && invalid.every((d) => d.knownIssue !== null);
 }
 
+function summarizeDivergence(entries: readonly AiBatchMatchEntry[]): AiBatchDivergence {
+  const checked = entries.filter((e) => e.replayCheck !== null);
+  if (checked.length === 0) return DIVERGENCE_NOT_CHECKED;
+  const diverged = checked.filter((e) => e.replayCheck!.status !== 'verified');
+  return {
+    status: 'checked',
+    count: diverged.length,
+    checked: checked.length,
+    diverged: diverged.map((e) => ({ seed: e.seed, matchup: e.matchup, detail: e.replayCheck!.detail })),
+  };
+}
+
 /** Summarizes finished entries into the GDD 163 report. Pure: the same entries always give the same report. */
 export function summarizeAiBatch(entries: readonly AiBatchMatchEntry[], wallMs: number, slowTickThresholdMs: number): AiBatchReport {
   const finished = entries.filter((e) => e.outcome !== null);
@@ -249,7 +306,7 @@ export function summarizeAiBatch(entries: readonly AiBatchMatchEntry[], wallMs: 
       unresolved: count((e) => e.outcome === RoundOutcome.Ongoing),
     },
     clashCount: entries.reduce((sum, e) => sum + e.clashes, 0),
-    divergence: DIVERGENCE_UNSUPPORTED_UNTIL_M9,
+    divergence: summarizeDivergence(entries),
     performanceAnomalies: entries.filter((e) => e.slowTicks > 0).map((e) => ({ seed: e.seed, matchup: e.matchup, slowTicks: e.slowTicks, maxTickMs: e.maxTickMs })),
     anomalyKinds: countAnomalyKinds(entries),
     knownIssues: countKnownIssues(entries),
@@ -287,8 +344,16 @@ export class AiBatchSession {
   private readonly jobs: BatchJob[] = [];
   private readonly entries: AiBatchMatchEntry[] = [];
   private readonly slowTickThresholdMs: number;
-  private current: { job: BatchJob; world: SelfTestMatchWorld; steps: Generator<number, AiMatchRecord, void>; tick: number } | null = null;
+  private current: {
+    job: BatchJob;
+    world: SelfTestMatchWorld;
+    steps: Generator<number, AiMatchRecord, void>;
+    tick: number;
+    /** Set once the match ended and its replay is being played back (verifyReplays). */
+    playback: { entry: AiBatchMatchEntry; replay: ChaosBeyReplayV1; run: HeadlessReplayRun; produced: StateCheckpoint[] } | null;
+  } | null = null;
   private busyMs = 0;
+  private fingerprint: RuntimeFingerprint | null = null;
 
   constructor(private readonly config: AiBatchConfig) {
     this.slowTickThresholdMs = config.slowTickThresholdMs ?? DEFAULT_SLOW_TICK_THRESHOLD_MS;
@@ -337,22 +402,29 @@ export class AiBatchSession {
                 difficulty: this.config.difficulty,
                 maxTicks: this.config.maxTicks ?? DEFAULT_AI_MATCH_MAX_TICKS,
                 onTick: this.config.onTick,
+                ...(this.config.verifyReplays ? { record: { fingerprint: await this.runtimeFingerprint() } } : {}),
               },
               this.slowTickThresholdMs,
             );
-            this.current = { job, world, steps, tick: 0 };
+            this.current = { job, world, steps, tick: 0, playback: null };
           } catch (error) {
             this.finish(crashEntry(job.seed, job.label, error));
             continue;
           }
         }
         const run = this.current!;
+        if (run.playback) {
+          budget -= this.stepPlayback(run.playback);
+          continue;
+        }
         try {
           const next = run.steps.next();
           budget--;
           if (next.done) {
-            const finalStateHash = stateHash(run.world.getCanonicalState(next.value.stats.ticks));
-            this.finish(entryFromRecord(run.job.seed, run.job.label, next.value, finalStateHash));
+            // The hash is read from the match world before it's swapped for a playback world.
+            const entry = entryFromRecord(run.job.seed, run.job.label, next.value, stateHash(run.world.getCanonicalState(next.value.stats.ticks)));
+            if (this.config.verifyReplays) await this.startPlayback(entry, next.value.replay);
+            else this.finish(entry);
           } else {
             run.tick = next.value + 1;
           }
@@ -364,6 +436,58 @@ export class AiBatchSession {
       this.busyMs += performance.now() - startedAtMs;
     }
     return this.isDone;
+  }
+
+  private async runtimeFingerprint(): Promise<RuntimeFingerprint> {
+    this.fingerprint ??= await currentRuntimeFingerprint();
+    return this.fingerprint;
+  }
+
+  /** The match ended: swap its world for a playback world rebuilt from its own replay. */
+  private async startPlayback(entry: AiBatchMatchEntry, replay: ChaosBeyReplayV1 | undefined): Promise<void> {
+    const run = this.current!;
+    if (!replay) {
+      this.finish(withReplayCheck(entry, { status: 'refused', firstMismatch: null, detail: 'the match was not recorded' }));
+      return;
+    }
+    const compatibility = checkReplayCompatibility(replay, await this.runtimeFingerprint());
+    if (!compatibility.ok) {
+      this.finish(withReplayCheck(entry, { status: 'refused', firstMismatch: null, detail: `refused: ${compatibility.refusals.map((r) => r.code).join(', ')}` }));
+      return;
+    }
+    try {
+      const world = await buildPlaybackWorld(replay, compatibility.beys);
+      run.world.dispose();
+      run.world = world;
+      run.tick = 0;
+      const playback = new HeadlessReplayRun(world, framesFromReplay(replay));
+      run.playback = { entry, replay, run: playback, produced: [playback.checkpoint()] };
+    } catch (error) {
+      this.finish(withReplayCheck(entry, { status: 'crashed', firstMismatch: null, detail: `playback crashed: ${errorText(error)}` }));
+    }
+  }
+
+  /** One playback tick, or the verdict once the replay is played out. Returns the ticks used (0 or 1). */
+  private stepPlayback(playback: NonNullable<NonNullable<AiBatchSession['current']>['playback']>): number {
+    try {
+      if (!playback.run.isFinished()) {
+        playback.run.advance();
+        playback.produced.push(playback.run.checkpoint());
+        this.current!.tick = playback.run.ticksCompleted;
+        return 1;
+      }
+      const comparison = compareCheckpoints(playback.replay.checkpoints, playback.produced);
+      const check: AiBatchReplayCheck =
+        comparison.status === 'match'
+          ? { status: 'verified', firstMismatch: null, detail: `${playback.replay.frames.length} ticks, ${comparison.compared} checkpoints identical` }
+          : comparison.status === 'diverged'
+            ? { status: 'diverged', firstMismatch: comparison.firstMismatch.ticksCompleted, detail: `diverged at TicksCompleted ${comparison.firstMismatch.ticksCompleted}` }
+            : { status: 'incomplete', firstMismatch: null, detail: `playback stopped before TicksCompleted ${comparison.missing}` };
+      this.finish(withReplayCheck(playback.entry, check));
+    } catch (error) {
+      this.finish(withReplayCheck(playback.entry, { status: 'crashed', firstMismatch: null, detail: `playback crashed: ${errorText(error)}` }));
+    }
+    return 0;
   }
 
   /** The GDD 163 report over the matches finished so far. */
