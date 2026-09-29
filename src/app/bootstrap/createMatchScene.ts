@@ -10,6 +10,7 @@ import { createArenaColliders } from '../../arena/colliders/createArenaColliders
 import { createBey, type Bey } from '../../bey/core/Bey';
 import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
+import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import { applyAttackProfileSettings, createDefaultAttackProfileSettings, type BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { FIRST_SPAWN, SECOND_SPAWN } from './matchSpawns';
@@ -40,20 +41,29 @@ function createSyncFn(body: Bey['body'], visual: BeyVisual) {
   };
 }
 
-// Milestone 6 (GDD section 6/31): an arbitrary prototype pairing for this
-// scene, not a final roster choice — the third archetype (Stamina, see
-// BeyArchetypes.ts) exists too and can be swapped in just as easily, since
-// all three are equally unapproved prototypes pending the owner's visual
-// approval gate (GDD section 96/97).
+/** Which Bey each side plays. */
+export interface MatchBeys {
+  readonly first: BeyDefinition;
+  readonly second: BeyDefinition;
+}
+
+/**
+ * The pairing used when nobody picked one (Debug Lab, quick play, tests):
+ * Attack vs Defense, the M6 prototype pairing. M10's Character Select and
+ * Pregame pick any of the three archetypes for either side.
+ */
+export const DEFAULT_MATCH_BEYS: MatchBeys = { first: ATTACK_ARCHETYPE, second: DEFENSE_ARCHETYPE };
+
 export function createMatchScene(
   scene: THREE.Object3D,
   physics: PhysicsWorld,
   attackProfileSettings: BeyAttackProfileSettings = createDefaultAttackProfileSettings(),
+  beys: MatchBeys = DEFAULT_MATCH_BEYS,
 ): MatchScene {
   createArenaColliders(scene, physics);
 
-  const first = createBey(physics, FIRST_SPAWN, applyAttackProfileSettings(ATTACK_ARCHETYPE, attackProfileSettings));
-  const second = createBey(physics, SECOND_SPAWN, applyAttackProfileSettings(DEFENSE_ARCHETYPE, attackProfileSettings));
+  const first = createBey(physics, FIRST_SPAWN, applyAttackProfileSettings(beys.first, attackProfileSettings));
+  const second = createBey(physics, SECOND_SPAWN, applyAttackProfileSettings(beys.second, attackProfileSettings));
 
   const firstVisual = first.definition.appearance.createVisual();
   const secondVisual = second.definition.appearance.createVisual();

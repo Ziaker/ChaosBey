@@ -27,3 +27,8 @@ export function appModeHref(mode: AppMode, current: { readonly pathname: string;
   const query = params.toString();
   return query ? `${current.pathname}?${query}` : current.pathname;
 }
+
+/** `?mode=play&quick`: start the default match directly, skipping the player screens. */
+export function isQuickPlay(search: string): boolean {
+  return new URLSearchParams(search).has('quick');
+}

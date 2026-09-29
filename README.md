@@ -45,7 +45,7 @@ Smoke-test environment variables:
 
 ## Main Menu
 
-The game URL (`/ChaosBey/`) opens the Main Menu (GDD 56). **PLAY** starts the Player-vs-AI match. The developer tools are kept apart from the player flow, in a separate **Developer / Debug** section with **DEBUG LAB** and **SELF TEST** (Back or `Esc` returns). Each entry loads the same URL a direct link uses — `?mode=play`, `?mode=debug-lab`, `?mode=self-test` — so the browser Back button returns to the menu. The menu's look is provisional until its visual approval.
+The game URL (`/ChaosBey/`) opens the Main Menu (GDD 56). **PLAY** opens the player flow: Character Select, the Player-vs-AI match, then Results (Rematch / Change Bey / Main Menu). `?mode=play&quick` skips the screens and starts the default match with the debug overlay up. The developer tools are kept apart from the player flow, in a separate **Developer / Debug** section with **DEBUG LAB** and **SELF TEST** (Back or `Esc` returns). Each entry loads the same URL a direct link uses — `?mode=play`, `?mode=debug-lab`, `?mode=self-test` — so the browser Back button returns to the menu. The menu's look is provisional until its visual approval.
 
 ## Debug Lab
 

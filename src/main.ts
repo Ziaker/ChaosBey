@@ -7,7 +7,8 @@
 // Modes (URL query `mode`):
 // - default (no `mode`): the Main Menu (app/menu/MainMenu.ts), whose
 //   entries load the URLs below;
-// - `play`: the Player-vs-AI match (app/modes/playMode.ts);
+// - `play`: the player flow — Character Select, the Player-vs-AI match,
+//   Results (app/modes/playMode.ts); `play&quick` starts the match directly;
 // - `debug-lab`: the Debug Lab developer tool (debug/lab/DebugLabMode.ts);
 // - `self-test`: the browser Self Test (debug/self-test-ui/SelfTestMode.ts).
 // ============================================================
@@ -16,7 +17,7 @@ import { WebGl2UnavailableError, showWebGl2UnavailableScreen } from './app/boots
 import { createRenderer } from './app/bootstrap/createRenderer';
 import { startMainMenu } from './app/menu/MainMenu';
 import { startPlayMode } from './app/modes/playMode';
-import { resolveAppMode } from './app/modes/appMode';
+import { isQuickPlay, resolveAppMode } from './app/modes/appMode';
 import { startDebugLabMode } from './debug/lab/DebugLabMode';
 import { startSelfTestMode } from './debug/self-test-ui/SelfTestMode';
 
@@ -24,7 +25,8 @@ async function bootstrap(): Promise<void> {
   const canvas = document.querySelector<HTMLCanvasElement>('#app-canvas');
   const debugOverlayRoot = document.querySelector<HTMLElement>('#debug-overlay-root');
   const attackSettingsRoot = document.querySelector<HTMLElement>('#attack-settings-root');
-  if (!canvas || !debugOverlayRoot || !attackSettingsRoot) {
+  const screenRoot = document.querySelector<HTMLElement>('#screen-root');
+  if (!canvas || !debugOverlayRoot || !attackSettingsRoot || !screenRoot) {
     throw new Error('bootstrap: required DOM mount points are missing from index.html.');
   }
 
@@ -45,7 +47,7 @@ async function bootstrap(): Promise<void> {
   if (mode === 'debug-lab') {
     await startDebugLabMode(appRenderer, debugOverlayRoot);
   } else {
-    await startPlayMode(appRenderer, { debugOverlayRoot, attackSettingsRoot });
+    await startPlayMode(appRenderer, { debugOverlayRoot, attackSettingsRoot, screenRoot }, { quick: isQuickPlay(window.location.search) });
   }
 }
 
