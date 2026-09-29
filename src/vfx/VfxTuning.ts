@@ -41,7 +41,7 @@ export const TRAIL_COLOR_SECOND_HEX = 0xff6b6b; // matches createMatchScene's se
 // --- Speed lines (camera-attached, active near top speed) ---
 // GDD requirement: streaks must track the Bey's actual movement direction
 // projected against the camera, not sit as a fixed radial overlay — see
-// CombatCameraController's speedLinesScreenDirection output and
+// the camera's speedLinesScreenDirection output (sessionCamera.ts) and
 // SpeedLinesVfx's pure direction helpers.
 export const SPEED_LINES_THRESHOLD_MPS = INTENDED_MAX_SPEED_MPS * 0.7;
 export const SPEED_LINES_FULL_OPACITY_SPEED_MPS = INTENDED_MAX_SPEED_MPS * 1.1;

@@ -74,3 +74,55 @@ Owner order for M11:
 
 - In Directional mode, the gamepad triggers (RT/LT, "forward/back" in Classic) still read as screen up/down. The stick or D-pad is the intended input.
 - Drift in Directional mode needs the direction held off the heading. Once the heading catches up, the drift ends, just as it does in Classic when you release the steer key.
+
+## Lane 2 — camera A/B/C in Settings + Clash forcing B without orbit
+
+### What changed
+
+- **The approved director is the game camera.** `prototypes/camera-concepts/src/director/` has been ported to `src/camera/director/` without changes:
+  - the three presets, with every parameter identical to `camera-approval.md` §12;
+  - the shared director constants.
+  
+  A test checks that the port reproduces the lab director tick for tick on real fights. `CombatCameraController` and `ClashCameraDirector` (the M4/M5 engineering values) are removed. Hitstop stays as it was, in `app/simulation/Hitstop.ts` (approval item 10.6).
+- **Settings → Graphics → Camera** offers Arena Fighter (A), Cinematic Hybrid (B) and Hyper Dynamic (C), each with a one-line description.
+  - The choice is saved in `PlayerSettings.cameraPreset`.
+  - It is used in the normal match, the Pause menu's settings and the Debug Lab.
+- **The Clash always forces B, without orbit** (`clash-presentation-approval.md` §3.6 and §5).
+  - `CameraRig` runs A, B and C every tick on the same `FightFrame`, all three with `clashOrbit: false`.
+  - The screen blends toward B following B's own Clash context weight, which ramps at B's approved `transitionSpeed`. Entering and leaving the Clash is therefore a smooth transition, never a cut.
+  - Once that weight drops below 0.001, the player's preset is back exactly.
+  - A player on B sees one continuous camera.
+- **No unnecessary cuts.** Changing preset mid-match (from Pause → Settings) crossfades over 0.6 s.
+- **Camera effects off** ("Camera shake & zoom") now removes the shake and the impact FOV punch. It no longer resets the FOV to a fixed value, so the preset's framing (speed FOV, contexts) remains.
+- **Presentation only.** The camera reads a read-only `FightFrame` built from the tick. Nothing it computes reaches the simulation, the replay or the state hash. A test shows identical state hashes for A, B and C, including a live preset switch.
+- **Debug.**
+  - F3 shows `preset · mode` and `clash camera B` (the share on screen).
+  - The Debug Lab inspector's Camera section shows: preset (and crossfade), active mode, forced B share, FOV and impact punch, target, distance, yaw and shoulder, shake, the high-speed context, and the director's modifiers.
+
+### Choices made while items are still open in `camera-approval.md` §10 (need the owner's confirmation)
+
+| Item | What this lane does | Why |
+|---|---|---|
+| 10.1 Default for a new player | **B** | The approval's recommendation; one line to change (`DEFAULT_PLAYER_SETTINGS.cameraPreset`) |
+| 10.2 Switching mid-match | Allowed from Pause → Settings, with a 0.6 s crossfade | The approval's recommendation |
+| 10.3 Names | Arena Fighter / Cinematic Hybrid / Hyper Dynamic, each with a short description | The lab's names |
+| 10.4 Player base FOV | Not added (the preset's own FOV) | Undecided; nothing invented |
+| 10.5 Shake ×1.35 | Not applied (the presets' shake as seen in the lab) | The approval's recommendation |
+| 10.8 Ring-Out/Finisher after the round ends | The game still freezes at the end of the round; the Finisher frames the frozen scene. No presentation-only physics | Undecided; not changed |
+
+### Tests
+
+- `tests/deterministic/cameraRig.test.ts` (real lab fights):
+  - the presets equal the approved values;
+  - the port equals the lab director tick for tick;
+  - `clashOrbit: false` changes nothing before the Clash and holds the angle during it (< 3° in total, against more than 45° for the lab orbit);
+  - for A and C the Clash shows B, then the player's own camera exactly;
+  - B sees one director;
+  - no per-tick eye jump beyond what the directors themselves make;
+  - both Beys stay in frame through the Clash;
+  - the crossfade on a preset switch;
+  - state hashes are identical across A, B and C.
+- `tests/smoke/cameraPresets.spec.ts`:
+  - Settings A/B/C with B as default, persisted;
+  - a match on each preset;
+  - Debug Lab Clash preset: a player on A sees B with no orbit, then A again.

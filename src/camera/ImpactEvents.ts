@@ -41,7 +41,7 @@ export interface ImpactEvent {
   isFirst: boolean;
   /**
    * Overrides which side (if any) camera "knockback follow" should bias
-   * toward for this specific event — see CombatCameraController's
+   * toward for this specific event — see the camera director's
    * KNOCKBACK_FOLLOW_EVENT_KINDS consumer. `null` means no unilateral
    * bias at all (e.g. a Clash Tie's symmetric/central presentation, where
    * `isFirst` would otherwise have to arbitrarily pick a side it doesn't

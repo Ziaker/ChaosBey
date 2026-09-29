@@ -21,8 +21,17 @@ import { DEFAULT_QUALITY_PRESET, QualityPreset } from '../runtime/QualityPreset'
 export type ControlScheme = 'directional' | 'classic';
 export const CONTROL_SCHEMES: readonly ControlScheme[] = ['directional', 'classic'];
 
+/**
+ * Combat camera (M11, docs/design-decisions/camera-approval.md): one of the
+ * three approved presets — A Arena Fighter, B Cinematic Hybrid, C Hyper
+ * Dynamic. Presentation only; the Clash always uses B without orbit.
+ */
+export type CameraPresetSetting = 'A' | 'B' | 'C';
+export const CAMERA_PRESET_SETTINGS: readonly CameraPresetSetting[] = ['A', 'B', 'C'];
+
 export interface PlayerSettings {
   readonly quality: QualityPreset;
+  readonly cameraPreset: CameraPresetSetting;
   readonly controlScheme: ControlScheme;
   /** Camera shake and the speed/impact FOV kick (off = steadier camera). */
   readonly cameraEffects: boolean;
@@ -36,6 +45,8 @@ export interface PlayerSettings {
 
 export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   quality: DEFAULT_QUALITY_PRESET,
+  // B until the owner picks the first-time default (camera-approval.md 10.1 recommends B).
+  cameraPreset: 'B',
   controlScheme: 'directional',
   cameraEffects: true,
   pauseOnFocusLoss: true,
@@ -63,8 +74,10 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
   const bool = (key: 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart'): boolean => (typeof input[key] === 'boolean' ? (input[key] as boolean) : (DEFAULT_PLAYER_SETTINGS[key] as boolean));
   const quality = Object.values(QualityPreset).find((q) => q === input.quality) ?? DEFAULT_PLAYER_SETTINGS.quality;
   const controlScheme = CONTROL_SCHEMES.find((c) => c === input.controlScheme) ?? DEFAULT_PLAYER_SETTINGS.controlScheme;
+  const cameraPreset = CAMERA_PRESET_SETTINGS.find((c) => c === input.cameraPreset) ?? DEFAULT_PLAYER_SETTINGS.cameraPreset;
   return {
     quality,
+    cameraPreset,
     controlScheme,
     cameraEffects: bool('cameraEffects'),
     pauseOnFocusLoss: bool('pauseOnFocusLoss'),

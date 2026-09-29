@@ -52,7 +52,11 @@ export interface DebugOverlayState {
   secondIsBroken: boolean;
   roundResult: string;
 
-  // Camera/game-feel (Milestone 4, GDD section 50+).
+  // Camera/game-feel (Milestone 4, GDD section 50+; director M11).
+  /** e.g. "B Cinematic Hybrid · CloseCombat". */
+  cameraPresetMode: string;
+  /** 0..1 share of the forced Clash camera (B, no orbit) on screen. */
+  cameraClashBlend: number;
   cameraFovDeg: number;
   cameraShakeOffsetM: { x: number; y: number; z: number };
   isHitstopActive: boolean;
@@ -182,7 +186,9 @@ export class DebugOverlay {
       `stamina          ${(state.secondStaminaFraction * 100).toFixed(0)}%\n` +
       `stability        ${(state.secondStabilityFraction * 100).toFixed(0)}%${state.secondIsBroken ? ' BROKEN' : ''}\n` +
       `round            ${state.roundResult}\n` +
-      `-- camera (M4) --\n` +
+      `-- camera --\n` +
+      `preset · mode    ${state.cameraPresetMode}\n` +
+      `clash camera B   ${state.cameraClashBlend > 0.001 ? `${(state.cameraClashBlend * 100).toFixed(0)}% (no orbit)` : 'off'}\n` +
       `fov              ${state.cameraFovDeg.toFixed(1)} deg\n` +
       `shake offset     ${fmtVec3(state.cameraShakeOffsetM)}\n` +
       `hitstop          ${state.isHitstopActive ? `ACTIVE (${state.hitstopRemainingS.toFixed(3)}s left)` : 'idle'}\n` +
