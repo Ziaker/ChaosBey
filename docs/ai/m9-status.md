@@ -28,11 +28,19 @@ Status values: **DONE** (merged and tested), **IN PROGRESS** (PR named),
 5. **Strict floats.** Only `-0 → +0` and NaN → one pattern are canonicalized;
    then a stable binary representation. No rounding. A tolerant comparator may
    exist for diagnosis only.
-6. **Chromium is the only reference browser.** The guarantee: same build +
-   same config + same seed + same inputs, in Chromium, gives the same hashes
-   and the same result. Firefox is out of scope. The replay still carries a
-   general fingerprint (format, schema and RNG versions, build/commit, Rapier
-   version).
+6. **Supported determinism (revised by the owner after lane E's
+   finding).** ChaosBey guarantees deterministic reproduction within the
+   same build in the reference environment the project uses. Bit-for-bit
+   equality across JavaScript engines, browser versions or Node is not part
+   of the contract. Chromium is the CI reference, not a requirement for
+   players: the game runs in the player's browser on GitHub Pages.
+   - The replay's general fingerprint (format, schema and RNG versions,
+     build/commit, Rapier version) does **not** include the browser version.
+   - A replay played in another engine or browser version may simply report
+     `diverged`; no universal compatibility is claimed.
+   - The math is unchanged (no custom `sin`/`cos`/`pow`).
+   - Node is an auxiliary test environment and may differ by 1 ULP.
+   - Firefox is out of scope for CI.
 7. **Record and play back `ControllerActions`, per side, per fixed tick.** No
    raw keyboard events. Playback runs the real runtime through a
    `ReplayController`; there is no second simulator.
@@ -49,9 +57,9 @@ Status values: **DONE** (merged and tested), **IN PROGRESS** (PR named),
 | Contracts | `src/replay/contracts.ts` + this file | — | no | DONE (#39) |
 | A | M9-0 (hitstop into the simulation, RNG scheme 2) + `CanonicalMatchStateV1` + state hash | Contracts | yes (hitstop wiring, RNG) | DONE (#40) |
 | B | `ChaosBeyReplayV1` format, encode/decode/validate, recorder, config snapshot — pure modules, no call-site hooks | Contracts | no | DONE (#41) |
-| C | `ReplayController`, recorder hooks at the three `tickMatch` callers, headless replay runner, checkpoint compare, first-divergence bisect | A + B | yes (after A) | IN PROGRESS (branch `claude/m9-c-playback`, PR pending) |
+| C | `ReplayController`, recorder hooks at the three `tickMatch` callers, headless replay runner, checkpoint compare, first-divergence bisect | A + B | yes (after A) | DONE (#42) |
 | D | `replay-reproduction` preset, batch divergence, Debug Lab and Self Test integration | C | via `DebugLabMode` | TODO |
-| E | Deterministic hardening in Chromium: long AI-vs-AI replays, 1× vs max acceleration, headless vs browser | A/B partly, rest parallel with D | no | TODO |
+| E | Deterministic hardening in Chromium: long AI-vs-AI replays, 1× vs max acceleration, headless vs browser | A/B partly, rest parallel with D | no | IN PROGRESS (branch `claude/m9-e-hardening`) |
 
 A and B run in parallel: they share only `contracts.ts`. Only one lane at a
 time edits `MatchSession.ts` (A, then C).
@@ -271,6 +279,34 @@ integrated only after B is merged and `main` is green.
   - a forced input counted as a state edit;
   - the scenario setup not re-applied;
   - the boundary-checkpoint refusal disabled.
+
+## Lane E notes
+
+- **Acceleration never changes the simulation.**
+  `tests/deterministic/accelerationDeterminism.test.ts` runs a batch of six
+  AI-vs-AI matches at each pacing the browser Self Test uses: 1, 4, 16 and
+  64 ticks per frame, 60-tick max-speed chunks, one go, and an irregular
+  pacing. Every pacing gives identical results and the identical canonical
+  state hash on every tick. A frame-boundary bug planted for the check
+  (nudging hitstop between steps) fails the test.
+- **In the browser.** `tests/smoke/browserDeterminism.spec.ts` runs the
+  same Self Test batch in Chromium (the production build) three ways: 1× in
+  real time, max speed, and max speed again. Every match ends on the same
+  tick, with the same outcome and the same final state hash.
+- **`AiBatchMatchEntry.finalStateHash`** is each match's canonical state
+  hash at the end (null on a crash). It appears in the Self Test report and
+  its JSON download, so two runs can be compared.
+- **Finding: Node and Chromium are not bit-for-bit equal.**
+  - Measured over 20,000 inputs, Node 22.22 and Chromium 153 disagree on
+    `Math.sin` (681), `Math.cos` (617) and `Math.pow` (1037) by up to 1
+    ULP. `tan`, `atan2`, `sqrt`, `exp`, `log`, `hypot`, `acos`, `asin` and
+    `atan` agree.
+  - In an 18-match batch, every match had the same length and outcome in
+    both runtimes, but 3 final hashes differed. In one of them the first
+    difference was `movement.lastHeadingForward` (from `Math.sin`/`cos`) at
+    tick 15.
+  - Rapier's WASM is not involved.
+  - Per the revised decision 6, this is a known limitation, not a bug.
 
 ## Known architecture facts (main@972f65d)
 
