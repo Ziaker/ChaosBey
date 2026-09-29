@@ -1,18 +1,8 @@
 // ============================================================
-// MAIN MENU (GDD sections 1.2, 56)
-// The page the plain game URL opens. Player entries sit at the top level;
-// the developer tools (DEBUG LAB, SELF TEST) live in a separate
-// "Developer / Debug" section, per the owner's decision (option C), so
-// they are never mixed with the normal player flow.
-//
-// Every entry boots its mode through the existing `?mode=` route (the
-// same URL a direct link uses), so no mode has a second bootstrap, and
-// the browser Back button returns to this menu.
-//
-// Visuals: provisional. The menu's final visual treatment is still behind
-// the owner's visual approval gate (GDD 1.6, 171.10;
-// VISUAL_APPROVALS_MASTER.md 11.1). This reuses the existing developer-UI
-// styling and is not a visual direction.
+// MAIN MENU (GDD sections 1.2, 56; M10 lane A)
+// The plain game URL opens here. PLAY enters the real player-facing flow:
+// Character Select -> Pregame -> Match. Developer tools stay isolated in
+// their own section and still use the same ?mode= routing.
 // ============================================================
 
 import { appModeHref, type AppMode } from '../modes/appMode';
@@ -24,20 +14,13 @@ export interface MainMenuEntry {
 }
 
 export interface MainMenuModel {
-  /** Top level: the normal player flow only. */
   readonly player: readonly MainMenuEntry[];
-  /** Label of the button that opens the developer section. */
   readonly developerSectionLabel: string;
-  /** Inside the Developer / Debug section only. */
   readonly developer: readonly MainMenuEntry[];
 }
 
-/**
- * GDD 56 lists PLAY, SELF TEST, DEBUG LAB and SETTINGS. SETTINGS has no
- * screen yet (Milestone 10), so it is not shown rather than shown dead.
- */
 export const MAIN_MENU: MainMenuModel = {
-  player: [{ id: 'play', label: 'PLAY', mode: 'play' }],
+  player: [{ id: 'play', label: 'PLAY', mode: 'character-select' }],
   developerSectionLabel: 'Developer / Debug',
   developer: [
     { id: 'debug-lab', label: 'DEBUG LAB', mode: 'debug-lab' },
@@ -46,7 +29,6 @@ export const MAIN_MENU: MainMenuModel = {
 };
 
 export interface MainMenuOptions {
-  /** Defaults to loading the URL in this tab. */
   readonly navigate?: (href: string) => void;
   readonly location?: { readonly pathname: string; readonly search: string };
 }
@@ -58,8 +40,12 @@ export function startMainMenu(mount: HTMLElement, options: MainMenuOptions = {})
 
   const root = element('div', 'main-menu');
   root.setAttribute('data-testid', 'main-menu');
+  const eyebrow = element('div', 'main-menu__eyebrow');
+  eyebrow.textContent = 'COMBAT SIMULATOR';
   const title = element('h1', 'main-menu__title');
   title.textContent = 'CHAOSBEY';
+  const subtitle = element('p', 'main-menu__subtitle');
+  subtitle.textContent = 'Physics-driven spinning-top combat. Configure the fight, then prove it in the arena.';
 
   const entryButton = (entry: MainMenuEntry): HTMLButtonElement => {
     const button = element('button', 'main-menu__entry');
@@ -114,7 +100,7 @@ export function startMainMenu(mount: HTMLElement, options: MainMenuOptions = {})
     }
   });
 
-  root.append(title, top, developer);
+  root.append(eyebrow, title, subtitle, top, developer);
   mount.append(root);
   top.querySelector('button')?.focus();
 }
@@ -126,19 +112,22 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: strin
 }
 
 function injectStyle(): void {
+  if (document.querySelector('#chaosbey-main-menu-style')) return;
   const style = document.createElement('style');
-  // Same palette and type as the existing developer panels (Debug Lab,
-  // Self Test); provisional until the menu's visual approval.
+  style.id = 'chaosbey-main-menu-style';
   style.textContent = `
-    .main-menu { pointer-events: auto; position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: #05050a; font: 14px/1.4 ui-monospace, Menlo, Consolas, monospace; color: #d8e0f0; }
-    .main-menu__title { margin: 0 0 8px; font-size: 28px; letter-spacing: 0.2em; font-weight: 600; }
-    .main-menu__list { display: flex; flex-direction: column; gap: 8px; min-width: 240px; }
+    .main-menu { pointer-events: auto; position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: radial-gradient(circle at 50% 25%, #152036 0, #080b13 42%, #05050a 75%); font: 14px/1.4 ui-monospace, Menlo, Consolas, monospace; color: #d8e0f0; }
+    .main-menu__eyebrow { color:#6f9cff; letter-spacing:.24em; font-size:10px; font-weight:700; }
+    .main-menu__title { margin: 0; font-size: clamp(36px,7vw,70px); letter-spacing: 0.2em; font-weight: 800; text-indent:.2em; }
+    .main-menu__subtitle { width:min(520px,80vw); margin:0 0 16px; color:#8290aa; text-align:center; }
+    .main-menu__list { display: flex; flex-direction: column; gap: 8px; min-width: min(320px,80vw); }
     .main-menu__list[hidden] { display: none; }
     .main-menu__section-title { margin: 0 0 4px; font-size: 12px; font-weight: normal; color: #8a96b8; text-transform: uppercase; letter-spacing: 0.1em; text-align: center; }
-    .main-menu__entry { font: inherit; color: #e6ecff; background: #1a2033; border: 1px solid #45507a; padding: 8px 16px; cursor: pointer; }
-    .main-menu__entry:hover, .main-menu__entry:focus-visible { background: #26304d; outline: 1px solid #8a96b8; }
-    .main-menu__entry--section { margin-top: 24px; font-size: 12px; color: #8a96b8; background: transparent; border-style: dashed; }
-    .main-menu__entry--back { margin-top: 8px; font-size: 12px; background: transparent; }
+    .main-menu__entry { font: inherit; letter-spacing:.08em; color: #e6ecff; background: #151d2d; border: 1px solid #405173; padding: 12px 18px; cursor: pointer; }
+    .main-menu__entry:first-child { background:linear-gradient(90deg,#557fd8,#88aaf0); color:#07101d; border-color:#afc7ff; font-weight:800; }
+    .main-menu__entry:hover, .main-menu__entry:focus-visible { outline: 2px solid #a9c3fa; outline-offset:2px; }
+    .main-menu__entry--section { margin-top: 20px; font-size: 11px; color: #8290aa; background: transparent !important; border-style: dashed; font-weight:400 !important; }
+    .main-menu__entry--back { margin-top: 8px; font-size: 12px; background: transparent !important; font-weight:400 !important; color:#aab6ca !important; }
   `;
   document.head.append(style);
 }

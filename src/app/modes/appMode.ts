@@ -6,9 +6,9 @@
 // the game's front door.
 // ============================================================
 
-export type AppMode = 'menu' | 'play' | 'debug-lab' | 'self-test';
+export type AppMode = 'menu' | 'character-select' | 'pregame' | 'play' | 'debug-lab' | 'self-test';
 
-const LINKED_MODES: readonly AppMode[] = ['play', 'debug-lab', 'self-test'];
+const LINKED_MODES: readonly AppMode[] = ['character-select', 'pregame', 'play', 'debug-lab', 'self-test'];
 
 export function resolveAppMode(search: string): AppMode {
   const mode = new URLSearchParams(search).get('mode');

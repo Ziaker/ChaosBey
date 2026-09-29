@@ -2,10 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { MAIN_MENU } from '../../src/app/menu/MainMenu';
 import { appModeHref, resolveAppMode } from '../../src/app/modes/appMode';
 
-// Main Menu (GDD 1.2, 56) with the owner's Developer / Debug section
-// (option C). The DOM behavior is covered by tests/smoke/mainMenu.spec.ts;
-// this pins the structure and the routing it relies on.
-
 describe('app mode routing', () => {
   it('opens the Main Menu for the plain URL and for unknown modes', () => {
     expect(resolveAppMode('')).toBe('menu');
@@ -14,14 +10,18 @@ describe('app mode routing', () => {
     expect(resolveAppMode('?mode=nonsense')).toBe('menu');
   });
 
-  it('keeps the direct links for every mode', () => {
+  it('keeps direct links for every real mode, including M10 pre-match flow', () => {
+    expect(resolveAppMode('?mode=character-select')).toBe('character-select');
+    expect(resolveAppMode('?mode=pregame')).toBe('pregame');
     expect(resolveAppMode('?mode=play')).toBe('play');
     expect(resolveAppMode('?mode=debug-lab')).toBe('debug-lab');
     expect(resolveAppMode('?mode=self-test')).toBe('self-test');
   });
 
-  it('builds mode URLs on the current path, keeping other query parameters', () => {
+  it('builds mode URLs on the current Pages path, keeping other query parameters', () => {
     const page = { pathname: '/ChaosBey/', search: '' };
+    expect(appModeHref('character-select', page)).toBe('/ChaosBey/?mode=character-select');
+    expect(appModeHref('pregame', page)).toBe('/ChaosBey/?mode=pregame');
     expect(appModeHref('play', page)).toBe('/ChaosBey/?mode=play');
     expect(appModeHref('debug-lab', page)).toBe('/ChaosBey/?mode=debug-lab');
     expect(appModeHref('self-test', page)).toBe('/ChaosBey/?mode=self-test');
@@ -33,9 +33,9 @@ describe('app mode routing', () => {
 describe('Main Menu structure', () => {
   const developerModes = MAIN_MENU.developer.map((e) => e.mode);
 
-  it('shows the normal player flow at the top level', () => {
+  it('starts PLAY at Character Select instead of bypassing M10 pregame', () => {
     expect(MAIN_MENU.player.map((e) => e.label)).toContain('PLAY');
-    expect(MAIN_MENU.player.find((e) => e.label === 'PLAY')?.mode).toBe('play');
+    expect(MAIN_MENU.player.find((e) => e.label === 'PLAY')?.mode).toBe('character-select');
   });
 
   it('keeps DEBUG LAB and SELF TEST only inside the Developer / Debug section', () => {
@@ -45,7 +45,7 @@ describe('Main Menu structure', () => {
     for (const entry of MAIN_MENU.player) expect(developerModes).not.toContain(entry.mode);
   });
 
-  it('routes every entry through the existing ?mode= route (no second bootstrap)', () => {
+  it('routes every entry through the existing ?mode= route', () => {
     const page = { pathname: '/ChaosBey/', search: '' };
     for (const entry of [...MAIN_MENU.player, ...MAIN_MENU.developer]) {
       const href = appModeHref(entry.mode, page);
