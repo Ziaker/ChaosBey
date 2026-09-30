@@ -261,8 +261,8 @@ export function tickMatch(
     floorNormal: floorNormalUnder(second, secondGrounded),
   });
 
-  first.spin.tick(first.body, fixedDeltaSeconds, firstCondition);
-  second.spin.tick(second.body, fixedDeltaSeconds, secondCondition);
+  first.spin.tick(first.body, fixedDeltaSeconds, firstCondition, firstGrounded);
+  second.spin.tick(second.body, fixedDeltaSeconds, secondCondition, secondGrounded);
 
   first.attackEnergy.tick(firstAttack.isConsumingAttackEnergy, fixedDeltaSeconds);
   second.attackEnergy.tick(secondAttack.isConsumingAttackEnergy, fixedDeltaSeconds);
@@ -409,7 +409,7 @@ export function tickMatch(
       attackerVelocityXZ: resolved.attackerVelocityXZ,
       impactDirectionXZ: normalize(subtract(resolved.defenderPositionXZ, resolved.attackerPositionXZ)),
     });
-    applyKnockback(defender.body, resolved.attackerPositionXZ, resolved.defenderPositionXZ, knockback);
+    applyKnockback(defender.body, resolved.attackerPositionXZ, resolved.defenderPositionXZ, knockback, defender.motion);
     // Same immediate-vs-pending arming as the catch-launch path above.
     defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
     combatEvents.push({

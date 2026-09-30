@@ -23,7 +23,7 @@ Este documento registra **o que já foi decidido** sobre o Motion Lab, para que 
 5. **Nenhuma das três direções vira automaticamente o default.** A escolha entre A, B, C ou uma mistura continua em aberto (seção 13.5).
 6. **`ext-0` e `ext-32` continuam cenários de investigação**, não correções aprovadas (seção 10).
 7. **Spin readability é um achado registrado, não uma decisão.** Nenhuma solução foi escolhida (seção 11).
-8. **Nada foi integrado ainda.** `src/bey/movement/`, `src/bey/spin/`, `src/physics/`, colisores, knockback de produção, Camera Director e IA continuam intactos. A integração segue a seção 14 quando o dono pedir.
+8. ~~Nada foi integrado ainda.~~ **Integrado no M11, por ordem do dono** ("EU SEMPRE APROVEI … AJEITA TUDO LOGO"): as três direções A/B/C, com os 33 valores exatos do Lab, estão no jogo e são escolhidas no Pregame (B é o padrão). Ver a seção 16, que registra o que foi portado, cada diferença em relação ao Lab e o que continua em aberto.
 9. **Motion e Camera foram avaliados separadamente** e nenhum dos dois deve alterar silenciosamente o outro (seção 12).
 
 ---
@@ -382,3 +382,72 @@ JSON exato dos três presets (as chaves de `PhysicsParams`, valores de protótip
   }
 }
 ```
+
+---
+
+## 16. Integração no jogo (M11) — ordem do dono
+
+Depois do playtest do M11, o dono escreveu: "COMO ASSIM ESPERAR PEDIDO, EU SEMPRE APROVEI, VC NÃO LÊ OS DOCUMENTOS, AJEITA TUDO LOGO". Isso fecha as seções 13.1–13.3 para a integração: os **33 valores exatos** de cada preset entram no jogo e as três direções ficam **selecionáveis**.
+
+### 16.1 O que o jogador tem
+
+- **Pregame → "Movement":**
+  - A — Stable Arcade;
+  - **B — Physical Hybrid (padrão)**: o Lab montou B a partir dos valores do jogo;
+  - C — Wild Mechanical.
+- **Debug Lab:** `&motion=A|B|C`, seletor no painel e linhas no inspector (direção, grip ×, SLIP, whirl, atitude, TUMBLE, mola de prumo).
+- **É gameplay:**
+  - fica em `MatchConfig.motion` e é gravado no replay;
+  - um replay antigo, sem o campo, é válido e toca como B;
+  - um valor inválido é recusado.
+
+### 16.2 Onde cada parâmetro entrou (`src/bey/motion/MotionPresets.ts`)
+
+| Parâmetros do Lab | No jogo |
+|---|---|
+| `accel`, `maxSpeed`, `turnRate`, `lateralGrip` | `MovementController`, como **razão em relação a B** sobre o perfil de cada arquétipo (Attack/Defense/Stamina mantêm suas diferenças) |
+| `longitudinalGrip`, `slipThreshold`, `slipGrip`, `gripRecovery`, `airGrip` | o modelo de grip/slip do Lab, com histerese de 0,6 e perda de 4/s; o impacto derruba o grip para `slipGrip`; drag só sem acelerar; o excesso acima do topo sangra a 1,5/s |
+| `linearToAngular`, `tumbleStrength`, `tumbleThreshold`, `angularDamping`, `maxAngularSpeed` | o **whirl** ("rodopio") gira o heading; e o tumble da atitude |
+| `leanStrength`, `speedTilt`, `maxTilt`, `uprightStrength`, `recoveryDamping`, `postImpactRecovery`, `precession`, `impactAngularImpulse` | a **atitude** do Lab (`SpinController`): alvo de lean, mola que cai a 15 % no impacto e volta, parada além do `maxTilt`, precessão |
+| `wobbleAmplitude`, `wobbleFrequency`, `wobbleFromImpact`, `wobbleDecay` | o wobble visual |
+| `restitutionBey`, `wallBounce`, `wallFriction` | colisores do Rapier: regra MULTIPLY com √`restitutionBey` no Bey; a parede usa a restituição da arena × `wallBounce`/B |
+| `floorBounce` | o quique de pouso do Lab (`vy = descida × floorBounce`, zero abaixo de 0,6 m/s, só depois de uma queda de verdade ≥ 0,1 s); o piso do Rapier não quica |
+| `knockbackScale`, `knockbackLift` | `applyKnockback`: impulso × `knockbackScale`, e a subida é `knockbackLift` × o horizontal (substitui os 0,35 antigos) |
+| `maxLinearSpeed` | clamp de segurança na velocidade que o controlador escreve |
+
+As medições (seção 9.2) conferem no jogo real (`tests/deterministic/motionDirections.test.ts`):
+- **Grip mínimo numa curva forte:** A 1, B 0,35, C 0,18.
+- **Rebote na parede e atitude no mesmo golpe:** A < B < C.
+- **Tumble:** só C a 11 m/s de impacto.
+- **O lean** inclina para a frente ao acelerar.
+
+### 16.3 Diferenças em relação ao Lab (medidas, não palpite)
+
+1. **O corpo físico não inclina mais; a inclinação é a atitude do Lab.**
+   - **Antes, em 24 partidas IA×IA:** o corpo rígido do Bey passava de 57° em **25,6 %** dos ticks. Ficava deitado na borda do cilindro, rolando como moeda e arrastado. Um Bey parado mantinha um rolamento de 12 rad/s e saía andando sozinho.
+   - **O Lab também não tem essa física:** sua atitude é um modelo, e um pião toca o chão num ponto sob o eixo.
+   - **Agora:** as rotações do corpo são travadas, a atitude do Lab é o que se vê, e esse percentual é 0 %.
+   - **Consequências necessárias:**
+     - o corpo nunca "dorme";
+     - o chão é detectado com contato recalculado;
+     - no bowl o corpo fica de pé, apoiado na borda externa, como a lane 4 foi feita (acompanhar a inclinação foi testado e descartado: girar um corpo em contato o empurra, e ele subia o bowl sozinho);
+     - um colisor alto só para contato Bey–Bey impede um Bey de atravessar o outro depois de um Clash empatado.
+2. **O atrito do piso do jogo foi mantido.**
+   - O Lab não tem atrito de piso: um B solto lá desliza ~18 m a partir da velocidade máxima. Aqui ele para em ~1 s, como o jogo sempre jogou.
+   - A aceleração líquida fica ~9 m/s² dos 14.
+   - **Motivo:** a nota do playtest do dono ("não é pro bey se mover sozinho").
+   - **O deslize longo do Lab é uma opção em aberto** para o dono sentir e decidir.
+3. **O Dash só empurra no chão.** No ar vale o modelo aéreo do Lab (15 % de empuxo), então um dasher contra-atacado não é empurrado por cima da parede na velocidade do Dash.
+4. **Impacto no jogo = variação de velocidade.** O detector do jogo mede a variação (entrada × (1 + restituição)); as respostas do Lab usam a velocidade de entrada. A conversão usa `wallBounce`.
+5. **Um golpe exatamente central não gera rodopio.** O Lab manda para +, o que quebrava a simetria espelhada.
+
+### 16.4 O que ainda está aberto
+
+- **Qual direção vira a definitiva** (13.2), ou uma mistura (13.3): as três ficam selecionáveis para o playtest.
+- **O deslize longo do Lab** (16.3 item 2).
+- **Retune da IA sobre o movimento novo:**
+  - o Ace não vence mais o Rookie: 35–35 em 72 partidas (antes 41–31);
+  - a vantagem de punição do Defense caiu de +0,12 para ~+0,03;
+  - números nos comentários de `aiDifficultyTiers.test.ts` e `aiArchetypeMatrix.test.ts`.
+- **ext-0, spin readability e tuning por Bey** (13.5–13.7) continuam como estavam.
+- **Câmera:** o blend do Clash para B agora é suavizado e limitado (≥ 0,8 s). As medições da câmera (12.4) devem ser repetidas com o movimento real, como a seção 12 manda.

@@ -29,12 +29,9 @@ describe('wall collision', () => {
       if (result.movement.impactDeltaSpeedMps > 0) {
         sawImpact = true;
       }
-      if (sawImpact) {
-        const angularSpeedHorizontal = Math.hypot(result.spin.angularVelocity.x, result.spin.angularVelocity.z);
-        if (angularSpeedHorizontal > 0.05) {
-          sawAngularResponseAfterImpact = true;
-        }
-      }
+      // The angular response is the Motion Lab attitude (M11): the impact
+      // kicks the tilt (the physics body itself never rotates).
+      if (sawImpact && result.spin.tiltRad > 0.02) sawAngularResponseAfterImpact = true;
     }
 
     expect(sawImpact).toBe(true);

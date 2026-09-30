@@ -68,12 +68,12 @@ interface Recording {
 }
 
 // Seeds pinned for long fights with many hitstop freezes (RNG scheme 2),
-// re-pinned after the ext-32 wall collider fix changed every fight that
-// touches the wall: replay-15 lasts 1301 ticks with 170 frozen, replay-17
-// lasts 1117 with 151.
-// Most seeds end in a ring-out within a few hundred ticks.
-const LONG_SEED = 'replay-15';
-const MUTATION_SEED = 'replay-17';
+// re-pinned after the Motion Lab integration (M11) changed every fight:
+// replay-45 lasts 1114 ticks with 144 frozen, replay-40 lasts 1162 with 125
+// (before: replay-15 / replay-17, pinned after the ext-32 wall fix).
+// Most seeds end within a few hundred ticks.
+const LONG_SEED = 'replay-45';
+const MUTATION_SEED = 'replay-40';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {

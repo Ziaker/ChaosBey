@@ -16,6 +16,7 @@
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { STANDARD_ARENA_GEOMETRY, type ArenaGeometry } from '../../arena/presets/ArenaPresets';
+import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 
 export interface MatchConfig {
   /** Multiplies the real knockback/Stability consequence a Clash resolution applies (both the FirstWins/SecondWins loser's knockback and a Tie's symmetric repulsion) — GDD section 152's "configurable impact multiplier". */
@@ -31,6 +32,13 @@ export interface MatchConfig {
    * Replays recorded before this field existed were all flat.
    */
   arenaFloor: ArenaFloorId;
+  /**
+   * M11: the motion direction — the approved Motion Lab preset A (Stable
+   * Arcade), B (Physical Hybrid, default) or C (Wild Mechanical), see
+   * bey/motion/MotionPresets.ts. Gameplay: both Beys and the arena's
+   * bounce use it, so it is recorded in every replay.
+   */
+  motion: MotionDirectionId;
 }
 
 export function createDefaultMatchConfig(): MatchConfig {
@@ -39,6 +47,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     arenaWallHeightM: STANDARD_ARENA_GEOMETRY.wallHeightM,
     arenaWallRestitution: STANDARD_ARENA_GEOMETRY.wallRestitution,
     arenaFloor: DEFAULT_ARENA_FLOOR,
+    motion: DEFAULT_MOTION_DIRECTION,
   };
 }
 

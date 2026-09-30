@@ -95,7 +95,11 @@ describe('AI air recovery — short window vs reaction delay (M7 Part 2b)', () =
     it(`${personality.id} (reaction ${personality.reactionDelaySeconds}s = ${needed} ticks): a longer window is recovered exactly ${needed} ticks after it opens`, async () => {
       const t = await launch(personality, longV);
       const opened = t.windowTicks[0]!;
-      expect(opened, 'the launch opened a window within a few ticks').toBeLessThanOrEqual(4);
+      // ≤ 5 since the Motion Lab integration (M11): the floor contact of the
+      // launched Defense Bey now clears one tick later (tick 5 for every
+      // launch speed from 1.1 to 1.4 m/s; was ≤ 4). The reaction timing
+      // asserted below is exact and unchanged.
+      expect(opened, 'the launch opened a window within a few ticks').toBeLessThanOrEqual(5);
       expect(t.pressTicks, 'one press').toHaveLength(1);
       expect(t.pressTicks[0], 'pressed at opening + reaction').toBe(opened + needed - 1);
       expect(t.airRecoverDecisionTick).toBe(t.pressTicks[0]);

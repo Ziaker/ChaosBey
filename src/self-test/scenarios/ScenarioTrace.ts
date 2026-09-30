@@ -12,6 +12,8 @@ import type { RoundState } from '../../combat/round-rules/RoundState';
 
 /** Ticks after the first wall impact over which the rebound is measured. */
 const IMPACT_WINDOW_TICKS = 6;
+/** Grip comes back exponentially after a drift or a slip (Motion Lab gripRecovery), so "restored" means within 1% of normal. */
+const GRIP_RESTORED_FRACTION = 0.99;
 
 export interface ScenarioHit {
   readonly tick: number;
@@ -83,7 +85,7 @@ export function createScenarioTrace(first: Bey): ScenarioTrace {
     firstDriftStates: new Set(),
     firstMaxSlipDeg: 0,
     firstMinGripPerS: Number.POSITIVE_INFINITY,
-    firstNormalGripPerS: first.definition.handling.lateralGripPerS,
+    firstNormalGripPerS: first.movement.getLateralGripPerS(),
     firstFinalGripPerS: first.definition.handling.lateralGripPerS,
     firstMinDriftGripPerS: Number.POSITIVE_INFINITY,
     firstGripRestoredAfterDrift: false,
@@ -152,7 +154,7 @@ export function recordScenarioTick(trace: ScenarioTrace, facts: ScenarioTickFact
   trace.firstMinGripPerS = Math.min(trace.firstMinGripPerS, a.movement.lateralGripPerS);
   trace.firstFinalGripPerS = a.movement.lateralGripPerS;
   if (a.driftState === 'Drifting' && a.grounded) trace.firstMinDriftGripPerS = Math.min(trace.firstMinDriftGripPerS, a.movement.lateralGripPerS);
-  if (trace.firstDriftStates.has('Recovering') && a.driftState === 'Idle' && a.grounded && a.movement.lateralGripPerS >= trace.firstNormalGripPerS - 1e-6) {
+  if (trace.firstDriftStates.has('Recovering') && a.driftState === 'Idle' && a.grounded && a.movement.lateralGripPerS >= trace.firstNormalGripPerS * GRIP_RESTORED_FRACTION) {
     trace.firstGripRestoredAfterDrift = true;
   }
   trace.firstMaxSpeedMps = Math.max(trace.firstMaxSpeedMps, a.movement.speedMps);

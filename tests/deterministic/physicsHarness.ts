@@ -14,6 +14,7 @@ import { createBeyRigidBody } from '../../src/bey/core/BeyRigidBody';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { MovementController, type MovementSnapshot } from '../../src/bey/movement/MovementController';
 import { SpinController, type SpinSnapshot } from '../../src/bey/spin/SpinController';
+import { motionParams, type MotionParams } from '../../src/bey/motion/MotionPresets';
 import { FULL_PHYSICAL_CONDITION } from '../../src/bey/stamina/StaminaSystem';
 import { DriftController, type DriftState } from '../../src/drift/DriftController';
 import type { ControllerActions } from '../../src/input/actions/Action';
@@ -38,12 +39,14 @@ export class TestBeyHarness {
     readonly drift: DriftController,
   ) {}
 
-  static async create(spawn: { x: number; y: number; z: number } = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }): Promise<TestBeyHarness> {
+  /** `motion`: the motion direction (M11 Motion Lab A/B/C); B, the game's default, when omitted. */
+  static async create(spawn: { x: number; y: number; z: number } = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, motion: MotionParams = motionParams()): Promise<TestBeyHarness> {
     const physics = await PhysicsWorld.create();
     const scene = new THREE.Scene(); // no renderer involved — safe in a headless test environment.
-    createArenaColliders(scene, physics);
-    const { body, collider } = createBeyRigidBody(physics, spawn);
-    return new TestBeyHarness(physics, body, collider, new MovementController(), new SpinController(), new DriftController());
+    createArenaColliders(scene, physics, undefined, undefined, motion);
+    const { body, collider } = createBeyRigidBody(physics, spawn, undefined, motion);
+    const movement = new MovementController(undefined, motion);
+    return new TestBeyHarness(physics, body, collider, movement, new SpinController(motion), new DriftController(movement.getLateralGripPerS()));
   }
 
   tick(actions: ControllerActions): TickResult {
@@ -58,7 +61,7 @@ export class TestBeyHarness {
       staminaAccelFactor: FULL_PHYSICAL_CONDITION.accelFactor,
       dashOverride: null,
     });
-    this.spin.tick(this.beyBody, FIXED_DELTA_SECONDS, FULL_PHYSICAL_CONDITION);
+    this.spin.tick(this.beyBody, FIXED_DELTA_SECONDS, FULL_PHYSICAL_CONDITION, grounded);
 
     this.physics.step();
 

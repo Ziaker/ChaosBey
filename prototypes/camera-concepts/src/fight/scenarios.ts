@@ -55,11 +55,12 @@ export const SCENARIOS: readonly Scenario[] = [
     description: 'IA contra IA do jogo, como uma luta de verdade: aproximações, Dash, Circular e recuos.',
     contexts: ['CombatFollow', 'CloseCombat', 'KnockbackFollow', 'HighSpeed'],
     durationS: 24,
-    // Seeds and spawns picked by sweeping the real AI: 24 s of combat with hits, a Clash and a Stability Break, and no round end.
+    // Seeds and spawns picked by sweeping the real AI: 24 s of combat with hits and a Clash, and no round end.
+    // Re-swept after the Motion Lab integration (M11) changed every fight: 'q' (was 'k').
     firstSpawn: { x: -3, z: -5 },
     secondSpawn: { x: 3, z: 5 },
-    first: { kind: 'ai', seed: 'duel-p-k' },
-    second: { kind: 'ai', seed: 'duel-o-k' },
+    first: { kind: 'ai', seed: 'duel-p-q' },
+    second: { kind: 'ai', seed: 'duel-o-q' },
     expects: ['hit', 'clashActive'],
   },
   {
@@ -159,14 +160,15 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     id: 'ring-out-chase',
     label: 'Ring-Out Chase',
-    description: 'Abertura real da IA contra IA: o jogador é lançado por cima da parede aos 2,1 s e a câmera persegue a trajetória.',
+    description: 'Abertura real da IA contra IA: um Bey é lançado por cima da parede aos 1,9 s e a câmera persegue a trajetória.',
     contexts: ['KnockbackFollow', 'RingOut', 'Finisher'],
     durationS: 5.5,
     // A scripted Circular-catches-Dash never cleared the 2 m wall in any timing we swept; the real AI does it on its own, so this scenario is the AI's opening.
     firstSpawn: { x: 0, z: -4 },
     secondSpawn: { x: 0, z: 4 },
-    first: { kind: 'ai', seed: 'duel-p-k' },
-    second: { kind: 'ai', seed: 'duel-o-k' },
+    // Re-swept after the Motion Lab integration (M11): 'b' rings out at 1.9 s (was 'k' at 2.1 s).
+    first: { kind: 'ai', seed: 'duel-p-b' },
+    second: { kind: 'ai', seed: 'duel-o-b' },
     expects: ['hit', 'ringOut', 'roundOver'],
   },
   {

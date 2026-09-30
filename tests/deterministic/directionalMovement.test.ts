@@ -9,6 +9,7 @@ import { STEERING_MAX_TURN_RATE_RAD_S } from '../../src/bey/movement/MovementTun
 import { DEFAULT_HANDLING_PROFILE } from '../../src/bey/archetype/BeyHandlingProfile';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { isSteering } from '../../src/bey/movement/directionalIntent';
+import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { TestBeyHarness } from './physicsHarness';
 
 function intent(x: number, z: number, heldActions: Action[] = []): ControllerActions {
@@ -27,14 +28,18 @@ async function settled(): Promise<TestBeyHarness> {
 
 describe('directional movement (M11)', () => {
   it('turning toward a new direction takes physical time: no snap, turn rate never above the cap, settles without overshoot', async () => {
-    const harness = await settled();
+    // From x = −10, so the Bey (driving +X) settles on the direction well
+    // before it reaches the far wall, where an impact's whirl — the Motion
+    // Lab rodopio (M11) — would turn the heading on top of the steering.
+    const harness = await TestBeyHarness.create({ x: -10, y: BEY_SPAWN_HEIGHT_M, z: 0 });
+    harness.tickMany(intent(0, 0), 30);
     const maxStep = DEFAULT_HANDLING_PROFILE.turnRateRadS * FIXED_DELTA_SECONDS + 1e-12;
     let previous = harness.movement.getHeadingRad();
     const first = harness.tick(intent(1, 0)); // want +X: yaw π/2
     expect(Math.abs(first.movement.headingRad - previous)).toBeLessThan(0.05); // eased, not snapped
     previous = first.movement.headingRad;
     let peak = previous;
-    for (let i = 0; i < 180; i++) {
+    for (let i = 0; i < 130; i++) {
       const { movement } = harness.tick(intent(1, 0));
       expect(Math.abs(movement.headingRad - previous)).toBeLessThanOrEqual(maxStep);
       expect(Math.abs(harness.movement.getDebugState().turnRateRadPerS)).toBeLessThanOrEqual(STEERING_MAX_TURN_RATE_RAD_S + 1e-9);

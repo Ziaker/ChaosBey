@@ -30,6 +30,7 @@ import { KeyboardController } from '../../input/devices/KeyboardController';
 import { cameraYawOf, DirectionalController } from '../../input/directional/DirectionalController';
 import { loadPlayerSettings, type CameraPresetSetting } from '../../config/settings/PlayerSettings';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, isArenaFloorId, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import { DEFAULT_MOTION_DIRECTION, isMotionDirectionId, MOTION_DIRECTION_IDS, MOTION_DIRECTIONS, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import { generateRandomSeedText } from '../../rng/stringSeed';
 import { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
@@ -89,6 +90,8 @@ export interface DebugLabHandle {
   getCamera(): THREE.PerspectiveCamera;
   /** M11 lane 4: the floor profile (flat / bowl A/B/C); restarts the match on the current seed. */
   setArenaFloor(floor: ArenaFloorId): Promise<void>;
+  /** M11: the motion direction (Motion Lab A/B/C); restarts the match. */
+  setMotion(motion: MotionDirectionId): Promise<void>;
   /** M11: the game camera preset (A/B/C), kept across restarts. Render only. */
   setCameraPreset(preset: CameraPresetSetting): void;
 }
@@ -113,7 +116,9 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   let cameraPreset: CameraPresetSetting = loadPlayerSettings().cameraPreset;
   // M11 lane 4: the floor profile to test (`&floor=bowl-a`, the panel, or the handle); flat by default.
   const floorParam = new URLSearchParams(window.location.search).get('floor');
-  let labMatchConfig = resolveMatchConfig({ arenaFloor: isArenaFloorId(floorParam) ? floorParam : 'flat' });
+  // M11: the motion direction to test (`&motion=A`, the panel, or the handle); B by default.
+  const motionParam = new URLSearchParams(window.location.search).get('motion');
+  let labMatchConfig = resolveMatchConfig({ arenaFloor: isArenaFloorId(floorParam) ? floorParam : 'flat', motion: isMotionDirectionId(motionParam) ? motionParam : DEFAULT_MOTION_DIRECTION });
   const labAttackProfileSettings = resolveAttackProfileSettings(loadAttackProfileOverrides() ?? undefined);
   /** M9: while a replay plays, the session is built from the replay's own config, never the Lab's (owner decision 3). */
   let replayCheck: LiveReplayCheck | null = null;
@@ -256,6 +261,11 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
     setArenaFloor: async (floor) => {
       labMatchConfig = resolveMatchConfig({ ...labMatchConfig, arenaFloor: floor });
       floorSelect.value = floor;
+      await handle.restart(null);
+    },
+    setMotion: async (motion) => {
+      labMatchConfig = resolveMatchConfig({ ...labMatchConfig, motion });
+      motionSelect.value = motion;
       await handle.restart(null);
     },
     setCameraPreset: (preset) => {
@@ -420,6 +430,20 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
     floorSelect.blur();
   });
   panel.addGroup('Arena floor (M11 playtest — restarts the match)', [labeled('Floor', floorSelect)]);
+  const motionSelect = document.createElement('select');
+  motionSelect.setAttribute('data-testid', 'debug-lab-motion');
+  for (const id of MOTION_DIRECTION_IDS) {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = MOTION_DIRECTIONS[id].name;
+    motionSelect.append(option);
+  }
+  motionSelect.value = labMatchConfig.motion;
+  motionSelect.addEventListener('change', () => {
+    if (isMotionDirectionId(motionSelect.value)) void handle.setMotion(motionSelect.value);
+    motionSelect.blur();
+  });
+  panel.addGroup('Movement (Motion Lab A/B/C — restarts the match)', [labeled('Direction', motionSelect)]);
   panel.addGroup('Presentation (render-only)', [
     labeled('Camera', viewSelect),
     checkbox('Camera effects (shake, FOV)', 'debug-lab-camera-effects', true, (on) => handle.setCameraEffects(on)),

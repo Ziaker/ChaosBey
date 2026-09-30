@@ -36,8 +36,6 @@ import { SelfTestMatchWorld } from './SelfTestMatchWorld';
 import { isGrounded } from '../physics/collision/GroundCheck';
 
 const TICKS_PER_S = Math.round(1 / FIXED_DELTA_SECONDS);
-/** Height above the floor under which a dropped Bey counts as landed (the drop probe; resting centre ≈ 0.18–0.3 m). */
-const ON_GROUND_MAX_HEIGHT_M = 0.45;
 /** "Near the edge" for the stats: past this radius. */
 const NEAR_EDGE_RADIUS_M = 9;
 /** "At the wall": the Bey's rim within ~0.6 m of the wall's inner face (11.7 m). */
@@ -140,10 +138,6 @@ const speed = (bey: Bey): number => {
   const v = bey.body.linvel();
   return Math.hypot(v.x, v.z);
 };
-const heightAboveFloor = (bey: Bey): number => {
-  const p = bey.body.translation();
-  return p.y - floorHeightAt(bey.arenaFloor, p.x, p.z);
-};
 
 async function probeWorld(floor: ArenaFloorId): Promise<SelfTestMatchWorld> {
   return SelfTestMatchWorld.build({ firstDefinition: ATTACK_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE, aiMashSource: new NullAiMashSource(), matchConfigOverrides: { arenaFloor: floor } });
@@ -154,7 +148,7 @@ async function probeWorld(floor: ArenaFloorId): Promise<SelfTestMatchWorld> {
  * Bey is held parked out of the way (re-placed every tick), calling
  * `each` after every tick. Returns the invalid states the detector saw.
  */
-async function probe(floor: ArenaFloorId, ticks: number, setup: (first: Bey) => void, controller: CombatController, each: (tick: number, first: Bey) => void): Promise<number> {
+async function probe(floor: ArenaFloorId, ticks: number, setup: (first: Bey) => void, controller: CombatController, each: (tick: number, first: Bey, grounded: boolean) => void): Promise<number> {
   const world = await probeWorld(floor);
   const config = resolveMatchConfig({ arenaFloor: floor });
   const detector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(floor) + config.arenaWallHeightM });
@@ -164,7 +158,7 @@ async function probe(floor: ArenaFloorId, ticks: number, setup: (first: Bey) => 
   for (let tick = 0; tick < ticks; tick++) {
     place(world.second, 0, -9.5, 0); // parked: never part of the probe
     const { firstActions, secondActions, result, advanced } = world.step({ first: controller, second: idle });
-    each(tick, world.first);
+    each(tick, world.first, result.first.movement.isGrounded);
     invalid += detector
       .check({ tick, first: world.first, second: world.second, result, roundState: world.roundState, clash: world.clash.controller, firstActions, secondActions, aiSides: { first: false, second: false }, hitstopActive: !advanced })
       .filter((d) => d.severity === 'invalid-state').length;
@@ -219,9 +213,9 @@ export async function runFloorProbes(floor: ArenaFloorId): Promise<FloorProbeRes
       b.body.setLinvel({ x: 6, y: 0, z: 0 }, true);
     },
     new IdleController(),
-    (t, b) => {
+    (t, b, grounded) => {
       dropMax = Math.max(dropMax, radius(b));
-      if (dropLand === null && heightAboveFloor(b) < ON_GROUND_MAX_HEIGHT_M) dropLand = (t + 1) / TICKS_PER_S;
+      if (dropLand === null && grounded) dropLand = (t + 1) / TICKS_PER_S;
     },
   );
 

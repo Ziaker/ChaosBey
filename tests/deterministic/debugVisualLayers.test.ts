@@ -53,11 +53,11 @@ function allFinite(root: THREE.Object3D): boolean {
 const ALL_LAYERS: DebugLayerId[] = DEBUG_LAYERS.map((l) => l.id);
 
 describe('DebugVisualLayers', () => {
-  it('draws every collider: both Beys, the floor and every wall segment', async () => {
+  it('draws every collider: both Beys (body + Bey-Bey bumper each, M11), the floor and every wall segment', async () => {
     const { session } = await createSession('viz-colliders');
     const layers = new DebugVisualLayers(session, ['colliders']);
     layers.update();
-    expect(layers.countVisibleObjects('colliders')).toBe(2 + 1 + ARENA_WALL_SEGMENT_COUNT);
+    expect(layers.countVisibleObjects('colliders')).toBe(2 * 2 + 1 + ARENA_WALL_SEGMENT_COUNT);
     layers.setEnabled('colliders', false);
     expect(layers.countVisibleObjects('colliders')).toBe(0);
     session.dispose();

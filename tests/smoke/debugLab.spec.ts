@@ -19,6 +19,10 @@ async function firstPosition(page: Page): Promise<number[]> {
 }
 
 test('Debug Lab: pause, step, restart, seeds, speed and controller switching on the real match', async ({ page }) => {
+  // One long walk through the Lab (~21 s locally, ~40% more on CI): the 30 s
+  // default was already tight before the Motion Lab integration (19.3 s
+  // locally) and its extra per-tick work pushed CI past it.
+  test.setTimeout(60_000);
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());

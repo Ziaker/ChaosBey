@@ -25,6 +25,7 @@
 import { createDefaultAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import { createDefaultMatchConfig, type MatchConfig } from '../../config/match/MatchConfig';
 import { isArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import { isMotionDirectionId } from '../../bey/motion/MotionPresets';
 import { FIXED_TICKS_PER_SECOND } from '../../physics/fixed-step/FixedTimestepLoop';
 import {
   REPLAY_FORMAT,
@@ -194,16 +195,25 @@ function validateConfig(v: Validator, value: unknown): void {
   v.version(config.fixedTicksPerSecond, FIXED_TICKS_PER_SECOND, 'config.fixedTicksPerSecond');
   // Same fields and types as this build's own config objects: a field added
   // or removed since the recording is a version problem, not something to guess.
-  // `arenaFloor` (M11 lane 4) is the one field allowed to be absent: every
-  // replay recorded before it existed was played on the flat arena, and
-  // playback resolves a missing value to 'flat' (resolveMatchConfig).
+  // `arenaFloor` (M11 lane 4) and `motion` (M11) are the fields allowed to
+  // be absent: every replay recorded before them was played on the flat
+  // arena, and playback resolves a missing value to the default
+  // (resolveMatchConfig). A replay without `motion` predates the Motion Lab
+  // integration, so playing it back runs today's direction B — the state
+  // hash check reports the divergence rather than it being guessed away.
   const matchTemplate: Partial<MatchConfig> = createDefaultMatchConfig();
   const recordedMatch = config.matchConfig;
-  const hasFloor = recordedMatch !== null && typeof recordedMatch === 'object' && 'arenaFloor' in recordedMatch;
+  const has = (key: string): boolean => recordedMatch !== null && typeof recordedMatch === 'object' && key in recordedMatch;
+  const hasFloor = has('arenaFloor');
+  const hasMotion = has('motion');
   if (!hasFloor) delete matchTemplate.arenaFloor;
+  if (!hasMotion) delete matchTemplate.motion;
   v.sameShape(recordedMatch, matchTemplate, 'config.matchConfig');
   if (hasFloor && !isArenaFloorId((recordedMatch as Record<string, unknown>).arenaFloor)) {
     v.fail('wrong-type', 'config.matchConfig.arenaFloor', `${describe((recordedMatch as Record<string, unknown>).arenaFloor)} is not a floor profile`);
+  }
+  if (hasMotion && !isMotionDirectionId((recordedMatch as Record<string, unknown>).motion)) {
+    v.fail('wrong-type', 'config.matchConfig.motion', `${describe((recordedMatch as Record<string, unknown>).motion)} is not a motion direction`);
   }
   v.sameShape(config.attackProfileSettings, createDefaultAttackProfileSettings(), 'config.attackProfileSettings');
   const spawns = v.record(config.spawns, 'config.spawns', ['first', 'second']);

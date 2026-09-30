@@ -139,7 +139,10 @@ describe('slow to react vs a new critical edge situation (real physics)', () => 
   }, 30000);
 
   it('C — control: a non-critical edge danger during the delay does not preempt it', async () => {
-    const { pendingIntent, after } = await run(7);
+    // 5.75 m/s since the Motion Lab integration (M11): no air/overspeed drag
+    // carries the kick further, so 7 now turns critical; 5.5–6 lands in the
+    // non-critical band (5 stays below 0.55, 6.5 is critical).
+    const { pendingIntent, after } = await run(5.75);
     // At the reaction read the AI is in edge danger (>= the 0.55 entry) but not critical.
     const read = after.find((t) => t.tick === reactionTicks)!;
     expect(read.edgeRisk).toBeGreaterThanOrEqual(0.55);

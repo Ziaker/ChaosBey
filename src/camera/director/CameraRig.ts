@@ -45,6 +45,8 @@ export const CLASH_FORCED_PRESET: PresetId = 'B';
 export const CLASH_BLEND_EPSILON = 1e-3;
 /** Crossfade length when the player changes preset mid-match (s). */
 export const PRESET_SWITCH_BLEND_S = 0.6;
+/** The Clash blend toward B never goes faster than 0 → 1 in this long. */
+export const CLASH_BLEND_MIN_S = 0.8;
 
 /** Player-facing names (camera-approval.md 10.3: the lab's English names). */
 export const CAMERA_PRESET_NAMES: Readonly<Record<PresetId, string>> = {
@@ -84,6 +86,7 @@ export class CameraRig {
   private preset: PresetId;
   private fromPreset: PresetId;
   private switchElapsedS = PRESET_SWITCH_BLEND_S;
+  private clashFollow = 0;
 
   /** `floorHeightAt`: the arena floor under (x, z) for the directors' floor guard (M11 bowls); omit for the flat arena. */
   constructor(preset: PresetId, aspect = 16 / 9, floorHeightAt?: (x: number, z: number) => number) {
@@ -124,7 +127,15 @@ export class CameraRig {
 
     const forced = outputs[CLASH_FORCED_PRESET];
     const rawClash = clamp(forced.weights.Clash, 0, 1);
-    const clashBlend = rawClash < CLASH_BLEND_EPSILON ? 0 : rawClash;
+    // Follows the director's Clash weight, eased and rate-limited: that
+    // weight rises exponentially (fastest on its first tick) and the
+    // player's eye can be ~12 m from B's (both kept inside the arena), so
+    // followed raw the view swept 0.6 m in one tick. A full blend now takes
+    // at least CLASH_BLEND_MIN_S.
+    const target = rawClash < CLASH_BLEND_EPSILON ? 0 : smoothstep(0, 1, rawClash);
+    const maxStep = dt / CLASH_BLEND_MIN_S;
+    this.clashFollow += Math.max(-maxStep, Math.min(maxStep, target - this.clashFollow));
+    const clashBlend = this.clashFollow < CLASH_BLEND_EPSILON ? 0 : this.clashFollow;
     const shown = clashBlend <= 0 ? playerView : mix(playerView, view(forced), clashBlend);
 
     return {

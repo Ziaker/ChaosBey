@@ -11,17 +11,18 @@ describe('hop -> hold -> drift -> recover', () => {
     const harness = await TestBeyHarness.create();
 
     // One continuous scripted run: drive straight, tap+hold JumpDrift+steer
-    // at tick 20 (drift begins), release JumpDrift at tick 120 (only
+    // at tick 45 (drift begins; the spawn drop's small Motion Lab floor
+    // bounce has settled by then), release JumpDrift at tick 145 (only
     // MoveForward held from then on).
     const controller = new ScriptedController([
       { fromTick: 0, held: [Action.MoveForward] },
-      { fromTick: 20, held: [Action.MoveForward, Action.JumpDrift, Action.SteerRight] },
-      { fromTick: 120, held: [Action.MoveForward] },
+      { fromTick: 45, held: [Action.MoveForward, Action.JumpDrift, Action.SteerRight] },
+      { fromTick: 145, held: [Action.MoveForward] },
     ]);
 
     const statesSeen: DriftState[] = [];
     let minLateralGripWhileDrifting = Infinity;
-    for (let i = 0; i < 220; i++) {
+    for (let i = 0; i < 245; i++) {
       const result = harness.tick(controller.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }));
       statesSeen.push(result.driftState);
       if (result.driftState === DriftState.Drifting) {
@@ -34,7 +35,7 @@ describe('hop -> hold -> drift -> recover', () => {
     expect(seen.has(DriftState.Drifting)).toBe(true);
     expect(seen.has(DriftState.Recovering)).toBe(true);
     expect(minLateralGripWhileDrifting).toBeLessThan(LATERAL_GRIP_PER_S);
-    // Enough ticks elapsed after releasing JumpDrift (tick 120 -> 220,
+    // Enough ticks elapsed after releasing JumpDrift (tick 145 -> 245,
     // well over DRIFT_GRIP_RECOVERY_DURATION_S) that it should have
     // settled back to Idle by the end.
     expect(statesSeen[statesSeen.length - 1]).toBe(DriftState.Idle);
@@ -46,7 +47,9 @@ describe('hop -> hold -> drift -> recover', () => {
     // Let the Bey settle on the floor before tapping — tapping while still
     // falling from spawn height means the tap's grounded check misses
     // entirely, which isn't what this test is about.
-    for (let i = 0; i < 30; i++) {
+    // 45 ticks: since the Motion Lab integration (M11) the drop from spawn
+    // height lands with a small floor bounce (B: ×0.35) before settling.
+    for (let i = 0; i < 45; i++) {
       harness.tick(settle.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }));
     }
 
@@ -67,7 +70,7 @@ describe('hop -> hold -> drift -> recover', () => {
     const harness = await TestBeyHarness.create();
     const enterDrift = new ScriptedController([
       { fromTick: 0, held: [Action.MoveForward] },
-      { fromTick: 20, held: [Action.MoveForward, Action.JumpDrift, Action.SteerRight] },
+      { fromTick: 45, held: [Action.MoveForward, Action.JumpDrift, Action.SteerRight] },
     ]);
 
     // Run until Drifting is actually reached, whenever that naturally

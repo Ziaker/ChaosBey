@@ -10,6 +10,7 @@ import { DEFAULT_ARENA_PRESET, arenaPreset, type ArenaGeometry, type ArenaPreset
 import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import { resolveMatchConfig, type MatchConfig } from '../../config/match/MatchConfig';
+import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
 import type { AiPersonalityChoice, SideControllerSpec } from '../session/SideControllers';
 import { BEY_ROSTER, rosterEntry } from './beyRoster';
@@ -24,6 +25,8 @@ export interface MatchSetup {
   readonly arena: { readonly presetId: ArenaPresetId; readonly geometry: ArenaGeometry };
   /** Advanced rules (GDD 152): scales the knockback a Clash resolution applies. */
   readonly clashImpactMultiplier: number;
+  /** M11: the motion direction — Motion Lab A / B (default) / C. */
+  readonly motion: MotionDirectionId;
   /** Fixed match seed text, or null for a fresh random seed every match. */
   readonly seedText: string | null;
 }
@@ -50,6 +53,7 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
     roundsToWin: 2,
     arena: { presetId: DEFAULT_ARENA_PRESET, geometry: arenaPreset(DEFAULT_ARENA_PRESET).geometry },
     clashImpactMultiplier: CLASH_IMPACT_MULTIPLIER_DEFAULT,
+    motion: DEFAULT_MOTION_DIRECTION,
     seedText: null,
   };
 }
@@ -73,6 +77,7 @@ export function matchConfigFor(setup: MatchSetup): MatchConfig {
     arenaWallHeightM: setup.arena.geometry.wallHeightM,
     arenaWallRestitution: setup.arena.geometry.wallRestitution,
     arenaFloor: setup.arena.geometry.floor ?? DEFAULT_ARENA_FLOOR,
+    motion: setup.motion ?? DEFAULT_MOTION_DIRECTION,
   });
 }
 

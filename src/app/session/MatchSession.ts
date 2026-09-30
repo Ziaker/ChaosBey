@@ -14,7 +14,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { createMatchScene, type MatchBeys, type MatchScene } from '../bootstrap/createMatchScene';
+import { createMatchScene, REST_VISUAL_POSE, type BeyVisualPose, type MatchBeys, type MatchScene } from '../bootstrap/createMatchScene';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
 import type { MatchTickResult } from '../simulation/tickMatch';
 import { MatchStepper, type MatchStepWorld } from '../simulation/MatchStepper';
@@ -224,7 +224,7 @@ export class MatchSession {
   private lastActions: Record<Side, ControllerActions | null> = { first: null, second: null };
   private lastVelocity: Record<Side, { x: number; y: number; z: number }>;
   private lastAcceleration: Record<Side, { x: number; y: number; z: number }> = { first: zero3(), second: zero3() };
-  private lastVisual: Record<Side, { spin: number; wobble: number }> = { first: { spin: 0, wobble: 0 }, second: { spin: 0, wobble: 0 } };
+  private lastVisual: Record<Side, BeyVisualPose> = { first: REST_VISUAL_POSE, second: REST_VISUAL_POSE };
   private disposed = false;
 
   private constructor(options: MatchSessionOptions, physics: PhysicsWorld) {
@@ -247,7 +247,7 @@ export class MatchSession {
     this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys, {
       geometry: arenaGeometryOf(options.matchConfig),
       theme: options.arenaTheme ?? FOUNDRY_PIT.theme,
-    });
+    }, options.matchConfig.motion ?? 'B');
     this.headingArrow = new HeadingArrow(this.root);
     this.camera = options.camera;
     const arenaFloor = options.matchConfig.arenaFloor ?? 'flat';
@@ -535,8 +535,8 @@ export class MatchSession {
     }
 
     this.lastVisual = {
-      first: { spin: result.first.spin.visualSpinAngleRad, wobble: result.first.spin.wobbleOffsetRad },
-      second: { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad },
+      first: { spin: result.first.spin.visualSpinAngleRad, wobble: result.first.spin.wobbleOffsetRad, lean: result.first.spin.lean },
+      second: { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad, lean: result.second.spin.lean },
     };
 
     this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents.clashStarted);
@@ -568,7 +568,7 @@ export class MatchSession {
   /** Syncs visuals, camera and frame-rate VFX to the current state. Call once per rendered frame, before renderer.render(). */
   renderFrame(frameDeltaSeconds: number, camera: THREE.PerspectiveCamera, view: SessionRenderView = DEFAULT_RENDER_VIEW): void {
     const match = this.match;
-    match.syncVisualsToPhysics(this.lastVisual.first.spin, this.lastVisual.first.wobble, this.lastVisual.second.spin, this.lastVisual.second.wobble);
+    match.syncVisualsToPhysics(this.lastVisual.first, this.lastVisual.second);
 
     // The player's Bey (the keyboard/pad side) gets the heading arrow.
     const playerSide: Side | null = this.controllerSpecs.first.kind === 'keyboard' ? 'first' : this.controllerSpecs.second.kind === 'keyboard' ? 'second' : null;
