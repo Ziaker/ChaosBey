@@ -24,7 +24,7 @@ import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { detectHits, type HitEvent } from '../../combat/hit-detection/HitDetection';
 import { applyKnockback, computeKnockback, computeStabilityDamage, type KnockbackComponents } from '../../combat/knockback/Knockback';
-import { CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS } from '../../combat/attacks/AttackTuning';
+import { CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS } from '../../combat/attacks/AttackTuning';
 import { isRingOut } from '../../arena/ringout/RingOut';
 import { RoundState } from '../../combat/round-rules/RoundState';
 import type { ControllerActions } from '../../input/actions/Action';
@@ -383,8 +383,14 @@ export function tickMatch(
       // GDD section 23/107: Circular Attack catching an active Dash Attack
       // launches the attacker's *target* upward instead of normal knockback.
       // Never routed through Clash (see ClashOrchestration.processTickHits).
+      // The catch stops the Dash: the dasher keeps only part of its
+      // horizontal speed. (The old movement's heavy air and overspeed drag
+      // used to stop the flight short; with the Motion Lab's air model a
+      // caught 15 m/s Dash flew on ~18 m, over the wall from the centre.)
       const vel = defender.body.linvel();
-      defender.body.setLinvel({ x: vel.x, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z }, true);
+      const keep = CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP;
+      defender.body.setLinvel({ x: vel.x * keep, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z * keep }, true);
+      defender.movement.registerKnockback();
       // A genuine launch: arm Air Recovery immediately if the defender was
       // already airborne (no further grounded->airborne transition would
       // ever come this period), otherwise arm the short pending window
@@ -410,6 +416,7 @@ export function tickMatch(
       impactDirectionXZ: normalize(subtract(resolved.defenderPositionXZ, resolved.attackerPositionXZ)),
     });
     applyKnockback(defender.body, resolved.attackerPositionXZ, resolved.defenderPositionXZ, knockback, defender.motion);
+    defender.movement.registerKnockback();
     // Same immediate-vs-pending arming as the catch-launch path above.
     defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
     combatEvents.push({

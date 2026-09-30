@@ -38,11 +38,11 @@
 
 | | Flat (current) | Bowl A — Parabolic dish | Bowl B — Funnel | Bowl C — Central plateau |
 |---|---:|---:|---:|---:|
-| Ring-outs / KOs / draws / unresolved | 12 / 24 / 0 / 0 | 3 / 33 / 0 / 0 | 5 / 31 / 0 / 0 | 2 / 34 / 0 / 0 |
-| Average round length | 14.0 s | 18.5 s | 15.2 s | 20.5 s |
-| Average speed | 6.80 m/s | 7.32 m/s | 7.48 m/s | 6.95 m/s |
-| Average distance from the centre | 6.93 m | 6.94 m | 6.95 m | 6.80 m |
-| Time past r = 9 m | 33.7% | 30.5% | 29.7% | 29.7% |
-| Time at the wall | 5.6% | 5.3% | 5.8% | 4.9% |
-| Time in the air | 18.4% | 25.6% | 22.8% | 21.8% |
+| Ring-outs / KOs / draws / unresolved | 3 / 31 / 2 / 0 | 8 / 27 / 1 / 0 | 9 / 26 / 1 / 0 | 10 / 24 / 2 / 0 |
+| Average round length | 15.8 s | 16.0 s | 14.8 s | 15.4 s |
+| Average speed | 6.11 m/s | 6.58 m/s | 6.90 m/s | 7.01 m/s |
+| Average distance from the centre | 7.23 m | 6.85 m | 7.06 m | 6.87 m |
+| Time past r = 9 m | 37.1% | 29.2% | 32.2% | 30.9% |
+| Time at the wall | 6.7% | 5.7% | 5.9% | 5.3% |
+| Time in the air | 19.7% | 25.4% | 22.0% | 24.7% |
 | GDD 67 invalid states / warnings | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |

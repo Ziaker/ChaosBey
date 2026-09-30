@@ -29,6 +29,9 @@ export const CIRCULAR_STABILITY_DAMAGE = 8;
 // opponent's active Dash Attack launches them upward instead of the usual
 // horizontal knockback.
 export const CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS = 7;
+// ...and the catch stops the Dash: the dasher keeps this fraction of its
+// horizontal speed (M11).
+export const CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP = 0.3;
 
 // --- Dash Attack ---
 export const DASH_MIN_CHARGE_S = 0.15; // below this, charge contributes ~nothing beyond the minimum force.

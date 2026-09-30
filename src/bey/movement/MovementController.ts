@@ -138,6 +138,20 @@ export class MovementController {
     this.lastHeadingForward = fromYaw(headingRad);
   }
 
+  /**
+   * A knockback (a hit, a counter, a Clash resolution) was just applied to
+   * this body: let it play out like a detected collision — the next ticks
+   * leave the velocity to physics (post-impact window) and grip drops as on
+   * any impact. Without this the next pre-step re-wrote the horizontal
+   * velocity (a Dash at full speed), so only the upward part of a counter's
+   * knockback survived and a countered dasher flew on over the wall.
+   */
+  registerKnockback(): void {
+    this.postImpactCooldownRemainingS = POST_IMPACT_GRIP_SUPPRESSION_S;
+    this.intendedVelocityThisTick = null;
+    this.grip = Math.min(this.grip, this.motion.slipGrip);
+  }
+
   /** Debug Lab "reset cooldowns" (GDD section 70) — explicit mutation, never called by gameplay. */
   debugResetCooldown(): void {
     this.postImpactCooldownRemainingS = 0;
@@ -275,9 +289,12 @@ export class MovementController {
 
     this.preStepVerticalMps = body.linvel().y;
     if (this.postImpactCooldownRemainingS > 0) {
-      // Back off: let the physics-resolved post-collision velocity play out untouched this tick.
+      // Back off: let the physics-resolved post-collision velocity play out
+      // untouched this tick. The velocity it carries in is still the
+      // reference for impact detection, so a second collision inside the
+      // window (a knockback into the wall) is still felt (M11).
       this.postImpactCooldownRemainingS = Math.max(0, this.postImpactCooldownRemainingS - fixedDeltaSeconds);
-      this.intendedVelocityThisTick = null;
+      this.intendedVelocityThisTick = velHoriz;
     } else {
       const vertical = this.verticalFor(newVelHoriz, currentVel, grounded ? input.floorNormal : null);
       body.setLinvel({ x: newVelHoriz.x, y: vertical, z: newVelHoriz.z }, true);

@@ -13,6 +13,7 @@
 // tuned numbers.
 // ============================================================
 
+import type { MatchConfig } from '../../config/match/MatchConfig';
 import type { Bey } from '../../bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../bey/core/BeyTuning';
 import { floorHeightAt } from '../../arena/floor/ArenaFloorProfile';
@@ -34,6 +35,8 @@ const TAP_TICKS = 2;
 const FULL_DASH_HOLD_TICKS = Math.ceil(DASH_MAX_CHARGE_S * FIXED_TICKS_PER_SECOND) + 3;
 /** Ticks a scripted short Dash holds Attack (just past the tap window). */
 const SHORT_DASH_HOLD_TICKS = Math.ceil(TAP_MAX_HOLD_S * FIXED_TICKS_PER_SECOND) + 6;
+/** Ticks the scripted ring-out jump holds JumpDrift (a short hop). */
+const JUMP_TAP_HOLD_TICKS = 12;
 /** Ticks a scripted full jump holds JumpDrift. */
 const FULL_JUMP_HOLD_TICKS = Math.ceil(JUMP_ASSIST_MAX_DURATION_S * FIXED_TICKS_PER_SECOND) + 3;
 
@@ -58,6 +61,8 @@ export interface ScenarioPreset {
   readonly supported: boolean;
   readonly unsupportedReason?: string;
   readonly durationTicks: number;
+  /** Match rules for this scenario (e.g. a lower wall); omitted = the defaults. */
+  readonly matchConfig?: Partial<MatchConfig>;
   /** Places Beys / sets resources before the first tick. */
   readonly setup?: (actors: ScenarioActors) => void;
   readonly first: ScenarioSideScript;
@@ -116,7 +121,9 @@ function faceOff(d: number): (a: ScenarioActors) => void {
 }
 
 /** clash-cooldown-collision: when both Dash again, inside the Clash cooldown. */
-const COOLDOWN_DASH_TIMES_S = [7, 9, 11, 13];
+const COOLDOWN_DASH_TIMES_S = [6.5, 9.5, 12.5];
+/** ...and second holds its charge this many ticks longer, releasing later. */
+const COOLDOWN_SECOND_EXTRA_HOLD_TICKS = 24;
 
 // ---- the presets ----
 
@@ -184,21 +191,24 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
   {
     id: 'ring-out',
     label: 'Test Ring-Out',
-    description: 'Second releases a full Dash outward from near the centre at first, who waits at z = 7; first\'s Circular catches the Dash and launches it up, and its own outward momentum carries it over the wall. The round ends by ring-out through the physics, not by rule.',
+    description: 'Second releases a full Dash outward at first (z = 5), who jumps just before it arrives; a Dash that hits an airborne Bey sends it over the wall. The round ends by ring-out through the physics, not by rule.',
     supported: true,
     durationTicks: 8 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
-      placeBey(first, 0, 7, Math.PI);
+      placeBey(first, 0, 5, Math.PI);
       placeBey(second, 0, -1, 0);
     },
-    // Tap 12 ticks after the Dash release: the middle of the 8–16 tick range
-    // that produces this ring-out, so small timing changes don't flip it.
-    // (Motion Lab integration, M11: re-measured — z = 6 with any tap from
-    // 0 to 16 ticks no longer rings out; z = 7 with 8–16 does.)
-    first: script(hold(Action.Attack, FULL_DASH_HOLD_TICKS + 12, TAP_TICKS)),
+    // Jump 8 ticks after the Dash release (the hit lands 18 ticks after
+    // it): the middle of the 2–16 tick range that produces this ring-out.
+    // M11 (Motion Lab movement): the old setup — first's Circular catching
+    // the Dash, whose own momentum carried it out — no longer rings out,
+    // since a caught dasher now keeps 30% of its speed (the fix for the
+    // ~2 s opening ring-outs). The AI ring-out traced under B came from
+    // this: a Dash hitting a Bey in the air.
+    first: script(hold(Action.JumpDrift, FULL_DASH_HOLD_TICKS + 8, JUMP_TAP_HOLD_TICKS)),
     second: script(hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS)),
     doneWhen: (t) => t.roundOver,
-    check: (t) => ok(t.outcome === 'FirstWinsByRingOut', `outcome ${t.outcome}; counter hits ${t.hits.filter((h) => h.caughtOpponentDashing).length}`),
+    check: (t) => ok(t.outcome === 'SecondWinsByRingOut', `outcome ${t.outcome}; Dash hits ${t.hits.filter((h) => !h.attackerIsFirst).length}`),
   },
   {
     id: 'wall-hit',
@@ -398,13 +408,15 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     supported: true,
     durationTicks: 14 * FIXED_TICKS_PER_SECOND,
     setup: faceOff(3),
-    // After the ~4 s Clash (a Tie here) both Beys are thrown apart, and
-    // since the Motion Lab integration (M11) one Dash at a fixed tick no
-    // longer reliably meets the other. Both Dash every 2 s from 7 s, all
-    // inside the cooldown; the lock-on steers them together (measured: 4
-    // hits during the cooldown).
+    // After the ~4 s Clash (a Tie here) both Beys are thrown apart and
+    // turned, and since the Motion Lab integration (M11) a Dash goes where
+    // its Bey faces: two released on the same tick fly past each other.
+    // Both Dash at 6.5, 9.5 and 12.5 s (all inside the cooldown), second
+    // releasing 24 ticks after first — the middle of the 8–40 tick range
+    // that lands hits (measured: 1–3 hits during the cooldown; 0 for any
+    // same-tick release, or a 7/9/11/13 s schedule).
     first: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...COOLDOWN_DASH_TIMES_S.flatMap((s) => hold(Action.Attack, Math.round(s * FIXED_TICKS_PER_SECOND), FULL_DASH_HOLD_TICKS))]),
-    second: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...COOLDOWN_DASH_TIMES_S.flatMap((s) => hold(Action.Attack, Math.round(s * FIXED_TICKS_PER_SECOND), FULL_DASH_HOLD_TICKS))]),
+    second: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...COOLDOWN_DASH_TIMES_S.flatMap((s) => hold(Action.Attack, Math.round(s * FIXED_TICKS_PER_SECOND), FULL_DASH_HOLD_TICKS + COOLDOWN_SECOND_EXTRA_HOLD_TICKS))]),
     check: (t) => ok(t.clashStarts === 1 && t.hitsDuringClashCooldown > 0, `Clash starts ${t.clashStarts}; hits during cooldown ${t.hitsDuringClashCooldown}`),
   },
   {

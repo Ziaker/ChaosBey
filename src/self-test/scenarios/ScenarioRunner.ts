@@ -92,7 +92,7 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
     }
   }
   const floor = options.arenaFloor ?? 'flat';
-  const matchConfig = resolveMatchConfig({ arenaFloor: floor });
+  const matchConfig = resolveMatchConfig({ ...preset.matchConfig, arenaFloor: floor });
   const world = await SelfTestMatchWorld.build({
     firstDefinition: options.firstDefinition ?? ATTACK_ARCHETYPE,
     secondDefinition: options.secondDefinition ?? DEFENSE_ARCHETYPE,

@@ -284,6 +284,7 @@ export class ClashOrchestration {
       impactDirectionXZ: normalize(subtract(winningHit.defenderPositionXZ, winningHit.attackerPositionXZ)),
     });
     applyKnockback(loser.body, winningHit.attackerPositionXZ, winningHit.defenderPositionXZ, knockback, loser.motion);
+    loser.movement.registerKnockback();
     loser.dodge.registerLaunch(!isGrounded(physics, loser.collider));
 
     const stabilityDamageAmount =

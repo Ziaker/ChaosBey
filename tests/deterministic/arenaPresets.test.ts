@@ -73,9 +73,12 @@ describe('arena values in real matches', () => {
     };
     const rift = await run(RIFT_CRATER.geometry);
     const tournament = await run(TOURNAMENT_STADIUM.geometry);
-    // Measured: Rift 15/15 ring-outs in 6338 ticks; Tournament 10/15 in 13190.
+    // Measured before the Motion Lab movement: Rift 15/15 ring-outs in 6338 ticks, Tournament
+    // 10/15 in 13190. With it (M11, direction B): Rift 3/15 in 10341, Tournament 0/15 in 12111 —
+    // B launches with the Lab's knockback lift (0.18 of the push, the game used 0.35), so even a
+    // 1 m rim is rarely cleared. Still more ring-outs and shorter rounds (was: < 0.7×).
     expect(rift.ringOuts).toBeGreaterThan(tournament.ringOuts);
-    expect(rift.ticks).toBeLessThan(tournament.ticks * 0.7);
+    expect(rift.ticks).toBeLessThan(tournament.ticks);
   }, 300_000);
 
   it('are recorded in the replay and used on playback: a different wall diverges', async () => {
