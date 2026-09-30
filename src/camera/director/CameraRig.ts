@@ -42,15 +42,20 @@ export const RIG_DIRECTOR_OPTIONS = {
 /**
  * Over-the-shoulder framing per preset (owner playtest, after M11: "third
  * person behind the Bey, behind and just a little above, over the
- * shoulder"). The lab presets framed the fight from 7–17 m out and 4–6 m up;
- * these put the eye 3.6–5 m behind the player's Bey and 1.5–2.4 m above it.
- * A steadiest and highest, C closest and lowest; the presets' own FOV,
- * smoothing, orbit speed cap, shake and contexts are unchanged.
+ * shoulder"; pulled back further after a second playtest pass, 2026-09:
+ * the first pass read as too close, cramping the fight and the arena/
+ * ring-out edge out of view). The lab presets framed the fight from
+ * 7–17 m out and 4–6 m up; these put the eye 4.8–6.5 m behind the
+ * player's Bey (was 3.6–5 m); height is untouched (1.5–2.4 m, same as
+ * before) — the pull-back is entirely distance, so pitch actually gets a
+ * little LOWER (more "behind", not more "overhead"). A steadiest
+ * and highest, C closest and lowest; the presets' own FOV, smoothing,
+ * orbit speed cap, shake and contexts are unchanged.
  */
 export const SHOULDER_RIGS: Readonly<Record<PresetId, ShoulderRig>> = {
-  A: { distanceM: 5, heightM: 2.4, shoulderM: 0.5, framing: 0.5, lookHeightM: 0.5, separationPull: 0.3, maxExtraDistanceM: 3.5, lookAheadS: 0 },
-  B: { distanceM: 4.2, heightM: 1.9, shoulderM: 0.8, framing: 0.45, lookHeightM: 0.45, separationPull: 0.28, maxExtraDistanceM: 3, lookAheadS: 0.12 },
-  C: { distanceM: 3.6, heightM: 1.5, shoulderM: 1, framing: 0.4, lookHeightM: 0.4, separationPull: 0.25, maxExtraDistanceM: 2.5, lookAheadS: 0.2 },
+  A: { distanceM: 5.8, heightM: 2.4, shoulderM: 0.5, framing: 0.5, lookHeightM: 0.5, separationPull: 0.3, maxExtraDistanceM: 3.5, lookAheadS: 0 },
+  B: { distanceM: 5, heightM: 1.9, shoulderM: 0.8, framing: 0.45, lookHeightM: 0.45, separationPull: 0.28, maxExtraDistanceM: 3, lookAheadS: 0.12 },
+  C: { distanceM: 4.3, heightM: 1.5, shoulderM: 1, framing: 0.4, lookHeightM: 0.4, separationPull: 0.25, maxExtraDistanceM: 2.5, lookAheadS: 0.2 },
 };
 
 /** The options the rig builds preset `id`'s director with (tests build the same director to compare against). */

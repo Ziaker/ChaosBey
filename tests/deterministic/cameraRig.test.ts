@@ -314,7 +314,13 @@ describe('in-game arena camera (owner playtest, M11)', () => {
         // distance), looking down at a shallow angle.
         expect(out.eye.y - p.position.y, `${label}: low`).toBeLessThan(4.5);
         const pitchDeg = (Math.atan2(out.eye.y - out.focus.y, Math.hypot(out.eye.x - out.focus.x, out.eye.z - out.focus.z)) * 180) / Math.PI;
-        expect(pitchDeg, `${label}: pitch`).toBeLessThan(30);
+        // 30 -> 31 after the second owner playtest pass pulled the rigs back
+        // (SHOULDER_RIGS distanceM up, height unchanged): at sep 14 the
+        // wider desired distance runs into the arena's containRadiusM
+        // (10.5 m) sooner, which pulls the eye horizontally closer while
+        // height stays put — measured 30.58° for A, still nowhere near
+        // aerial (the ceiling was itself a margin, not the approved value).
+        expect(pitchDeg, `${label}: pitch`).toBeLessThan(31);
         expect(pitchDeg, `${label}: pitch`).toBeGreaterThan(3);
       }
     }

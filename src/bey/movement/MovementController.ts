@@ -107,6 +107,8 @@ export class MovementController {
   private whirlRadPerS = 0;
   /** Vertical velocity the body carried into physics.step() (for the Motion Lab landing bounce in postStep). */
   private preStepVerticalMps = 0;
+  /** The current post-impact window was opened by a knockback (a hit, a counter, a Clash): it plays out undamped. */
+  private knockbackPlaying = false;
   /** Horizontal velocity the body carried into physics.step() (a landing keeps it — see applyLandingBounce). */
   private preStepHorizontal: Vec2 = { x: 0, z: 0 };
   /** Consecutive ticks that started airborne (a landing bounces only after a real fall). */
@@ -154,6 +156,7 @@ export class MovementController {
    * knockback survived and a countered dasher flew on over the wall.
    */
   registerKnockback(): void {
+    this.knockbackPlaying = true;
     this.postImpactCooldownRemainingS = POST_IMPACT_GRIP_SUPPRESSION_S;
     this.intendedVelocityThisTick = null;
     this.grip = Math.min(this.grip, this.motion.slipGrip);
@@ -162,6 +165,7 @@ export class MovementController {
   /** Debug Lab "reset cooldowns" (GDD section 70) — explicit mutation, never called by gameplay. */
   debugResetCooldown(): void {
     this.postImpactCooldownRemainingS = 0;
+    this.knockbackPlaying = false;
     this.grip = 1;
     this.slipping = false;
     this.whirlRadPerS = 0;
@@ -313,6 +317,16 @@ export class MovementController {
       // window (a knockback into the wall) is still felt (M11).
       this.postImpactCooldownRemainingS = Math.max(0, this.postImpactCooldownRemainingS - fixedDeltaSeconds);
       this.intendedVelocityThisTick = velHoriz;
+      // A bounce off the wall (or a Bey) with no movement input settles
+      // like any other idle motion (owner playtest, after M11: released at
+      // 11 m/s into the wall, a Bey came back at 7 m/s and slid ~3 m on its
+      // own). A knockback from a hit still plays out untouched.
+      if (!hasMovementInput && grounded && !this.knockbackPlaying) {
+        const k = Math.exp(-IDLE_DAMPING_PER_S * fixedDeltaSeconds);
+        body.setLinvel({ x: velHoriz.x * k, y: currentVel.y, z: velHoriz.z * k }, true);
+        this.intendedVelocityThisTick = scale(velHoriz, k);
+      }
+      if (this.postImpactCooldownRemainingS === 0) this.knockbackPlaying = false;
     } else {
       const vertical = this.verticalFor(newVelHoriz, currentVel, grounded ? input.floorNormal : null);
       body.setLinvel({ x: newVelHoriz.x, y: vertical, z: newVelHoriz.z }, true);
@@ -474,6 +488,7 @@ export class MovementController {
       lastLateralGripPerS: this.lastLateralGripPerS,
       intendedVelocityThisTick: vec2(this.intendedVelocityThisTick),
       preStepVerticalMps: this.preStepVerticalMps,
+      knockbackPlaying: this.knockbackPlaying,
       preStepHorizontal: vec2(this.preStepHorizontal),
       airborneTicks: this.airborneTicks,
       grip: this.grip,

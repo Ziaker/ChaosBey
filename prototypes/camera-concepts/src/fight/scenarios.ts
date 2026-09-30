@@ -59,11 +59,12 @@ export const SCENARIOS: readonly Scenario[] = [
     // Re-swept after the Motion Lab integration (M11) changed every fight: 'q' (was 'k'), then again
     // after its follow-up fixes: no seed a..z keeps a Clash and 24 s without a round end any more
     // (fights end by KO in 8–16 s), so 15 s; 'g' since the owner-playtest controls (Clash at
-    // 5.9 s, round end at 16.6 s; was 'u').
+    // 5.9 s, round end at 16.6 s; was 'u'); 'k' since wall bounces without input settle like idle
+    // motion (Clash at 2.0 s, round end at 16.6 s; was 'g').
     firstSpawn: { x: -3, z: -5 },
     secondSpawn: { x: 3, z: 5 },
-    first: { kind: 'ai', seed: 'duel-p-g' },
-    second: { kind: 'ai', seed: 'duel-o-g' },
+    first: { kind: 'ai', seed: 'duel-p-k' },
+    second: { kind: 'ai', seed: 'duel-o-k' },
     expects: ['hit', 'clashActive'],
   },
   {
