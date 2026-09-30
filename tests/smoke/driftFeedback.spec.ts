@@ -11,10 +11,11 @@ import * as fs from 'fs';
 async function driveIntoDrift(page: Page): Promise<void> {
   await page.keyboard.down('ArrowUp');
   await page.waitForTimeout(700); // build speed
-  await page.keyboard.down('x'); // hop…
-  await page.waitForTimeout(120);
+  // Turn as X goes down: X + a real turn is a drift (X held going straight
+  // would be the variable jump — see DriftController).
   await page.keyboard.up('ArrowUp');
-  await page.keyboard.down('ArrowRight'); // …and turn while holding X
+  await page.keyboard.down('ArrowRight');
+  await page.keyboard.down('x');
 }
 
 async function releaseDrift(page: Page): Promise<void> {
