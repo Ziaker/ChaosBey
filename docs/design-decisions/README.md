@@ -2,17 +2,20 @@
 
 Este diretório contém decisões de design que agentes **não devem reabrir** sem nova instrução explícita do owner.
 
-## Ordem de leitura obrigatória para trabalho visual
+## Ordem de leitura obrigatória
 
-1. **`VISUAL_APPROVALS_MASTER.md`** — estado canônico consolidado e regras de precedência.
-2. Documento detalhado da área afetada.
-3. `visual-prototype-inventory.md` apenas como inventário/histórico e para localizar labs; ele pode conter linhas antigas posteriormente superseded.
+1. **`OWNER_DECISIONS_MASTER.md`** — ledger mais recente de decisões fechadas, owner overrides e pendências reais. Ler primeiro.
+2. **`VISUAL_APPROVALS_MASTER.md`** — estado consolidado dos protótipos e aprovações visuais.
+3. Documento detalhado da área afetada.
+4. `visual-prototype-inventory.md` apenas como inventário/histórico e para localizar labs; ele pode conter linhas antigas posteriormente superseded.
+5. Status docs/código atual para distinguir `APROVADO`, `PROTOTIPADO` e `INTEGRADO`.
 
 ## Fontes por área
 
 | Área | Documento |
 |---|---|
-| Estado consolidado de todos os protótipos visuais | `VISUAL_APPROVALS_MASTER.md` |
+| Ledger de decisões/overrides do owner | `OWNER_DECISIONS_MASTER.md` |
+| Estado consolidado dos protótipos visuais | `VISUAL_APPROVALS_MASTER.md` |
 | Beys, Arena e VFX | `visual-prototypes-approval.md` |
 | Stamina / Stability / Quebrado | `condition-visual-approval.md` |
 | Camera Director e presets | `camera-approval.md` |
@@ -23,10 +26,12 @@ Este diretório contém decisões de design que agentes **não devem reabrir** s
 ## Precedência
 
 - Uma decisão explícita mais recente do owner vence uma formulação antiga.
-- Quando `VISUAL_APPROVALS_MASTER.md` marcar `OWNER OVERRIDE` ou `SUPERSEDED`, aquela correção prevalece sobre inventários/documentos históricos conflitantes.
+- `OWNER_DECISIONS_MASTER.md` registra as decisões/overrides mais recentes que precisam impedir reabertura de perguntas já respondidas.
+- Quando `VISUAL_APPROVALS_MASTER.md` ou o ledger marcar `OWNER OVERRIDE` ou `SUPERSEDED`, aquela correção prevalece sobre inventários/documentos históricos conflitantes.
 - Para valores numéricos exatos, use o documento detalhado da área, salvo supersessão explícita.
 - `PROTOTIPADO`, `APROVADO` e `INTEGRADO` são estados diferentes.
 - UI/debug de um lab não é automaticamente UI final do jogo.
+- Uma lacuna em HUD/UI **não** autoriza reprototipar Arena, VFX, Camera, Motion, Condition ou Clash já aprovados.
 
 ## Owner override vigente sobre o roster
 
@@ -34,12 +39,19 @@ Este diretório contém decisões de design que agentes **não devem reabrir** s
 
 Qualquer texto antigo dizendo para escolher apenas três finalistas está superseded nesse ponto. Os códigos/nomenclatura final e outras decisões independentes continuam regidos pelos documentos atuais.
 
+## Diretiva de escopo vigente — 2026-09-30
+
+Antes de criar um novo Lab, identificar exatamente a lacuna que permanece aberta. Sistemas já aprovados devem ser **reutilizados**, não reconstruídos para comparação.
+
+Em particular, qualquer trabalho futuro de Combat HUD deve tratar somente layout/estética/legibilidade do HUD geral enquanto isso continuar sem escolha final documentada. Ele não deve recriar câmera, arena, movimento, VFX, condição, Clash, física, recursos ou IA.
+
 ## Regra de manutenção
 
 Ao registrar uma nova decisão:
 
 1. atualizar o documento detalhado da área;
-2. atualizar o master se o resumo/status mudou;
-3. marcar decisões antigas como superseded quando necessário;
-4. atualizar o inventário;
-5. preservar o histórico em vez de apagar contexto útil.
+2. atualizar `OWNER_DECISIONS_MASTER.md` se o status/precedência mudar;
+3. atualizar o master visual quando a mudança for visual;
+4. marcar decisões antigas como superseded quando necessário;
+5. atualizar o inventário;
+6. preservar o histórico em vez de apagar contexto útil.
