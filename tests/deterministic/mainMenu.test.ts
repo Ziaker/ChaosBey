@@ -17,6 +17,7 @@ describe('app mode routing', () => {
   it('keeps the direct links for every mode', () => {
     expect(resolveAppMode('?mode=play')).toBe('play');
     expect(resolveAppMode('?mode=debug-lab')).toBe('debug-lab');
+    expect(resolveAppMode('?mode=combat-hud-lab')).toBe('combat-hud-lab');
     expect(resolveAppMode('?mode=self-test')).toBe('self-test');
   });
 
@@ -24,6 +25,7 @@ describe('app mode routing', () => {
     const page = { pathname: '/ChaosBey/', search: '' };
     expect(appModeHref('play', page)).toBe('/ChaosBey/?mode=play');
     expect(appModeHref('debug-lab', page)).toBe('/ChaosBey/?mode=debug-lab');
+    expect(appModeHref('combat-hud-lab', page)).toBe('/ChaosBey/?mode=combat-hud-lab');
     expect(appModeHref('self-test', page)).toBe('/ChaosBey/?mode=self-test');
     expect(appModeHref('menu', { pathname: '/ChaosBey/', search: '?mode=play' })).toBe('/ChaosBey/');
     expect(appModeHref('debug-lab', { pathname: '/ChaosBey/', search: '?x=1&mode=play' })).toBe('/ChaosBey/?x=1&mode=debug-lab');
@@ -38,10 +40,10 @@ describe('Main Menu structure', () => {
     expect(MAIN_MENU.player.find((e) => e.label === 'PLAY')?.mode).toBe('play');
   });
 
-  it('keeps DEBUG LAB and SELF TEST only inside the Developer / Debug section', () => {
+  it('keeps all Labs and Self Test only inside the Developer / Debug section', () => {
     expect(MAIN_MENU.developerSectionLabel).toBe('Developer / Debug');
-    expect(MAIN_MENU.developer.map((e) => e.label)).toEqual(['DEBUG LAB', 'SELF TEST']);
-    expect(developerModes).toEqual(['debug-lab', 'self-test']);
+    expect(MAIN_MENU.developer.map((e) => e.label)).toEqual(['DEBUG LAB', 'COMBAT HUD LAB', 'SELF TEST']);
+    expect(developerModes).toEqual(['debug-lab', 'combat-hud-lab', 'self-test']);
     for (const entry of MAIN_MENU.player) expect(developerModes).not.toContain(entry.mode);
   });
 
