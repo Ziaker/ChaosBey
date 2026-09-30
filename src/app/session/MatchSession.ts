@@ -38,7 +38,7 @@ import { FOUNDRY_PIT, type ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { Bey } from '../../bey/core/Bey';
 import type { KnockbackComponents } from '../../combat/knockback/Knockback';
-import type { CombatController, ControllerActions } from '../../input/actions/Action';
+import { Action, type CombatController, type ControllerActions } from '../../input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../../physics/fixed-step/FixedTimestepLoop';
 import { checkAngularVelocity, checkLinearVelocity } from '../../physics/diagnostics/physicsSafety';
 import { PhysicsWorld } from '../../physics/world/PhysicsWorld';
@@ -773,6 +773,7 @@ export class MatchSession {
       clashProgress: this.clash.controller.getElapsedS() / CLASH_TARGET_DURATION_S,
       roundOver: this.roundState.isOver,
       ringOutIsFirst: this.ringOutIsFirst,
+      playerSteering: isSteeringInput(this.lastActions.first),
     });
     const out = this.cameraRig.tick(frame, fixedDeltaSeconds);
     const hitstop = this.hitstopView();
@@ -815,4 +816,11 @@ function createMatchId(): string {
   const cryptoApi = globalThis.crypto;
   if (cryptoApi && typeof cryptoApi.randomUUID === 'function') return cryptoApi.randomUUID();
   return `match-${Date.now().toString(36)}`;
+}
+
+/** Whether these actions hold a movement direction (directional stick/arrows, or the classic movement keys). Camera only. */
+function isSteeringInput(actions: ControllerActions | null): boolean {
+  if (!actions) return false;
+  if (actions.moveIntent) return Math.hypot(actions.moveIntent.x, actions.moveIntent.z) > 0;
+  return actions.held.has(Action.MoveForward) || actions.held.has(Action.MoveBackward) || actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight);
 }

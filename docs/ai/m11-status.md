@@ -487,7 +487,7 @@ Tests:
 - **Headless:** the player is in the lower half, the opponent is ahead and in frame, pitch is < 30° and eye height < 4.5 m, for every preset at 4 / 8 / 14 m. Turning never exceeds the cap; it holds when the Beys touch; on the bowls the eye stays inside the arena and above the floor.
 - **Browser** (`cameraShoulder.spec.ts`): the same checks through the real camera, flat and Bowl B, with screenshots.
 
-**Trade-off:** following the player → opponent line means the camera turns when the fight turns, which is what the fix-4 camera had stopped. The arrows are latched per gesture (a held direction keeps its world meaning), but their meaning changes between gestures as the camera turns.
+**Trade-off (superseded by fix 6 below):** following the player → opponent line means the camera turns when the fight turns, which is what the fix-4 camera had stopped. The arrows are latched per gesture (a held direction keeps its world meaning), but their meaning changes between gestures as the camera turns.
 
 ### 3. Result auto-continue (4 s)
 
@@ -507,3 +507,24 @@ See `docs/design-decisions/visual-fidelity-audit.md` for the A/B/C classificatio
 ### Consequences
 
 Replay seeds are re-pinned to replay-41 / replay-64. The low-grip preset now coasts after the drift (driving on hit the wall before grip was back).
+
+## Owner playtest fix 6 — the Bey "moves by itself" and ignores the arrows; camera too close
+
+Owner: "the Bey keeps moving by itself and doesn't respect my movement commands… the camera is too close, put it between the previous one and this one".
+
+Measured in the browser (real key presses, production build, the error between the held arrow and the Bey's motion on screen, computed from the live render camera):
+
+| | fix 5 | fix 6 |
+|---|---|---|
+| camera yaw range over the probe | −179 … 180° | −41 … 32° |
+| yaw change while an arrow is held (max per frame) | up to 82° (eye pushed over the player) | 12° (only in Clash / against the wall in contact) |
+| error, every held-arrow frame (median) | 22–25° | 11° |
+| error, open floor, no contact (median; share < 10°) | 25°; 22% | 6°; 64% |
+
+Causes and fixes:
+1. **The camera turned under the player's input.** The shoulder camera followed the player → opponent line, so every AI move turned the screen — and what ↑/→ mean. Now the angle is held: it never turns while a direction is held, nor for 0.6 s after release; idle, it turns only when the opponent is about to leave the frame (50° off), at ≤ 20°/s.
+2. **The view aimed between the Beys**, so even with the angle held it swung 15–40° as the opponent moved sideways; and when the wall/Bey guards pushed the eye nearly above the player, the screen's up/right flipped. The view now always faces the held angle (eye → focus locked to it horizontally, ≥ 3 m ahead); Clash, ring-out and finisher shots keep their own aim.
+3. **Idle wall bounces slid on.** A bounce with no input now settles with the idle damping (a hit's knockback still plays out undamped): the idle slide after a wall bounce went 1.0 m → 0.42 m headless.
+4. **Distance:** `SHOULDER_RIGS` sit between the lab camera and fix 5: A 6.5 m / 3.9 m up, B 5.6 / 3.2, C 4.8 / 2.6 (fix 5: 5 / 2.4, 4.2 / 1.9, 3.6 / 1.5; lab 7–17 m / 4.7–10 m). Brought in against the wall, the eye also comes down in proportion, so the pitch stays < 30°.
+
+Tests: `cameraRig.test.ts` — the angle and the rendered view hold while the opponent swings ±45° (idle) and walks 120° round (steering); after release it waits ≥ 0.5 s and turns ≤ 20°/s (this test fails on the fix-5 director: the view swung 33°). The camera lab's `normal-duel` seed is re-pinned to `k` (Clash at 2.0 s, no round end in 15 s).

@@ -310,9 +310,11 @@ describe('in-game arena camera (owner playtest, M11)', () => {
         expect(out.eye.z, `${label}: behind the player`).toBeLessThan(p.position.z);
         const back = Math.hypot(out.eye.x - p.position.x, out.eye.z - p.position.z);
         expect(back, `${label}: close behind`).toBeLessThan(9);
-        // Not an aerial view: low above the Bey (the lab presets sat 4–6 m up and more with
-        // distance), looking down at a shallow angle.
-        expect(out.eye.y - p.position.y, `${label}: low`).toBeLessThan(4.5);
+        // Not an aerial view: well below the lab presets (4.7–10.2 m up at these separations)
+        // and above the first shoulder pass (1.5–2.7 m), which the owner found too close
+        // (measured now: 2.6–5.9 m, the top end with the player's back to the wall), looking
+        // down at a shallow angle.
+        expect(out.eye.y - p.position.y, `${label}: low`).toBeLessThan(6.5);
         const pitchDeg = (Math.atan2(out.eye.y - out.focus.y, Math.hypot(out.eye.x - out.focus.x, out.eye.z - out.focus.z)) * 180) / Math.PI;
         expect(pitchDeg, `${label}: pitch`).toBeLessThan(30);
         expect(pitchDeg, `${label}: pitch`).toBeGreaterThan(3);
@@ -344,6 +346,56 @@ describe('in-game arena camera (owner playtest, M11)', () => {
         drift = Math.max(drift, Math.abs(((out.debug.yawDeg - start + 540) % 360) - 180));
       }
       expect(drift, `${preset} up close`).toBeLessThan(2);
+    }
+  });
+
+  it('does not chase the opponent: the angle is held; never turns while steering; idle, a slow turn only at the frame edge', () => {
+    // Owner playtest (after M11): following the player → opponent line turned the camera through a
+    // full circle as the AI circled a standing player (measured in the browser: yaw −179…180°), and a
+    // 25° re-aim zone still turned it 60°+ while the player stood still — every turn changes what the
+    // screen-relative arrows mean.
+    const yawStep = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180);
+    // What the player sees: the direction the rendered view faces (eye → focus), not only the director's angle.
+    const viewDeg = (o: { eye: { x: number; z: number }; focus: { x: number; z: number } }) => (Math.atan2(o.focus.x - o.eye.x, o.focus.z - o.eye.z) * 180) / Math.PI;
+    for (const preset of PRESET_IDS) {
+      const d = new CameraDirector(PRESETS[preset], 16 / 9, rigDirectorOptions(preset));
+      const settled = settle(d, fighter(0, -3), fighter(0, 3));
+      const start = settled.debug.yawDeg;
+      const startView = viewDeg(settled);
+      let worst = 0;
+      let worstView = 0;
+      // The opponent swings 45° either side of straight ahead, player idle: inside the frame, no turn.
+      for (let t = 0; t < 180; t++) {
+        const a = Math.PI / 2 + Math.sin((t / 180) * Math.PI * 2) * (45 * Math.PI) / 180;
+        const out = d.tick(frame(240 + t, fighter(0, -3), fighter(6 * Math.cos(a), -3 + 6 * Math.sin(a))) as never, DT);
+        worst = Math.max(worst, yawStep(out.debug.yawDeg, start));
+        worstView = Math.max(worstView, yawStep(viewDeg(out), startView));
+      }
+      expect(worst, `${preset}: inside the zone`).toBeLessThan(1);
+      // The opponent walks 120° round while the player holds a direction: no turn at all.
+      for (let t = 0; t < 90; t++) {
+        const a = Math.PI / 2 + (t / 90) * ((2 * Math.PI) / 3);
+        const out = d.tick({ ...frame(420 + t, fighter(0, -3), fighter(6 * Math.cos(a), -3 + 6 * Math.sin(a))), playerSteering: true } as never, DT);
+        worst = Math.max(worst, yawStep(out.debug.yawDeg, start));
+        worstView = Math.max(worstView, yawStep(viewDeg(out), startView));
+      }
+      expect(worst, `${preset}: steering`).toBeLessThan(1);
+      // Aiming between the Beys used to turn the view 15–40° as the opponent moved sideways.
+      expect(worstView, `${preset}: the view faces the held angle`).toBeLessThan(1);
+      // Let go: nothing for the first moments, then a slow turn (≤ 20°/s) toward the opponent.
+      const far = fighter(6 * Math.cos(Math.PI / 2 + (2 * Math.PI) / 3), -3 + 6 * Math.sin(Math.PI / 2 + (2 * Math.PI) / 3));
+      let previous = start;
+      let worstStep = 0;
+      let firstTurnTick = -1;
+      for (let t = 0; t < 120; t++) {
+        const out = d.tick(frame(510 + t, fighter(0, -3), far) as never, DT);
+        const step = yawStep(out.debug.yawDeg, previous);
+        if (step > 1e-3 && firstTurnTick < 0) firstTurnTick = t;
+        worstStep = Math.max(worstStep, step);
+        previous = out.debug.yawDeg;
+      }
+      expect(firstTurnTick, `${preset}: waits after the release`).toBeGreaterThanOrEqual(30);
+      expect(worstStep, `${preset}: slow re-aim`).toBeLessThanOrEqual(20 * DT + 1e-6);
     }
   });
 
