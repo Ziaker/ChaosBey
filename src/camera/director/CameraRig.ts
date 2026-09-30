@@ -51,6 +51,16 @@ export const RIG_DIRECTOR_OPTIONS = {
  * little LOWER (more "behind", not more "overhead"). A steadiest
  * and highest, C closest and lowest; the presets' own FOV, smoothing,
  * orbit speed cap, shake and contexts are unchanged.
+ *
+ * A separate, since-superseded pass (PR #63) raised height ~60% on top of
+ * this same distance pull-back, to compensate for a camera that locked its
+ * angle while the player steered (see CameraDirector's playerSteering
+ * removal below): a taller eye kept both fighters in frame even when the
+ * locked angle didn't naturally point at the action. With Directional
+ * input now genuinely arena/world-relative (no camera coupling to
+ * compensate for — see src/input/directional/screenDirection.ts), that
+ * lock and the height increase it needed are both gone; this keeps the
+ * distance-only pull-back the owner asked for.
  */
 export const SHOULDER_RIGS: Readonly<Record<PresetId, ShoulderRig>> = {
   A: { distanceM: 5.8, heightM: 2.4, shoulderM: 0.5, framing: 0.5, lookHeightM: 0.5, separationPull: 0.3, maxExtraDistanceM: 3.5, lookAheadS: 0 },

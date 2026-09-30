@@ -28,6 +28,8 @@ test('production build boots under /ChaosBey/ to the Main Menu, PLAY starts the 
   // could pass while testing the wrong (unscoped) URL.
   await page.goto('/ChaosBey/');
   expect(new URL(page.url()).pathname).toBe('/ChaosBey/');
+  // The version and the build commit are on screen (owner request), so a playtest knows which build it runs.
+  await expect(page.getByTestId('app-version')).toHaveText(/^v\d+\.\d+\.\d+( · [0-9a-f]{7,})?$/);
 
   // The plain game URL opens the Main Menu (GDD 56); PLAY opens the player
   // flow (M10) through the same ?mode=play route a direct link uses:
