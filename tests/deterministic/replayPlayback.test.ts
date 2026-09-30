@@ -68,12 +68,15 @@ interface Recording {
 }
 
 // Seeds pinned for long fights with many hitstop freezes (RNG scheme 2),
-// re-pinned after the Motion Lab integration (M11) changed every fight:
-// replay-45 lasts 1114 ticks with 144 frozen, replay-40 lasts 1162 with 125
-// (before: replay-15 / replay-17, pinned after the ext-32 wall fix).
+// re-pinned after the Motion Lab integration (M11) and again after its
+// follow-up fixes (a caught Dash stops, stacked Beys slide off, knockback
+// suppresses grip) changed every fight: replay-50 lasts 1243 ticks with 170
+// frozen, and its first Bey still reads its movement input after tick 900
+// (replay-59, 1126/168, no longer does), so it serves both tests
+// (before: replay-45 / replay-40; replay-15 / replay-17 before M11).
 // Most seeds end within a few hundred ticks.
-const LONG_SEED = 'replay-45';
-const MUTATION_SEED = 'replay-40';
+const LONG_SEED = 'replay-50';
+const MUTATION_SEED = 'replay-50';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {

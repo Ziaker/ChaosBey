@@ -41,7 +41,7 @@ export interface Scenario {
   readonly expects: readonly (IntentKind | 'clashActive' | 'roundOver' | 'closeRange' | 'farRange' | 'highSpeed')[];
 }
 
-const { MoveForward: F, MoveBackward: B, SteerLeft: L, SteerRight: R, Attack: Z } = Action;
+const { MoveForward: F, MoveBackward: B, SteerLeft: L, SteerRight: R, Attack: Z, JumpDrift: J } = Action;
 
 /** True for `on` seconds out of every `period`, starting at `offset`. */
 const pulse = (t: number, period: number, on: number, offset = 0): boolean => t >= offset && ((t - offset) % period) < on;
@@ -54,13 +54,15 @@ export const SCENARIOS: readonly Scenario[] = [
     label: 'Normal Duel',
     description: 'IA contra IA do jogo, como uma luta de verdade: aproximações, Dash, Circular e recuos.',
     contexts: ['CombatFollow', 'CloseCombat', 'KnockbackFollow', 'HighSpeed'],
-    durationS: 24,
-    // Seeds and spawns picked by sweeping the real AI: 24 s of combat with hits and a Clash, and no round end.
-    // Re-swept after the Motion Lab integration (M11) changed every fight: 'q' (was 'k').
+    durationS: 15,
+    // Seeds and spawns picked by sweeping the real AI: combat with hits and a Clash, and no round end.
+    // Re-swept after the Motion Lab integration (M11) changed every fight: 'q' (was 'k'), then again
+    // after its follow-up fixes: no seed a..z keeps a Clash and 24 s without a round end any more
+    // (fights end by KO in 8–16 s), so 15 s of 'u', whose round ends at 15.5 s.
     firstSpawn: { x: -3, z: -5 },
     secondSpawn: { x: 3, z: 5 },
-    first: { kind: 'ai', seed: 'duel-p-q' },
-    second: { kind: 'ai', seed: 'duel-o-q' },
+    first: { kind: 'ai', seed: 'duel-p-u' },
+    second: { kind: 'ai', seed: 'duel-o-u' },
     expects: ['hit', 'clashActive'],
   },
   {
@@ -160,15 +162,17 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     id: 'ring-out-chase',
     label: 'Ring-Out Chase',
-    description: 'Abertura real da IA contra IA: um Bey é lançado por cima da parede aos 1,9 s e a câmera persegue a trajetória.',
+    description: 'Um Dash carregado acerta o oponente no meio de um pulo e o lança por cima da parede; a câmera persegue a trajetória.',
     contexts: ['KnockbackFollow', 'RingOut', 'Finisher'],
     durationS: 5.5,
-    // A scripted Circular-catches-Dash never cleared the 2 m wall in any timing we swept; the real AI does it on its own, so this scenario is the AI's opening.
-    firstSpawn: { x: 0, z: -4 },
-    secondSpawn: { x: 0, z: 4 },
-    // Re-swept after the Motion Lab integration (M11): 'b' rings out at 1.9 s (was 'k' at 2.1 s).
-    first: { kind: 'ai', seed: 'duel-p-b' },
-    second: { kind: 'ai', seed: 'duel-o-b' },
+    // Was the AI's opening (a Circular catching a Dash that carried the dasher out at ~2 s) until a
+    // caught Dash stopped keeping its speed. Under the game's movement a ring-out comes from a Dash
+    // hitting a Bey in the air: first holds a full Dash, second jumps; any jump from 1.28 to 1.48 s
+    // rings out at 2.0 s (swept), so 1.38 s.
+    firstSpawn: { x: 0, z: -1 },
+    secondSpawn: { x: 0, z: 5 },
+    first: { kind: 'script', held: (t) => when(t < 1.25, Z) },
+    second: { kind: 'script', held: (t) => when(between(t, 1.38, 1.58), J) },
     expects: ['hit', 'ringOut', 'roundOver'],
   },
   {

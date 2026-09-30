@@ -12,8 +12,10 @@
 //   at Dash speed overlapped deeply in one tick and Rapier separated them
 //   vertically: one rode up over the other and passed through it (seen
 //   after a Clash Tie). Tall bumpers always overlap far more vertically
-//   than sideways, so Bey-Bey contact is always resolved sideways; a real
-//   jump (the centres more than a bumper height apart) still clears it.
+//   than sideways, so Bey-Bey contact is always resolved sideways. They
+//   only touch while the two bodies overlap in height (PhysicsWorld's
+//   contact filter), so a Bey above the other passes over it and can never
+//   stand on the other's bumper.
 // ============================================================
 
 const ARENA = 0x0001;

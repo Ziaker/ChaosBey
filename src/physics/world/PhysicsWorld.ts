@@ -14,7 +14,33 @@ import { FIXED_DELTA_SECONDS } from '../fixed-step/FixedTimestepLoop';
 const GRAVITY_Y = -9.81;
 
 export class PhysicsWorld {
+  /** Bey-Bey bumper colliders (see physics/collision/CollisionGroups.ts) → half-height of their Bey's own body. */
+  private readonly bumperBodyHalfHeight = new Map<number, number>();
+
+  /**
+   * Two bumpers only touch while the two Bey bodies overlap in height; a Bey
+   * really above the other (a jump, a launch) passes over it instead of
+   * standing on the other's tall bumper (M11: seen with the bumpers alone —
+   * one Bey balanced on top of the other for the rest of a round).
+   */
+  private readonly hooks: RAPIER.PhysicsHooks = {
+    filterContactPair: (collider1, collider2, body1, body2) => {
+      const h1 = this.bumperBodyHalfHeight.get(collider1);
+      const h2 = this.bumperBodyHalfHeight.get(collider2);
+      if (h1 === undefined || h2 === undefined) return RAPIER.SolverFlags.COMPUTE_IMPULSE;
+      const y1 = this.rapierWorld.getRigidBody(body1).translation().y;
+      const y2 = this.rapierWorld.getRigidBody(body2).translation().y;
+      return Math.abs(y1 - y2) > h1 + h2 ? RAPIER.SolverFlags.EMPTY : RAPIER.SolverFlags.COMPUTE_IMPULSE;
+    },
+    filterIntersectionPair: () => true,
+  };
+
   private constructor(readonly rapierWorld: RAPIER.World) {}
+
+  /** Registers a Bey-Bey bumper collider with its Bey body's half-height (for the contact filter above). */
+  registerBeyBumper(collider: RAPIER.Collider, bodyHalfHeightM: number): void {
+    this.bumperBodyHalfHeight.set(collider.handle, bodyHalfHeightM);
+  }
 
   /** Rapier ships as WebAssembly and must be initialized asynchronously before any RAPIER.* class can be constructed. */
   static async create(): Promise<PhysicsWorld> {
@@ -32,6 +58,6 @@ export class PhysicsWorld {
 
   /** Advances the physics simulation by exactly one fixed tick. Must be called from FixedTimestepLoop's onFixedTick, never from a render callback (GDD section 80). */
   step(): void {
-    this.rapierWorld.step();
+    this.rapierWorld.step(undefined, this.hooks);
   }
 }

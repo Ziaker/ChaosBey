@@ -13,8 +13,13 @@ import { BEY_BODY_COLLISION_GROUPS, BEY_BUMPER_COLLISION_GROUPS } from '../../ph
 import { beyColliderRestitution, motionParams, type MotionParams } from '../motion/MotionPresets';
 import { DEFAULT_PHYSICAL_PROFILE, type BeyPhysicalProfile } from '../archetype/BeyPhysicalProfile';
 
-/** Half-height of the Bey-Bey bumper collider: Beys whose centres are more than twice this apart vertically pass over each other. */
-export const BEY_BUMPER_HALF_HEIGHT_M = 0.6;
+/**
+ * Half-height of the Bey-Bey bumper collider: tall enough that two
+ * touching bumpers always overlap far more vertically than sideways, so the
+ * solver separates them sideways. Whether they touch at all is decided by
+ * the bodies' own heights (PhysicsWorld's contact filter).
+ */
+export const BEY_BUMPER_HALF_HEIGHT_M = 1.5;
 
 export interface BeyRigidBody {
   readonly body: RAPIER.RigidBody;
@@ -60,8 +65,9 @@ export function createBeyRigidBody(
   );
   // Bey-Bey contact goes through a tall, massless bumper (see
   // physics/collision/CollisionGroups.ts), same radius and materials.
-  physics.rapierWorld.createCollider(
+  const bumper = physics.rapierWorld.createCollider(
     RAPIER.ColliderDesc.cylinder(BEY_BUMPER_HALF_HEIGHT_M, physical.colliderRadiusM)
+      .setActiveHooks(RAPIER.ActiveHooks.FILTER_CONTACT_PAIRS)
       .setDensity(0)
       .setRestitution(beyColliderRestitution(motion))
       .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Multiply)
@@ -69,6 +75,7 @@ export function createBeyRigidBody(
       .setCollisionGroups(BEY_BUMPER_COLLISION_GROUPS),
     body,
   );
+  physics.registerBeyBumper(bumper, physical.colliderHalfHeightM);
 
   return { body, collider };
 }

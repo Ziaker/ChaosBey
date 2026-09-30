@@ -438,6 +438,9 @@ As medições (seção 9.2) conferem no jogo real (`tests/deterministic/motionDi
    - **Motivo:** a nota do playtest do dono ("não é pro bey se mover sozinho").
    - **O deslize longo do Lab é uma opção em aberto** para o dono sentir e decidir.
 3. **O Dash só empurra no chão.** No ar vale o modelo aéreo do Lab (15 % de empuxo), então um dasher contra-atacado não é empurrado por cima da parede na velocidade do Dash.
+   - **Depois do playtest:** um Dash apanhado pelo Circular mantém só 30 % da velocidade horizontal. Antes ele voava por cima da parede aos ~2 s de luta.
+   - **Todo knockback** abre a janela pós-impacto de grip.
+   - **Dois Beys empilhados** escorregam um do outro: os bumpers só se tocam quando os corpos se sobrepõem em altura.
 4. **Impacto no jogo = variação de velocidade.** O detector do jogo mede a variação (entrada × (1 + restituição)); as respostas do Lab usam a velocidade de entrada. A conversão usa `wallBounce`.
 5. **Um golpe exatamente central não gera rodopio.** O Lab manda para +, o que quebrava a simetria espelhada.
 
@@ -445,9 +448,10 @@ As medições (seção 9.2) conferem no jogo real (`tests/deterministic/motionDi
 
 - **Qual direção vira a definitiva** (13.2), ou uma mistura (13.3): as três ficam selecionáveis para o playtest.
 - **O deslize longo do Lab** (16.3 item 2).
-- **Retune da IA sobre o movimento novo:**
-  - o Ace não vence mais o Rookie: 35–35 em 72 partidas (antes 41–31);
-  - a vantagem de punição do Defense caiu de +0,12 para ~+0,03;
-  - números nos comentários de `aiDifficultyTiers.test.ts` e `aiArchetypeMatrix.test.ts`.
+- **Retune da IA sobre o movimento novo:** resolvido em parte, detalhes em `docs/ai/m11-status.md` ("Owner playtest fix 3").
+  - **Ace vs Rookie:** o Ace voltou a vencer o Rookie, e os limites originais do teste valem de novo.
+  - **Punição do Defense:** a taxa ficou onde estava (0,31–0,38 dos ataques). O Attack agora pune tanto quanto ele, por acaso: ataca ~35 vezes por minuto e o oponente fica mais tempo em recovery. O que separa os dois é o counter do Circular (2,0–3,2×).
+- **Balanço Attack × Defense (decisão do dono):** sem o ring-out grátis da abertura, o Attack vence o Defense em 16 de 24 partidas por KO. Na main antiga, o Defense vencia 18 de 24, quase sempre por esse ring-out.
+- **Stick leve no Bowl B (decisão do dono):** o funil segura um stick a 35%. A 45% o Bey sai normalmente. As opções são uma curva de resposta do stick, um funil mais suave ou uma assistência na rampa.
 - **ext-0, spin readability e tuning por Bey** (13.5–13.7) continuam como estavam.
 - **Câmera:** o blend do Clash para B agora é suavizado e limitado (≥ 0,8 s). As medições da câmera (12.4) devem ser repetidas com o movimento real, como a seção 12 manda.
