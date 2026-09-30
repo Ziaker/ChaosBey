@@ -29,6 +29,16 @@ import { PRESETS, PRESET_IDS, type PresetId } from './CameraParams';
 import type { FightFrame, Vec3 } from './FightFrame';
 import { clamp, smoothstep } from './frameMath';
 
+/**
+ * Every game director: no Clash orbit (clash-presentation-approval.md 3.6)
+ * and the in-game arena camera (owner, M11 playtest): stays inside the
+ * arena, ignores fight-axis turns under 60°.
+ */
+export const RIG_DIRECTOR_OPTIONS = {
+  clashOrbit: false,
+  arena: { containRadiusM: 10.5, yawDeadzoneRad: (60 * Math.PI) / 180 },
+} as const;
+
 /** The preset the Clash always uses (owner decision 2026-09-28). */
 export const CLASH_FORCED_PRESET: PresetId = 'B';
 /** Below this share the forced Clash camera is dropped (a sub-millimetre difference), so the player's preset is back exactly instead of asymptotically. */
@@ -77,7 +87,7 @@ export class CameraRig {
 
   /** `floorHeightAt`: the arena floor under (x, z) for the directors' floor guard (M11 bowls); omit for the flat arena. */
   constructor(preset: PresetId, aspect = 16 / 9, floorHeightAt?: (x: number, z: number) => number) {
-    const options = { clashOrbit: false, floorHeightAt };
+    const options = { ...RIG_DIRECTOR_OPTIONS, floorHeightAt };
     this.directors = {
       A: new CameraDirector(PRESETS.A, aspect, options),
       B: new CameraDirector(PRESETS.B, aspect, options),

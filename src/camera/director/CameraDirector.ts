@@ -138,6 +138,20 @@ export interface DirectorOptions {
    * guard to follow the concave profile once the bowl is integrated.
    */
   readonly floorHeightAt?: (x: number, z: number) => number;
+  /**
+   * The in-game arena camera (owner playtest, M11): omitted = the lab's
+   * behaviour. When set:
+   * - the camera does not follow every move: it frames the fight on the
+   *   player → opponent axis but ignores rotations of that axis smaller
+   *   than `yawDeadzoneRad`, then glides to the new angle (the preset's own
+   *   orbit smoothing and speed cap); no velocity-mixed heading, no
+   *   automatic orbit drift or lead, no shoulder switching;
+   * - it always stays inside the arena: a viewpoint that would fall past
+   *   `containRadiusM` from the centre swings to the arena's inner side,
+   *   and the eye is never farther out than that, so the wall is never
+   *   between the camera and the Beys.
+   */
+  readonly arena?: { readonly containRadiusM: number; readonly yawDeadzoneRad: number };
 }
 
 interface PendingKnock {
@@ -179,6 +193,8 @@ export class CameraDirector {
   private finisherTimer = 0;
   private finisherTargetIsFirst = false;
   private clashYaw = 0;
+  /** Arena mode: the framing angle the camera holds until the fight axis moves past the dead zone. */
+  private heldYaw = 0;
   private wasClash = false;
   // Side
   private side = 1;
@@ -327,13 +343,36 @@ export class CameraDirector {
     set3(this.laPoint, ft.x, ft.y, ft.z);
 
     // ---- Yaw: behind the player on the fight axis, to one shoulder, orbiting with the action ----
+    const arena = this.options.arena;
     let baseYaw = this.axisYaw;
-    if (frame.first.speed > 3 && P.opponentWeight < 1) baseYaw = lerpAngle(yawOf(this.velFilt.x, this.velFilt.z), this.axisYaw, P.opponentWeight);
-    const orbitLead = clamp(this.axisRate * ORBIT_LEAD_GAIN_S, -ORBIT_LEAD_MAX_RAD, ORBIT_LEAD_MAX_RAD) * P.orbitStrength;
-    this.closeDrift += (wClose > 0.5 ? CLOSE_DRIFT_RAD_S * P.orbitStrength * dt : -this.closeDrift * smoothK(0.5, dt));
-    this.closeDrift = clamp(this.closeDrift, -CLOSE_DRIFT_MAX_RAD, CLOSE_DRIFT_MAX_RAD);
-    this.updateSide(frame, dt, wClash + wFin + wRing);
+    if (!arena && frame.first.speed > 3 && P.opponentWeight < 1) baseYaw = lerpAngle(yawOf(this.velFilt.x, this.velFilt.z), this.axisYaw, P.opponentWeight);
+    const orbitLead = arena ? 0 : clamp(this.axisRate * ORBIT_LEAD_GAIN_S, -ORBIT_LEAD_MAX_RAD, ORBIT_LEAD_MAX_RAD) * P.orbitStrength;
+    if (arena) this.closeDrift = 0;
+    else {
+      this.closeDrift += (wClose > 0.5 ? CLOSE_DRIFT_RAD_S * P.orbitStrength * dt : -this.closeDrift * smoothK(0.5, dt));
+      this.closeDrift = clamp(this.closeDrift, -CLOSE_DRIFT_MAX_RAD, CLOSE_DRIFT_MAX_RAD);
+      this.updateSide(frame, dt, wClash + wFin + wRing);
+    }
     let yawTarget = baseYaw + Math.PI + this.side * P.lateralOffset * DEG + orbitLead + this.closeDrift + this.yawKick;
+    if (arena) {
+      // Hold the framing angle; re-aim only when the fight axis has turned past the dead zone,
+      // landing well inside it so the camera then stays put again.
+      // The fight is a line, not an arrow: when the Beys pass each other the
+      // axis flips 180°, and following it would swing the camera half-way
+      // round (and the screen-relative controls with it). Either end of the
+      // line is a valid framing; the camera keeps the one it is nearest to.
+      const behindPlayer = baseYaw + Math.PI + this.side * P.lateralOffset * DEG;
+      const behindOpponent = baseYaw + this.side * P.lateralOffset * DEG;
+      const offPlayer = angleDelta(this.heldYaw, behindPlayer);
+      const offOpponent = angleDelta(this.heldYaw, behindOpponent);
+      const off = Math.abs(offPlayer) <= Math.abs(offOpponent) ? offPlayer : offOpponent;
+      const wanted = this.heldYaw + off;
+      if (!this.initialized) this.heldYaw = behindPlayer;
+      // Up close the axis is noise (it spins as the Beys pass each other): only re-aim when they are apart.
+      else if (sep > CLOSE_START_M && Math.abs(off) > arena.yawDeadzoneRad) this.heldYaw = wanted - Math.sign(off) * arena.yawDeadzoneRad * 0.35;
+      this.heldYaw = this.containedYaw(this.heldYaw, ft, this.distance, arena.containRadiusM);
+      yawTarget = this.heldYaw + this.yawKick;
+    }
     if (Math.abs(orbitLead) > 0.05) this.modifiers.push(`órbita ${(orbitLead / DEG).toFixed(0)}°`);
     if (Math.abs(this.yawKick) > 0.02) this.modifiers.push(`reenquadramento ${(this.yawKick / DEG).toFixed(0)}°`);
 
@@ -407,6 +446,9 @@ export class CameraDirector {
       lerp3(this.eye, this.eye, et, smoothK(P.positionDamping, dt));
       lerp3(this.focus, this.focus, ft, smoothK(P.rotationDamping, dt));
     }
+
+    // ---- Guard: inside the arena (arena mode) ----
+    if (arena) this.containEye(arena.containRadiusM);
 
     // ---- Guards: floor, Beys ----
     const floorY = this.options.floorHeightAt ? this.options.floorHeightAt(this.eye.x, this.eye.z) : 0;
@@ -496,6 +538,49 @@ export class CameraDirector {
         modifiers: this.modifiers,
       },
     };
+  }
+
+  /**
+   * Arena mode: `yaw` if the eye it puts at `distance` from `focus` is inside
+   * the arena; otherwise the nearest angle that is (searched both ways in
+   * 5° steps), or, if none is, the angle looking out from the arena's
+   * centre side.
+   */
+  private containedYaw(yaw: number, focus: Vec3, distance: number, radius: number): number {
+    const inside = (a: number): boolean => Math.hypot(focus.x + Math.sin(a) * distance, focus.z + Math.cos(a) * distance) <= radius;
+    if (inside(yaw)) return yaw;
+    for (let k = 1; k <= 36; k++) {
+      const d = k * 5 * DEG;
+      if (inside(yaw + d)) return yaw + d;
+      if (inside(yaw - d)) return yaw - d;
+    }
+    // Focus near the edge and a long distance: sit on the centre side.
+    return Math.hypot(focus.x, focus.z) < 1e-6 ? yaw : yawOf(-focus.x, -focus.z);
+  }
+
+  /** Arena mode: never let the eye past `radius` from the centre (pulled in toward the focus, raised to keep the framing). */
+  private containEye(radius: number): void {
+    const r = Math.hypot(this.eye.x, this.eye.z);
+    if (r <= radius) return;
+    const f = this.focus;
+    if (Math.hypot(f.x, f.z) >= radius) {
+      // The focus itself is outside (a ring-out flight): just bring the eye back to the rim line.
+      this.eye.x *= radius / r;
+      this.eye.z *= radius / r;
+    } else {
+      // Where the focus → eye line crosses the circle of `radius`.
+      const dx = this.eye.x - f.x;
+      const dz = this.eye.z - f.z;
+      const a = dx * dx + dz * dz;
+      const b = 2 * (f.x * dx + f.z * dz);
+      const c = f.x * f.x + f.z * f.z - radius * radius;
+      const t = clamp((-b + Math.sqrt(Math.max(0, b * b - 4 * a * c))) / (2 * a), 0, 1);
+      const lost = Math.sqrt(a) * (1 - t);
+      this.eye.x = f.x + dx * t;
+      this.eye.z = f.z + dz * t;
+      this.eye.y += lost * 0.5;
+    }
+    this.modifiers.push('proteção: dentro da arena');
   }
 
   private consumeIntents(intents: readonly CameraIntent[]): void {
