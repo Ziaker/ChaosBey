@@ -19,6 +19,10 @@ import { add, dot, fromYaw, length, scale, signedAngleBetween, type Vec2 } from 
 import {
   AIRBORNE_ACCELERATION_FACTOR,
   DIRECTIONAL_STEER_GAIN_PER_S,
+  DIRECTIONAL_STEERING_RESPONSE_PER_S,
+  DIRECTIONAL_THRUST_ALIGNMENT_POWER,
+  DIRECTIONAL_TURN_RATE_MULTIPLIER,
+  IDLE_DAMPING_PER_S,
   IMPACT_TANGENTIAL_TRANSFER,
   IMPACT_VELOCITY_DELTA_THRESHOLD_MPS,
   LANDING_BOUNCE_MIN_AIRBORNE_TICKS,
@@ -189,12 +193,14 @@ export class MovementController {
       let targetTurnRate: number;
       if (intent) {
         const error = intentMagnitude(intent) > 0 ? headingErrorRad(intent, this.headingRad) : 0;
-        targetTurnRate = Math.max(-this.handling.turnRateRadS, Math.min(this.handling.turnRateRadS, error * DIRECTIONAL_STEER_GAIN_PER_S));
+        const cap = this.handling.turnRateRadS * DIRECTIONAL_TURN_RATE_MULTIPLIER;
+        targetTurnRate = Math.max(-cap, Math.min(cap, error * DIRECTIONAL_STEER_GAIN_PER_S));
       } else {
         const steerInput = (actions.held.has(Action.SteerRight) ? 1 : 0) - (actions.held.has(Action.SteerLeft) ? 1 : 0);
         targetTurnRate = steerInput * this.handling.turnRateRadS;
       }
-      this.turnRateRadPerS += (targetTurnRate - this.turnRateRadPerS) * Math.min(1, STEERING_RESPONSE_PER_S * fixedDeltaSeconds);
+      const response = intent ? DIRECTIONAL_STEERING_RESPONSE_PER_S : STEERING_RESPONSE_PER_S;
+      this.turnRateRadPerS += (targetTurnRate - this.turnRateRadPerS) * Math.min(1, response * fixedDeltaSeconds);
       // Motion Lab whirl: an impact's rodopio turns the heading on top of
       // the steering, and dies out at the direction's angular damping.
       this.whirlRadPerS *= Math.exp(-this.motion.angularDamping * fixedDeltaSeconds);
@@ -211,12 +217,17 @@ export class MovementController {
     let throttleScale = 1;
     if (intent) {
       const magnitude = intentMagnitude(intent);
-      const drive = magnitude > 0 ? magnitude * Math.cos(headingErrorRad(intent, this.headingRad)) : 0;
+      const alignment = magnitude > 0 ? Math.cos(headingErrorRad(intent, this.headingRad)) : 0;
+      const drive = magnitude * Math.sign(alignment) * Math.abs(alignment) ** DIRECTIONAL_THRUST_ALIGNMENT_POWER;
       throttleInput = Math.sign(drive);
       throttleScale = Math.abs(drive);
     } else {
       throttleInput = (actions.held.has(Action.MoveForward) ? 1 : 0) - (actions.held.has(Action.MoveBackward) ? 1 : 0);
     }
+
+    const hasMovementInput = intent
+      ? intentMagnitude(intent) > 0
+      : actions.held.has(Action.MoveForward) || actions.held.has(Action.MoveBackward) || actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight);
 
     const currentVel = body.linvel();
     const velHoriz: Vec2 = { x: currentVel.x, z: currentVel.z };
@@ -250,6 +261,10 @@ export class MovementController {
       }
       if (grounded) {
         if (throttleInput === 0) newLongitudinalSpeed *= Math.exp(-this.motion.longitudinalGrip * fixedDeltaSeconds);
+        // No movement input at all: the Bey settles instead of gliding on
+        // (owner playtest: "it moves by itself"). Only on the ground and
+        // outside an impact's window, so hits and bounces still play out.
+        if (!hasMovementInput) newLongitudinalSpeed *= Math.exp(-IDLE_DAMPING_PER_S * fixedDeltaSeconds);
         const speedAbs = Math.abs(newLongitudinalSpeed);
         if (speedAbs > maxSpeed) {
           newLongitudinalSpeed -= Math.sign(newLongitudinalSpeed) * (speedAbs - maxSpeed) * (1 - Math.exp(-OVERSPEED_RETURN_PER_S * fixedDeltaSeconds));

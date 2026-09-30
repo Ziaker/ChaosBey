@@ -221,7 +221,10 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
       first.body.setLinvel({ x: 0, y: 0, z: 12 }, true);
       placeBey(second, 0, -8, 0);
     },
-    first: idle,
+    // Driven for the first half second: with no input the idle damping
+    // (owner playtest, after M11) settles a Bey on a bowl's slope before it
+    // reaches the wall.
+    first: script(hold(Action.MoveForward, 0, 30)),
     second: idle,
     check: (t) => ok(t.firstMaxImpactMps > 0 && t.firstMaxRadiusM < 12 && t.firstMinRadialVelocityAfterImpact < 0, `impact Δv ${t.firstMaxImpactMps.toFixed(2)} m/s, max radius ${t.firstMaxRadiusM.toFixed(2)} m, rebound radial speed ${t.firstMinRadialVelocityAfterImpact.toFixed(2)} m/s`),
   },
@@ -237,7 +240,8 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
       first.body.setLinvel({ x: 4.75, y: 0, z: 11.06 }, true);
       placeBey(second, 0, -8, 0);
     },
-    first: idle,
+    // Driven for the first half second, as in wall-hit (idle damping).
+    first: script(hold(Action.MoveForward, 0, 30)),
     second: idle,
     check: (t) => ok(t.firstMaxImpactMps > 0 && t.firstMinRadialVelocityAfterImpact < 0 && t.firstTangentialSpeedAfterImpact > 3, `impact Δv ${t.firstMaxImpactMps.toFixed(2)} m/s, rebound radial ${t.firstMinRadialVelocityAfterImpact.toFixed(2)} m/s, tangential ${t.firstTangentialSpeedAfterImpact.toFixed(2)} m/s`),
   },

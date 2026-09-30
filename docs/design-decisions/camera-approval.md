@@ -18,7 +18,12 @@ Este documento registra **o que já foi decidido** sobre a câmera de combate, p
 2. **Sem alterações.** Os valores aprovados são os 43 parâmetros de cada preset (seção 6, JSON exato na seção 12) e as constantes do diretor, compartilhadas pelas três (seção 2.9).
 3. **Elas vão para o jogo como opção nas Configurações.** O jogador escolhe **uma das três**. Diferente das camadas de Stamina e Stability, que se somam, a câmera só pode seguir uma direção por vez.
 4. **O que foi aprovado é o comportamento visto no lab:** um único diretor de câmera com sete modos e proteções de leitura (seção 2), rodando cada um dos três conjuntos de valores. As três opções são **três presets do mesmo diretor**, não três câmeras diferentes.
-5. **Ajuste do dono após o playtest (M11):** no jogo, a câmera não segue o Bey o tempo todo (ignora giros do eixo da luta abaixo de 60°, sem órbita automática nem troca de ombro) e fica sempre dentro da arena (nunca além de 10,5 m do centro, nunca atrás da parede). Os 43 valores dos presets não mudaram. Detalhes em `docs/ai/m11-status.md`. Com o movimento do Motion Lab integrado, o blend do Clash para a B também ficou suavizado e limitado (um blend completo leva ≥ 0,8 s), porque o olho do jogador podia estar a ~12 m do olho da B e o blend cru varria 0,6 m num tick.
+5. **Ajuste do dono após o playtest (M11):** no jogo, a câmera não segue o Bey o tempo todo e fica sempre dentro da arena (nunca além de 10,5 m do centro, nunca atrás da parede). Os 43 valores dos presets não mudaram. Detalhes em `docs/ai/m11-status.md`.
+   - **Blend do Clash:** com o movimento do Motion Lab integrado, o blend do Clash para a B ficou suavizado e limitado (um blend completo leva ≥ 0,8 s). O olho do jogador podia estar a ~12 m do olho da B, e o blend cru varria 0,6 m num tick.
+   - **Segundo playtest (fix 4):** a primeira versão ainda reorientava pelo eixo da luta depois de 60° e girou 127° em 3 s numa partida real, só com o oponente andando, com as setas mudando de sentido.
+     - O ângulo agora é escolhido no início do round (atrás do jogador) e mantido.
+     - A câmera continua dinâmica: acompanha a luta quando ela sai de uma zona de 1,5 m, com zoom, FOV, tremor, knockback, Clash, ring-out e finisher.
+     - Para ficar dentro da arena, ela se aproxima e sobe; não gira.
 6. **Integração (M11, lane 2):** o diretor e os três presets estão no jogo, em `src/camera/director/`, sem alteração de valores, com a escolha A/B/C nas Configurações e o Clash forçando a B sem órbita. As escolhas provisórias para os itens em aberto da seção 10 estão em `docs/ai/m11-status.md` e aguardam confirmação do dono.
 
 ---

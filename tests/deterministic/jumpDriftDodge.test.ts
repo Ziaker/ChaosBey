@@ -642,7 +642,11 @@ describe('dodge preserves existing momentum', () => {
 
 describe('low air control (GDD section 12/20)', () => {
   it('steering while airborne only nudges trajectory — velocity does not snap to the new heading', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    // The second Bey sits out of the way: the first drives straight ahead,
+    // and since the idle damping (owner playtest, after M11) an idle Bey in
+    // its path is pushed along instead of sliding clear, so the first never
+    // built the speed this needs.
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, { x: -6, y: BEY_SPAWN_HEIGHT_M, z: -6 });
     settle(harness);
 
     // Slip angle is only meaningful with real horizontal speed (Movement-

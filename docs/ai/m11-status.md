@@ -381,3 +381,42 @@ From 45% up, Bowl B is no harder than flat. The Lab and the game both scale thru
 **5. The Lab's long glide** stays an open option (fix 2): the floor friction is kept.
 
 **Bowls:** `docs/ai/m11-bowl-comparison-data.md` is regenerated. The flat arena has 3 ring-outs in 36 AI matches (12 before these fixes), and the bowls have 8–10 (2–5 before). Round lengths are now 14.8–16.0 s everywhere.
+
+## Owner playtest fix 4 — the camera still turned, and the Bey did not go where it was told
+
+**What the owner saw:** "a câmera ainda tá do mesmo jeito, controlar o bey ainda é horrível, ele ainda se move sozinho … ele ainda fica indo pra direções erradas ao invés de ir para a direção que eu estou movendo".
+
+**Measured in the real game** (production build in Chromium, Play mode against the default AI, arrow keys held like a player; the probe records the Bey, the camera and the keys every frame):
+- **The camera turned 127° in 3 s before any key was pressed.** The opponent circled, and the fix-1 camera re-aimed at the fight axis once it had turned past 60°. Every turn changes what ↑/↓/←/→ mean on the ground.
+- **From rest, a direction 90° away moved the Bey 6 cm in half a second.** It left up to 42 cm off-line first, because thrust pushed along the old heading while it turned at the classic 2.6 rad/s. A direction straight behind moved it only 0.44 m in a whole second.
+- **Released at top speed, it coasted 6.6 m over 1.35 s.**
+
+**What changed:**
+- **Camera (in-game arena mode, every preset):**
+  - The angle is chosen once per round, behind the player on the opening axis, and held. There is no re-aiming at the fight axis and no impact re-framing turn.
+  - It stays dynamic: the framing point follows the fight once it moves 1.5 m (no look-ahead), and zoom, FOV, shake, knockback follow, Clash, ring-out and finisher are kept.
+  - It stays inside the arena by pulling the eye in and raising it, never by swinging the angle.
+  - The Camera Lab director without the arena option is unchanged.
+- **Directional control:**
+  - The heading swings toward the wanted direction at 3× the classic turn rate (gain 12/s, easing 20/s). It is still limited and eased, so momentum, slip and drift play out.
+  - Thrust along the heading is scaled by cos(error)², so a Bey still turning is not driven off at an angle.
+  - Classic (tank) steering is unchanged.
+- **Idle damping:** with no movement input, on the ground and outside an impact's window, speed decays at 4/s. This is proportional, so a pushed idle Bey still gives way, and knockbacks and bounces are not damped.
+
+**After** (same probes):
+
+| | before | after |
+|---|---:|---:|
+| Browser, camera yaw range over the fight | +20° … +151° | −25° … +3° (ring-out/knockback framing) |
+| Browser, arrow held on open floor: velocity vs wanted direction | 46° → 0° over ~0.8 s, drifting with the camera | 0–2° |
+| From rest, 90° away: distance in 0.5 s / 1 s (off-line) | 0.06 / 1.44 m (0.42 m) | 0.58 / 3.33 m (0.03 m) |
+| From rest, straight behind: distance in 1 s | 0.44 m | 1.97 m |
+| At top speed, 90° turn: sideways carry | 4.9 m | 3.1 m (slip/drift) |
+| Released at top speed: stops after | 1.35 s, 6.6 m | 0.47 s, 1.7 m |
+
+**Tests:**
+- New: the camera holds within 2° while the opponent circles a standing player, for every preset. It does not drag along with 1 m shuffles. Both tests fail on the fix-1 camera.
+- Directional tests updated to the new response: a quarter turn still takes more than 3 ticks and settles within half a second; straight behind brakes at once and moves the wanted way within half a second.
+- Tests that threw a Bey with no input now drive it: the wall bounce, and the wall-hit / wall-ricochet presets (half a second of forward). Tests where an idle Bey sat in the driver's path now move it aside.
+- The Stamina passive-share margin over Defense went from > +0.08 to > +0.06 (measured +0.084 → +0.075). The other identity checks keep their margins.
+- Seeds re-pinned: replay-66 / replay-30, and Camera Lab normal-duel `g`.

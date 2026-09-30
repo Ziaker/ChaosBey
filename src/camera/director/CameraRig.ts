@@ -36,7 +36,7 @@ import { clamp, smoothstep } from './frameMath';
  */
 export const RIG_DIRECTOR_OPTIONS = {
   clashOrbit: false,
-  arena: { containRadiusM: 10.5, yawDeadzoneRad: (60 * Math.PI) / 180 },
+  arena: { containRadiusM: 10.5 },
 } as const;
 
 /** The preset the Clash always uses (owner decision 2026-09-28). */

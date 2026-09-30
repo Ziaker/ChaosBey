@@ -1,11 +1,12 @@
 // M11 directional control, simulation side: the desired world direction
-// (ControllerActions.moveIntent) steers the heading through the same turn
-// rate / easing / grip as classic steering — no snap, no diagonal speed
-// gain, reverse thrust while the direction is behind.
+// (ControllerActions.moveIntent) steers the heading with a turn-rate limit
+// and easing (3× the classic turn rate since the owner's playtest) and the
+// same grip as classic steering — no snap, no diagonal speed gain, reverse
+// thrust while the direction is behind.
 
 import { describe, expect, it } from 'vitest';
 import { Action, type ControllerActions, type MoveIntent } from '../../src/input/actions/Action';
-import { STEERING_MAX_TURN_RATE_RAD_S } from '../../src/bey/movement/MovementTuning';
+import { DIRECTIONAL_TURN_RATE_MULTIPLIER, STEERING_MAX_TURN_RATE_RAD_S } from '../../src/bey/movement/MovementTuning';
 import { DEFAULT_HANDLING_PROFILE } from '../../src/bey/archetype/BeyHandlingProfile';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { isSteering } from '../../src/bey/movement/directionalIntent';
@@ -33,7 +34,7 @@ describe('directional movement (M11)', () => {
     // Lab rodopio (M11) — would turn the heading on top of the steering.
     const harness = await TestBeyHarness.create({ x: -10, y: BEY_SPAWN_HEIGHT_M, z: 0 });
     harness.tickMany(intent(0, 0), 30);
-    const maxStep = DEFAULT_HANDLING_PROFILE.turnRateRadS * FIXED_DELTA_SECONDS + 1e-12;
+    const maxStep = DEFAULT_HANDLING_PROFILE.turnRateRadS * DIRECTIONAL_TURN_RATE_MULTIPLIER * FIXED_DELTA_SECONDS + 1e-12;
     let previous = harness.movement.getHeadingRad();
     const first = harness.tick(intent(1, 0)); // want +X: yaw π/2
     expect(Math.abs(first.movement.headingRad - previous)).toBeLessThan(0.05); // eased, not snapped
@@ -42,30 +43,35 @@ describe('directional movement (M11)', () => {
     for (let i = 0; i < 130; i++) {
       const { movement } = harness.tick(intent(1, 0));
       expect(Math.abs(movement.headingRad - previous)).toBeLessThanOrEqual(maxStep);
-      expect(Math.abs(harness.movement.getDebugState().turnRateRadPerS)).toBeLessThanOrEqual(STEERING_MAX_TURN_RATE_RAD_S + 1e-9);
+      expect(Math.abs(harness.movement.getDebugState().turnRateRadPerS)).toBeLessThanOrEqual(STEERING_MAX_TURN_RATE_RAD_S * DIRECTIONAL_TURN_RATE_MULTIPLIER + 1e-9);
       previous = movement.headingRad;
       peak = Math.max(peak, previous);
     }
-    // A quarter turn at 2.6 rad/s can't finish in under ~0.6 s, and it settles on the direction.
+    // It settles on the direction without overshooting it.
     expect(previous).toBeCloseTo(Math.PI / 2, 2);
     expect(peak).toBeLessThan(Math.PI / 2 + 0.15);
   });
 
-  it('a quarter turn is not instant: after 10 ticks the heading is still far from the target', async () => {
+  it('a quarter turn is not instant, but quick: still far from the target after 3 ticks, on it within half a second', async () => {
+    // Owner playtest (after M11): the old classic-car turn (2.6 rad/s) left a
+    // Bey at rest barely moving for half a second toward a direction 90° away.
     const harness = await settled();
-    harness.tickMany(intent(1, 0), 10);
+    harness.tickMany(intent(1, 0), 3);
     expect(harness.movement.getHeadingRad()).toBeLessThan(Math.PI / 4);
+    harness.tickMany(intent(1, 0), 27);
+    expect(harness.movement.getHeadingRad()).toBeCloseTo(Math.PI / 2, 1);
   });
 
-  it('a direction behind the Bey starts with reverse thrust (moves that way at once) while the heading turns around', async () => {
+  it('a direction behind the Bey: it brakes at once and is moving the wanted way within half a second', async () => {
     const harness = await settled();
     harness.tickMany(intent(0, 1), 40); // moving +Z
-    const results = harness.tickMany(intent(0, -1), 20);
-    // Velocity along +Z drops immediately (reverse thrust + drag), the heading has not flipped.
-    expect(results[19]!.movement.actualVelocityVector.z).toBeLessThan(results[0]!.movement.actualVelocityVector.z);
-    expect(Math.abs(harness.movement.getHeadingRad())).toBeLessThan(Math.PI * 0.75);
-    const later = harness.tickMany(intent(0, -1), 120);
-    expect(later.at(-1)!.movement.actualVelocityVector.z).toBeLessThan(-1);
+    const results = harness.tickMany(intent(0, -1), 30);
+    // Velocity along +Z drops immediately (reverse thrust + drag while the heading swings round).
+    expect(results[5]!.movement.actualVelocityVector.z).toBeLessThan(results[0]!.movement.actualVelocityVector.z);
+    expect(results[29]!.movement.actualVelocityVector.z).toBeLessThan(-0.5);
+    // Measured: +Z at 5.7 m/s → −Z within 25 ticks; before (the classic turn rate), still +Z after 20.
+    const later = harness.tickMany(intent(0, -1), 30);
+    expect(later.at(-1)!.movement.actualVelocityVector.z).toBeLessThan(-3);
   });
 
   it('a diagonal is not faster than a straight line', async () => {

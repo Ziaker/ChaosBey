@@ -138,7 +138,11 @@ describe('AI vs AI archetype matrix', () => {
     const attack = archetype('attack-ai-personality');
     const defense = archetype('defense-ai-personality');
     const stamina = archetype('stamina-ai-personality');
-    expect(stamina.passiveShare / stamina.sides).toBeGreaterThan(defense.passiveShare / defense.sides + 0.08);
+    // Passive share over Defense (was > +0.08): +0.084 before the owner-playtest controls (faster
+    // directional turning, idle damping), +0.075 with them (Stamina 0.239 vs Defense 0.164); the
+    // other identity checks below keep their margins (Dashes 9.4 vs 10.4 per minute, Stamina spent
+    // 1.01 vs 1.69 and 1.82 per minute).
+    expect(stamina.passiveShare / stamina.sides).toBeGreaterThan(defense.passiveShare / defense.sides + 0.06);
     expect(stamina.passiveShare / stamina.sides).toBeGreaterThan(attack.passiveShare / attack.sides + 0.2);
     expect(stamina.dashes / stamina.minutes).toBeLessThan(defense.dashes / defense.minutes);
     // Per minute of play: matches are short, so end-of-match Stamina alone
