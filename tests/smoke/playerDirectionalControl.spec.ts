@@ -41,9 +41,13 @@ async function holdAndMeasureWorldDisplacement(page: Page, key: Direction): Prom
   return { x: end.x - start.x, z: end.z - start.z };
 }
 
-test('arrows move the Bey along a fixed world axis, identically in two very different camera orientations', async ({ page }) => {
+test('Directional (experimental): arrows move the Bey along a fixed world axis, identically in two very different camera orientations', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  // Directional is no longer the default (Classic/Bey-relative is, see
+  // PlayerSettings.ts's header) — the Debug Lab reads the control scheme
+  // from Settings once at startup, so it must be set before the page loads.
+  await page.addInitScript(() => localStorage.setItem('chaosbey.settings.player.v1', JSON.stringify({ controlScheme: 'directional' })));
   await page.goto('/ChaosBey/?mode=debug-lab');
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession() != null), { timeout: 20_000 }).toBe(true);
   // Nobody else moving: the opponent idles.
@@ -105,19 +109,27 @@ test('real keyboard, real AI fight: holding a direction through jump/drift/knock
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.evaluate(() => window.__chaosBeyDebugLab!.setPaused(true));
 
-  async function driveAndTrace(key: Direction | 'ArrowUp', jump: boolean, ticks: number) {
+  // Under Classic (default, this test doesn't override the control scheme),
+  // a held arrow passes straight through as its raw Action — never through
+  // moveIntent (see DirectionalController.ts's header) — so the only
+  // legitimate reason for it to go missing from `held` is one of the
+  // approved input locks (inputLockReason.ts: Hitstop, an Active Clash, or
+  // a decided round).
+  const EXPECTED_ACTION: Record<Direction, string> = { ArrowUp: 'MoveForward', ArrowDown: 'MoveBackward', ArrowLeft: 'SteerLeft', ArrowRight: 'SteerRight' };
+
+  async function driveAndTrace(key: Direction, jump: boolean, ticks: number) {
+    const expectedAction = EXPECTED_ACTION[key];
     await page.keyboard.down(key);
     if (jump) await page.keyboard.down('KeyX');
     const result = await page.evaluate(
-      ({ ticksToRun }) => {
+      ({ ticksToRun, expectedAction }) => {
         const lab = window.__chaosBeyDebugLab!;
         const session = lab.getSession()!;
         const violations: unknown[] = [];
         for (let i = 0; i < ticksToRun; i++) {
           lab.step(1);
           const actions = session.getLastActions('first');
-          const intentLen = actions?.moveIntent ? Math.hypot(actions.moveIntent.x, actions.moveIntent.z) : 0;
-          const heldMovementKey = actions ? actions.held.size > 0 || (actions.moveIntent != null && intentLen > 0.01) : false;
+          const held = [...(actions?.held ?? [])] as string[];
           const bey = session.getBey('first');
           const grounded = session.getLastResult()?.first.grounded ?? false;
           const owner = session.getController('first');
@@ -126,11 +138,15 @@ test('real keyboard, real AI fight: holding a direction through jump/drift/knock
             violations.push({ reason: 'controller-owner-flipped-to-ai', tick: session.getTickIndex() });
             continue;
           }
-          if (heldMovementKey && intentLen < 0.01) {
-            const camera = session.getLastCameraOutput();
+          const camera = session.getLastCameraOutput();
+          const isHitstopActive = camera?.isHitstopActive ?? false;
+          const clashActive = session.clash.controller.getState() === 'Active';
+          const roundOver = session.roundState.result !== 'Ongoing';
+          const lockReason = isHitstopActive ? 'Hitstop' : clashActive ? 'Clash' : roundOver ? 'RoundEnd' : 'none';
+          if (!held.includes(expectedAction) && lockReason === 'none') {
             violations.push({
               tick: session.getTickIndex(),
-              held: [...(actions?.held ?? [])],
+              held,
               moveIntent: actions?.moveIntent ?? null,
               velocity: bey.body.linvel(),
               grounded,
@@ -141,7 +157,7 @@ test('real keyboard, real AI fight: holding a direction through jump/drift/knock
         }
         return { violations, finalController: session.getController('first')?.constructor?.name };
       },
-      { ticksToRun: ticks },
+      { ticksToRun: ticks, expectedAction },
     );
     await page.keyboard.up(key);
     if (jump) await page.keyboard.up('KeyX');
@@ -165,13 +181,55 @@ test('real keyboard, real AI fight: holding a direction through jump/drift/knock
   expect(errors).toEqual([]);
 });
 
-test('Settings offers Directional (default) and Classic control', async ({ page }) => {
+test('Classic (default): a held key keeps the same meaning while the real camera orbits through a real AI fight', async ({ page }) => {
+  // Reproduces the owner's "Fix 6" report directly: the default scheme is
+  // now Bey-relative (Classic), which has no absolute axis to fall out of
+  // alignment with the screen as the camera orbits. This asserts the
+  // structural guarantee in a real browser: ArrowUp always resolves to
+  // Action.MoveForward held, on every tick, while a real fight makes the
+  // camera swing through a large orbit — never routed through moveIntent,
+  // never reading the camera at all.
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/ChaosBey/?mode=debug-lab');
+  await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession() != null), { timeout: 20_000 }).toBe(true);
+  await page.evaluate(() => window.__chaosBeyDebugLab!.setController('second', { kind: 'ai', personality: 'archetype' }));
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.evaluate(() => window.__chaosBeyDebugLab!.setPaused(true));
+
+  await page.keyboard.down('ArrowUp');
+  const result = await page.evaluate(() => {
+    const lab = window.__chaosBeyDebugLab!;
+    const session = lab.getSession()!;
+    const violations: unknown[] = [];
+    const cameraYawsDeg: number[] = [];
+    for (let i = 0; i < 300; i++) {
+      lab.step(1);
+      const actions = session.getLastActions('first');
+      const held = [...(actions?.held ?? [])] as string[];
+      if (!held.includes('MoveForward')) {
+        violations.push({ tick: session.getTickIndex(), held, moveIntent: actions?.moveIntent ?? null });
+      }
+      if (actions?.moveIntent != null) violations.push({ tick: session.getTickIndex(), reason: 'moveIntent set under Classic (default) control' });
+      cameraYawsDeg.push(session.getLastCameraOutput()?.yawDeg ?? 0);
+    }
+    return { violations, cameraYawRangeDeg: Math.max(...cameraYawsDeg) - Math.min(...cameraYawsDeg) };
+  });
+  await page.keyboard.up('ArrowUp');
+
+  expect(result.violations, `violations while holding ArrowUp under Classic: ${JSON.stringify(result.violations, null, 2)}`).toEqual([]);
+  expect(result.cameraYawRangeDeg, 'the camera never moved at all — this run does not actually exercise independence').toBeGreaterThan(10);
+  expect(errors).toEqual([]);
+});
+
+test('Settings offers Classic (default, Bey-relative) and Directional (experimental) control', async ({ page }) => {
   await page.goto('/ChaosBey/?mode=settings');
   const row = page.getByTestId('settings-control-scheme');
   await expect(row).toBeVisible({ timeout: 15_000 });
-  await expect(row.getByRole('radio', { name: 'Directional' })).toHaveAttribute('aria-checked', 'true');
-  await row.getByRole('radio', { name: 'Classic' }).click();
   await expect(row.getByRole('radio', { name: 'Classic' })).toHaveAttribute('aria-checked', 'true');
-  await expect(page.getByTestId('settings-control-note')).toContainText('Tank steering');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('chaosbey.settings.player.v1') ?? '{}').controlScheme)).toBe('classic');
+  await expect(page.getByTestId('settings-control-note')).toContainText('Kart-like');
+  await row.getByRole('radio', { name: 'Directional' }).click();
+  await expect(row.getByRole('radio', { name: 'Directional' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('settings-control-note')).toContainText('Experimental');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('chaosbey.settings.player.v1') ?? '{}').controlScheme)).toBe('directional');
 });

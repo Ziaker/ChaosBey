@@ -56,9 +56,9 @@ function decoded(text: string): ChaosBeyReplayV1 {
 describe('Replay V2 (M11)', () => {
   it('a directional player match records `move` per frame and plays back verified on every tick', async () => {
     const fingerprint = await currentRuntimeFingerprint();
-    // A camera that keeps turning: the latch must still give a well-formed, reproducible command.
-    let yaw = 0;
-    const player = new DirectionalController(new ArrowScript(), { cameraYaw: () => (yaw += 0.01) });
+    // DirectionalController has no camera parameter at all — the recorded
+    // `move` must be a well-formed, reproducible command regardless.
+    const player = new DirectionalController(new ArrowScript());
     const live = await session({ first: { kind: 'keyboard' }, second: { kind: 'ai', personality: 'archetype' } }, player);
     live.startReplayCapture({ fingerprint, checkpointEvery: 1 });
     for (let i = 0; i < 900 && !live.roundState.isOver; i++) live.tick();
@@ -81,7 +81,7 @@ describe('Replay V2 (M11)', () => {
 
   it('a V1 file (classic player, no `move`) still decodes and verifies with the old semantics', async () => {
     const fingerprint = await currentRuntimeFingerprint();
-    const classicPlayer = new DirectionalController(new ArrowScript(), { cameraYaw: () => 0 });
+    const classicPlayer = new DirectionalController(new ArrowScript());
     classicPlayer.setEnabled(false);
     const live = await session({ first: { kind: 'keyboard' }, second: { kind: 'ai', personality: 'archetype' } }, classicPlayer);
     live.startReplayCapture({ fingerprint, checkpointEvery: 30 });
@@ -117,7 +117,7 @@ describe('Replay V2 (M11)', () => {
 
   it('rejects a `move` longer than 1 or not a pair', async () => {
     const fingerprint = await currentRuntimeFingerprint();
-    const live = await session({ first: { kind: 'keyboard' }, second: { kind: 'idle' } }, new DirectionalController(new ArrowScript(), { cameraYaw: () => 0 }));
+    const live = await session({ first: { kind: 'keyboard' }, second: { kind: 'idle' } }, new DirectionalController(new ArrowScript()));
     live.startReplayCapture({ fingerprint, checkpointEvery: 10 });
     for (let i = 0; i < 20; i++) live.tick();
     const { replay } = live.finishReplayCapture();

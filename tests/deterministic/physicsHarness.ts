@@ -49,7 +49,16 @@ export class TestBeyHarness {
     return new TestBeyHarness(physics, body, collider, movement, new SpinController(motion), new DriftController(movement.getLateralGripPerS()));
   }
 
-  tick(actions: ControllerActions): TickResult {
+  /**
+   * `midStepEffect`, when given, runs after applyPreStep and before
+   * physics.step() — the same window a real combat impact's knockback
+   * impulse lands in (see Knockback.ts), so a test can apply one and have
+   * MovementController.postStep() correctly detect it as an impact
+   * (comparing the resulting velocity against what applyPreStep itself
+   * intended), instead of the impulse being silently overwritten before
+   * physics.step() ever runs.
+   */
+  tick(actions: ControllerActions, midStepEffect?: (body: RAPIER.RigidBody) => void): TickResult {
     const grounded = isGrounded(this.physics, this.beyCollider);
 
     const driftResult = this.drift.tick(this.beyBody, actions, grounded, FIXED_DELTA_SECONDS, this.movement.getHeadingRad());
@@ -61,6 +70,7 @@ export class TestBeyHarness {
       staminaAccelFactor: FULL_PHYSICAL_CONDITION.accelFactor,
       dashOverride: null,
     });
+    midStepEffect?.(this.beyBody);
     this.spin.tick(this.beyBody, FIXED_DELTA_SECONDS, FULL_PHYSICAL_CONDITION, grounded);
 
     this.physics.step();

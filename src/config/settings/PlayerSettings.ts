@@ -13,10 +13,18 @@
 import { DEFAULT_QUALITY_PRESET, QualityPreset } from '../runtime/QualityPreset';
 
 /**
- * How the arrows / stick drive the Bey (M11).
- * - directional (default): ↑ = up the screen, and so on; the Bey turns
- *   toward that direction physically (turn rate, momentum, grip).
- * - classic: tank steering — ←/→ turn the heading, ↑/↓ throttle.
+ * How the arrows / stick drive the Bey (M11, default revised 2026-09-30 —
+ * "Fix 6" of the M11 playtest round, see screenDirection.ts's header).
+ * - classic (default): Bey-relative, kart-like — ←/→ steer the Bey's own
+ *   heading, ↑/↓ accelerate/decelerate along it (turn rate, momentum, grip
+ *   all still apply; this is not a snap-to-input). No absolute axis, so it
+ *   has nothing to fall out of alignment with when the camera orbits.
+ * - directional: arena/world-relative — ↑ = world +Z on screen, and so on;
+ *   fully camera-independent (screenToWorld takes no camera parameter),
+ *   but because it maps to FIXED world axes, a screen "up" that no longer
+ *   visually matches world +Z once a dynamic camera has turned can read as
+ *   "wrong" even though the Bey's own trajectory never changed. Kept as a
+ *   selectable, experimental option, not the default.
  */
 export type ControlScheme = 'directional' | 'classic';
 export const CONTROL_SCHEMES: readonly ControlScheme[] = ['directional', 'classic'];
@@ -47,7 +55,7 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   quality: DEFAULT_QUALITY_PRESET,
   // B until the owner picks the first-time default (camera-approval.md 10.1 recommends B).
   cameraPreset: 'B',
-  controlScheme: 'directional',
+  controlScheme: 'classic',
   cameraEffects: true,
   pauseOnFocusLoss: true,
   controlHints: true,

@@ -17,7 +17,6 @@ import { ARENA_CAMERA_RIGS, CAMERA_PRESET_NAMES } from '../../camera/director/Ca
 import { PRESETS, PRESET_IDS } from '../../camera/director/CameraParams';
 import { AIRBORNE_ACCELERATION_FACTOR } from '../../bey/movement/MovementTuning';
 import { MOTION_DIRECTIONS, MOTION_DIRECTION_IDS } from '../../bey/motion/MotionPresets';
-import { DirectionalController } from '../../input/directional/DirectionalController';
 import { inputLockReasonFor } from '../inputLockReason';
 
 const MOTION_NAME_BY_PARAMS = new Map(MOTION_DIRECTION_IDS.map((id) => [MOTION_DIRECTIONS[id].params, MOTION_DIRECTIONS[id].name] as const));
@@ -153,7 +152,7 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('Heading (physical)', snapshot ? `${f(snapshot.movement.headingRad * RAD_TO_DEG)}°` : '—'),
         ...floorRows(bey.arenaFloor, bey.body.translation()),
         row('Desired input (world)', desiredInput(session.getLastActions(side)?.moveIntent)),
-        row('Camera yaw (diagnostic only — must never move Desired input above)', cameraYawDiagnostic(session, side)),
+        row('Camera yaw (diagnostic only — must never move Desired input above)', cameraYawDiagnostic(session)),
         row('Turn rate', `${f(movementDebug.turnRateRadPerS * RAD_TO_DEG)}°/s`),
       ],
     },
@@ -468,11 +467,16 @@ function desiredInput(intent: { x: number; z: number } | undefined): string {
   return len < 1e-3 ? 'none (0)' : `(${f(intent.x)}, ${f(intent.z)}) → ${f(Math.atan2(intent.x, intent.z) * RAD_TO_DEG)}°, |${f(len)}|`;
 }
 
-/** Shown purely so the reader can confirm this side's Desired input never tracks it — screenToWorld() takes no camera parameter at all, so this is display only. */
-function cameraYawDiagnostic(session: MatchSession, side: Side): string {
-  const controller = session.getController(side);
-  if (!(controller instanceof DirectionalController) || !controller.isEnabled()) return 'n/a (not directional)';
-  return `${f((controller.getDebug().cameraYawRad * 180) / Math.PI)}°`;
+/**
+ * Shown purely so the reader can confirm Desired input above never tracks
+ * it — screenToWorld() takes no camera parameter at all, and src/input/
+ * has no camera dependency to read here even if it wanted to (see
+ * DirectionalController.ts's header). Read directly from CameraDirector's
+ * own output, never through any controller.
+ */
+function cameraYawDiagnostic(session: MatchSession): string {
+  const camera = session.getLastCameraOutput();
+  return camera ? `${f(camera.yawDeg)}°` : '—';
 }
 
 /** M11 lane 4: the floor under this Bey (profile, height, slope, downhill pull). */

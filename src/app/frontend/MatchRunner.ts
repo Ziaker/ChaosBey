@@ -24,8 +24,8 @@ import type { AttackProfileSettingsPanel } from '../../debug/settings/AttackProf
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { KeyboardController } from '../../input/devices/KeyboardController';
 import { CombinedController, GamepadController } from '../../input/devices/GamepadController';
-import { cameraYawOf, DirectionalController, type DirectionalDebug } from '../../input/directional/DirectionalController';
-import type { CameraPresetSetting, ControlScheme } from '../../config/settings/PlayerSettings';
+import { DirectionalController, type DirectionalDebug } from '../../input/directional/DirectionalController';
+import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ControlScheme } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 
@@ -136,13 +136,13 @@ export class MatchRunner {
     // player drives with the keyboard and/or the first gamepad.
     const keyboard = new KeyboardController();
     const gamepad = new GamepadController();
-    // M11: arrows / stick = a screen direction (default), resolved to a
-    // world direction with the camera the player is looking through.
+    // Arena/world-relative directional control: a selectable, non-default
+    // option (PlayerSettings.ts) with no camera dependency at all — not
+    // even diagnostic (see DirectionalController.ts's header).
     const directional = new DirectionalController(new CombinedController([keyboard, gamepad]), {
-      cameraYaw: () => cameraYawOf(deps.appRenderer.camera),
       stick: () => gamepad.getStick(),
     });
-    directional.setEnabled((start.controlScheme ?? 'directional') === 'directional');
+    directional.setEnabled((start.controlScheme ?? DEFAULT_PLAYER_SETTINGS.controlScheme) === 'directional');
     const session = await MatchSession.create({
       scene: deps.appRenderer.scene,
       camera: deps.appRenderer.camera,

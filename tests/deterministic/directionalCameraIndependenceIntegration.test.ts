@@ -23,7 +23,7 @@ import * as THREE from 'three';
 import { GameStateMachine } from '../../src/app/lifecycle/GameState';
 import { MatchSession } from '../../src/app/session/MatchSession';
 import { AIController } from '../../src/ai/controllers/AIController';
-import { DirectionalController, cameraYawOf } from '../../src/input/directional/DirectionalController';
+import { DirectionalController } from '../../src/input/directional/DirectionalController';
 import { resolveMatchConfig } from '../../src/config/match/MatchConfig';
 import { createDefaultAttackProfileSettings } from '../../src/config/attack-profile/AttackProfileSettings';
 import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecorder';
@@ -55,7 +55,12 @@ async function createDirectionalMatch(arenaFloor: ArenaFloorId, seedText: string
   const camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 1000);
   scene.add(camera);
   const keySource = new HeldKeySource();
-  const directional = new DirectionalController(keySource, { cameraYaw: () => cameraYawOf(camera) });
+  // No camera source is threaded through DirectionalController at all — it
+  // has no such parameter any more (see DirectionalController.ts's
+  // header). The real camera's yaw for this test's own bookkeeping is read
+  // straight from the session's camera output below, never through the
+  // controller.
+  const directional = new DirectionalController(keySource);
   const session = await MatchSession.create({
     scene,
     camera,
@@ -96,7 +101,7 @@ describe('Directional control stays camera-independent through a real 30 s fight
 
         session.renderFrame(FIXED_DELTA_SECONDS, camera); // updates the REAL camera from the current fight, before this tick's input is sampled
         const result = session.tick();
-        cameraYaws.push(cameraYawOf(camera));
+        cameraYaws.push(session.getLastCameraOutput()?.yawDeg ?? 0);
 
         const actualWorld = session.getLastActions('first')?.moveIntent;
         expect(actualWorld, `tick ${tick}: moveIntent missing on a directional frame`).toBeDefined();
@@ -130,7 +135,7 @@ describe('Directional control stays camera-independent through a real 30 s fight
       // not a fixed-yaw stub that would trivially "pass" the independence
       // check above by never changing at all.
       const yawRange = Math.max(...cameraYaws) - Math.min(...cameraYaws);
-      expect(yawRange, 'the camera never moved at all — this run does not actually exercise independence').toBeGreaterThan(0.05);
+      expect(yawRange, 'the camera never moved at all — this run does not actually exercise independence').toBeGreaterThan(3);
 
       // At least one of the real-combat events happened somewhere in this
       // AI-vs-real-player-input run, so Test H's claim ("input recovers
@@ -153,11 +158,13 @@ describe('fundamental test: the camera orbits fully while a held direction\'s wo
     for (const preset of PRESET_IDS) {
       const keySource = new HeldKeySource();
       keySource.setHeld(Action.MoveForward); // held for the entire test, never released or changed
-      // cameraYaw here is wired to a constant: DirectionalController never reads it to
-      // compute moveIntent (see screenToWorld's signature) — this is exactly the point
-      // being proven, not a shortcut. The real orbiting camera below is a separate,
-      // independent CameraRig, driving nothing back into this controller.
-      const directional = new DirectionalController(keySource, { cameraYaw: () => 0 });
+      // DirectionalController has no camera parameter at all any more (see
+      // its header) — this is exactly the point being proven, not a
+      // shortcut. The real orbiting camera below is a separate, independent
+      // CameraRig, driving nothing back into this controller; its yaw is
+      // read straight off `out.player.debug.yawDeg` for this test's own
+      // bookkeeping.
+      const directional = new DirectionalController(keySource);
       const rig = new CameraRig(preset);
       const ticks = 360;
       let prevYawDeg: number | null = null;

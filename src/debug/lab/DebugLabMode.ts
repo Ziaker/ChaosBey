@@ -27,7 +27,7 @@ import { resolveMatchConfig } from '../../config/match/MatchConfig';
 import { resolveAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import { loadAttackProfileOverrides } from '../../config/attack-profile/AttackProfileStorage';
 import { KeyboardController } from '../../input/devices/KeyboardController';
-import { cameraYawOf, DirectionalController } from '../../input/directional/DirectionalController';
+import { DirectionalController } from '../../input/directional/DirectionalController';
 import { loadPlayerSettings, type CameraPresetSetting } from '../../config/settings/PlayerSettings';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, isArenaFloorId, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { DEFAULT_MOTION_DIRECTION, isMotionDirectionId, MOTION_DIRECTION_IDS, MOTION_DIRECTIONS, type MotionDirectionId } from '../../bey/motion/MotionPresets';
@@ -108,9 +108,10 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
 
   const keyboard = new KeyboardController();
   keyboard.attach();
-  // M11: the player's control scheme from Settings (directional by
-  // default), resolved against whichever camera view the Lab shows.
-  const playerInput = new DirectionalController(keyboard, { cameraYaw: () => cameraYawOf(appRenderer.camera) });
+  // M11: the player's control scheme from Settings (Classic/Bey-relative by
+  // default; Directional is a selectable, camera-independent option — see
+  // DirectionalController.ts's header for why it has no camera dependency).
+  const playerInput = new DirectionalController(keyboard);
   playerInput.setEnabled(loadPlayerSettings().controlScheme === 'directional');
   // M11: the game camera preset from Settings (A/B/C; the Clash forces B).
   let cameraPreset: CameraPresetSetting = loadPlayerSettings().cameraPreset;
