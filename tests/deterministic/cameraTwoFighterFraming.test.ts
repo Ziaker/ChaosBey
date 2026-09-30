@@ -292,15 +292,16 @@ describe('two-fighter camera framing — owner playtest fix 8, scenarios A–J (
 
   // D and E genuinely invert the player↔opponent axis (the player passes right by/through the
   // opponent's position), which the Lab's own AXIS_FREEZE_BELOW_M holds through, then releases
-  // into a fresh orbit at the preset's own speed cap — a brief, bounded reframe blip is the
-  // designed behaviour here, not a bug (see docs/ai/m11-status.md, "fix 8"); the owner's own
-  // §13 metric for this is the longest offscreen gap, which this keeps small.
+  // into a fresh orbit. Fix 8's first pass left this at 86–90% opponent visibility (owner
+  // playtest follow-up); a crossing-triggered rescue pulse (CROSSING_AXIS_RATE_RAD_S — distance
+  // and FOV only, no extra yaw/orbit speed) now closes almost all of that gap, matching the same
+  // bar as every other CombatFollow scenario (see docs/ai/m11-status.md, "fix 8").
   for (const key of ['D', 'E'] as const) {
     const spec = SCENARIOS[key]!;
-    it(`${spec.label}: any reframe blip at the axis crossing is brief and recovers, for every preset`, () => {
+    it(`${spec.label}: opponent stays visible through the axis crossing, for every preset`, () => {
       for (const preset of PRESET_IDS) {
         const m = runScenario(preset, spec.build(spec.ticks), spec.ticks);
-        expect(m.opponentInFramePct, `${preset} ${spec.label}: opponent visibility`).toBeGreaterThanOrEqual(80);
+        expect(m.opponentInFramePct, `${preset} ${spec.label}: opponent visibility`).toBeGreaterThanOrEqual(95);
         expect(m.longestOpponentOffscreenS, `${preset} ${spec.label}: longest opponent offscreen gap`).toBeLessThan(0.3);
         expect(m.maxYawRateDegPerS, `${preset} ${spec.label}: yaw rate`).toBeLessThanOrEqual(PRESETS[preset].orbitSpeed + 1e-6);
       }

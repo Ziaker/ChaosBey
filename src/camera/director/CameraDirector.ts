@@ -89,6 +89,19 @@ const RESCUE_FALL_PER_S = 1.2;
 const RESCUE_EXTRA_DISTANCE_M = 4;
 const RESCUE_EXTRA_FOV = 10;
 const FRAME_MARGIN = 0.04;               // "In frame" means inside 96% of the view.
+// Arena mode only (never the Lab, which this must stay bit-identical to):
+// a fast axis crossing (the player passing right by a stationary opponent)
+// flips the fight axis by close to a half-turn in a single tick once the
+// close-range freeze (AXIS_FREEZE_BELOW_M) releases. Reactive rescue (below)
+// only starts growing once a fighter is already offscreen, which was too
+// slow for a crossing this abrupt (owner playtest, fix 8 follow-up: scenario
+// E measured 86.7% opponent visibility). CROSSING_AXIS_RATE_RAD_S detects
+// exactly that single-tick flip (ordinary orbiting/strafing never gets close)
+// and jumps the rescue to CROSSING_RESCUE_PULSE immediately, decaying at the
+// normal RESCUE_FALL_PER_S from there — the same offscreen-rescue mechanism,
+// just given a head start at the one moment it can't react in time otherwise.
+const CROSSING_AXIS_RATE_RAD_S = 5;
+const CROSSING_RESCUE_PULSE = 0.55;
 const MODE_THRESHOLD = 0.5;
 const MODE_MIN_HOLD_S = 0.25;
 // ----------------------------------------------------------------------------------------------
@@ -290,6 +303,12 @@ export class CameraDirector {
     const rawAxisRate = angleDelta(this.prevAxisYaw, this.axisYaw) / dt;
     this.axisRate += (rawAxisRate - this.axisRate) * smoothK(4, dt);
     this.prevAxisYaw = this.axisYaw;
+    // A fast axis crossing (see CROSSING_AXIS_RATE_RAD_S's doc comment): give
+    // the offscreen rescue a head start it wouldn't otherwise have time to
+    // build on its own. Distance/FOV react to `rescue` regardless of which
+    // fighter it's "toward", so this alone (no rescueTowardFirst guess needed)
+    // already gives both fighters more room the instant the axis flips.
+    if (this.options.arena && Math.abs(rawAxisRate) > CROSSING_AXIS_RATE_RAD_S) this.rescue = Math.max(this.rescue, CROSSING_RESCUE_PULSE);
 
     // ---- Intents → contexts ----
     this.consumeIntents(frame.intents);
