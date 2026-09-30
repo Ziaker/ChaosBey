@@ -11,6 +11,7 @@
 //   Results (app/modes/playMode.ts); `play&quick` starts the match directly;
 // - `settings`: the Settings screen (app/modes/settingsMode.ts);
 // - `debug-lab`: the Debug Lab developer tool (debug/lab/DebugLabMode.ts);
+// - `combat-hud-lab`: three HUD directions over the real MatchSession;
 // - `self-test`: the browser Self Test (debug/self-test-ui/SelfTestMode.ts).
 // ============================================================
 
@@ -23,6 +24,7 @@ import { startPlayMode } from './app/modes/playMode';
 import { startSettingsMode } from './app/modes/settingsMode';
 import { isQuickPlay, resolveAppMode } from './app/modes/appMode';
 import { startDebugLabMode } from './debug/lab/DebugLabMode';
+import { startCombatHudLabMode } from './debug/combat-hud-lab/CombatHudLabMode';
 import { startSelfTestMode } from './debug/self-test-ui/SelfTestMode';
 
 async function bootstrap(): Promise<void> {
@@ -57,6 +59,8 @@ async function bootstrap(): Promise<void> {
   const appRenderer = createRenderer(canvas);
   if (mode === 'debug-lab') {
     await startDebugLabMode(appRenderer, debugOverlayRoot);
+  } else if (mode === 'combat-hud-lab') {
+    await startCombatHudLabMode(appRenderer, debugOverlayRoot);
   } else {
     await startPlayMode(appRenderer, { debugOverlayRoot, attackSettingsRoot, screenRoot }, { quick: isQuickPlay(window.location.search) });
   }
