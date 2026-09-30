@@ -88,16 +88,22 @@ describe('motion directions — the Lab\'s behaviours in the real simulation', (
     expect(slipTicks.C).toBeGreaterThan(slipTicks.A!);
   });
 
-  it('wall bounce: a head-on hit at 9 m/s rebounds A < B < C, and never comes back faster than it went in', async () => {
+  it('wall bounce: a head-on hit at 9+ m/s rebounds A < B < C, and never comes back faster than it went in', async () => {
     const rebound: Record<string, number> = {};
     for (const id of MOTION_DIRECTION_IDS) {
       const h = await harness(id, { x: 0, y: 1, z: 8 });
       h.beyBody.setLinvel({ x: 0, y: 0, z: 9 }, true);
       let fastestBack = 0;
-      for (const r of h.tickMany(IDLE, 60)) fastestBack = Math.max(fastestBack, -r.movement.actualVelocityVector.z);
+      // Driven into the wall (forward held): with no input the idle damping
+      // (owner playtest, after M11) settles a Bey before it covers the 3 m.
+      let fastestIn = 9;
+      for (const r of h.tickMany(held(Action.MoveForward), 60)) {
+        fastestIn = Math.max(fastestIn, r.movement.actualVelocityVector.z);
+        fastestBack = Math.max(fastestBack, -r.movement.actualVelocityVector.z);
+      }
       rebound[id] = fastestBack;
       expect(fastestBack, `${id}: bounced back`).toBeGreaterThan(0.5);
-      expect(fastestBack, `${id}: no energy gained`).toBeLessThan(9);
+      expect(fastestBack, `${id}: no energy gained`).toBeLessThan(fastestIn);
     }
     expect(rebound.A).toBeLessThan(rebound.B!);
     expect(rebound.B).toBeLessThan(rebound.C!);

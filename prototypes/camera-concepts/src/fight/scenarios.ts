@@ -58,11 +58,12 @@ export const SCENARIOS: readonly Scenario[] = [
     // Seeds and spawns picked by sweeping the real AI: combat with hits and a Clash, and no round end.
     // Re-swept after the Motion Lab integration (M11) changed every fight: 'q' (was 'k'), then again
     // after its follow-up fixes: no seed a..z keeps a Clash and 24 s without a round end any more
-    // (fights end by KO in 8–16 s), so 15 s of 'u', whose round ends at 15.5 s.
+    // (fights end by KO in 8–16 s), so 15 s; 'g' since the owner-playtest controls (Clash at
+    // 5.9 s, round end at 16.6 s; was 'u').
     firstSpawn: { x: -3, z: -5 },
     secondSpawn: { x: 3, z: 5 },
-    first: { kind: 'ai', seed: 'duel-p-u' },
-    second: { kind: 'ai', seed: 'duel-o-u' },
+    first: { kind: 'ai', seed: 'duel-p-g' },
+    second: { kind: 'ai', seed: 'duel-o-g' },
     expects: ['hit', 'clashActive'],
   },
   {

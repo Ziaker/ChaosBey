@@ -41,6 +41,8 @@ import { angleDelta, clamp, copy3, distXZ, inFrame, lerp3, lerpAngle, set3, smoo
 
 // ---------------- DIRECTOR CONSTANTS (shared by A/B/C; the sliders cover the rest) ----------------
 const DEG = Math.PI / 180;
+/** Arena mode: how far (m) the fight's framing point can wander before the camera starts to follow it. */
+const ARENA_FOCUS_DEADZONE_M = 1.5;
 const ZERO: Vec3 = { x: 0, y: 0, z: 0 };
 const MAX_FOV_CEILING = 120;             // GDD 49 hard ceiling.
 const MIN_FOV = 30;
@@ -141,17 +143,19 @@ export interface DirectorOptions {
   /**
    * The in-game arena camera (owner playtest, M11): omitted = the lab's
    * behaviour. When set:
-   * - the camera does not follow every move: it frames the fight on the
-   *   player → opponent axis but ignores rotations of that axis smaller
-   *   than `yawDeadzoneRad`, then glides to the new angle (the preset's own
-   *   orbit smoothing and speed cap); no velocity-mixed heading, no
-   *   automatic orbit drift or lead, no shoulder switching;
-   * - it always stays inside the arena: a viewpoint that would fall past
-   *   `containRadiusM` from the centre swings to the arena's inner side,
-   *   and the eye is never farther out than that, so the wall is never
-   *   between the camera and the Beys.
+   * - the angle is chosen once, behind the player on the opening fight
+   *   axis, and held for the round: no re-aiming at the fight axis, no
+   *   velocity-mixed heading, no orbit drift or lead, no shoulder switching,
+   *   no impact re-framing turn — so the screen-relative controls keep their
+   *   meaning;
+   * - it stays dynamic by moving and zooming: the framing point follows the
+   *   fight once it leaves a 1.5 m zone (no look-ahead), and distance, FOV,
+   *   shake, knockback follow, Clash, ring-out and finisher all apply;
+   * - it always stays inside the arena: the eye is never farther than
+   *   `containRadiusM` from the centre (pulled in toward the fight and
+   *   raised), so the wall is never between the camera and the Beys.
    */
-  readonly arena?: { readonly containRadiusM: number; readonly yawDeadzoneRad: number };
+  readonly arena?: { readonly containRadiusM: number };
 }
 
 interface PendingKnock {
@@ -195,6 +199,8 @@ export class CameraDirector {
   private clashYaw = 0;
   /** Arena mode: the framing angle the camera holds until the fight axis moves past the dead zone. */
   private heldYaw = 0;
+  /** Arena mode: the framing point, moved only when the fight leaves ARENA_FOCUS_DEADZONE_M around it. */
+  private readonly heldFocus: Vec3 = { x: 0, y: 0, z: 0 };
   private wasClash = false;
   // Side
   private side = 1;
@@ -333,8 +339,23 @@ export class CameraDirector {
     // ---- Focus target ----
     const ft = this.focusTarget;
     lerp3(ft, p1, p2, P.framingBias);
-    ft.x += this.lookAhead.x;
-    ft.z += this.lookAhead.z;
+    if (this.options.arena) {
+      // Arena mode: the framing point only moves once the fight has left a
+      // small zone around it, so ordinary moves don't drag the camera along.
+      if (!this.initialized) copy3(this.heldFocus, ft);
+      const dx = ft.x - this.heldFocus.x;
+      const dz = ft.z - this.heldFocus.z;
+      const d = Math.hypot(dx, dz);
+      if (d > ARENA_FOCUS_DEADZONE_M) {
+        this.heldFocus.x += (dx / d) * (d - ARENA_FOCUS_DEADZONE_M);
+        this.heldFocus.z += (dz / d) * (d - ARENA_FOCUS_DEADZONE_M);
+      }
+      ft.x = this.heldFocus.x;
+      ft.z = this.heldFocus.z;
+    } else {
+      ft.x += this.lookAhead.x;
+      ft.z += this.lookAhead.z;
+    }
     if (this.hasEncounter) lerp3(ft, ft, this.encounter, encounterW * 0.5);
     const knockPos = this.knockTargetIsFirst ? p1 : p2;
     lerp3(ft, ft, knockPos, wKnock * 0.6 * P.knockbackFollow);
@@ -355,23 +376,15 @@ export class CameraDirector {
     }
     let yawTarget = baseYaw + Math.PI + this.side * P.lateralOffset * DEG + orbitLead + this.closeDrift + this.yawKick;
     if (arena) {
-      // Hold the framing angle; re-aim only when the fight axis has turned past the dead zone,
-      // landing well inside it so the camera then stays put again.
-      // The fight is a line, not an arrow: when the Beys pass each other the
-      // axis flips 180°, and following it would swing the camera half-way
-      // round (and the screen-relative controls with it). Either end of the
-      // line is a valid framing; the camera keeps the one it is nearest to.
-      const behindPlayer = baseYaw + Math.PI + this.side * P.lateralOffset * DEG;
-      const behindOpponent = baseYaw + this.side * P.lateralOffset * DEG;
-      const offPlayer = angleDelta(this.heldYaw, behindPlayer);
-      const offOpponent = angleDelta(this.heldYaw, behindOpponent);
-      const off = Math.abs(offPlayer) <= Math.abs(offOpponent) ? offPlayer : offOpponent;
-      const wanted = this.heldYaw + off;
-      if (!this.initialized) this.heldYaw = behindPlayer;
-      // Up close the axis is noise (it spins as the Beys pass each other): only re-aim when they are apart.
-      else if (sep > CLOSE_START_M && Math.abs(off) > arena.yawDeadzoneRad) this.heldYaw = wanted - Math.sign(off) * arena.yawDeadzoneRad * 0.35;
-      this.heldYaw = this.containedYaw(this.heldYaw, ft, this.distance, arena.containRadiusM);
-      yawTarget = this.heldYaw + this.yawKick;
+      // The angle is chosen once, behind the player on the opening fight axis,
+      // and held for the round (owner playtest, after M11: the camera must not
+      // move with the Bey constantly). Re-aiming at the fight axis — even past
+      // a 60° dead zone — turned it 127° in 3 s while the opponent circled and
+      // the player stood still, and every turn changed what the screen-relative
+      // arrows mean. It stays dynamic by moving and zooming (below), and the
+      // eye is pulled in and raised, never swung, to stay inside the arena.
+      if (!this.initialized) this.heldYaw = baseYaw + Math.PI;
+      yawTarget = this.heldYaw;
     }
     if (Math.abs(orbitLead) > 0.05) this.modifiers.push(`órbita ${(orbitLead / DEG).toFixed(0)}°`);
     if (Math.abs(this.yawKick) > 0.02) this.modifiers.push(`reenquadramento ${(this.yawKick / DEG).toFixed(0)}°`);
@@ -538,24 +551,6 @@ export class CameraDirector {
         modifiers: this.modifiers,
       },
     };
-  }
-
-  /**
-   * Arena mode: `yaw` if the eye it puts at `distance` from `focus` is inside
-   * the arena; otherwise the nearest angle that is (searched both ways in
-   * 5° steps), or, if none is, the angle looking out from the arena's
-   * centre side.
-   */
-  private containedYaw(yaw: number, focus: Vec3, distance: number, radius: number): number {
-    const inside = (a: number): boolean => Math.hypot(focus.x + Math.sin(a) * distance, focus.z + Math.cos(a) * distance) <= radius;
-    if (inside(yaw)) return yaw;
-    for (let k = 1; k <= 36; k++) {
-      const d = k * 5 * DEG;
-      if (inside(yaw + d)) return yaw + d;
-      if (inside(yaw - d)) return yaw - d;
-    }
-    // Focus near the edge and a long distance: sit on the centre side.
-    return Math.hypot(focus.x, focus.z) < 1e-6 ? yaw : yawOf(-focus.x, -focus.z);
   }
 
   /** Arena mode: never let the eye past `radius` from the centre (pulled in toward the focus, raised to keep the framing). */

@@ -276,9 +276,9 @@ describe('in-game arena camera (owner playtest, M11)', () => {
     }
   }, 120_000);
 
-  it('does not follow every move: small turns of the fight are ignored, and the Beys passing each other does not swing it round', () => {
+  it('does not follow every move: the player circling the opponent or running past it does not swing it round', () => {
     const d = new CameraDirector(PRESETS.C, 16 / 9, RIG_DIRECTOR_OPTIONS);
-    // The player circles 50° around the opponent: inside the dead zone, the camera holds its angle.
+    // The player circles 50° around the opponent: the camera holds its angle.
     let first = 0;
     let last = 0;
     for (let t = 0; t < 180; t++) {
@@ -299,5 +299,40 @@ describe('in-game arena camera (owner playtest, M11)', () => {
       if (t > 10) maxTurn = Math.max(maxTurn, Math.abs(((o.debug.yawDeg - start + 540) % 360) - 180));
     }
     expect(maxTurn).toBeLessThan(45);
+  });
+
+  it('holds its angle for the round: the opponent circling a standing player turns it by less than 2°, for every preset', () => {
+    // Owner playtest (after M11): in a real match the camera turned 127° in 3 s while the AI
+    // circled and the player had not touched a key, so the arrows kept changing meaning.
+    const yawTurn = (from: number, to: number): number => Math.abs(((to - from + 540) % 360) - 180);
+    for (const preset of PRESET_IDS) {
+      const d = new CameraDirector(PRESETS[preset], 16 / 9, RIG_DIRECTOR_OPTIONS);
+      let start = 0;
+      let worst = 0;
+      for (let t = 0; t < 360; t++) {
+        const a = Math.PI / 2 + (t / 360) * Math.PI * 1.5; // the opponent sweeps 270° around the player, 6 m out
+        const o = d.tick(frame(t, fighter(0, -4), fighter(6 * Math.cos(a), -4 + 6 * Math.sin(a))) as never, DT);
+        if (t === 0) start = o.debug.yawDeg;
+        worst = Math.max(worst, yawTurn(start, o.debug.yawDeg));
+      }
+      expect(worst, preset).toBeLessThan(2);
+    }
+  });
+
+  it('does not drag along with small moves: the framing point waits until the fight has moved 1.5 m', () => {
+    const d = new CameraDirector(PRESETS.B, 16 / 9, RIG_DIRECTOR_OPTIONS);
+    let settled = { x: 0, z: 0 };
+    for (let t = 0; t < 240; t++) {
+      const o = d.tick(frame(t, fighter(0, -3), fighter(0, 3)) as never, DT);
+      settled = { x: o.eye.x, z: o.eye.z };
+    }
+    // The player shuffles 1 m to the side and back, twice.
+    let drift = 0;
+    for (let t = 240; t < 480; t++) {
+      const x = Math.sin(((t - 240) / 120) * Math.PI * 2);
+      const o = d.tick(frame(t, fighter(x, -3), fighter(0, 3)) as never, DT);
+      drift = Math.max(drift, Math.hypot(o.eye.x - settled.x, o.eye.z - settled.z));
+    }
+    expect(drift).toBeLessThan(0.05);
   });
 });

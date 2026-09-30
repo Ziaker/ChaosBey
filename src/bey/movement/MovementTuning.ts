@@ -75,7 +75,30 @@ export const IMPACT_VELOCITY_DELTA_THRESHOLD_MPS = 2.5;
 // rate is proportional to the heading error (rad/s per rad), capped at
 // the Bey's turn rate, so the heading settles on the direction instead of
 // overshooting it.
-export const DIRECTIONAL_STEER_GAIN_PER_S = 3;
+export const DIRECTIONAL_STEER_GAIN_PER_S = 12;
+// Owner playtest (after M11): "it keeps going in wrong directions instead
+// of the direction I'm moving". With classic-car turning (2.6 rad/s,
+// gain 3/s, easing 6/s) a Bey at rest took 0.5 s to move 6 cm toward a
+// direction 90° away and stalled for a whole second on one behind it. A
+// top has no front wheels: in directional mode its heading swings toward
+// the wanted direction this many times faster than the classic turn
+// rate, with a quicker easing — still a limit and still eased, so a new
+// direction takes a moment and momentum/slip/drift still play out.
+export const DIRECTIONAL_TURN_RATE_MULTIPLIER = 3;
+export const DIRECTIONAL_STEERING_RESPONSE_PER_S = 20;
+// Thrust along the heading is scaled by cos(error)^this: close to full
+// once facing the direction, little while still turning, so the Bey is
+// not driven off at an angle (at 45° off: 0.5 instead of 0.71).
+export const DIRECTIONAL_THRUST_ALIGNMENT_POWER = 2;
 // Heading error (rad) beyond which a held direction counts as "steering"
 // for drift (hop, then hold JumpDrift while steering).
 export const DIRECTIONAL_STEERING_THRESHOLD_RAD = 0.25;
+
+// Owner playtest (after M11): "it moves by itself". Released at top speed
+// (~11 m/s) a Bey coasted 6.6 m over 1.35 s on rolling drag and floor
+// friction alone. With no movement input, on the ground and outside an
+// impact's window, its speed also decays at this rate (1/s). It is
+// proportional, not a constant brake: strong at speed, weak when slow, so
+// an idle Bey pushed by another still gives way instead of acting like a
+// wall; knockbacks and bounces are not damped.
+export const IDLE_DAMPING_PER_S = 4;

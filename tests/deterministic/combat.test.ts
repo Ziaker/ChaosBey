@@ -471,7 +471,11 @@ describe('RoundEnd freeze is genuinely read-only', () => {
     // unresolved impact right as the round ends — the scenario that
     // exposed the bug: freezing while movement's own impact-detection
     // state was "hot".
-    const harness = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, CLOSE_SECOND_SPAWN);
+    // The second Bey sits out of the way: with the idle brake (owner
+    // playtest, after M11) an idle Bey no longer slides off when pushed, and
+    // the first one plowed it all the way to the wall without a detectable
+    // impact of its own.
+    const harness = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, { x: -6, y: BEY_SPAWN_HEIGHT_M, z: -6 });
     settle(harness);
 
     const driver = new ScriptedController([{ fromTick: 0, held: [Action.MoveForward] }]);
