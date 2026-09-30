@@ -17,6 +17,8 @@ import { CAMERA_PRESET_NAMES, SHOULDER_RIGS } from '../../camera/director/Camera
 import { PRESETS, PRESET_IDS } from '../../camera/director/CameraParams';
 import { AIRBORNE_ACCELERATION_FACTOR } from '../../bey/movement/MovementTuning';
 import { MOTION_DIRECTIONS, MOTION_DIRECTION_IDS } from '../../bey/motion/MotionPresets';
+import { DirectionalController } from '../../input/directional/DirectionalController';
+import { inputLockReasonFor } from '../inputLockReason';
 
 const MOTION_NAME_BY_PARAMS = new Map(MOTION_DIRECTION_IDS.map((id) => [MOTION_DIRECTIONS[id].params, MOTION_DIRECTIONS[id].name] as const));
 import { ClashState } from '../../combat/clash/ClashController';
@@ -85,6 +87,7 @@ function buildMatchSection(session: MatchSession, frame: InspectionFrameStats): 
       ...Object.keys(config).map((key) => row(`Rule: ${key}`, String(config[key]))),
       row('First controller', session.describeController('first')),
       row('Second controller', session.describeController('second')),
+      row('Input lock (first)', inputLockReasonFor(session, session.getLastCameraOutput()?.isHitstopActive ?? false)),
       row('Anomalies (GDD 67)', anomalySummary(session)),
       row(
         'Debug mutations',
@@ -150,6 +153,7 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('Heading (physical)', snapshot ? `${f(snapshot.movement.headingRad * RAD_TO_DEG)}°` : '—'),
         ...floorRows(bey.arenaFloor, bey.body.translation()),
         row('Desired input (world)', desiredInput(session.getLastActions(side)?.moveIntent)),
+        row('Camera yaw (diagnostic only — must never move Desired input above)', cameraYawDiagnostic(session, side)),
         row('Turn rate', `${f(movementDebug.turnRateRadPerS * RAD_TO_DEG)}°/s`),
       ],
     },
@@ -462,6 +466,13 @@ function desiredInput(intent: { x: number; z: number } | undefined): string {
   if (!intent) return 'classic (steer/throttle)';
   const len = Math.hypot(intent.x, intent.z);
   return len < 1e-3 ? 'none (0)' : `(${f(intent.x)}, ${f(intent.z)}) → ${f(Math.atan2(intent.x, intent.z) * RAD_TO_DEG)}°, |${f(len)}|`;
+}
+
+/** Shown purely so the reader can confirm this side's Desired input never tracks it — screenToWorld() takes no camera parameter at all, so this is display only. */
+function cameraYawDiagnostic(session: MatchSession, side: Side): string {
+  const controller = session.getController(side);
+  if (!(controller instanceof DirectionalController) || !controller.isEnabled()) return 'n/a (not directional)';
+  return `${f((controller.getDebug().cameraYawRad * 180) / Math.PI)}°`;
 }
 
 /** M11 lane 4: the floor under this Bey (profile, height, slope, downhill pull). */

@@ -9,6 +9,7 @@
 // ============================================================
 
 import type { Vec2 } from '../../physics/Vec2';
+import type { InputLockReason } from '../inputLockReason';
 
 export interface DebugOverlayState {
   fps: number;
@@ -25,6 +26,14 @@ export interface DebugOverlayState {
   headingRad: number;
   /** M11: the player's desired world direction (directional control), null under classic control. Debug only — never drawn in the game view. */
   desiredMoveIntent: Vec2 | null;
+  /** "Directional" or "Classic" (PlayerSettings.controlScheme as actually wired, not just the saved setting). */
+  controlSchemeLabel: string;
+  /** The camera's current yaw in degrees, shown ONLY as a side-by-side diagnostic next to desiredMoveIntent — proves the two never move together. Null when the player's side isn't running DirectionalController (e.g. Classic, or an AI/scripted side). */
+  cameraYawDeg: number | null;
+  /** Owner of the 'first' (player) side's controller this tick: 'HUMAN' or 'AI' (Debug Lab can assign either side to AI). */
+  firstControllerOwner: 'HUMAN' | 'AI';
+  /** Why player input is (or isn't) restricted right now — never a bare "0" with no reason. 'none' means input is fully authoritative. */
+  inputLockReason: InputLockReason;
   /** M11 lane 4: e.g. "Bowl A — Parabolic dish · h 1.20 m · slope 12.3° · pull 2.10 m/s²". */
   floorLine: string;
   slipAngleRad: number;
@@ -173,7 +182,10 @@ export class DebugOverlay {
       `actual velocity  ${fmtVec2(state.actualVelocityVector)}\n` +
       `speed            ${state.speedMps.toFixed(2)} m/s\n` +
       `heading          ${(state.headingRad * RAD_TO_DEG).toFixed(1)} deg\n` +
+      `control scheme   ${state.controlSchemeLabel} · owner ${state.firstControllerOwner}\n` +
       `desired input    ${state.desiredMoveIntent ? `${fmtVec2(state.desiredMoveIntent)} ${fmtIntentAngle(state.desiredMoveIntent)}` : 'classic (steer/throttle)'}\n` +
+      `camera yaw       ${state.cameraYawDeg === null ? '—' : `${state.cameraYawDeg.toFixed(1)} deg (must never move with desired input above)`}\n` +
+      `input lock       ${state.inputLockReason}\n` +
       `slip angle       ${(state.slipAngleRad * RAD_TO_DEG).toFixed(1)} deg\n` +
       `floor            ${state.floorLine}\n` +
       `lateral grip     ${state.lateralGripPerS.toFixed(2)} /s\n` +

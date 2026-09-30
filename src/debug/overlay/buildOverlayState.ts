@@ -13,6 +13,8 @@ import type { MatchSession } from '../../app/session/MatchSession';
 import { computeClashPower, computeMashPerformance, computeStaminaFactor, computeVelocityFactor } from '../../combat/clash/ClashFormula';
 import type { DebugOverlayState } from './DebugOverlay';
 import { Action } from '../../input/actions/Action';
+import { DirectionalController } from '../../input/directional/DirectionalController';
+import { inputLockReasonFor } from '../inputLockReason';
 
 export type CombatOverlayFields = Omit<DebugOverlayState, 'fps' | 'frameTimeMs' | 'physicsStepTimeMs' | 'tickIndex' | 'seedText' | 'gameState'>;
 
@@ -25,6 +27,8 @@ export function buildCombatOverlayFields(session: MatchSession): CombatOverlayFi
   const firstMash = clash.getFirstMashEventCount();
   const secondMash = clash.getSecondMashEventCount();
   const secondController = session.getController('second');
+  const firstController = session.getController('first');
+  const directional = firstController instanceof DirectionalController && firstController.isEnabled() ? firstController : null;
 
   return {
     intendedSteeringVector: result.first.movement.intendedSteeringVector,
@@ -32,6 +36,10 @@ export function buildCombatOverlayFields(session: MatchSession): CombatOverlayFi
     speedMps: result.first.movement.speedMps,
     headingRad: result.first.movement.headingRad,
     desiredMoveIntent: session.getLastActions('first')?.moveIntent ?? null,
+    controlSchemeLabel: directional ? 'Directional' : 'Classic',
+    cameraYawDeg: directional ? (directional.getDebug().cameraYawRad * 180) / Math.PI : null,
+    firstControllerOwner: firstController instanceof AIController ? 'AI' : 'HUMAN',
+    inputLockReason: inputLockReasonFor(session, camera.isHitstopActive),
     floorLine: floorLineFor(session),
     slipAngleRad: result.first.movement.slipAngleRad,
     lateralGripPerS: result.first.movement.lateralGripPerS,
