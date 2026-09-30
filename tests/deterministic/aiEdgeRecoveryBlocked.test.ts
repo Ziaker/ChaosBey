@@ -70,12 +70,15 @@ describe('AI edge recovery around a blocking opponent (M7 Part 2b, real physics)
     // Around, on the side away from the blocker's offset.
     expect(right.recovery[right.recovery.length - 1]!.x).toBeLessThan(-0.8);
     expect(left.recovery[left.recovery.length - 1]!.x).toBeGreaterThan(0.8);
-    // Mirror symmetry, tick for tick (to 5 cm: the physics solver is not
-    // bit-exactly mirror-symmetric, the decisions are).
+    // Mirror symmetry, tick for tick (to 10 cm: the physics solver is not
+    // bit-exactly mirror-symmetric, the decisions are). Was 5 cm; the Motion
+    // Lab's B Bey-Bey restitution (0.55, M11; effectively 0.35 before) makes
+    // the contact with the blocker bouncier, and the solver's asymmetry grew
+    // from 1.7 cm to 7.7 cm at worst (both runs still 80 recovery ticks).
     expect(left.recovery.length).toBe(right.recovery.length);
     for (let i = 0; i < right.recovery.length; i++) {
-      expect(left.recovery[i]!.x).toBeCloseTo(-right.recovery[i]!.x, 1);
-      expect(left.recovery[i]!.z).toBeCloseTo(right.recovery[i]!.z, 1);
+      expect(Math.abs(left.recovery[i]!.x + right.recovery[i]!.x)).toBeLessThan(0.1);
+      expect(Math.abs(left.recovery[i]!.z - right.recovery[i]!.z)).toBeLessThan(0.1);
     }
   });
 });

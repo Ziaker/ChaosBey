@@ -53,6 +53,7 @@ describe('match setup', () => {
       roundsToWin: 2,
       arena: { presetId: 'foundry', geometry: { wallHeightM: 2, wallRestitution: 0.55 } },
       clashImpactMultiplier: 1,
+      motion: 'B',
       seedText: null,
     });
     // The default setup is the Debug Lab / quick-play pairing.

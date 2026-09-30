@@ -109,7 +109,10 @@ describe('Debug Lab mutations', () => {
     forceAction(session, 'second', 'jump');
     expect(runUntil(session, 10, () => bey('second').drift.getState() === DriftState.Hopping)).toBe(true);
 
-    runUntil(session, 120, () => false);
+    // The 2.9 m forced jump lands at ~7 m/s and, since the Motion Lab
+    // integration (M11), bounces off the floor (B: ×0.35, then once more):
+    // wait until it has settled, as a ground Dodge needs the floor.
+    runUntil(session, 200, () => false);
     forceAction(session, 'second', 'dodge');
     expect(runUntil(session, 10, () => bey('second').dodge.getState() === DodgeState.Dodging)).toBe(true);
     expect(runUntil(session, 60, () => bey('second').dodge.getState() === DodgeState.Cooldown)).toBe(true);

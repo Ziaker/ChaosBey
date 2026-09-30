@@ -28,6 +28,12 @@ import { SeededRng } from '../../src/rng/SeededRng';
 import { CombatHarness } from './combatHarness';
 
 const RUN_TICKS = 600;
+/**
+ * AI RNG seed whose control run reaches all three freeze situations. Was
+ * 'hitstop-freeze'; since the Motion Lab integration (M11) that run never
+ * enters a counter stance, so re-swept: -6 reaches them at ticks 28 / 112 / 365.
+ */
+const AI_SEED = 'hitstop-freeze-6';
 /** ~0.2 s: a strong hit's hitstop. */
 const FREEZE_TICKS = 12;
 /** How long after the freeze the action sequence must match the control run. */
@@ -51,7 +57,7 @@ function signature(actions: ControllerActions): { held: string; pressed: string 
 /** Runs the match; if `freezeAtTick` is set, inserts a FREEZE_TICKS hitstop right before that simulated tick. Returns one sample per simulated tick, plus the frozen samples. */
 async function run(freezeAtTick: number | null): Promise<{ samples: Sample[]; frozen: { actions: ControllerActions; reactionTimerS: number; pendingDelayRemainingS: number; intent: AiIntent }[]; beforeFreeze: { actions: ControllerActions; reactionTimerS: number; pendingDelayRemainingS: number; intent: AiIntent } | null }> {
   const harness = await CombatHarness.create({ x: 0, y: 0.5, z: -4 }, { x: 0, y: 0.5, z: 4 }, {}, new NullAiMashSource());
-  const ai = new AIController(harness.physics, harness.second, harness.first, harness.clash.controller, PERSONALITY, DEFAULT_AI_DIFFICULTY_PROFILE, SeededRng.fromSeedText('hitstop-freeze'));
+  const ai = new AIController(harness.physics, harness.second, harness.first, harness.clash.controller, PERSONALITY, DEFAULT_AI_DIFFICULTY_PROFILE, SeededRng.fromSeedText(AI_SEED));
   const frames = [];
   for (let start = 10; start < RUN_TICKS; start += 110) {
     frames.push({ fromTick: start, held: [Action.MoveForward, Action.Attack] });

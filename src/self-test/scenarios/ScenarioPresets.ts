@@ -115,6 +115,9 @@ function faceOff(d: number): (a: ScenarioActors) => void {
   };
 }
 
+/** clash-cooldown-collision: when both Dash again, inside the Clash cooldown. */
+const COOLDOWN_DASH_TIMES_S = [7, 9, 11, 13];
+
 // ---- the presets ----
 
 export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
@@ -181,16 +184,18 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
   {
     id: 'ring-out',
     label: 'Test Ring-Out',
-    description: 'Second releases a full Dash outward from near the centre at first, who waits at z = 6; first\'s Circular catches the Dash and launches it up, and its own outward momentum carries it over the wall. The round ends by ring-out through the physics, not by rule.',
+    description: 'Second releases a full Dash outward from near the centre at first, who waits at z = 7; first\'s Circular catches the Dash and launches it up, and its own outward momentum carries it over the wall. The round ends by ring-out through the physics, not by rule.',
     supported: true,
     durationTicks: 8 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
-      placeBey(first, 0, 6, Math.PI);
+      placeBey(first, 0, 7, Math.PI);
       placeBey(second, 0, -1, 0);
     },
-    // Tap 8 ticks after the Dash release: the middle of the 4–12 tick range
+    // Tap 12 ticks after the Dash release: the middle of the 8–16 tick range
     // that produces this ring-out, so small timing changes don't flip it.
-    first: script(hold(Action.Attack, FULL_DASH_HOLD_TICKS + 8, TAP_TICKS)),
+    // (Motion Lab integration, M11: re-measured — z = 6 with any tap from
+    // 0 to 16 ticks no longer rings out; z = 7 with 8–16 does.)
+    first: script(hold(Action.Attack, FULL_DASH_HOLD_TICKS + 12, TAP_TICKS)),
     second: script(hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS)),
     doneWhen: (t) => t.roundOver,
     check: (t) => ok(t.outcome === 'FirstWinsByRingOut', `outcome ${t.outcome}; counter hits ${t.hits.filter((h) => h.caughtOpponentDashing).length}`),
@@ -282,7 +287,12 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     durationTicks: 4 * FIXED_TICKS_PER_SECOND,
     setup: faceOff(2.5),
     first: script(hold(Action.Attack, 0, SHORT_DASH_HOLD_TICKS)),
-    second: script(hold(Action.Dodge, SHORT_DASH_HOLD_TICKS + 3, TAP_TICKS)),
+    // Dodge 16 ticks after the release: the middle of the 11–20 tick range
+    // that lands inside the Perfect Dodge window. (Motion Lab integration,
+    // M11: +3 before — a Dash now only drives on the ground, and the Beys
+    // placed at spawn height are still settling from the drop's small floor
+    // bounce, so the dasher arrives later.)
+    second: script(hold(Action.Dodge, SHORT_DASH_HOLD_TICKS + 16, TAP_TICKS)),
     doneWhen: (t) => t.perfectDodges.includes('second'),
     check: (t) => ok(t.perfectDodges.includes('second'), `perfect dodges: ${t.perfectDodges.join(', ') || 'none'}; dodged: ${t.dodges.join(', ') || 'none'}`),
   },
@@ -305,7 +315,10 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     supported: true,
     durationTicks: 3 * FIXED_TICKS_PER_SECOND,
     setup: faceOff(4),
-    first: script([...hold(Action.JumpDrift, 0, FULL_JUMP_HOLD_TICKS), ...hold(Action.Attack, 12, TAP_TICKS)]),
+    // From tick 30, once the Bey placed at spawn height has settled (M11:
+    // a drop now lands with the Motion Lab floor bounce, which on bowl B's
+    // slope was still going at tick 0).
+    first: script([...hold(Action.JumpDrift, 30, FULL_JUMP_HOLD_TICKS), ...hold(Action.Attack, 42, TAP_TICKS)]),
     second: idle,
     check: (t) => ok(t.firstAirborneAttackState !== null, `attack state while airborne: ${t.firstAirborneAttackState ?? 'none'}`),
   },
@@ -381,17 +394,17 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
   {
     id: 'clash-cooldown-collision',
     label: 'Test Clash Cooldown Collision',
-    description: 'A Clash, then both Dash head-on again inside the 10 s cooldown: no second Clash starts; the collision resolves as normal hits.',
+    description: 'A Clash, then both keep Dashing at each other inside the 10 s cooldown: no second Clash starts; the collisions resolve as normal hits.',
     supported: true,
     durationTicks: 14 * FIXED_TICKS_PER_SECOND,
     setup: faceOff(3),
-    // Second Dash starts well after the ~4 s Clash resolves (tick ~320) and
-    // lands inside its 10 s cooldown; the lock-on steers both back together.
-    // 8 s since M9: the Clash resolution's hitstop now freezes the headless
-    // match too (one simulation), shifting the fight against this absolute-
-    // tick script; at the old 7 s the Dashes no longer met.
-    first: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...hold(Action.Attack, 8 * FIXED_TICKS_PER_SECOND, FULL_DASH_HOLD_TICKS)]),
-    second: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...hold(Action.Attack, 8 * FIXED_TICKS_PER_SECOND, FULL_DASH_HOLD_TICKS)]),
+    // After the ~4 s Clash (a Tie here) both Beys are thrown apart, and
+    // since the Motion Lab integration (M11) one Dash at a fixed tick no
+    // longer reliably meets the other. Both Dash every 2 s from 7 s, all
+    // inside the cooldown; the lock-on steers them together (measured: 4
+    // hits during the cooldown).
+    first: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...COOLDOWN_DASH_TIMES_S.flatMap((s) => hold(Action.Attack, Math.round(s * FIXED_TICKS_PER_SECOND), FULL_DASH_HOLD_TICKS))]),
+    second: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...COOLDOWN_DASH_TIMES_S.flatMap((s) => hold(Action.Attack, Math.round(s * FIXED_TICKS_PER_SECOND), FULL_DASH_HOLD_TICKS))]),
     check: (t) => ok(t.clashStarts === 1 && t.hitsDuringClashCooldown > 0, `Clash starts ${t.clashStarts}; hits during cooldown ${t.hitsDuringClashCooldown}`),
   },
   {

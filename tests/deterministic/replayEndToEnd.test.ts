@@ -25,7 +25,9 @@ import { setResourceFraction } from '../../src/debug/cheats/DebugMutations';
 import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecorder';
 
 // A long fight with many hitstop freezes (see replayPlayback.test.ts).
-const LONG_SEED = 'replay-15';
+const LONG_SEED = 'replay-45';
+/** The tampered-inputs check flips MoveForward on ticks 300 up to (not including) this. */
+const EDIT_END_TICK = 700;
 
 async function liveSession(seedText: string, controllers: { first: SideControllerSpec; second: SideControllerSpec }, replay?: ChaosBeyReplayV1): Promise<MatchSession> {
   const scene = new THREE.Scene();
@@ -172,10 +174,11 @@ describe('incompatible and tampered replays', () => {
     if (!edited.ok) expect(edited.errors.map((e) => e.code)).toEqual(['integrity-mismatch']);
 
     // Re-sealed: the file is valid, but its inputs no longer produce its states.
-    // Flipping MoveForward on ticks 300..399 is certain to reach ticks where movement is read.
+    // Flipping MoveForward on ticks 300..699 is certain to reach ticks where movement is read
+    // (400 ticks: a Clash or a hitstop can hold movement for a long stretch).
     const replay = decoded(text);
     const tampered = reseal(replay, (r) => {
-      for (let n = 300; n < 400; n++) {
+      for (let n = 300; n < EDIT_END_TICK; n++) {
         const held: string[] = r.frames[n].first.held;
         r.frames[n].first.held = (held.includes(Action.MoveForward) ? held.filter((a) => a !== Action.MoveForward) : [...held, Action.MoveForward]).sort();
       }
@@ -185,7 +188,7 @@ describe('incompatible and tampered replays', () => {
     if (verdict.status !== 'diverged' || verdict.comparison.status !== 'diverged') return;
     expect(verdict.comparison.lastMatch).toBeGreaterThanOrEqual(300);
     expect(verdict.comparison.firstMismatch.ticksCompleted).toBeGreaterThan(300);
-    expect(verdict.comparison.firstMismatch.ticksCompleted).toBeLessThanOrEqual(400);
+    expect(verdict.comparison.firstMismatch.ticksCompleted).toBeLessThanOrEqual(EDIT_END_TICK);
     // Per-tick checkpoints: the window is exactly one tick.
     expect(verdict.comparison.firstMismatch.ticksCompleted).toBe(verdict.comparison.lastMatch! + 1);
   }, 180_000);

@@ -11,7 +11,9 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { FLOOR_MATERIAL, WALL_MATERIAL } from '../../physics/materials/PhysicsMaterials';
+import { ARENA_COLLISION_GROUPS } from '../../physics/collision/CollisionGroups';
 import { ARENA_FLOORS, floorRimHeight, type ArenaFloorId } from '../floor/ArenaFloorProfile';
+import { motionParams, motionRatio, surfaceColliderRestitution, type MotionParams } from '../../bey/motion/MotionPresets';
 import { FOUNDRY_PIT, STANDARD_ARENA_GEOMETRY, type ArenaGeometry, type ArenaTheme } from '../presets/ArenaPresets';
 import {
   ARENA_FLOOR_RADIUS,
@@ -35,7 +37,27 @@ export function createArenaColliders(
   physics: PhysicsWorld,
   geometry: ArenaGeometry = STANDARD_ARENA_GEOMETRY,
   theme: ArenaTheme = FOUNDRY_PIT.theme,
+  motion: MotionParams = motionParams(),
 ): Arena {
+  // Motion direction (M11, bey/motion/MotionPresets.ts): the wall keeps
+  // the arena's own restitution (an M10 slider) scaled by the direction's
+  // wall bounce relative to B, and its scrape friction likewise. The floor
+  // collider does not bounce at all (restitution 0, MULTIPLY with the Bey):
+  // the direction's floorBounce is the Motion Lab's landing bounce, applied
+  // by MovementController on a real landing only — Rapier would also
+  // bounce every rim contact of a rocking Bey, which at C's 0.55 pumped
+  // the rocking until the cylinder lay on its side (measured).
+  const floorRestitution = 0;
+  const wallRestitution = surfaceColliderRestitution(geometry.wallRestitution * motionRatio(motion, 'wallBounce'), motion);
+  const wallFriction = WALL_MATERIAL.friction * motionRatio(motion, 'wallFriction');
+  // The floor keeps the game's contact friction. The Motion Lab has none
+  // (its drive alone slows a coasting Bey, at 0.6/s: an ~18 m glide from
+  // top speed); here the contact friction also acts (~0.5 g: a released
+  // Bey stops within ~1 s, and thrust nets ~9 m/s² of the 14), as the game
+  // has always played — the Lab built B from the game's values, and the
+  // owner's playtest note was that the Bey must not move by itself. The
+  // long glide is an open option (docs/design-decisions/motion-approval.md §16).
+  const floorMaterial = (desc: RAPIER.ColliderDesc) => desc.setRestitution(floorRestitution).setFriction(FLOOR_MATERIAL.friction).setCollisionGroups(ARENA_COLLISION_GROUPS);
   const floor: ArenaFloorId = geometry.floor ?? 'flat';
   const profile = ARENA_FLOORS[floor];
   // The wall is measured from the rim (visual-prototypes-approval.md §2.3):
@@ -95,14 +117,12 @@ export function createArenaColliders(
       RAPIER.RigidBodyDesc.fixed().setTranslation(0, -ARENA_FLOOR_THICKNESS / 2, 0),
     );
     physics.rapierWorld.createCollider(
-      RAPIER.ColliderDesc.cylinder(ARENA_FLOOR_THICKNESS / 2, ARENA_FLOOR_RADIUS)
-        .setRestitution(FLOOR_MATERIAL.restitution)
-        .setFriction(FLOOR_MATERIAL.friction),
+      floorMaterial(RAPIER.ColliderDesc.cylinder(ARENA_FLOOR_THICKNESS / 2, ARENA_FLOOR_RADIUS)),
       floorBody,
     );
   } else {
     physics.rapierWorld.createCollider(
-      bowlHeightfield(profile.heightAtRadius).setRestitution(FLOOR_MATERIAL.restitution).setFriction(FLOOR_MATERIAL.friction),
+      floorMaterial(bowlHeightfield(profile.heightAtRadius)),
       physics.rapierWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed()),
     );
   }
@@ -145,8 +165,9 @@ export function createArenaColliders(
   const chordLength = 2 * ARENA_FLOOR_RADIUS * Math.sin(Math.PI / ARENA_WALL_SEGMENT_COUNT);
   const segmentHalfWidth = (chordLength * ARENA_WALL_SEGMENT_OVERLAP_FACTOR) / 2;
   const wallCollider = RAPIER.ColliderDesc.cuboid(segmentHalfWidth, wallHeightM / 2, ARENA_WALL_THICKNESS / 2)
-    .setRestitution(geometry.wallRestitution)
-    .setFriction(WALL_MATERIAL.friction);
+    .setRestitution(wallRestitution)
+    .setFriction(wallFriction)
+    .setCollisionGroups(ARENA_COLLISION_GROUPS);
 
   for (let i = 0; i < ARENA_WALL_SEGMENT_COUNT; i++) {
     const angle = (i / ARENA_WALL_SEGMENT_COUNT) * Math.PI * 2;

@@ -42,7 +42,8 @@ test('Character Select and Pregame set up the match that really runs, and Result
   await page.getByTestId('pregame-ai-level-ace').click();
   await expect(reaction).toContainText('0.12 s'); // 0.22 × 0.55
   await expect(page.getByTestId('pregame-ai')).toContainText('Ace');
-  // Keyboard from the AI level row (the click focused it): ↓↓↓↓ (style, arena, floor) to Match length, ← to a single round.
+  // Keyboard from the AI level row (the click focused it): ↓↓↓↓↓ (style, arena, floor, movement) to Match length, ← to a single round.
+  await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');

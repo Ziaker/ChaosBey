@@ -33,29 +33,18 @@ export const GROUND_CONTACT_MIN_NORMAL_Y = 0.5;
 export function isGrounded(physics: PhysicsWorld, beyCollider: RAPIER.Collider): boolean {
   let grounded = false;
 
+  // The candidate pairs come from Rapier's contact graph; the contact itself
+  // is computed fresh here (contactCollider) rather than read from the
+  // pair's stored manifold. M11: since the Bey's rotations are locked, a
+  // Bey resting still stops refreshing that manifold — it kept the 3 cm gap
+  // of the tick before touchdown and read as airborne for good.
   physics.rapierWorld.contactPairsWith(beyCollider, (otherCollider) => {
     if (grounded) return;
-
-    physics.rapierWorld.contactPair(beyCollider, otherCollider, (manifold) => {
-      if (grounded) return;
-
-      const contactCount = manifold.numContacts();
-      let isActuallyTouching = false;
-      for (let i = 0; i < contactCount; i++) {
-        if (manifold.contactDist(i) <= GROUND_CONTACT_DIST_THRESHOLD_M) {
-          isActuallyTouching = true;
-          break;
-        }
-      }
-      if (!isActuallyTouching) return;
-
-      // Direction (which collider is "1" vs "2") can be flipped internally
-      // by Rapier; taking the absolute value sidesteps needing to know
-      // which way this particular manifold points.
-      if (Math.abs(manifold.normal().y) >= GROUND_CONTACT_MIN_NORMAL_Y) {
-        grounded = true;
-      }
-    });
+    const contact = beyCollider.contactCollider(otherCollider, GROUND_CONTACT_DIST_THRESHOLD_M);
+    if (!contact || contact.distance > GROUND_CONTACT_DIST_THRESHOLD_M) return;
+    // Either normal's sign depends on which shape Rapier treats as first;
+    // the absolute value sidesteps that.
+    if (Math.abs(contact.normal1.y) >= GROUND_CONTACT_MIN_NORMAL_Y) grounded = true;
   });
 
   return grounded;

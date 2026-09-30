@@ -6,6 +6,7 @@
 // ============================================================
 
 import type RAPIER from '@dimforge/rapier3d-compat';
+import { motionParams, type MotionParams } from '../../bey/motion/MotionPresets';
 import { dot, normalize, scale, subtract, type Vec2 } from '../../physics/Vec2';
 import { INTENDED_MAX_SPEED_MPS } from '../../bey/movement/MovementTuning';
 import {
@@ -118,9 +119,25 @@ export function computeStabilityDamage(baseDamage: number, attackStat: number, d
   return (baseDamage * attackStat) / defenseStat;
 }
 
-/** Applies a horizontal + upward knockback impulse to the defender, directed away from the attacker. */
-export function applyKnockback(defenderBody: RAPIER.RigidBody, attackerPositionXZ: Vec2, defenderPositionXZ: Vec2, result: KnockbackResult): void {
+/**
+ * Applies a horizontal + upward knockback impulse to the defender, directed
+ * away from the attacker. The defender's motion direction (M11, Motion Lab)
+ * shapes it the Lab's way: knockbackScale multiplies the launch and the
+ * upward impulse is knockbackLift × the horizontal one (A 0.06, B 0.18,
+ * C 0.32 — it replaces KNOCKBACK_UPWARD_LAUNCH_FRACTION's 0.35, which the
+ * formula still reports). With the Lab's lift, a counter's ~28 m/s launch
+ * (M7 ext-0) hits the wall in B and clears it only in C, as the Lab showed
+ * (motion-approval.md §10.1).
+ */
+export function applyKnockback(
+  defenderBody: RAPIER.RigidBody,
+  attackerPositionXZ: Vec2,
+  defenderPositionXZ: Vec2,
+  result: KnockbackResult,
+  motion: MotionParams = motionParams(),
+): void {
   const direction = normalize(subtract(defenderPositionXZ, attackerPositionXZ));
-  const horizontalImpulse = scale(direction, result.impulseMagnitude);
-  defenderBody.applyImpulse({ x: horizontalImpulse.x, y: result.upwardImpulseMagnitude, z: horizontalImpulse.z }, true);
+  const horizontalImpulse = scale(direction, result.impulseMagnitude * motion.knockbackScale);
+  const upward = result.impulseMagnitude * motion.knockbackScale * motion.knockbackLift;
+  defenderBody.applyImpulse({ x: horizontalImpulse.x, y: upward, z: horizontalImpulse.z }, true);
 }

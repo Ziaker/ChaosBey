@@ -21,6 +21,7 @@ import type { ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { DEFAULT_BEY_DEFINITION, type BeyDefinition } from '../archetype/BeyDefinition';
 import { resolveBeyStats } from '../archetype/BeyStatsResolution';
 import type { BeyStats } from '../archetype/BeyStats';
+import { motionParams, type MotionParams } from '../motion/MotionPresets';
 
 export interface Bey {
   readonly definition: BeyDefinition;
@@ -44,6 +45,8 @@ export interface Bey {
   readonly attack: AttackController;
   /** M11: the floor profile of the arena this Bey plays on (placement helpers put it on the floor). Not simulation state. */
   readonly arenaFloor: ArenaFloorId;
+  /** M11: the motion direction's parameters (Motion Lab A/B/C, from MatchConfig.motion) — gameplay, shared by every system that reads it. */
+  readonly motion: MotionParams;
 }
 
 export function createBey(
@@ -51,22 +54,25 @@ export function createBey(
   spawnPosition: { x: number; y: number; z: number },
   definition: BeyDefinition = DEFAULT_BEY_DEFINITION,
   arenaFloor: ArenaFloorId = 'flat',
+  motion: MotionParams = motionParams(),
 ): Bey {
-  const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical);
+  const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical, motion);
   const stats = resolveBeyStats(definition.ratings);
+  const movement = new MovementController(definition.handling, motion);
   return {
     definition,
     stats,
     body,
     collider,
-    movement: new MovementController(definition.handling),
-    spin: new SpinController(),
-    drift: new DriftController(definition.handling.lateralGripPerS),
+    movement,
+    spin: new SpinController(motion),
+    drift: new DriftController(movement.getLateralGripPerS()),
     dodge: new DodgeController(),
     stamina: new StaminaSystem(stats.stamina),
     stability: new StabilitySystem(),
     attackEnergy: new AttackEnergySystem(),
     attack: new AttackController(definition.attack),
     arenaFloor,
+    motion,
   };
 }

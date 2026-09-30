@@ -13,7 +13,10 @@ import type { MatchSession, Side } from '../../app/session/MatchSession';
 import { ARENA_FLOORS, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { floorReadout } from '../../arena/floor/floorReadout';
 import { CAMERA_PRESET_NAMES } from '../../camera/director/CameraRig';
-import { AIRBORNE_ACCELERATION_FACTOR, AIRBORNE_LATERAL_GRIP_PER_S } from '../../bey/movement/MovementTuning';
+import { AIRBORNE_ACCELERATION_FACTOR } from '../../bey/movement/MovementTuning';
+import { MOTION_DIRECTIONS, MOTION_DIRECTION_IDS } from '../../bey/motion/MotionPresets';
+
+const MOTION_NAME_BY_PARAMS = new Map(MOTION_DIRECTION_IDS.map((id) => [MOTION_DIRECTIONS[id].params, MOTION_DIRECTIONS[id].name] as const));
 import { ClashState } from '../../combat/clash/ClashController';
 import { computeClashPower, computeMashPerformance, computeStaminaFactor, computeVelocityFactor } from '../../combat/clash/ClashFormula';
 import { DODGE_PERFECT_WINDOW_S } from '../../dodge/DodgeTuning';
@@ -159,6 +162,7 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('Tilt', snapshot ? `${f(snapshot.spin.tiltRad * RAD_TO_DEG)}°` : '—'),
         row('Wobble energy', snapshot ? f(snapshot.spin.wobbleEnergy) : '—'),
         row('Wobble offset', snapshot ? `${f(snapshot.spin.wobbleOffsetRad * RAD_TO_DEG)}°` : '—'),
+        row('Attitude (Motion Lab, visual)', snapshot ? `${f(Math.hypot(snapshot.spin.lean.x, snapshot.spin.lean.z) * RAD_TO_DEG)}°${snapshot.spin.isTumbling ? ' · TUMBLE' : ''} · upright spring ${f(snapshot.spin.recoveryFraction * 100)}%` : '—'),
         row('Angular impulse source: impact Δv', `${f(impulses.impactDeltaSpeedMps)} m/s`),
       ],
     },
@@ -172,7 +176,10 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('Ground normal', ground.groundNormal ? vec3(ground.groundNormal) : '— (airborne)'),
         row('Collider friction', f(bey.collider.friction())),
         row('Collider restitution', f(bey.collider.restitution())),
+        row('Movement direction', MOTION_NAME_BY_PARAMS.get(bey.motion) ?? 'custom'),
         row('Lateral grip', snapshot ? `${f(snapshot.movement.lateralGripPerS)} /s` : '—'),
+        row('Grip (Motion Lab)', snapshot ? `×${f(snapshot.movement.gripFactor)}${snapshot.movement.isSlipping ? ' · SLIP' : ''}` : '—'),
+        row('Whirl (rodopio)', snapshot ? `${f(snapshot.movement.whirlRadPerS)} rad/s` : '—'),
         row('Longitudinal drag', snapshot ? `${f(snapshot.movement.longitudinalDragPerS)} /s` : '—'),
         row('Slip angle', snapshot ? `${f(snapshot.movement.slipAngleRad * RAD_TO_DEG)}°` : '—'),
       ],
@@ -243,7 +250,7 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('Jump/drift state', bey.drift.getState()),
         row('Jump force (vertical speed added)', drift.jumpVerticalSpeedAddedMps > 0 ? `${f(drift.jumpVerticalSpeedAddedMps)} m/s` : '— (not in a hop)'),
         row('Airborne', String(!ground.grounded)),
-        row('Air control', `accel ×${f(AIRBORNE_ACCELERATION_FACTOR)}, lateral grip ${f(AIRBORNE_LATERAL_GRIP_PER_S)} /s`),
+        row('Air control', `accel ×${f(AIRBORNE_ACCELERATION_FACTOR)}, lateral grip ${f(bey.motion.airGrip)} /s`),
         row('Hop timer', `${f(drift.hopTimerS)} s`),
         row('Drift recovery timer', bey.drift.getState() === DriftState.Recovering ? `${f(drift.recoveryTimerS)} s` : '—'),
         row(

@@ -28,4 +28,4 @@ export const BEY_MATERIAL: SurfaceMaterial = {
   friction: 0.4,
 };
 
-/** Rapier combines two colliders' restitution/friction (default: max). We just feed each collider its own material — no combine-rule override needed yet. */
+/** Restitution against a Bey comes from the motion direction (bey/motion/MotionPresets.ts, MULTIPLY rule): these restitution values are only the reference for surfaces no Bey touches. Friction combines by Rapier's default AVERAGE. */

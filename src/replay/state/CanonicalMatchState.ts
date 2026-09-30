@@ -91,8 +91,18 @@ function bodyState(bey: Bey): CanonicalRecord {
  * can't silently escape the hash.
  */
 export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  MovementController: { handling: 'build-time config from the Bey definition (replay config snapshot)' },
+  MovementController: {
+    handling: 'build-time config from the Bey definition (replay config snapshot)',
+    motion: 'build-time config: the motion direction (MatchConfig.motion, replay config snapshot)',
+  },
   SpinController: {
+    motion: 'build-time config: the motion direction (MatchConfig.motion, replay config snapshot)',
+    sinceImpactS: 'render-only (fade-in of the visual Motion Lab attitude spring)',
+    tumbleRemainingS: 'render-only (tumble window of the visual Motion Lab attitude)',
+    lean: 'render-only (visual Motion Lab attitude, never fed back into physics)',
+    leanRate: 'render-only (visual Motion Lab attitude rate)',
+    accel: 'render-only (smoothed acceleration driving the visual lean target)',
+    prevVel: 'render-only (previous velocity for the visual lean acceleration)',
     visualSpinAngleRad: 'render-only (mesh rotation; the detector only checks it is finite)',
     wobbleEnergy: 'render-only (drives the visual wobble; read by overlay/inspector/detector only)',
     wobbleTimeAccumulatorS: 'render-only (phase of the visual wobble)',

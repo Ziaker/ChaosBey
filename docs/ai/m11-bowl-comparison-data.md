@@ -4,16 +4,16 @@
 
 | | Flat (current) | Bowl A — Parabolic dish | Bowl B — Funnel | Bowl C — Central plateau |
 |---|---:|---:|---:|---:|
-| Coast from r = 8 m at rest: radius after 5 s | 8.00 m | 7.96 m | 7.57 m | 7.94 m |
-| Coast: peak speed | 0.04 m/s | 0.35 m/s | 0.43 m/s | 0.42 m/s |
+| Coast from r = 8 m at rest: radius after 5 s | 8.00 m | 8.00 m | 8.00 m | 8.00 m |
+| Coast: peak speed | 0.00 m/s | 0.00 m/s | 0.00 m/s | 0.00 m/s |
 | Coast: reaches the centre (r < 1 m) | never | never | never | never |
-| Slow climb (35% stick): speed at 2 s | 1.11 m/s | 1.72 m/s | 0.24 m/s | 1.11 m/s |
-| Slow climb: farthest radius in 4 s | 4.06 m | 4.83 m | 1.25 m | 3.79 m |
-| Fast climb (full stick): top speed | 11.95 m/s | 11.03 m/s | 10.66 m/s | 10.73 m/s |
-| Fast climb: reaches r = 10 m | 1.77 s | 1.62 s | 1.68 s | 1.75 s |
-| Wall push at r = 10.5 m: farthest radius | 11.08 m | 11.05 m | 11.07 m | 11.05 m |
-| Drop from 3 m at r = 5 m (6 m/s out): lands after | 0.80 s | 0.67 s | 0.68 s | 0.65 s |
-| Drop: farthest radius | 8.98 m | 8.34 m | 8.50 m | 8.31 m |
+| Slow climb (35% stick): speed at 2 s | 1.66 m/s | 4.74 m/s | 0.08 m/s | 1.66 m/s |
+| Slow climb: farthest radius in 4 s | 6.90 m | 11.05 m | 0.63 m | 7.26 m |
+| Fast climb (full stick): top speed | 12.57 m/s | 12.65 m/s | 12.60 m/s | 12.62 m/s |
+| Fast climb: reaches r = 10 m | 1.75 s | 1.40 s | 1.47 s | 1.68 s |
+| Wall push at r = 10.5 m: farthest radius | 11.07 m | 11.11 m | 11.09 m | 11.07 m |
+| Drop from 3 m at r = 5 m (6 m/s out): lands after | 0.87 s | 0.65 s | 0.67 s | 0.63 s |
+| Drop: farthest radius | 11.05 m | 11.05 m | 10.81 m | 10.61 m |
 | Probe invalid states | 0 | 0 | 0 | 0 |
 
 ### Scenario presets (GDD 68) — the preset's own check, written for the flat arena
@@ -30,7 +30,7 @@
 | jump-attack | pass | pass | pass | pass |
 | strong-landing | pass | pass | pass | pass |
 | air-recovery | pass | pass | pass | pass |
-| ring-out | pass | differs | pass | differs |
+| ring-out | pass | differs | differs | differs |
 | high-speed-collision | pass | pass | pass | pass |
 | clash | pass | pass | pass | pass |
 
@@ -38,11 +38,11 @@
 
 | | Flat (current) | Bowl A — Parabolic dish | Bowl B — Funnel | Bowl C — Central plateau |
 |---|---:|---:|---:|---:|
-| Ring-outs / KOs / draws / unresolved | 27 / 9 / 0 / 0 | 22 / 14 / 0 / 0 | 28 / 8 / 0 / 0 | 26 / 10 / 0 / 0 |
-| Average round length | 13.7 s | 16.9 s | 16.4 s | 17.5 s |
-| Average speed | 6.99 m/s | 6.95 m/s | 6.72 m/s | 6.75 m/s |
-| Average distance from the centre | 6.64 m | 6.52 m | 6.29 m | 6.41 m |
-| Time past r = 9 m | 31.1% | 24.8% | 23.3% | 24.0% |
-| Time at the wall | 5.9% | 4.7% | 4.5% | 4.5% |
-| Time in the air | 31.3% | 61.0% | 59.5% | 62.7% |
+| Ring-outs / KOs / draws / unresolved | 12 / 24 / 0 / 0 | 3 / 33 / 0 / 0 | 5 / 31 / 0 / 0 | 2 / 34 / 0 / 0 |
+| Average round length | 14.0 s | 18.5 s | 15.2 s | 20.5 s |
+| Average speed | 6.80 m/s | 7.32 m/s | 7.48 m/s | 6.95 m/s |
+| Average distance from the centre | 6.93 m | 6.94 m | 6.95 m | 6.80 m |
+| Time past r = 9 m | 33.7% | 30.5% | 29.7% | 29.7% |
+| Time at the wall | 5.6% | 5.3% | 5.8% | 4.9% |
+| Time in the air | 18.4% | 25.6% | 22.8% | 21.8% |
 | GDD 67 invalid states / warnings | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |

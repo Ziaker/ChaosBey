@@ -20,6 +20,7 @@ import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
 import { CLASH_IMPACT_RANGE, matchupLines, normalizeSeedText, withArenaFloor, withArenaPreset, type MatchSetup } from './matchSetup';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import { DEFAULT_MOTION_DIRECTION, MOTION_DIRECTIONS, MOTION_DIRECTION_IDS, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import { ARENA_PRESETS, ARENA_WALL_BOUNCE_RANGE, ARENA_WALL_HEIGHT_RANGE, arenaPreset, isPresetGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
 
 export interface PregameOptions {
@@ -88,6 +89,13 @@ const ROWS: readonly AnyChoiceRow[] = [
     options: ARENA_FLOOR_IDS.map((id) => ({ value: id, label: ARENA_FLOOR_SHORT_LABELS[id] })),
     get: (s) => s.arena.geometry.floor ?? DEFAULT_ARENA_FLOOR,
     set: (s, v) => withArenaFloor(s, v),
+  }),
+  row<MotionDirectionId>({
+    id: 'motion',
+    label: 'Movement',
+    options: MOTION_DIRECTION_IDS.map((id) => ({ value: id, label: MOTION_DIRECTIONS[id].name })),
+    get: (s) => s.motion ?? DEFAULT_MOTION_DIRECTION,
+    set: (s, v) => ({ ...s, motion: v }),
   }),
   row<RoundsToWin>({
     id: 'rounds',
@@ -366,6 +374,8 @@ export class PregameScreen {
     if (!isPresetGeometry(arena.id, walls)) addRule(`Custom walls: ${walls.wallHeightM.toFixed(1)} m high, bounce ${walls.wallRestitution.toFixed(2)}`);
     const floor = ARENA_FLOORS[walls.floor ?? DEFAULT_ARENA_FLOOR];
     addRule(floor.id === 'flat' ? `Floor: ${floor.label}` : `Floor (playtest): ${floor.label} — ${floor.description} Temporary look; walls measured from the rim.`);
+    const motion = MOTION_DIRECTIONS[setup.motion ?? DEFAULT_MOTION_DIRECTION];
+    addRule(`Movement ${motion.name}: ${motion.summary}`);
     addRule(describeRoundsToWin(setup.roundsToWin));
     addRule('A round ends on a ring-out or a knock-out (a hit while broken). A draw scores nobody.');
     addRule(setup.clashImpactMultiplier === 1 ? 'Standard Clash impact' : `Clash impact ×${setup.clashImpactMultiplier.toFixed(2)}`);

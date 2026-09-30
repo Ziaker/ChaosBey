@@ -49,7 +49,11 @@ describe('grounded detection while tilted', () => {
     const tiltThresholdRad = (15 * Math.PI) / 180;
     for (let i = 0; i < 10; i++) {
       const result = harness.tick(noInput.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }));
-      if (result.spin.tiltRad > tiltThresholdRad && result.grounded) {
+      // The body's own tilt (M11: its rotations are locked, so it stays at
+      // the angle set above; the attitude in result.spin is visual).
+      const q = harness.beyBody.rotation();
+      const bodyTiltRad = Math.acos(Math.min(1, 1 - 2 * (q.x * q.x + q.z * q.z)));
+      if (bodyTiltRad > tiltThresholdRad && result.grounded) {
         sawGroundedWhileTilted = true;
       }
     }

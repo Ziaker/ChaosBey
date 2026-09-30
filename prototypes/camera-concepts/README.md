@@ -65,7 +65,7 @@ Scenario setup changes nothing in the rules, with one exception: Final Hit start
 | Dash Approach | Charged Dash into a still opponent, then a short second Dash | HighSpeed (Dash), KnockbackFollow |
 | Heavy Knockback | Full-charge Dash; the opponent hits the wall | KnockbackFollow (strong), wall impact |
 | Wall Ricochet | Angled high-speed wall hit and rebound | Wall impact |
-| Ring-Out Chase | The real AI's opening: the player is launched over the wall at 2.1 s | RingOut, Finisher |
+| Ring-Out Chase | The real AI's opening: a Bey is launched over the wall at 1.9 s | RingOut, Finisher |
 | Clash Setup | Simultaneous Dashes into a real Clash (≈ 2.4–6.4 s) | Clash, KnockbackFollow afterwards |
 | High-Speed Orbit | Circling the opponent while turning (~8 m/s) | Orbit during a high-speed turn |
 | Final Hit | Opponent starts Broken; a strong Dash scores the KO | Finisher |

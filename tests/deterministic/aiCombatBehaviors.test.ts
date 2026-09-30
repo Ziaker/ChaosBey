@@ -6,6 +6,7 @@
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
+import { AiIntent } from '../../src/ai/decision/Intent';
 import { AIController } from '../../src/ai/controllers/AIController';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../src/ai/difficulty/AiDifficultyProfile';
 import { ATTACK_AI_PERSONALITY, DEFENSE_AI_PERSONALITY } from '../../src/ai/personalities/AiArchetypePersonalities';
@@ -167,7 +168,11 @@ describe('AI combat behaviors', () => {
       const attackState = harness.second.attack.getState();
       const chargeFraction = harness.second.attack.getChargeFraction();
 
-      if (attackState === 'ChargingDash') {
+      // Only an AttackDash charge is committed to its charge target
+      // (PressAdvantage charges and releases on its own timing); since the
+      // Motion Lab integration (M11) this fight's first charge is a
+      // PressAdvantage one.
+      if (attackState === 'ChargingDash' && debug.activeIntent === AiIntent.AttackDash) {
         sawChargingDash = true;
         // Below the target with margin: must still be held. At/near the
         // target: this may legitimately be the release tick (charge
