@@ -2,6 +2,10 @@
 
 A browser-based 3D spinning-top arena combat simulator, built with Three.js, Rapier 3D and Vite, deployed to GitHub Pages.
 
+**Play it:** https://ziaker.github.io/ChaosBey/ — every merge to `main` is built, tested and deployed there automatically.
+
+**Version:** 0.11.0 (`package.json`). The game shows its version and the commit it was built from in the bottom-right corner of every screen (e.g. `v0.11.0 · 8d51f79`); if it doesn't match the latest `main`, reload with Ctrl+Shift+R (GitHub Pages caches the page for a few minutes).
+
 The authoritative design specification and AI-agent operating contract lives in the project's master design document (provided to development agents out-of-band). Every meaningful design decision in this codebase traces back to it — when this README and that document disagree, the document wins.
 
 ## Canonical design decisions
@@ -12,7 +16,7 @@ Those documents distinguish **prototyped**, **approved** and **integrated** work
 
 ## Status
 
-Milestones 0–10 are merged. M10 (Pregame / Presentation) added the player flow, the Pregame Simulator with Rookie / Rival / Ace AI, arena presets, Settings, pause, gamepad support and the combat HUD — see [`docs/ai/m10-status.md`](docs/ai/m10-status.md). The milestone history below is kept for context.
+Milestones 0–11 are merged, plus the owner's post-M11 playtest passes (camera, movement, drift, over-the-shoulder camera, result auto-continue) — see [`docs/ai/m11-status.md`](docs/ai/m11-status.md). M10 (Pregame / Presentation) added the player flow, the Pregame Simulator with Rookie / Rival / Ace AI, arena presets, Settings, pause, gamepad support and the combat HUD — see [`docs/ai/m10-status.md`](docs/ai/m10-status.md). The milestone history below is kept for context.
 
 ## Milestone 1 — Physical Movement Prototype
 

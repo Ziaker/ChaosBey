@@ -187,8 +187,16 @@ export interface ShoulderRig {
 
 /** Below this separation the fight axis is noise (the Beys touching): the shoulder camera holds its angle. */
 const SHOULDER_AXIS_MIN_SEP_M = 2.5;
+/** Shoulder mode: the opponent may sit this far (rad) off the centre of the view — about the edge of the frame — before the camera turns. */
+const SHOULDER_REAIM_ZONE_RAD = 50 * DEG;
+/** Shoulder mode: the player must have let go of the directions this long (s) before the camera may turn at all. */
+const SHOULDER_REAIM_IDLE_S = 0.6;
+/** Shoulder mode: the fastest the camera re-aims (rad/s). */
+const SHOULDER_REAIM_RAD_S = 20 * DEG;
 /** Shoulder mode: the eye never comes closer than this (m) behind the player, even against the wall. */
 const SHOULDER_MIN_DISTANCE_M = 1.8;
+/** Shoulder mode: the look point is at least this far (m) ahead of the eye, so the view's direction stays defined. */
+const SHOULDER_MIN_LOOK_M = 3;
 
 interface PendingKnock {
   at: number;
@@ -202,6 +210,8 @@ export class CameraDirector {
   // Smoothed camera state
   private readonly eye = v3();
   private readonly focus = v3();
+  /** Shoulder mode: the focus handed out, its horizontal direction locked to the held angle. */
+  private readonly focusOut = v3();
   private fov = 60;
   private yaw = 0;
   private distance = 9;
@@ -231,6 +241,8 @@ export class CameraDirector {
   private clashYaw = 0;
   /** Arena mode: the framing angle the camera holds until the fight axis moves past the dead zone. */
   private heldYaw = 0;
+  /** Shoulder mode: how long (s) the player has not been holding a direction. */
+  private shoulderIdleS = 0;
   /** Shoulder mode: the smoothed eye distance behind the player. */
   private shoulderDistance = 0;
   /** Arena mode: the framing point, moved only when the fight leaves ARENA_FOCUS_DEADZONE_M around it. */
@@ -274,6 +286,7 @@ export class CameraDirector {
   /** Forget the smoothed state (a new scenario). */
   reset(): void {
     this.initialized = false;
+    this.shoulderIdleS = 0;
     this.time = 0;
     this.pending = [];
     this.knockLevel = 0;
@@ -411,10 +424,23 @@ export class CameraDirector {
     let yawTarget = baseYaw + Math.PI + this.side * P.lateralOffset * DEG + orbitLead + this.closeDrift + this.yawKick;
     const shoulder = arena?.shoulder;
     if (arena && shoulder) {
-      // Over the shoulder: behind the player on the player → opponent line,
-      // at the preset's own orbit smoothing and speed cap below (never a
-      // snap, never a side switch). Up close the line is noise: hold.
-      if (!this.initialized || sep > SHOULDER_AXIS_MIN_SEP_M) this.heldYaw = baseYaw + Math.PI;
+      // Over the shoulder, behind the player — but it does not follow every
+      // move of the opponent (owner playtest, after M11: following the
+      // player → opponent line turned the camera through a full circle as
+      // the AI circled a standing player, and every turn changed what the
+      // screen-relative arrows mean; a 25° zone still turned it 60°+ while
+      // the player stood still). The angle is held. It never turns while
+      // the player holds a direction, nor in the first moments after they
+      // let go (between taps); only when the opponent is about to leave
+      // the frame, only by the amount it has left that zone, and slowly.
+      // Up close the line is noise: hold.
+      const wanted = baseYaw + Math.PI;
+      this.shoulderIdleS = frame.playerSteering ? 0 : this.shoulderIdleS + dt;
+      if (!this.initialized) this.heldYaw = wanted;
+      else if (sep > SHOULDER_AXIS_MIN_SEP_M && this.shoulderIdleS >= SHOULDER_REAIM_IDLE_S) {
+        const off = angleDelta(this.heldYaw, wanted);
+        if (Math.abs(off) > SHOULDER_REAIM_ZONE_RAD) this.heldYaw += Math.sign(off) * Math.min(Math.abs(off) - SHOULDER_REAIM_ZONE_RAD, SHOULDER_REAIM_RAD_S * dt);
+      }
       yawTarget = this.heldYaw;
     } else if (arena) {
       // The angle is chosen once, behind the player on the opening fight
@@ -480,13 +506,23 @@ export class CameraDirector {
         dBack = clamp(-b + Math.sqrt(Math.max(0, b * b - c)), SHOULDER_MIN_DISTANCE_M, dBack);
       }
       const inFraction = this.shoulderDistance > 0 ? dBack / this.shoulderDistance : 1;
-      set3(et, bx + back.x * dBack, p1.y + shoulder.heightM + (this.shoulderDistance - shoulder.distanceM) * 0.25 + (this.shoulderDistance - dBack) * 0.2, bz + back.z * dBack);
+      // Brought in, it also comes down in proportion, so the view stays behind the Bey instead of looking down on it.
+      const up = (shoulder.heightM + (this.shoulderDistance - shoulder.distanceM) * 0.25) * (0.55 + 0.45 * inFraction);
+      set3(et, bx + back.x * dBack, p1.y + up, bz + back.z * dBack);
       lerp3(ft, p1, p2, shoulder.framing * inFraction);
       ft.x += this.velFilt.x * shoulder.lookAheadS;
       ft.z += this.velFilt.z * shoulder.lookAheadS;
       ft.y = p1.y * (1 - shoulder.framing * inFraction) + p2.y * shoulder.framing * inFraction + shoulder.lookHeightM;
       const knockPos2 = this.knockTargetIsFirst ? p1 : p2;
       lerp3(ft, ft, knockPos2, wKnock * 0.6 * P.knockbackFollow);
+      // The view looks straight along the held angle: the framing point is
+      // kept on that line (only its distance and height follow the fight).
+      // Aiming at a point between the Beys turned the view ~15–40° as the
+      // opponent moved sideways — and with it what the arrows mean on
+      // screen (owner playtest: "not respecting my movement commands").
+      const along = Math.max(1, (ft.x - et.x) * -back.x + (ft.z - et.z) * -back.z);
+      ft.x = et.x - back.x * along;
+      ft.z = et.z - back.z * along;
       set3(this.laPoint, ft.x, ft.y, ft.z);
     }
     if (wClash > 0.01) {
@@ -552,6 +588,21 @@ export class CameraDirector {
     // The Bey guard can push the eye outward again: contain once more (arena mode).
     if (arena) this.containEye(arena.containRadiusM);
 
+    // Over the shoulder the view always faces the held angle, whatever
+    // the guards did to the eye (pushed off a Bey, brought in at the wall
+    // until it is nearly above the player): the screen's up/right — what
+    // the arrows mean — then turn only when the held angle turns. Clash,
+    // ring-out and finisher shots keep their own aim.
+    copy3(this.focusOut, this.focus);
+    if (shoulder) {
+      const lock = 1 - Math.max(wClash, wRing, wFin);
+      const fx = -Math.sin(this.yaw);
+      const fz = -Math.cos(this.yaw);
+      const along = Math.max(SHOULDER_MIN_LOOK_M, (this.focus.x - this.eye.x) * fx + (this.focus.z - this.eye.z) * fz);
+      this.focusOut.x += (this.eye.x + fx * along - this.focus.x) * lock;
+      this.focusOut.z += (this.eye.z + fz * along - this.focus.z) * lock;
+    }
+
     // ---- FOV ----
     const speedNorm = clamp((this.speedFilt - SPEED_FOV_START_MPS) / (SPEED_FOV_FULL_MPS - SPEED_FOV_START_MPS), 0, 1);
     let fovTarget = P.baseFov + (P.maxFov - P.baseFov) * P.fovSpeedStrength * Math.pow(speedNorm, P.fovSpeedCurve);
@@ -567,8 +618,8 @@ export class CameraDirector {
     const fovOut = clamp(this.fov + this.fovPunch, MIN_FOV, MAX_FOV_CEILING);
 
     // ---- Readability: are both Beys in frame? ----
-    const firstIn = inFrame(p1, this.eye, this.focus, fovOut, this.aspect, FRAME_MARGIN);
-    const secondIn = inFrame(p2, this.eye, this.focus, fovOut, this.aspect, FRAME_MARGIN);
+    const firstIn = inFrame(p1, this.eye, this.focusOut, fovOut, this.aspect, FRAME_MARGIN);
+    const secondIn = inFrame(p2, this.eye, this.focusOut, fovOut, this.aspect, FRAME_MARGIN);
     const inPlay = !frame.roundOver;
     if (!firstIn && inPlay) this.offscreenFirst += dt;
     if (!secondIn && inPlay) this.offscreenSecond += dt;
@@ -596,7 +647,7 @@ export class CameraDirector {
     this.initialized = true;
     return {
       eye: this.eye,
-      focus: this.focus,
+      focus: this.focusOut,
       fov: fovOut,
       shake: this.shakeVec,
       fovPunch: Math.min(this.fovPunch, fovOut - MIN_FOV),

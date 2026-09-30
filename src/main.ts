@@ -16,6 +16,7 @@
 
 import { WebGl2UnavailableError, showWebGl2UnavailableScreen } from './app/bootstrap/bootFailureScreen';
 import { createRenderer } from './app/bootstrap/createRenderer';
+import { showVersionBadge } from './app/bootstrap/versionBadge';
 import { startMainMenu } from './app/menu/MainMenu';
 import { GamepadMenuKeys } from './input/devices/GamepadMenuKeys';
 import { startPlayMode } from './app/modes/playMode';
@@ -25,6 +26,7 @@ import { startDebugLabMode } from './debug/lab/DebugLabMode';
 import { startSelfTestMode } from './debug/self-test-ui/SelfTestMode';
 
 async function bootstrap(): Promise<void> {
+  showVersionBadge();
   const canvas = document.querySelector<HTMLCanvasElement>('#app-canvas');
   const debugOverlayRoot = document.querySelector<HTMLElement>('#debug-overlay-root');
   const attackSettingsRoot = document.querySelector<HTMLElement>('#attack-settings-root');
