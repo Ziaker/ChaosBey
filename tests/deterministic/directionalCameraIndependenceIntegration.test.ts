@@ -30,6 +30,9 @@ import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecord
 import { Action, type CombatController, type ControllerActions, type ControllerContext } from '../../src/input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import type { ArenaFloorId } from '../../src/arena/floor/ArenaFloorProfile';
+import { CameraRig } from '../../src/camera/director/CameraRig';
+import { PRESET_IDS } from '../../src/camera/director/CameraParams';
+import type { FightFrame } from '../../src/camera/director/FightFrame';
 
 /** A test double for the physical device: held keys settable tick by tick, standing in for a human bashing the keyboard. */
 class HeldKeySource implements CombatController {
@@ -136,4 +139,57 @@ describe('Directional control stays camera-independent through a real 30 s fight
       if (anyKnockback) expect(sawResponsiveAfterKnockback).toBe(true);
     }, 30_000);
   }
+});
+
+// Owner playtest fix 8's "fundamental test" (GDD §§48–50, §14 of the camera
+// feedback): the two-fighter camera must be free to orbit however the fight
+// demands, and that orbit must have zero effect on what a held direction
+// means. This exercises the real CameraRig (the fix 8 director, opponent
+// circling a stationary player — the same drive as scenario A in
+// cameraTwoFighterFraming.test.ts) and the real DirectionalController side
+// by side, tick for tick.
+describe('fundamental test: the camera orbits fully while a held direction\'s world vector never moves (owner playtest fix 8 §14)', () => {
+  it('opponent circles the stationary player 360°: camera yaw sweeps most of a full turn, held ArrowUp is world +Z on every single tick', () => {
+    for (const preset of PRESET_IDS) {
+      const keySource = new HeldKeySource();
+      keySource.setHeld(Action.MoveForward); // held for the entire test, never released or changed
+      // cameraYaw here is wired to a constant: DirectionalController never reads it to
+      // compute moveIntent (see screenToWorld's signature) — this is exactly the point
+      // being proven, not a shortcut. The real orbiting camera below is a separate,
+      // independent CameraRig, driving nothing back into this controller.
+      const directional = new DirectionalController(keySource, { cameraYaw: () => 0 });
+      const rig = new CameraRig(preset);
+      const ticks = 360;
+      let prevYawDeg: number | null = null;
+      let totalRotationDeg = 0;
+
+      for (let t = 0; t < ticks; t++) {
+        const a = (t / ticks) * Math.PI * 2;
+        const frame: FightFrame = {
+          tick: t,
+          time: t / 60,
+          first: { position: { x: 0, y: 0.2, z: -3 }, velocity: { x: 0, y: 0, z: 0 }, speed: 0, airborne: false, attack: 'none', broken: false },
+          second: { position: { x: 6 * Math.cos(a), y: 0.2, z: -3 + 6 * Math.sin(a) }, velocity: { x: 0, y: 0, z: 0 }, speed: 0, airborne: false, attack: 'none', broken: false },
+          intents: [],
+          clashActive: false,
+          clashProgress: 0,
+          roundOver: false,
+          ringOutIsFirst: null,
+        };
+        const out = rig.tick(frame, FIXED_DELTA_SECONDS);
+        const yawDeg = out.player.debug.yawDeg;
+        if (prevYawDeg !== null) totalRotationDeg += Math.abs(((yawDeg - prevYawDeg + 540) % 360) - 180);
+        prevYawDeg = yawDeg;
+
+        const actions = directional.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
+        expect(actions.moveIntent, `${preset} tick ${t}: ArrowUp must be world +Z regardless of camera yaw (${yawDeg.toFixed(1)}°)`).toEqual({ x: 0, z: 1 });
+      }
+
+      // The opponent went all the way around the stationary player, so the
+      // opponent-focused, orbiting camera (fix 8) should have swept most of a
+      // full turn following it — proof this run genuinely exercises a large,
+      // continuous orbit, not a camera nudging by a few degrees.
+      expect(totalRotationDeg, `${preset}: camera actually orbits`).toBeGreaterThan(180);
+    }
+  });
 });

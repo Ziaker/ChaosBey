@@ -13,7 +13,7 @@ import { AIController } from '../../ai/controllers/AIController';
 import type { MatchSession, Side } from '../../app/session/MatchSession';
 import { ARENA_FLOORS, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { floorReadout } from '../../arena/floor/floorReadout';
-import { CAMERA_PRESET_NAMES, SHOULDER_RIGS } from '../../camera/director/CameraRig';
+import { ARENA_CAMERA_RIGS, CAMERA_PRESET_NAMES } from '../../camera/director/CameraRig';
 import { PRESETS, PRESET_IDS } from '../../camera/director/CameraParams';
 import { AIRBORNE_ACCELERATION_FACTOR } from '../../bey/movement/MovementTuning';
 import { MOTION_DIRECTIONS, MOTION_DIRECTION_IDS } from '../../bey/motion/MotionPresets';
@@ -364,11 +364,11 @@ function buildCameraSection(session: MatchSession): InspectorSection {
       row('Eye above player / behind player', eyeVsPlayerText(camera.cameraPositionM, session.getBey('first').body.translation())),
       row('Pitch (looking down)', `${f((Math.atan2(camera.cameraPositionM.y - camera.focusPositionM.y, Math.hypot(camera.cameraPositionM.x - camera.focusPositionM.x, camera.cameraPositionM.z - camera.focusPositionM.z)) * 180) / Math.PI)}°`),
       ...PRESET_IDS.map((id) => {
-        const r = SHOULDER_RIGS[id];
+        const r = ARENA_CAMERA_RIGS[id];
         const p = PRESETS[id];
         return row(
           `Rig ${id}${id === camera.preset ? ' (active)' : ''}`,
-          `behind ${f(r.distanceM)} m (+${f(r.separationPull)}/m past 4 m, max +${f(r.maxExtraDistanceM)}), up ${f(r.heightM)} m, shoulder ${f(r.shoulderM)} m, look ${f(r.framing * 100)}% to opponent, FOV ${p.baseFov}–${p.maxFov}°, orbit ≤ ${p.orbitSpeed}°/s`,
+          `distance ${f(r.minDistance)}–${f(r.maxDistance)} m (+${f(p.separationResponse)}/m past 3 m), up ${f(r.cameraHeight)} m, framing bias ${f(p.framingBias * 100)}%, opponent weight ${f(p.opponentWeight * 100)}%, FOV ${p.baseFov}–${p.maxFov}°, orbit ≤ ${p.orbitSpeed}°/s`,
         );
       }),
       row('Shake offset', vec3(camera.shakeOffsetM)),

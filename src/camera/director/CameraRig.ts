@@ -24,15 +24,18 @@
 // state hash (camera-approval.md 8).
 // ============================================================
 
-import { CameraDirector, type CameraMode, type DirectorOptions, type DirectorOutput, type ShoulderRig } from './CameraDirector';
-import { PRESETS, PRESET_IDS, type PresetId } from './CameraParams';
+import { CameraDirector, type CameraMode, type DirectorOptions, type DirectorOutput } from './CameraDirector';
+import { cloneParams, PRESETS, PRESET_IDS, type CameraParams, type PresetId } from './CameraParams';
 import type { FightFrame, Vec3 } from './FightFrame';
 import { clamp, smoothstep } from './frameMath';
 
 /**
  * Every game director: no Clash orbit (clash-presentation-approval.md 3.6)
  * and the in-game arena camera (owner, M11 playtest): stays inside the
- * arena. The rig adds each preset's over-the-shoulder framing (SHOULDER_RIGS).
+ * arena. The rig's own height/distance overrides (ARENA_CAMERA_RIGS) keep
+ * the low, close, third-person feel; everything else — focus bias, orbit,
+ * side switching, offscreen rescue, FOV, shake, contexts — is the
+ * unmodified Camera Lab director.
  */
 export const RIG_DIRECTOR_OPTIONS = {
   clashOrbit: false,
@@ -40,37 +43,45 @@ export const RIG_DIRECTOR_OPTIONS = {
 } as const;
 
 /**
- * Over-the-shoulder framing per preset (owner playtest, after M11: "third
- * person behind the Bey, behind and just a little above, over the
- * shoulder"; pulled back further after a second playtest pass, 2026-09:
- * the first pass read as too close, cramping the fight and the arena/
- * ring-out edge out of view). The lab presets framed the fight from
- * 7–17 m out and 4–6 m up; these put the eye 4.8–6.5 m behind the
- * player's Bey (was 3.6–5 m); height is untouched (1.5–2.4 m, same as
- * before) — the pull-back is entirely distance, so pitch actually gets a
- * little LOWER (more "behind", not more "overhead"). A steadiest
- * and highest, C closest and lowest; the presets' own FOV, smoothing,
- * orbit speed cap, shake and contexts are unchanged.
- *
- * A separate, since-superseded pass (PR #63) raised height ~60% on top of
- * this same distance pull-back, to compensate for a camera that locked its
- * angle while the player steered (see CameraDirector's playerSteering
- * removal below): a taller eye kept both fighters in frame even when the
- * locked angle didn't naturally point at the action. With Directional
- * input now genuinely arena/world-relative (no camera coupling to
- * compensate for — see src/input/directional/screenDirection.ts), that
- * lock and the height increase it needed are both gone; this keeps the
- * distance-only pull-back the owner asked for.
+ * Height/distance overrides for the in-game camera (owner playtest, M11
+ * fix 8, 2026-09: GDD §§48–50 call for a dynamic, opponent-focused,
+ * two-fighter "cinematic arena camera", not a camera locked behind the
+ * player — see docs/ai/m11-status.md, "Owner playtest fix 8"). Every other
+ * parameter (framingBias, opponentWeight, orbit, offscreen rescue, FOV,
+ * ...) is exactly the approved Camera Lab preset (camera-approval.md);
+ * only `minDistance`, `maxDistance` and `cameraHeight` are overridden here,
+ * to the same low, close-behind-the-player values the earlier `ShoulderRig`
+ * used at rest (fix 7, before this redesign): A 5.8 m / 2.4 m up, B 5 m /
+ * 1.9 m, C 4.3 m / 1.5 m. `maxDistance` is kept generous (unlike the old
+ * fixed `maxExtraDistanceM` caps) so the director's own separation response
+ * can pull back as far as it needs to keep the opponent framed; the arena's
+ * `containRadiusM` (10.5 m) and `HEIGHT_PER_DISTANCE` already stop that
+ * from reading as an aerial shot (see the "far separation" test scenario).
  */
-export const SHOULDER_RIGS: Readonly<Record<PresetId, ShoulderRig>> = {
-  A: { distanceM: 5.8, heightM: 2.4, shoulderM: 0.5, framing: 0.5, lookHeightM: 0.5, separationPull: 0.3, maxExtraDistanceM: 3.5, lookAheadS: 0 },
-  B: { distanceM: 5, heightM: 1.9, shoulderM: 0.8, framing: 0.45, lookHeightM: 0.45, separationPull: 0.28, maxExtraDistanceM: 3, lookAheadS: 0.12 },
-  C: { distanceM: 4.3, heightM: 1.5, shoulderM: 1, framing: 0.4, lookHeightM: 0.4, separationPull: 0.25, maxExtraDistanceM: 2.5, lookAheadS: 0.2 },
+export interface ArenaCameraRig {
+  readonly minDistance: number;
+  readonly maxDistance: number;
+  readonly cameraHeight: number;
+}
+export const ARENA_CAMERA_RIGS: Readonly<Record<PresetId, ArenaCameraRig>> = {
+  A: { minDistance: 5.8, maxDistance: 13, cameraHeight: 2.4 },
+  B: { minDistance: 5, maxDistance: 14, cameraHeight: 1.9 },
+  C: { minDistance: 4.3, maxDistance: 15, cameraHeight: 1.5 },
 };
+
+/** The approved preset's params with the in-game arena's height/distance overrides applied. */
+export function arenaParamsFor(id: PresetId): CameraParams {
+  const params = cloneParams(PRESETS[id]);
+  const rig = ARENA_CAMERA_RIGS[id];
+  params.minDistance = rig.minDistance;
+  params.maxDistance = rig.maxDistance;
+  params.cameraHeight = rig.cameraHeight;
+  return params;
+}
 
 /** The options the rig builds preset `id`'s director with (tests build the same director to compare against). */
 export function rigDirectorOptions(id: PresetId, floorHeightAt?: (x: number, z: number) => number): DirectorOptions {
-  return { ...RIG_DIRECTOR_OPTIONS, arena: { ...RIG_DIRECTOR_OPTIONS.arena, shoulder: SHOULDER_RIGS[id] }, floorHeightAt };
+  return { ...RIG_DIRECTOR_OPTIONS, floorHeightAt };
 }
 
 /** The preset the Clash always uses (owner decision 2026-09-28). */
@@ -126,9 +137,9 @@ export class CameraRig {
   constructor(preset: PresetId, aspect = 16 / 9, floorHeightAt?: (x: number, z: number) => number) {
     const options = (id: PresetId) => rigDirectorOptions(id, floorHeightAt);
     this.directors = {
-      A: new CameraDirector(PRESETS.A, aspect, options('A')),
-      B: new CameraDirector(PRESETS.B, aspect, options('B')),
-      C: new CameraDirector(PRESETS.C, aspect, options('C')),
+      A: new CameraDirector(arenaParamsFor('A'), aspect, options('A')),
+      B: new CameraDirector(arenaParamsFor('B'), aspect, options('B')),
+      C: new CameraDirector(arenaParamsFor('C'), aspect, options('C')),
     };
     this.preset = preset;
     this.fromPreset = preset;
