@@ -115,7 +115,13 @@ test('AI opponent runs in the real loop through hits, hitstop and (when it happe
 
   const startedAt = Date.now();
   let clashFirstSeenAt: number | null = null;
-  while (Date.now() - startedAt < MAX_RUN_MS) {
+  // Past MAX_RUN_MS the run still waits (up to the grace) for a Clash that
+  // started late to resolve, so a Clash begun just before the deadline is
+  // not mistaken for one stuck Active.
+  const clashStillResolving = (f: SmokeFlags | undefined): boolean =>
+    f !== undefined && f.clashActiveSeen && !f.clashLeftActive && clashFirstSeenAt !== null && Date.now() - clashFirstSeenAt <= CLASH_RESOLVE_GRACE_MS;
+  let latest: SmokeFlags | undefined;
+  while (Date.now() - startedAt < MAX_RUN_MS || clashStillResolving(latest)) {
     // A player tap (Circular) — the same key a person presses.
     await page.keyboard.down('z');
     await page.waitForTimeout(50);
@@ -123,6 +129,7 @@ test('AI opponent runs in the real loop through hits, hitstop and (when it happe
     await page.waitForTimeout(PLAYER_TAP_INTERVAL_MS - 50);
 
     const current = await flags();
+    latest = current;
     if (current.clashActiveSeen && clashFirstSeenAt === null) clashFirstSeenAt = Date.now();
     const hitstopRecovered =
       current.tickWhenFirstHitstopEnded !== null && (current.lastTick ?? 0) >= current.tickWhenFirstHitstopEnded + MIN_TICKS_AFTER_HITSTOP;
