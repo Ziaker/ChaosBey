@@ -40,6 +40,9 @@ export interface ArenaTheme {
   readonly hemisphereIntensity: number;
   readonly sunHex: number;
   readonly sunIntensity: number;
+  /** Contact sparks, hot → cool (the Arena Concept Lab's `sparkColors` for this arena). */
+  readonly sparkHotHex: number;
+  readonly sparkCoolHex: number;
 }
 
 /** The two arena values a match is built with (MatchConfig fields). */
@@ -80,6 +83,8 @@ export const FOUNDRY_PIT: ArenaPreset = {
     wallHex: 0x5a4a3c,
     wallOpacity: 1,
     rimHex: 0xff8a2a,
+    sparkHotHex: 0xffe28a,
+    sparkCoolHex: 0xff6a14,
     skyHex: 0xffc28a,
     groundHex: 0x1a120c,
     hemisphereIntensity: 1.1,
@@ -103,6 +108,8 @@ export const RIFT_CRATER: ArenaPreset = {
     wallHex: 0x26222e,
     wallOpacity: 1,
     rimHex: 0x7ce8ff,
+    sparkHotHex: 0xd9ccff,
+    sparkCoolHex: 0x7f5cff,
     skyHex: 0x8a7cff,
     groundHex: 0x07050c,
     hemisphereIntensity: 0.9,
@@ -126,6 +133,8 @@ export const TOURNAMENT_STADIUM: ArenaPreset = {
     wallHex: 0xbfe6ff,
     wallOpacity: 0.35,
     rimHex: 0xffffff,
+    sparkHotHex: 0xffffff,
+    sparkCoolHex: 0xffc94a,
     skyHex: 0xe8eeff,
     groundHex: 0x303440,
     hemisphereIntensity: 1.25,

@@ -420,3 +420,90 @@ From 45% up, Bowl B is no harder than flat. The Lab and the game both scale thru
 - Tests that threw a Bey with no input now drive it: the wall bounce, and the wall-hit / wall-ricochet presets (half a second of forward). Tests where an idle Bey sat in the driver's path now move it aside.
 - The Stamina passive-share margin over Defense went from > +0.08 to > +0.06 (measured +0.084 → +0.075). The other identity checks keep their margins.
 - Seeds re-pinned: replay-66 / replay-30, and Camera Lab normal-duel `g`.
+
+## Owner playtest fix 5 — drift, over-the-shoulder camera, result auto-continue, visual audit
+
+### 1. Drift: the state really did not stay on (mechanical), and nothing showed it (feedback)
+
+**Traced** (`tap X → hop → X held → landing → Drifting → release → Recovering → Idle`), in the headless harness and in the browser:
+- **The drift lasted 2–4 ticks.**
+  - It ended as soon as the Bey stopped "steering". In directional control the heading reaches the held direction within a few ticks, so that happened almost at once.
+  - It also ended on any tick off the ground, and the Motion Lab landing bounce lifts the Bey right after touchdown.
+  - Measured: `drift` scenario, flat floor: 2 ticks.
+- **Holding X almost always meant a tall jump instead.** The M3 variable jump adds height while X is held without steering, which is again almost always in directional control. The result was a 1.7 m, 1.3 s jump before any drift could start (browser log).
+- **The landing took ~35% of the horizontal speed in one step** (6.4 → 4.2 m/s). That came from the floor collider's friction on the impact, so a drift landing read as a stop.
+- **The test harness never passed the heading to DriftController.** `tickMatch` did. Fixed.
+
+**Changes:**
+- **The drift lasts while X is held.** Short air time (≤ 0.45 s: the landing bounce, a bump) does not end it. Releasing X starts the 0.5 s grip recovery as before.
+- **Jump vs drift (owner's rule): X + going straight = the variable jump; X + a real turn = drift.**
+  - **Reference:** when X is pressed, the drift latches that instant's direction: the Bey's motion at ≥ 2 m/s, otherwise the held direction or the heading.
+  - **Arming:** a turn arms the drift for the rest of that X press. A turn is the held direction more than the existing directional steering threshold (0.25 rad) off that reference, or a turn key in classic control. The current heading is not used, because in directional control it catches up with the held direction within a few ticks.
+  - **Once armed:** the height assist stops (the hop stays small), and the drift starts on landing, or on a later turn while X is still held.
+  - **Without a turn:** the hop is the variable jump, standing or moving.
+  - This replaces an intermediate rule ("moving ≥ 4 m/s with a direction held = drift") that took the high jump away while moving.
+- **Jump on slopes:** the variable jump's height assist ran only while the absolute vertical speed was > 0. Going down a bowl's slope the Bey already falls with the floor (vy −2.9 m/s on Bowl B), so a held jump got no extra height there. "Rising" is now measured against the vertical speed at the hop. On the flat floor that base is 0, as before.
+- **A landing keeps its horizontal speed** (the Motion Lab's landing model). This applies only when the landing step slowed the Bey along the same line, so a landing that also hits a wall or a Bey keeps what physics decided.
+- **AI:** it lets go of X after 0.5 s of drift. Holding it for the whole decision left both AIs drifting round the rim for a full 100 s round.
+
+**Feedback (render only):**
+- **Skid marks and sparks** from the approved VFX language (see `visual-fidelity-audit.md` for exact sources and the drift-specific densities).
+- **Arena spark colours** from the Arena Lab.
+- **A scuff where the drift starts** and a **bright grip-regain ring where it ends**.
+- **A 16° lean** into the turn against the slide.
+- **A temporary "DRIFT" / "GRIP" tag** on the HUD. It is functional, not the final HUD.
+- **F3 and Debug Lab rows:** drift state, X held, drift armed, grounded, slip angle, lateral grip, heading, velocity direction and heading − velocity.
+
+**Evidence:**
+- `drift.test.ts`, drift cycle: the full transition list, ~1 s of Drifting while X is held, speed kept through the landing, grip < 30% of normal, heading ≥ 45° off the velocity. It fails on the old code.
+- `drift.test.ts`, jump vs drift:
+  1. running straight + holding X is a tall jump (apex > 1.4× a tap hop) and never a drift;
+  2. running + X + a turn is a small hop into Drifting;
+  3. the drift goes on after the heading has reached the held direction;
+  4. releasing X gives Recovering at once, then Idle;
+  5. at rest, holding X is the variable jump, with or without a direction;
+  6. flat and Bowl A/B/C through the scenario runner: straight + X gets the full height assist (> 0.25 s) and no drift, while X + turn gets none (< 0.05 s) and ≥ 35 Drifting ticks.
+  - Tests 1 and 6 fail on the intermediate speed rule.
+- The `drift` scenario now requires ≥ 35 Drifting ticks and ≥ 20° slip. Measured 47 ticks flat and 66–71 on bowls A/B/C; before, 2 ticks flat.
+- `driftFeedback.spec.ts`, Play mode: DRIFT shows, 15+ skid decals, then GRIP, then Idle.
+- `driftFeedback.spec.ts`, Debug Lab: flat and bowls A/B/C each give one start, one end and 49–62 skid decals.
+
+### 2. Camera: third person behind the Bey, over the shoulder
+
+The lab presets framed the fight's midpoint from 7–17 m out and 4.7–10 m up (pitch 28–43°). The game now uses an over-the-shoulder rig per preset (`SHOULDER_RIGS`):
+- the eye sits behind the player's Bey on the player → opponent line, at A 5 m / 2.4 m up, B 4.2 m / 1.9 m, C 3.6 m / 1.5 m;
+- it has a right-shoulder offset (A 0.5, B 0.8, C 1 m) and looks 40–50% of the way to the opponent;
+- it pulls back a little with separation, so the opponent stays in frame.
+
+The line is followed at each preset's own orbit smoothing and speed cap (A 40°/s, B 70°/s, C 105°/s), and held when the Beys touch. Against the wall the eye comes in and rises slightly, and the look point moves toward the player. FOV, shake, knockback, Clash (B, no orbit), ring-out and finisher are unchanged.
+
+| | before (A/B/C, sep 4–8 m) | after |
+|---|---|---|
+| eye height above the player | 4.7–7.6 m | 1.5–2.7 m |
+| pitch | 28–34° | 10–15° |
+| player on screen (NDC y) | −0.28 … −0.60 | −0.28 … −0.36 (lower half) |
+
+Tests:
+- **Headless:** the player is in the lower half, the opponent is ahead and in frame, pitch is < 30° and eye height < 4.5 m, for every preset at 4 / 8 / 14 m. Turning never exceeds the cap; it holds when the Beys touch; on the bowls the eye stays inside the arena and above the floor.
+- **Browser** (`cameraShoulder.spec.ts`): the same checks through the real camera, flat and Bowl B, with screenshots.
+
+**Trade-off:** following the player → opponent line means the camera turns when the fight turns, which is what the fix-4 camera had stopped. The arrows are latched per gesture (a held direction keeps its world meaning), but their meaning changes between gestures as the camera turns.
+
+### 3. Result auto-continue (4 s)
+
+After WIN / LOSE / DRAW the result dialog shows "Next round in 4.0 s" (or "Rematch in …" at the end of the match). After 4 s it runs exactly its primary button's action.
+- The button still continues at once.
+- "Stop auto" keeps the result on screen, and Continue still works afterwards.
+- It fires at most once, so a press on the timer's instant cannot start two transitions.
+- No rule changed: draws still score nobody, and there is no tiebreak.
+- The finished round stays frozen, and the timer is UI time only.
+
+Tests: `autoContinue.test.ts` (fake clock) and `resultAutoContinue.spec.ts` (round 1 WIN auto, round 2 LOSE pressed, round 3 DRAW stopped for 5.5 s, match end auto-rematch).
+
+### 4. Visual prototypes
+
+See `docs/design-decisions/visual-fidelity-audit.md` for the A/B/C classification and what was ported. The big approved integrations (the full Hybrid C VFX with Cel Cyclone, the condition visuals, and the Clash Overdrive visuals) are listed there and not started.
+
+### Consequences
+
+Replay seeds are re-pinned to replay-41 / replay-64. The low-grip preset now coasts after the drift (driving on hit the wall before grip was back).

@@ -41,6 +41,10 @@ export interface ScenarioTrace {
   firstAirborneAttackState: string | null;
   firstDriftStates: Set<string>;
   firstMaxSlipDeg: number;
+  /** Ticks the first Bey spent Drifting. */
+  firstDriftTicks: number;
+  /** Longest variable-jump height assist the first Bey got in one airborne period (s): 0 for a bare hop or a drift hop. */
+  firstMaxJumpAssistS: number;
   firstMinGripPerS: number;
   firstNormalGripPerS: number;
   firstFinalGripPerS: number;
@@ -84,6 +88,8 @@ export function createScenarioTrace(first: Bey): ScenarioTrace {
     firstAirborneAttackState: null,
     firstDriftStates: new Set(),
     firstMaxSlipDeg: 0,
+    firstDriftTicks: 0,
+    firstMaxJumpAssistS: 0,
     firstMinGripPerS: Number.POSITIVE_INFINITY,
     firstNormalGripPerS: first.movement.getLateralGripPerS(),
     firstFinalGripPerS: first.definition.handling.lateralGripPerS,
@@ -150,6 +156,7 @@ export function recordScenarioTick(trace: ScenarioTrace, facts: ScenarioTickFact
   trace.finalFirstAttackState = a.attackState;
   if (!a.grounded && (a.attackState === 'CircularActive' || a.attackState === 'DashActive')) trace.firstAirborneAttackState ??= a.attackState;
   trace.firstDriftStates.add(a.driftState);
+  if (a.driftState === 'Drifting') trace.firstDriftTicks++;
   trace.firstMaxSlipDeg = Math.max(trace.firstMaxSlipDeg, Math.abs(a.movement.slipAngleRad) * (180 / Math.PI));
   trace.firstMinGripPerS = Math.min(trace.firstMinGripPerS, a.movement.lateralGripPerS);
   trace.firstFinalGripPerS = a.movement.lateralGripPerS;
@@ -161,6 +168,7 @@ export function recordScenarioTick(trace: ScenarioTrace, facts: ScenarioTickFact
   trace.firstMinAccelFactor = Math.min(trace.firstMinAccelFactor, first.stamina.getPhysicalCondition().accelFactor);
   if (a.justLanded) trace.firstMaxLandingIntensity = Math.max(trace.firstMaxLandingIntensity, a.landingIntensity);
 
+  trace.firstMaxJumpAssistS = Math.max(trace.firstMaxJumpAssistS, first.drift.getDebugTimers().jumpAssistElapsedS);
   const p = first.body.translation();
   const radius = Math.hypot(p.x, p.z);
   trace.firstMaxRadiusM = Math.max(trace.firstMaxRadiusM, radius);

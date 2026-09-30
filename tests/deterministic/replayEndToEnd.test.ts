@@ -25,7 +25,7 @@ import { setResourceFraction } from '../../src/debug/cheats/DebugMutations';
 import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecorder';
 
 // A long fight with many hitstop freezes (see replayPlayback.test.ts).
-const LONG_SEED = 'replay-66';
+const LONG_SEED = 'replay-41';
 /** The tampered-inputs check flips MoveForward on ticks 300 up to (not including) this. */
 const EDIT_END_TICK = 700;
 

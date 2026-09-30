@@ -31,6 +31,8 @@ import {
   AIR_RECOVERY_WOBBLE_REDUCTION,
   ATTITUDE_TILT_CLAMP_RAD,
   BASE_SPIN_RATE_RAD_S,
+  DRIFT_LEAN_DEG,
+  DRIFT_LEAN_FULL_SLIDE_MPS,
   LEAN_ACCEL_SMOOTHING_PER_S,
   SPIN_DECAY_FRACTION_PER_S,
   TILT_OVERSHOOT_STOP_GAIN,
@@ -91,7 +93,13 @@ export class SpinController {
    * — a tired Bey visibly loses physical confidence, it doesn't get a
    * config flag flipped.
    */
-  tick(body: RAPIER.RigidBody, fixedDeltaSeconds: number, staminaCondition: PhysicalCondition, grounded = true): void {
+  /**
+   * `driftHeadingRad`: the heading while this Bey is Drifting (null
+   * otherwise) — the attitude then leans into the turn, against the
+   * sideways slide (owner playtest, after M11: the drift had no body
+   * language at all). Render only, like the rest of the attitude.
+   */
+  tick(body: RAPIER.RigidBody, fixedDeltaSeconds: number, staminaCondition: PhysicalCondition, grounded = true, driftHeadingRad: number | null = null): void {
     const m = this.motion;
     const dt = fixedDeltaSeconds;
 
@@ -101,10 +109,10 @@ export class SpinController {
     this.wobbleEnergy = Math.max(this.wobbleEnergy * Math.exp(-m.wobbleDecay * dt), staminaCondition.ambientWobbleFloor);
     this.wobbleTimeAccumulatorS += dt;
 
-    this.tickAttitude(body, dt, grounded, staminaCondition.recoveryTorqueFactor);
+    this.tickAttitude(body, dt, grounded, staminaCondition.recoveryTorqueFactor, driftHeadingRad);
   }
 
-  private tickAttitude(body: RAPIER.RigidBody, dt: number, grounded: boolean, staminaFactor: number): void {
+  private tickAttitude(body: RAPIER.RigidBody, dt: number, grounded: boolean, staminaFactor: number, driftHeadingRad: number | null): void {
     const m = this.motion;
     this.sinceImpactS += dt;
     this.tumbleRemainingS = Math.max(0, this.tumbleRemainingS - dt);
@@ -120,9 +128,22 @@ export class SpinController {
     this.prevVel = vel;
 
     const maxTilt = m.maxTilt * DEG;
-    const target = grounded
+    let target = grounded
       ? clampLength({ x: m.leanStrength * this.accel.x + m.speedTilt * vel.x, z: m.leanStrength * this.accel.z + m.speedTilt * vel.z }, maxTilt)
       : { x: 0, z: 0 };
+    if (driftHeadingRad !== null) {
+      // Drift: lean into the turn, against the sideways slide, scaled by how fast it slides.
+      const hx = Math.sin(driftHeadingRad);
+      const hz = Math.cos(driftHeadingRad);
+      const along = vel.x * hx + vel.z * hz;
+      const sx = vel.x - along * hx;
+      const sz = vel.z - along * hz;
+      const slide = Math.hypot(sx, sz);
+      if (slide > 0.2) {
+        const k = (DRIFT_LEAN_DEG * DEG * Math.min(1, slide / DRIFT_LEAN_FULL_SLIDE_MPS)) / slide;
+        target = { x: target.x - sx * k, z: target.z - sz * k };
+      }
+    }
     const k = m.uprightStrength * this.recoveryFraction() * (tumbling ? TUMBLE_RECOVERY_FACTOR : 1) * staminaFactor;
     let fx = -k * (this.lean.x - target.x) - m.recoveryDamping * this.leanRate.x;
     let fz = -k * (this.lean.z - target.z) - m.recoveryDamping * this.leanRate.z;

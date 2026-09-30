@@ -46,6 +46,7 @@ import { createRngStreams, type RngStreams } from '../../rng/SeededRng';
 import { TelemetryEventKind } from '../../telemetry/events/TelemetryEvent';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 import { HeadingArrow } from '../../vfx/HeadingArrow';
+import { DriftVfx } from '../../vfx/DriftVfx';
 import { VfxManager } from '../../vfx/VfxManager';
 import { ForcedInputController } from '../../automation/scripted-scenarios/ForcedInputController';
 import { AIController } from '../../ai/controllers/AIController';
@@ -133,6 +134,8 @@ export class MatchSession {
 
   private readonly root = new THREE.Group();
   private readonly vfxManager: VfxManager;
+  /** Owner playtest (after M11): skid marks, sparks and grip-regain ring while a Bey drifts. Render only. */
+  private readonly driftVfx: { readonly first: DriftVfx; readonly second: DriftVfx };
   /** M11: the approved camera director running the three presets; the Clash forces B without orbit. Render only. */
   private readonly cameraRig: CameraRig;
   /** The render camera, read only for its aspect ratio (the director's off-screen check). */
@@ -253,6 +256,10 @@ export class MatchSession {
     const arenaFloor = options.matchConfig.arenaFloor ?? 'flat';
     this.cameraRig = new CameraRig(options.cameraPreset ?? 'B', options.camera.aspect, arenaFloor === 'flat' ? undefined : (x, z) => floorHeightAt(arenaFloor, x, z));
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
+    const theme = options.arenaTheme ?? FOUNDRY_PIT.theme;
+    const floorAt = (x: number, z: number): number => floorHeightAt(arenaFloor, x, z);
+    this.driftVfx = { first: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt), second: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt) };
+    this.root.add(this.driftVfx.first.object3D, this.driftVfx.second.object3D);
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
     this.anomalyDetector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(options.matchConfig.arenaFloor ?? 'flat') + options.matchConfig.arenaWallHeightM });
@@ -604,6 +611,24 @@ export class MatchSession {
       this.lastMatchResult?.second.movement.speedMps ?? 0,
       cameraOutput?.speedLinesScreenDirection ?? { x: 0, y: 0 },
     );
+    const last = this.lastMatchResult;
+    if (last) {
+      for (const side of ['first', 'second'] as const) {
+        const bey = match[side];
+        this.driftVfx[side].update(frameDeltaSeconds, {
+          position: bey.body.translation(),
+          velocity: bey.body.linvel(),
+          headingRad: bey.movement.getHeadingRad(),
+          driftState: last[side].driftState,
+          grounded: last[side].grounded,
+        });
+      }
+    }
+  }
+
+  /** Drift effect counts per side (render only), for tests and the smoke. */
+  getDriftVfxCounts(side: Side): ReturnType<DriftVfx['getCounts']> {
+    return this.driftVfx[side].getCounts();
   }
 
   /** Scene subtree owned by this session — debug visualization layers attach here so they go away with it. */
@@ -620,6 +645,8 @@ export class MatchSession {
     if (this.disposed) return;
     this.disposed = true;
     this.vfxManager.dispose();
+    this.driftVfx.first.dispose();
+    this.driftVfx.second.dispose();
     this.root.removeFromParent();
     this.root.traverse((object) => {
       const mesh = object as THREE.Mesh;

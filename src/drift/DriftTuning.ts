@@ -35,6 +35,18 @@ export const DRIFT_LATERAL_GRIP_PER_S = 1.1;
 // to normal — an instant snap back would feel like the slide never
 // happened.
 export const DRIFT_GRIP_RECOVERY_DURATION_S = 0.5;
+// While drifting, time (s) the Bey may be off the ground — the landing
+// bounce right after the hop, a bump — before the drift ends. Longer than
+// the Motion Lab landing bounce (a hop landing at ~4 m/s leaves at
+// 4 × floorBounce 0.35 = 1.4 m/s: ~0.29 s in the air; 0.25 cut the drift
+// short in the browser), shorter than a real launch.
+export const DRIFT_AIRBORNE_GRACE_S = 0.45;
+// The hop's reference direction (what a turn is measured against) is the
+// Bey's motion when X is pressed at this speed (m/s) or above; slower, it is
+// the held direction, or the heading. A turn is the held direction more
+// than MovementTuning's DIRECTIONAL_STEERING_THRESHOLD_RAD off it (the same
+// threshold that counts as steering), or a turn key in classic control.
+export const DRIFT_REFERENCE_MIN_SPEED_MPS = 2;
 
 // --- Variable jump height (Milestone 3) ---
 // Extra upward acceleration applied every tick JumpDrift is still held

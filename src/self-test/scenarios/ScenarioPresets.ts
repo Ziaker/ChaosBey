@@ -368,7 +368,10 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
       { fromTick: 150, held: [Action.MoveForward] },
     ]),
     second: idle,
-    check: (t) => ok(t.firstDriftStates.has('Drifting') && t.firstDriftStates.has('Recovering') && t.firstMaxSlipDeg > 5, `drift states ${[...t.firstDriftStates].join(', ')}, max slip ${t.firstMaxSlipDeg.toFixed(1)}°`),
+    // Drifting for most of the hold (X held ticks 60–150, minus the hop) and a real slide
+    // (owner playtest, after M11: it used to leave Drifting after a few ticks). Measured:
+    // 47 ticks on the flat floor, 66–71 on the bowls; max slip 135–171°.
+    check: (t) => ok(t.firstDriftStates.has('Drifting') && t.firstDriftStates.has('Recovering') && t.firstDriftTicks >= 35 && t.firstMaxSlipDeg > 20, `drift states ${[...t.firstDriftStates].join(', ')}, drifting ${t.firstDriftTicks} ticks, max slip ${t.firstMaxSlipDeg.toFixed(1)}°`),
   },
   {
     id: 'low-grip',
@@ -384,7 +387,9 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
       { fromTick: 0, held: [Action.MoveForward] },
       { fromTick: 60, held: [Action.MoveForward, Action.JumpDrift] },
       { fromTick: 62, held: [Action.MoveForward, Action.JumpDrift, Action.SteerRight] },
-      { fromTick: 150, held: [Action.MoveForward] },
+      // Coasting after the drift: since the drift lasts as long as X is held (owner playtest,
+      // after M11), driving on at full speed hit the wall before grip was back to 99%.
+      { fromTick: 150, held: [] },
     ]),
     second: idle,
     check: (t) => ok(t.firstMinDriftGripPerS < t.firstNormalGripPerS && t.firstGripRestoredAfterDrift, `grip while drifting ${t.firstMinDriftGripPerS.toFixed(2)} /s, normal ${t.firstNormalGripPerS.toFixed(2)} /s, restored on the ground after the drift: ${t.firstGripRestoredAfterDrift}`),

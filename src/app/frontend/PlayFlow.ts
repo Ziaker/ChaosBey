@@ -21,6 +21,7 @@ import { arenaPreset } from '../../arena/presets/ArenaPresets';
 import { rosterEntry } from './beyRoster';
 import { CharacterSelectScreen } from './CharacterSelectScreen';
 import { outcomeText } from './matchOutcome';
+import { AUTO_CONTINUE_S } from './AutoContinue';
 import { MatchResultsScreen, type MatchResultsAction } from './MatchResultsScreen';
 import { MatchRunner } from './MatchRunner';
 import { EMPTY_SCORE, matchWinner, roundSeed, scoreRound, type MatchScore } from './matchScore';
@@ -312,6 +313,7 @@ export class PlayFlow {
           { id: 'next-round', label: 'Next round', primary: true, run: () => void this.startRound() },
           { id: 'forfeit', label: 'Leave match', run: () => this.openPregame() },
         ],
+        autoContinue: { actionId: 'next-round', seconds: AUTO_CONTINUE_S, verb: 'Next round' },
       });
       return;
     }
@@ -330,6 +332,7 @@ export class PlayFlow {
       subline: `Final round — ${text.finish}`,
       details: [this.setup.roundsToWin > 1 ? `Final score ${scoreLine}` : 'Single round', matchup, seedLine],
       actions,
+      autoContinue: { actionId: 'rematch', seconds: AUTO_CONTINUE_S, verb: 'Rematch' },
     });
   }
 

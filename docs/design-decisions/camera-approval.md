@@ -24,6 +24,12 @@ Este documento registra **o que já foi decidido** sobre a câmera de combate, p
      - O ângulo agora é escolhido no início do round (atrás do jogador) e mantido.
      - A câmera continua dinâmica: acompanha a luta quando ela sai de uma zona de 1,5 m, com zoom, FOV, tremor, knockback, Clash, ring-out e finisher.
      - Para ficar dentro da arena, ela se aproxima e sobe; não gira.
+   - **Terceiro playtest (fix 5): terceira pessoa por trás do Bey, over-the-shoulder.**
+     - **Posição:** o olho fica atrás do Bey do jogador, na linha jogador → oponente, com ombro à direita. Por preset: A 5 m atrás e 2,4 m acima, B 4,2 m e 1,9 m, C 3,6 m e 1,5 m (`SHOULDER_RIGS` em `CameraRig.ts`).
+     - **Giro:** segue essa linha na suavização e no limite de órbita de cada preset.
+     - **Enquadramento:** o pitch caiu de 28–43° para 10–19°, e o jogador fica na metade de baixo da tela.
+     - **O que não mudou:** FOV, tremor, contextos, Clash (B, sem órbita), ring-out e finisher.
+     - Detalhes em `docs/ai/m11-status.md`.
 6. **Integração (M11, lane 2):** o diretor e os três presets estão no jogo, em `src/camera/director/`, sem alteração de valores, com a escolha A/B/C nas Configurações e o Clash forçando a B sem órbita. As escolhas provisórias para os itens em aberto da seção 10 estão em `docs/ai/m11-status.md` e aguardam confirmação do dono.
 
 ---

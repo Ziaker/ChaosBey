@@ -8,6 +8,7 @@
 
 import { button, el, ensureFrontendStyle, keyHint } from './frontendStyle';
 import { navigationIntent, wrapIndex } from './listNavigation';
+import { AutoContinueCountdown } from './AutoContinue';
 
 export interface MatchResultsAction {
   readonly id: string;
@@ -29,6 +30,12 @@ export interface MatchResultsContent {
   /** Lines under the headline, e.g. the matchup and the score. */
   readonly details: readonly string[];
   readonly actions: readonly MatchResultsAction[];
+  /**
+   * Owner playtest (after M11): run this action by itself after `seconds`
+   * (a visible countdown), unless the player continues first or presses
+   * "Stop auto". Exactly the button's own action, fired at most once.
+   */
+  readonly autoContinue?: { readonly actionId: string; readonly seconds: number; readonly verb: string };
 }
 
 export class MatchResultsScreen {
@@ -37,6 +44,10 @@ export class MatchResultsScreen {
   private focusIndex = 0;
   private closed = false;
   private readonly onBack: (() => void) | null;
+  private countdown: AutoContinueCountdown | null = null;
+  private countdownTicker: ReturnType<typeof setInterval> | null = null;
+  /** Some action already ran: nothing else may (a click on the instant the countdown fires). */
+  private acted = false;
 
   constructor(mount: HTMLElement, content: MatchResultsContent) {
     ensureFrontendStyle();
@@ -62,9 +73,21 @@ export class MatchResultsScreen {
     }
 
     const row = el('div', 'cb-results__actions');
+    const runOnce = (action: MatchResultsAction): void => {
+      if (this.closed || this.acted) return;
+      this.acted = true;
+      this.stopTicker();
+      action.run();
+    };
+    const auto = content.autoContinue;
+    const autoAction = auto ? content.actions.find((a) => a.id === auto.actionId) : undefined;
     content.actions.forEach((action) => {
       const node = button(action.label, action.primary ? 'cb-button--primary' : '', `${id}-${action.id}`, () => {
-        if (!this.closed) action.run();
+        if (action === autoAction && this.countdown) this.countdown.fire(true);
+        else {
+          this.countdown?.dispose();
+          runOnce(action);
+        }
       });
       // Tab or a click moves focus too: Enter must act on the button actually focused.
       const index = this.buttons.length;
@@ -72,6 +95,29 @@ export class MatchResultsScreen {
       this.buttons.push(node);
       row.append(node);
     });
+    if (auto && autoAction) {
+      const line = el('p', 'cb-results__countdown', `${id}-countdown`);
+      panel.append(line);
+      const stop = button('Stop auto', '', `${id}-stop-auto`, () => {
+        this.countdown?.stop();
+        this.stopTicker();
+        line.textContent = 'Auto-continue stopped';
+        line.dataset['state'] = 'stopped';
+        stop.disabled = true;
+      });
+      const index = this.buttons.length;
+      stop.addEventListener('focus', () => (this.focusIndex = index));
+      this.buttons.push(stop);
+      row.append(stop);
+      this.countdown = new AutoContinueCountdown(auto.seconds, () => runOnce(autoAction));
+      const render = (): void => {
+        if (!this.countdown || this.countdown.getState() !== 'running') return;
+        line.textContent = `${auto.verb} in ${this.countdown.remainingS().toFixed(1)} s`;
+        line.dataset['state'] = 'running';
+      };
+      render();
+      this.countdownTicker = setInterval(render, 100);
+    }
     const hints = el('div', 'cb-results__hints');
     hints.append(keyHint(['←', '→'], 'Select'), keyHint(['Enter'], 'Confirm'));
     if (content.onBack) hints.append(keyHint(['Esc'], 'Back'));
@@ -87,6 +133,8 @@ export class MatchResultsScreen {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    this.countdown?.dispose();
+    this.stopTicker();
     window.removeEventListener('keydown', this.handleKey);
     this.root.remove();
   }
@@ -100,6 +148,11 @@ export class MatchResultsScreen {
     else if (intent === 'confirm') this.buttons[this.focusIndex]?.click();
     else if (intent === 'back' && this.onBack && !this.closed) this.onBack();
   };
+
+  private stopTicker(): void {
+    if (this.countdownTicker !== null) clearInterval(this.countdownTicker);
+    this.countdownTicker = null;
+  }
 
   private moveFocus(delta: number): void {
     this.focusIndex = wrapIndex(this.focusIndex, delta, this.buttons.length);
@@ -125,6 +178,7 @@ function injectResultsStyle(): void {
     .cb-results__detail { margin: 0; font-size: 13px; color: var(--cb-text-dim); }
     .cb-results__actions { margin-top: 14px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
     .cb-results__hints { margin-top: 8px; display: flex; gap: 14px; justify-content: center; }
+    .cb-results__countdown { margin: 10px 0 0; font: 700 14px/1 var(--cb-mono); letter-spacing: 0.08em; color: var(--cb-warn); }
   `;
   document.head.append(style);
 }

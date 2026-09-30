@@ -102,3 +102,8 @@ export const DIRECTIONAL_STEERING_THRESHOLD_RAD = 0.25;
 // an idle Bey pushed by another still gives way instead of acting like a
 // wall; knockbacks and bounces are not damped.
 export const IDLE_DAMPING_PER_S = 4;
+
+// A landing keeps its horizontal speed (the Motion Lab's landing model)
+// only when the landing step slowed it along the same line: cos of the
+// largest direction change still counted as "the same line" (~8°).
+export const LANDING_SAME_LINE_COS = 0.99;
