@@ -132,18 +132,20 @@ test('a standard gamepad drives the menus, the Bey and the pause', async ({ page
   await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getScreen()), { timeout: 15_000 }).toBe('match');
   expect(await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getBey('first').definition.id)).toBe('stamina-prototype');
 
-  // The stick drives the Bey (M11 directional default): full tilt up-right is a
-  // full-strength world direction, and no turn/throttle actions are held.
+  // The stick drives the Bey (M11 Classic default, Bey-relative — see
+  // PlayerSettings.ts's header): the raw steer/throttle actions are held
+  // directly, with no moveIntent conversion (that's Directional, now a
+  // selectable, non-default option).
   await page.evaluate(() => ((window as unknown as { __pad: { axes: number[] } }).__pad.axes = [1, -1, 0, 0]));
   await expect
     .poll(() =>
       page.evaluate(() => {
         const actions = window.__chaosBeyPlay!.getSession()!.getLastActions('first');
         const move = actions?.moveIntent;
-        return { held: [...(actions?.held ?? [])], strength: move ? Math.round(Math.hypot(move.x, move.z) * 100) / 100 : null };
+        return { held: [...(actions?.held ?? [])].sort(), strength: move ? Math.round(Math.hypot(move.x, move.z) * 100) / 100 : null };
       }),
     )
-    .toEqual({ held: [], strength: 1 });
+    .toEqual({ held: ['MoveForward', 'SteerRight'], strength: null });
   await page.evaluate(() => ((window as unknown as { __pad: { axes: number[] } }).__pad.axes = [0, 0, 0, 0]));
 
   // Start pauses; B (back) resumes.
