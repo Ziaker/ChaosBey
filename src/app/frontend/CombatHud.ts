@@ -52,6 +52,13 @@ export class CombatHud {
   private readonly cards: { readonly first: CardParts; readonly second: CardParts };
   private readonly banner = el('div', 'cb-hud__banner', 'hud-banner');
   private readonly hints = el('div', 'cb-hud__hints', 'hud-hints');
+  /**
+   * Temporary functional indicator (owner playtest, after M11): "DRIFT"
+   * while the player's Bey is Drifting, "GRIP" while grip comes back — so a
+   * playtest can tell "the drift never started" from "it started and I
+   * didn't feel it". Not the final HUD.
+   */
+  private readonly driftTag = el('div', 'cb-hud__drift', 'hud-drift');
   private readonly clashBar = el('div', 'cb-hud__clash', 'hud-clash-bar');
   private readonly clashFirst = el('div', 'cb-hud__clash-half cb-hud__clash-half--first');
   private readonly clashSecond = el('div', 'cb-hud__clash-half cb-hud__clash-half--second');
@@ -89,7 +96,7 @@ export class CombatHud {
 
     this.hintsOn = options.controlHints;
     this.hints.hidden = !options.controlHints;
-    this.root.append(this.cards.first.root, center, this.cards.second.root, this.clashBar, this.banner, this.hints);
+    this.root.append(this.cards.first.root, center, this.cards.second.root, this.clashBar, this.banner, this.hints, this.driftTag);
     mount.append(this.root);
     this.refreshHints();
     this.showBanner(`ROUND ${options.roundNumber}`, 'FIGHT!', START_BANNER_MS);
@@ -101,6 +108,11 @@ export class CombatHud {
     if (result) {
       this.fillCard(this.cards.first, hudSide(result.first));
       this.fillCard(this.cards.second, hudSide(result.second));
+      const drift = result.first.driftState;
+      this.driftTag.dataset['state'] = drift;
+      this.driftTag.textContent = drift === 'Drifting' ? 'DRIFT' : drift === 'Recovering' ? 'GRIP' : '';
+      this.driftTag.classList.toggle('is-drifting', drift === 'Drifting');
+      this.driftTag.classList.toggle('is-recovering', drift === 'Recovering');
     }
     this.updateClashBar(session, camera, frameDeltaSeconds);
     if (this.hintsOn) this.refreshHints();
@@ -296,6 +308,9 @@ function injectHudStyle(): void {
     .cb-hud__banner-sub { margin-top: 4px; font-size: clamp(16px, 3vw, 26px); font-weight: 800; letter-spacing: 0.4em; color: var(--cb-warn); }
     .cb-hud__hints { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--cb-text-dim); background: rgba(8, 10, 16, 0.5); padding: 6px 12px; border-radius: 5px; max-width: calc(100vw - 32px); box-sizing: border-box; }
     .cb-hud__hints[hidden] { display: none; }
+    .cb-hud__drift { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); font: 900 22px/1 var(--cb-font); letter-spacing: 0.3em; padding: 6px 14px; border-radius: 4px; opacity: 0; transition: opacity 90ms linear; }
+    .cb-hud__drift.is-drifting { opacity: 1; color: #1a1206; background: #ffcf4a; box-shadow: 0 0 18px rgba(255, 207, 74, 0.6); }
+    .cb-hud__drift.is-recovering { opacity: 0.8; color: #ffcf4a; background: rgba(8, 10, 16, 0.6); border: 1px solid #ffcf4a; }
     .cb-hud__clash { position: absolute; top: 0; left: 0; width: 320px; height: 22px; display: flex; border-radius: 3px; overflow: hidden; box-shadow: 0 0 16px rgba(255, 224, 102, 0.55), 0 0 0 2px rgba(0, 0, 0, 0.6); }
     .cb-hud__clash[hidden] { display: none; }
     .cb-hud__clash.is-swapped { flex-direction: row-reverse; }

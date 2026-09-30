@@ -35,6 +35,22 @@ export const DRIFT_LATERAL_GRIP_PER_S = 1.1;
 // to normal — an instant snap back would feel like the slide never
 // happened.
 export const DRIFT_GRIP_RECOVERY_DURATION_S = 0.5;
+// While drifting, time (s) the Bey may be off the ground — the landing
+// bounce right after the hop, a bump — before the drift ends. Longer than
+// the Motion Lab landing bounce (a hop landing at ~4 m/s leaves at
+// 4 × floorBounce 0.35 = 1.4 m/s: ~0.29 s in the air; 0.25 cut the drift
+// short in the browser), shorter than a real launch.
+export const DRIFT_AIRBORNE_GRACE_S = 0.45;
+// A turn also counts as drift intent when the heading is already this far
+// (rad) from the velocity's direction at this speed or above: the heading
+// turns in the air while the velocity does not, so a Bey that turned
+// during the hop lands already "sideways".
+export const DRIFT_ENTRY_SLIP_RAD = 0.25;
+export const DRIFT_ENTRY_MIN_SPEED_MPS = 2;
+// At this speed or above, with a direction held, holding X after the hop
+// is drift intent, not a higher jump: the hop gets no height assist
+// (owner playtest, after M11 — see DriftController's Hopping state).
+export const DRIFT_HOP_INTENT_MIN_SPEED_MPS = 4;
 
 // --- Variable jump height (Milestone 3) ---
 // Extra upward acceleration applied every tick JumpDrift is still held

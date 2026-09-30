@@ -12,6 +12,7 @@ import { AIController } from '../../ai/controllers/AIController';
 import type { MatchSession } from '../../app/session/MatchSession';
 import { computeClashPower, computeMashPerformance, computeStaminaFactor, computeVelocityFactor } from '../../combat/clash/ClashFormula';
 import type { DebugOverlayState } from './DebugOverlay';
+import { Action } from '../../input/actions/Action';
 
 export type CombatOverlayFields = Omit<DebugOverlayState, 'fps' | 'frameTimeMs' | 'physicsStepTimeMs' | 'tickIndex' | 'seedText' | 'gameState'>;
 
@@ -37,6 +38,7 @@ export function buildCombatOverlayFields(session: MatchSession): CombatOverlayFi
     longitudinalDragPerS: result.first.movement.longitudinalDragPerS,
     grounded: result.first.grounded,
     driftState: result.first.driftState,
+    jumpDriftHeld: session.getLastActions('first')?.held.has(Action.JumpDrift) ?? false,
     dodgeState: result.first.dodgeState,
     angularVelocity: result.first.spin.angularVelocity,
     spinRateRadPerSec: result.first.spin.spinRateRadPerSec,

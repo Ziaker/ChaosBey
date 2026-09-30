@@ -8,11 +8,13 @@
 // Pure data: the panel renders it, tests assert on it.
 // ============================================================
 
+import { Action } from '../../input/actions/Action';
 import { AIController } from '../../ai/controllers/AIController';
 import type { MatchSession, Side } from '../../app/session/MatchSession';
 import { ARENA_FLOORS, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { floorReadout } from '../../arena/floor/floorReadout';
-import { CAMERA_PRESET_NAMES } from '../../camera/director/CameraRig';
+import { CAMERA_PRESET_NAMES, SHOULDER_RIGS } from '../../camera/director/CameraRig';
+import { PRESETS, PRESET_IDS } from '../../camera/director/CameraParams';
 import { AIRBORNE_ACCELERATION_FACTOR } from '../../bey/movement/MovementTuning';
 import { MOTION_DIRECTIONS, MOTION_DIRECTION_IDS } from '../../bey/motion/MotionPresets';
 
@@ -248,6 +250,13 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
       rows: [
         row('Hold time (JumpDrift)', actions ? `${f(actions.jumpDriftHoldDurationSeconds)} s` : '—'),
         row('Jump/drift state', bey.drift.getState()),
+        row('X (JumpDrift) held', actions ? String(actions.held.has(Action.JumpDrift)) : '—'),
+        row('Drift armed (landed holding X, waiting for a turn)', String(drift.driftArmed)),
+        row('Slip angle', snapshot ? `${f((snapshot.movement.slipAngleRad * 180) / Math.PI)}°` : '—'),
+        row('Lateral grip now', snapshot ? `${f(snapshot.movement.lateralGripPerS)} /s` : '—'),
+        row('Heading', `${f((bey.movement.getHeadingRad() * 180) / Math.PI)}°`),
+        row('Velocity direction', velocityDirectionText(bey.body.linvel())),
+        row('Heading − velocity', headingMinusVelocityText(bey.movement.getHeadingRad(), bey.body.linvel())),
         row('Jump force (vertical speed added)', drift.jumpVerticalSpeedAddedMps > 0 ? `${f(drift.jumpVerticalSpeedAddedMps)} m/s` : '— (not in a hop)'),
         row('Airborne', String(!ground.grounded)),
         row('Air control', `accel ×${f(AIRBORNE_ACCELERATION_FACTOR)}, lateral grip ${f(bey.motion.airGrip)} /s`),
@@ -348,6 +357,16 @@ function buildCameraSection(session: MatchSession): InspectorSection {
       row('Target (focus)', vec3(camera.focusPositionM)),
       row('Distance (eye → focus)', `${f(distance)} m (director ${f(camera.distanceM)} m)`),
       row('Yaw / shoulder', `${f(camera.yawDeg)}° / ${camera.side > 0 ? 'right' : 'left'}`),
+      row('Eye above player / behind player', eyeVsPlayerText(camera.cameraPositionM, session.getBey('first').body.translation())),
+      row('Pitch (looking down)', `${f((Math.atan2(camera.cameraPositionM.y - camera.focusPositionM.y, Math.hypot(camera.cameraPositionM.x - camera.focusPositionM.x, camera.cameraPositionM.z - camera.focusPositionM.z)) * 180) / Math.PI)}°`),
+      ...PRESET_IDS.map((id) => {
+        const r = SHOULDER_RIGS[id];
+        const p = PRESETS[id];
+        return row(
+          `Rig ${id}${id === camera.preset ? ' (active)' : ''}`,
+          `behind ${f(r.distanceM)} m (+${f(r.separationPull)}/m past 4 m, max +${f(r.maxExtraDistanceM)}), up ${f(r.heightM)} m, shoulder ${f(r.shoulderM)} m, look ${f(r.framing * 100)}% to opponent, FOV ${p.baseFov}–${p.maxFov}°, orbit ≤ ${p.orbitSpeed}°/s`,
+        );
+      }),
       row('Shake offset', vec3(camera.shakeOffsetM)),
       row('High-speed context', f(camera.highSpeedBlend)),
       row('Modifiers', camera.modifiers.length > 0 ? camera.modifiers.join(', ') : '—'),
@@ -454,4 +473,18 @@ function floorRows(floor: ArenaFloorId, position: { x: number; y: number; z: num
     row('Floor slope / normal', `${f(r.slopeDeg)}° / (${f(r.normal.x)}, ${f(r.normal.y)}, ${f(r.normal.z)})`),
     row('Downhill pull (g·sin slope)', `${f(r.downhillPullMps2)} m/s² toward the centre`),
   ];
+}
+
+function velocityDirectionText(v: { x: number; z: number }): string {
+  return Math.hypot(v.x, v.z) < 0.05 ? '— (at rest)' : `${((Math.atan2(v.x, v.z) * 180) / Math.PI).toFixed(1)}°`;
+}
+
+function headingMinusVelocityText(headingRad: number, v: { x: number; z: number }): string {
+  if (Math.hypot(v.x, v.z) < 0.05) return '— (at rest)';
+  const d = headingRad - Math.atan2(v.x, v.z);
+  return `${((Math.atan2(Math.sin(d), Math.cos(d)) * 180) / Math.PI).toFixed(1)}°`;
+}
+
+function eyeVsPlayerText(eye: { x: number; y: number; z: number }, player: { x: number; y: number; z: number }): string {
+  return `${(eye.y - player.y).toFixed(2)} m / ${Math.hypot(eye.x - player.x, eye.z - player.z).toFixed(2)} m`;
 }

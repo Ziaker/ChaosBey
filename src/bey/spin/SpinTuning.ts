@@ -56,3 +56,10 @@ export const LEAN_ACCEL_SMOOTHING_PER_S = 12;
 // correction alone before landing.
 export const AIR_RECOVERY_WOBBLE_REDUCTION = 0.6;
 export const AIR_RECOVERY_ATTITUDE_RETURN_PER_S = 8;
+
+// Drift body language (owner playtest, after M11): while Drifting, the
+// attitude leans this far (deg) into the turn, against the sideways slide,
+// reached once the tip slides sideways at DRIFT_LEAN_FULL_SLIDE_MPS.
+// Render only (the attitude never reaches gameplay or the state hash).
+export const DRIFT_LEAN_DEG = 16;
+export const DRIFT_LEAN_FULL_SLIDE_MPS = 4;

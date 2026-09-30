@@ -52,7 +52,7 @@ export class TestBeyHarness {
   tick(actions: ControllerActions): TickResult {
     const grounded = isGrounded(this.physics, this.beyCollider);
 
-    const driftResult = this.drift.tick(this.beyBody, actions, grounded, FIXED_DELTA_SECONDS);
+    const driftResult = this.drift.tick(this.beyBody, actions, grounded, FIXED_DELTA_SECONDS, this.movement.getHeadingRad());
     this.movement.applyPreStep(this.beyBody, {
       actions,
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,

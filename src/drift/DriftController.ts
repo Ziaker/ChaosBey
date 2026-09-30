@@ -26,6 +26,10 @@ import { Action, type ControllerActions } from '../input/actions/Action';
 import { LATERAL_GRIP_PER_S } from '../bey/movement/MovementTuning';
 import { isSteering } from '../bey/movement/directionalIntent';
 import {
+  DRIFT_AIRBORNE_GRACE_S,
+  DRIFT_ENTRY_MIN_SPEED_MPS,
+  DRIFT_ENTRY_SLIP_RAD,
+  DRIFT_HOP_INTENT_MIN_SPEED_MPS,
   DRIFT_GRIP_RECOVERY_DURATION_S,
   DRIFT_LATERAL_GRIP_PER_S,
   HOP_IMPULSE_MPS,
@@ -64,6 +68,12 @@ export class DriftController {
   private jumpAssistElapsedS = 0;
   private wasGrounded = true;
   private lastAirborneVerticalVelocityMps = 0;
+  /** The hop landed with JumpDrift still held and no turn yet: the first turn while it stays held starts the drift. */
+  private driftArmed = false;
+  /** Seconds airborne in the current drift (a landing bounce or a bump must not end it). */
+  private driftAirborneS = 0;
+  /** Horizontal velocity on the last airborne tick (the hop's landing keeps it — see below). */
+  private lastAirborneHorizontal = { x: 0, z: 0 };
 
   /**
    * normalLateralGripPerS: the grip Recovering eases back toward — must be
@@ -80,8 +90,9 @@ export class DriftController {
   }
 
   /** Read-only jump/drift timers for Debug Lab inspection (GDD section 69). No gameplay code may branch on this. */
-  getDebugTimers(): { hopTimerS: number; recoveryTimerS: number; jumpAssistElapsedS: number; jumpVerticalSpeedAddedMps: number } {
+  getDebugTimers(): { hopTimerS: number; recoveryTimerS: number; jumpAssistElapsedS: number; jumpVerticalSpeedAddedMps: number; driftArmed: boolean } {
     return {
+      driftArmed: this.driftArmed,
       hopTimerS: this.hopTimerS,
       recoveryTimerS: this.recoveryTimerS,
       jumpAssistElapsedS: this.jumpAssistElapsedS,
@@ -95,9 +106,14 @@ export class DriftController {
     const jumpDriftPressed = actions.pressedThisFrame.has(Action.JumpDrift);
     // The approved control is hop, then hold JumpDrift *while steering* to
     // slide (GDD section 19) — holding JumpDrift straight must not drift.
-    const steering = isSteering(actions, headingRad);
+    // Drift intent is a turn: the stick/keys asking for a new direction, or
+    // — since the heading turns in the air while the velocity does not —
+    // a heading already away from where the Bey is actually going.
+    const steering = isSteering(actions, headingRad) || this.headingOffVelocity(body, headingRad);
 
     if (!grounded) {
+      const v = body.linvel();
+      this.lastAirborneHorizontal = { x: v.x, z: v.z };
       // Keep sampling this every tick while airborne so the last value
       // recorded (read the tick before landing is detected) is the closest
       // available proxy for actual pre-impact descent speed.
@@ -124,8 +140,13 @@ export class DriftController {
 
     switch (this.state) {
       case DriftState.Idle:
+        if (!jumpDriftHeld) this.driftArmed = false;
         if (jumpDriftPressed && grounded) {
           this.beginHop(body);
+        } else if (this.driftArmed && grounded && steering) {
+          this.driftArmed = false;
+          this.state = DriftState.Drifting;
+          this.driftAirborneS = 0;
         }
         break;
 
@@ -137,7 +158,16 @@ export class DriftController {
         // stop adding height so the drift hop stays small and consistent.
         // Never applies once falling (vel.y <= 0) — this is height assist,
         // not a hover.
-        if (jumpDriftHeld && !steering && this.jumpAssistElapsedS < JUMP_ASSIST_MAX_DURATION_S) {
+        // Owner playtest (after M11): GDD 19's drift is "tap X, keep
+        // holding X, turn" — but holding also meant the variable jump
+        // (GDD 20) unless the Bey was already turning, and in directional
+        // control the heading lines up with the held direction within a
+        // few ticks, so almost every drift attempt became a 1.3 s, 1.7 m
+        // jump. Moving at speed with a direction held, the hold is drift
+        // intent: the hop stays small. From rest, or with no direction
+        // held, holding X still jumps higher.
+        const driftIntentByMotion = this.hasMoveInput(actions) && Math.hypot(body.linvel().x, body.linvel().z) >= DRIFT_HOP_INTENT_MIN_SPEED_MPS;
+        if (jumpDriftHeld && !steering && !driftIntentByMotion && this.jumpAssistElapsedS < JUMP_ASSIST_MAX_DURATION_S) {
           const vel = body.linvel();
           if (vel.y > 0) {
             body.setLinvel({ x: vel.x, y: vel.y + JUMP_ASSIST_ACCEL_MPS2 * fixedDeltaSeconds, z: vel.z }, true);
@@ -146,13 +176,32 @@ export class DriftController {
         }
 
         if (this.hopTimerS >= HOP_MIN_AIRBORNE_DURATION_S && grounded) {
+          // Landed with JumpDrift still held: drift at once if turning,
+          // otherwise armed — the first turn while it stays held starts it.
+          // The drift keeps the hop's momentum: the landing contact's
+          // friction took ~35% of the horizontal speed in one step (6.4 →
+          // 4.1 m/s measured), which read as the Bey stopping, not sliding.
+          if (jumpDriftHeld) {
+            const v = body.linvel();
+            body.setLinvel({ x: this.lastAirborneHorizontal.x, y: v.y, z: this.lastAirborneHorizontal.z }, true);
+          }
+          this.driftArmed = jumpDriftHeld && !steering;
           this.state = jumpDriftHeld && steering ? DriftState.Drifting : DriftState.Idle;
+          this.driftAirborneS = 0;
         }
         break;
       }
 
       case DriftState.Drifting:
-        if (!jumpDriftHeld || !grounded || !steering) {
+        // The drift lasts as long as JumpDrift is held (owner playtest,
+        // after M11). It used to end the moment the Bey stopped "steering"
+        // (in directional control, once the heading reached the wanted
+        // direction — a few ticks) or left the ground at all (the Motion
+        // Lab landing bounce lifts it right after touchdown), so a drift
+        // measured 4 ticks. A real launch (airborne past the grace) still
+        // ends it.
+        this.driftAirborneS = grounded ? 0 : this.driftAirborneS + fixedDeltaSeconds;
+        if (!jumpDriftHeld || this.driftAirborneS > DRIFT_AIRBORNE_GRACE_S) {
           this.state = DriftState.Recovering;
           this.recoveryTimerS = 0;
         }
@@ -179,8 +228,22 @@ export class DriftController {
     };
   }
 
+  private hasMoveInput(actions: ControllerActions): boolean {
+    const intent = actions.moveIntent;
+    if (intent) return Math.hypot(intent.x, intent.z) > 0;
+    return actions.held.has(Action.MoveForward) || actions.held.has(Action.MoveBackward) || actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight);
+  }
+
+  private headingOffVelocity(body: RAPIER.RigidBody, headingRad: number): boolean {
+    const v = body.linvel();
+    if (Math.hypot(v.x, v.z) < DRIFT_ENTRY_MIN_SPEED_MPS) return false;
+    const off = Math.atan2(Math.sin(Math.atan2(v.x, v.z) - headingRad), Math.cos(Math.atan2(v.x, v.z) - headingRad));
+    return Math.abs(off) > DRIFT_ENTRY_SLIP_RAD;
+  }
+
   private beginHop(body: RAPIER.RigidBody): void {
     this.state = DriftState.Hopping;
+    this.driftArmed = false;
     this.hopTimerS = 0;
     this.jumpAssistElapsedS = 0;
     const vel = body.linvel();
@@ -207,6 +270,9 @@ export class DriftController {
       jumpAssistElapsedS: this.jumpAssistElapsedS,
       wasGrounded: this.wasGrounded,
       lastAirborneVerticalVelocityMps: this.lastAirborneVerticalVelocityMps,
+      driftArmed: this.driftArmed,
+      driftAirborneS: this.driftAirborneS,
+      lastAirborneHorizontal: { x: this.lastAirborneHorizontal.x, z: this.lastAirborneHorizontal.z },
     };
   }
 }

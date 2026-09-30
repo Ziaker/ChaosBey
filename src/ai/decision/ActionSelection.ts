@@ -283,12 +283,17 @@ function isCounterTapMoment(world: WorldState): boolean {
   return secondsUntilInReach <= AI_COUNTER_MAX_LEAD_S;
 }
 
+/** How long (ticks) the AI keeps a drift going before letting go of X: half a second, a readable slide off the attack line. */
+const AI_DRIFT_MAX_TICKS = 30;
+
 export class ActionSelector {
   private circleSign: 1 | -1 = 1;
   private currentTick = 0;
   private previousHeld = new Set<Action>();
   /** A Dash charge that was being held when this Bey was launched: held until it is back on the ground (see selectActions). */
   private holdingChargeThroughLaunch = false;
+  /** Ticks this Bey has been Drifting in a row (the AI lets go of X after AI_DRIFT_MAX_TICKS). */
+  private driftingTicks = 0;
   private readonly holdStartedAtTick = new Map<Action, number>();
 
   /**
@@ -414,11 +419,17 @@ export class ActionSelector {
     // Hopping->Drifting if JumpDrift (and steering) are STILL held the
     // moment it re-lands (see DriftController.tick), so releasing after one
     // tick can only ever produce a bare hop, never a real drift.
+    // Since the owner-playtest drift fix a drift lasts as long as X is held
+    // (it used to end as soon as the turn did), so the AI lets go after
+    // AI_DRIFT_MAX_TICKS: holding it for the whole decision left both AIs
+    // drifting round the rim for a full round (matrix-11: 100 s, no
+    // contact).
+    this.driftingTicks = world.own.driftState === DriftState.Drifting ? this.driftingTicks + 1 : 0;
     if (
       intent === AiIntent.UseJumpDrift &&
       ((world.own.driftState === DriftState.Idle && world.own.grounded) ||
         world.own.driftState === DriftState.Hopping ||
-        world.own.driftState === DriftState.Drifting)
+        (world.own.driftState === DriftState.Drifting && this.driftingTicks <= AI_DRIFT_MAX_TICKS))
     ) {
       desiredHeld.add(Action.JumpDrift);
     }
@@ -450,6 +461,7 @@ export class ActionSelector {
    * event (M7 audit follow-up).
    */
   reset(): void {
+    this.driftingTicks = 0;
     this.previousHeld = new Set();
     this.holdStartedAtTick.clear();
     this.currentTick = 0;

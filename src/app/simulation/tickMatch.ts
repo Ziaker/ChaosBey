@@ -31,7 +31,7 @@ import type { ControllerActions } from '../../input/actions/Action';
 import { WALL_IMPACT_STABILITY_DAMAGE_PER_MPS } from '../../bey/stability/StabilityTuning';
 import type { MovementSnapshot } from '../../bey/movement/MovementController';
 import type { SpinSnapshot } from '../../bey/spin/SpinController';
-import type { DriftState } from '../../drift/DriftController';
+import { DriftState } from '../../drift/DriftController';
 import type { DodgeState } from '../../dodge/DodgeController';
 import { isGrounded } from '../../physics/collision/GroundCheck';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
@@ -261,8 +261,8 @@ export function tickMatch(
     floorNormal: floorNormalUnder(second, secondGrounded),
   });
 
-  first.spin.tick(first.body, fixedDeltaSeconds, firstCondition, firstGrounded);
-  second.spin.tick(second.body, fixedDeltaSeconds, secondCondition, secondGrounded);
+  first.spin.tick(first.body, fixedDeltaSeconds, firstCondition, firstGrounded, firstDrift.driftState === DriftState.Drifting ? first.movement.getHeadingRad() : null);
+  second.spin.tick(second.body, fixedDeltaSeconds, secondCondition, secondGrounded, secondDrift.driftState === DriftState.Drifting ? second.movement.getHeadingRad() : null);
 
   first.attackEnergy.tick(firstAttack.isConsumingAttackEnergy, fixedDeltaSeconds);
   second.attackEnergy.tick(secondAttack.isConsumingAttackEnergy, fixedDeltaSeconds);

@@ -27,6 +27,7 @@ import {
   IMPACT_VELOCITY_DELTA_THRESHOLD_MPS,
   LANDING_BOUNCE_MIN_AIRBORNE_TICKS,
   LANDING_BOUNCE_MIN_MPS,
+  LANDING_SAME_LINE_COS,
   OVERSPEED_RETURN_PER_S,
   POST_IMPACT_GRIP_SUPPRESSION_S,
   SLIP_GRIP_LOSS_PER_S,
@@ -106,6 +107,8 @@ export class MovementController {
   private whirlRadPerS = 0;
   /** Vertical velocity the body carried into physics.step() (for the Motion Lab landing bounce in postStep). */
   private preStepVerticalMps = 0;
+  /** Horizontal velocity the body carried into physics.step() (a landing keeps it — see applyLandingBounce). */
+  private preStepHorizontal: Vec2 = { x: 0, z: 0 };
   /** Consecutive ticks that started airborne (a landing bounces only after a real fall). */
   private airborneTicks = 0;
   /** This Bey's handling with the motion direction applied (turn rate and lateral grip scale by the preset's ratio to B). */
@@ -316,6 +319,8 @@ export class MovementController {
       this.preStepVerticalMps = vertical;
       this.intendedVelocityThisTick = newVelHoriz;
     }
+    const carried = body.linvel();
+    this.preStepHorizontal = { x: carried.x, z: carried.z };
   }
 
   /**
@@ -381,9 +386,21 @@ export class MovementController {
     if (descent <= 0 || this.airborneTicks < LANDING_BOUNCE_MIN_AIRBORNE_TICKS) return;
     const v = body.linvel();
     if (v.y < -descent * 0.5) return; // still falling: nothing stopped it
+    // The Lab's landing keeps the horizontal speed; the floor collider's
+    // friction took it with the impact (a hop landing at 6.4 m/s came out
+    // at 4.2 — ~35% gone in one step, so a drift landing read as the Bey
+    // stopping). Only when the step just slowed it along the same line: a
+    // landing that also met a wall or a Bey keeps what physics decided.
+    let x = v.x;
+    let z = v.z;
+    const before = Math.hypot(this.preStepHorizontal.x, this.preStepHorizontal.z);
+    const after = Math.hypot(v.x, v.z);
+    if (after > 0.1 && after < before && (v.x * this.preStepHorizontal.x + v.z * this.preStepHorizontal.z) > LANDING_SAME_LINE_COS * after * before) {
+      x = (v.x / after) * before;
+      z = (v.z / after) * before;
+    }
     const bounce = descent * this.motion.floorBounce;
-    if (bounce < LANDING_BOUNCE_MIN_MPS) return;
-    body.setLinvel({ x: v.x, y: Math.max(v.y, bounce), z: v.z }, true);
+    body.setLinvel({ x, y: bounce < LANDING_BOUNCE_MIN_MPS ? v.y : Math.max(v.y, bounce), z }, true);
   }
 
   /**
@@ -457,6 +474,7 @@ export class MovementController {
       lastLateralGripPerS: this.lastLateralGripPerS,
       intendedVelocityThisTick: vec2(this.intendedVelocityThisTick),
       preStepVerticalMps: this.preStepVerticalMps,
+      preStepHorizontal: vec2(this.preStepHorizontal),
       airborneTicks: this.airborneTicks,
       grip: this.grip,
       slipping: this.slipping,

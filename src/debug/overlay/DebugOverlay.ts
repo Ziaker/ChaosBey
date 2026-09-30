@@ -32,6 +32,8 @@ export interface DebugOverlayState {
   longitudinalDragPerS: number;
   grounded: boolean;
   driftState: string;
+  /** JumpDrift (X) held this tick. */
+  jumpDriftHeld: boolean;
   dodgeState: string;
 
   // Rotational (GDD section 17/122).
@@ -126,6 +128,12 @@ function fmtVec3(v: { x: number; y: number; z: number }): string {
   return `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`;
 }
 
+/** Signed angle (rad) from the velocity's direction to the heading, −π..π (fromYaw convention: forward = (sin, cos)). */
+function headingVsVelocityRad(headingRad: number, velocity: Vec2): number {
+  const d = headingRad - Math.atan2(velocity.x, velocity.z);
+  return Math.atan2(Math.sin(d), Math.cos(d));
+}
+
 export class DebugOverlay {
   private readonly root: HTMLElement;
   private visible: boolean;
@@ -171,7 +179,11 @@ export class DebugOverlay {
       `lateral grip     ${state.lateralGripPerS.toFixed(2)} /s\n` +
       `longitudinal drag ${state.longitudinalDragPerS.toFixed(2)} /s\n` +
       `grounded         ${state.grounded}\n` +
-      `drift state      ${state.driftState}\n` +
+      `-- drift --\n` +
+      `drift state      ${state.driftState}${state.driftState === 'Drifting' ? '  <<< DRIFT' : ''}\n` +
+      `X held           ${state.jumpDriftHeld}\n` +
+      `velocity dir     ${state.speedMps > 0.05 ? `${(Math.atan2(state.actualVelocityVector.x, state.actualVelocityVector.z) * RAD_TO_DEG).toFixed(1)} deg` : '—'}\n` +
+      `heading - vel    ${state.speedMps > 0.05 ? `${(headingVsVelocityRad(state.headingRad, state.actualVelocityVector) * RAD_TO_DEG).toFixed(1)} deg` : '—'}\n` +
       `dodge state      ${state.dodgeState}\n` +
       `-- rotational --\n` +
       `angular velocity ${fmtVec3(state.angularVelocity)}\n` +

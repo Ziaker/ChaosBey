@@ -5,6 +5,13 @@ import { ScriptedController } from '../../src/automation/scripted-scenarios/Scri
 import { DriftController, DriftState } from '../../src/drift/DriftController';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { TestBeyHarness } from './physicsHarness';
+import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
+import type { ControllerActions } from '../../src/input/actions/Action';
+
+const intentArgs = (x: number, z: number) => ({ x, z });
+function intent(x: number, z: number, held: Action[] = [], pressed: Action[] = []): ControllerActions {
+  return { held: new Set(held), pressedThisFrame: new Set(pressed), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0, moveIntent: { x, z } };
+}
 
 describe('hop -> hold -> drift -> recover', () => {
   it('transitions Idle -> Hopping -> Drifting on tap+hold, reducing lateral grip, then Recovering -> Idle on release', async () => {
@@ -66,35 +73,70 @@ describe('hop -> hold -> drift -> recover', () => {
     expect(statesSeen.has(DriftState.Drifting)).toBe(false);
   });
 
-  it('starts recovering as soon as steering is released, even while still holding JumpDrift', async () => {
+  it('lasts while JumpDrift is held: stopping the turn or the landing bounce does not end it; releasing X does', async () => {
+    // Owner playtest (after M11): the drift used to end the moment the Bey
+    // stopped "steering" or left the ground at all — the Motion Lab landing
+    // bounce lifts it right after touchdown — so it measured 4 ticks.
     const harness = await TestBeyHarness.create();
     const enterDrift = new ScriptedController([
       { fromTick: 0, held: [Action.MoveForward] },
       { fromTick: 45, held: [Action.MoveForward, Action.JumpDrift, Action.SteerRight] },
     ]);
-
-    // Run until Drifting is actually reached, whenever that naturally
-    // happens (landing timing isn't perfectly fixed-tick), rather than
-    // assuming it's still active at some hardcoded later tick.
     let reachedDrifting = false;
     for (let i = 0; i < 300 && !reachedDrifting; i++) {
-      const result = harness.tick(enterDrift.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }));
-      if (result.driftState === DriftState.Drifting) reachedDrifting = true;
+      if (harness.tick(enterDrift.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS })).driftState === DriftState.Drifting) reachedDrifting = true;
     }
     expect(reachedDrifting).toBe(true);
 
-    // Now release steering (still holding JumpDrift) and confirm it
-    // promptly leaves Drifting.
-    const releaseSteering = new ScriptedController([{ fromTick: 0, held: [Action.MoveForward, Action.JumpDrift] }]);
-    let leftDrifting = false;
-    for (let i = 0; i < 10; i++) {
-      const result = harness.tick(releaseSteering.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }));
-      if (result.driftState !== DriftState.Drifting) {
-        leftDrifting = true;
-        break;
-      }
+    // Stop turning, keep holding X: still drifting a second later.
+    const holdStraight = new ScriptedController([{ fromTick: 0, held: [Action.MoveForward, Action.JumpDrift] }]);
+    for (let i = 0; i < 60; i++) {
+      expect(harness.tick(holdStraight.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS })).driftState).toBe(DriftState.Drifting);
     }
-    expect(leftDrifting).toBe(true);
+    // Release X: recovering at once, then back to Idle with normal grip.
+    const release = new ScriptedController([{ fromTick: 0, held: [Action.MoveForward] }]);
+    expect(harness.tick(release.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS })).driftState).toBe(DriftState.Recovering);
+    let last = harness.tick(release.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }));
+    for (let i = 0; i < 40; i++) last = harness.tick(release.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }));
+    expect(last.driftState).toBe(DriftState.Idle);
+  });
+
+  it('directional control: tap X, hold it, turn — the full cycle, with the slide measured', async () => {
+    // tap X → hop → X held → landing → Drifting → (X released) → Recovering → Idle.
+    const harness = await TestBeyHarness.create({ x: -8, y: BEY_SPAWN_HEIGHT_M, z: -8 });
+    harness.tickMany(intent(0, 0), 30);
+    harness.tickMany(intent(0, 1), 50); // ~7.8 m/s along +Z
+    const transitions: string[] = [];
+    let previous: DriftState = DriftState.Idle;
+    let speedBeforeLanding = 0;
+    let speedAfterLanding = 0;
+    let maxHeadingVsVelocityDeg = 0;
+    let driftTicks = 0;
+    let minGripWhileDrifting = Infinity;
+    for (let t = 0; t < 150; t++) {
+      const held = t < 110 ? [Action.JumpDrift] : [];
+      const dir = t < 5 ? intentArgs(0, 1) : intentArgs(1, 0); // hop straight, then ask for +X
+      const r = harness.tick(intent(dir.x, dir.z, held, t === 0 ? [Action.JumpDrift] : []));
+      if (r.driftState !== previous) transitions.push(r.driftState);
+      const v = harness.beyBody.linvel();
+      if (previous === DriftState.Hopping && r.driftState !== DriftState.Hopping) speedAfterLanding = Math.hypot(v.x, v.z);
+      if (r.driftState === DriftState.Hopping) speedBeforeLanding = Math.hypot(v.x, v.z);
+      if (r.driftState === DriftState.Drifting) {
+        driftTicks++;
+        minGripWhileDrifting = Math.min(minGripWhileDrifting, r.movement.lateralGripPerS);
+        const off = Math.atan2(v.x, v.z) - harness.movement.getHeadingRad();
+        maxHeadingVsVelocityDeg = Math.max(maxHeadingVsVelocityDeg, Math.abs((Math.atan2(Math.sin(off), Math.cos(off)) * 180) / Math.PI));
+      }
+      previous = r.driftState;
+    }
+    expect(transitions).toEqual([DriftState.Hopping, DriftState.Drifting, DriftState.Recovering, DriftState.Idle]);
+    // Drifting until X was released (tick 110), about a second after landing.
+    expect(driftTicks).toBeGreaterThan(45);
+    // It kept the hop's momentum through the landing (it used to lose ~35% in one step)…
+    expect(speedAfterLanding).toBeGreaterThan(speedBeforeLanding * 0.95);
+    // …with lowered lateral grip, and heading and velocity clearly apart: a slide, not a carve.
+    expect(minGripWhileDrifting).toBeLessThan(LATERAL_GRIP_PER_S * 0.3);
+    expect(maxHeadingVsVelocityDeg).toBeGreaterThan(45);
   });
 });
 
