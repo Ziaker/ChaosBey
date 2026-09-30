@@ -1,22 +1,37 @@
 // ============================================================
-// SCREEN DIRECTION (M11 directional control, arena/world-relative)
+// SCREEN DIRECTION (M11 directional control — now an experimental/debug
+// option, not the player default; see fix 9/"Fix 6" below)
 // Pure helpers: arrows/D-pad/stick → a screen vector (x right, y up,
 // length 0..1, diagonals normalized), and a screen vector → the world X/Z
 // direction that goes into ControllerActions.moveIntent — a FIXED mapping
 // (Up = world +Z, Right = world +X, etc.), never the camera's.
 //
-// This is a closed decision (playtest, 2026-09): the camera must never
-// participate in the movement calculation, in any way, at any time — not
-// latched, not per-gesture, not re-read on release. A camera-relative
-// scheme (even one that re-reads the camera only between gestures, as an
-// earlier version of this file did via CameraYawLatch) means the same key
-// can produce a different world direction depending on where the camera
-// happens to be pointed, which reads to a player as "the Bey goes the
-// wrong way" or "I lost control" — exactly the failure mode this fixes.
-// cameraYawFromRight/cameraYawOf below still exist, but ONLY for a
-// diagnostic readout (F3/Debug Lab) that shows the camera's yaw next to
-// the desired world vector, to prove the two are independent — nothing
-// here feeds it into screenToWorld.
+// This module has no camera dependency at all — not even for diagnostics.
+// The debug overlay/inspector reads the camera's own yaw directly from
+// MatchSession.getLastCameraOutput().yawDeg, never through src/input/. An
+// architectural regression-guard test asserts src/input/ never imports
+// from src/camera/.
+//
+// History: a camera-relative scheme (even one that re-reads the camera
+// only between gestures, as an earlier version of this file did via
+// CameraYawLatch) meant the same key could produce a different world
+// direction depending on where the camera happened to be pointed, which
+// read to a player as "the Bey goes the wrong way" or "I lost control".
+// Fixing that by making the world mapping fixed and camera-free removed
+// that failure mode. But with the camera itself now free to orbit widely
+// (the fix 8 two-fighter director), a FIXED arena mapping has its own
+// failure mode: when the camera turns 90/180/270°, "up" on screen no
+// longer lines up with world +Z, so a constant, unchanging key can *look*
+// wrong on screen even though the Bey's world trajectory never changed —
+// this is a screen-reading problem, not a control coupling. The owner's
+// decision (2026-09-30, "Fix 6" of this playtest round): the player
+// DEFAULT is no longer this arena/world-relative scheme. It is now
+// Bey-relative/kart-like (Classic, see PlayerSettings.ts and
+// MovementController's no-moveIntent path) — a scheme with no absolute
+// axis to fall out of alignment with the screen in the first place. This
+// module and its arena-relative mapping are kept as a selectable,
+// non-default option (still fully camera-independent, just not what a
+// player gets without changing Settings).
 // ============================================================
 
 import type { MoveIntent } from '../actions/Action';
@@ -58,18 +73,6 @@ export function screenVectorFromStick(axisX: number, axisY: number, deadzone = D
 
 export function screenLength(v: ScreenVector): number {
   return Math.sqrt(v.x * v.x + v.y * v.y);
-}
-
-/**
- * Camera yaw (fromYaw convention: forward = (sin, cos)) from the camera's
- * world-space right vector. The right vector of a camera without roll is
- * horizontal whether it looks straight down or at the horizon, so this
- * never degenerates. DIAGNOSTIC ONLY (F3/Debug Lab) — see this file's
- * header. Never pass this into screenToWorld.
- */
-export function cameraYawFromRight(rightX: number, rightZ: number): number {
-  // right = (-forward.z, forward.x)  ⇒  forward = (right.z, -right.x)
-  return Math.atan2(rightZ, -rightX);
 }
 
 /**

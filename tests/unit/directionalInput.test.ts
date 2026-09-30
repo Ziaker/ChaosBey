@@ -1,15 +1,18 @@
 // M11 directional control, input layer: screen directions (arrows, stick)
 // → a FIXED world direction (arena-relative, never the camera's) that goes
 // into ControllerActions.moveIntent. Closed decision (playtest, 2026-09):
-// the camera must never participate in this calculation — see
-// screenDirection.ts's header.
+// the camera must never participate in this calculation, and as of
+// 2026-09-30 ("Fix 6" of this playtest round) src/input/ has no camera
+// dependency at all — not even for diagnostics — see
+// DirectionalController.ts's and screenDirection.ts's headers. Directional
+// is also no longer the player default (Classic/Bey-relative is); see
+// PlayerSettings.ts.
 
 import { describe, expect, it } from 'vitest';
 import { Action, type CombatController, type ControllerActions } from '../../src/input/actions/Action';
-import { DirectionalController, cameraYawOf } from '../../src/input/directional/DirectionalController';
-import { cameraYawFromRight, screenToWorld, screenVectorFromDigital, screenVectorFromStick, screenLength } from '../../src/input/directional/screenDirection';
+import { DirectionalController } from '../../src/input/directional/DirectionalController';
+import { screenToWorld, screenVectorFromDigital, screenVectorFromStick, screenLength } from '../../src/input/directional/screenDirection';
 import { sanitizePlayerSettings, DEFAULT_PLAYER_SETTINGS } from '../../src/config/settings/PlayerSettings';
-import * as THREE from 'three';
 
 const CONTEXT = { fixedDeltaSeconds: 1 / 60 };
 
@@ -72,43 +75,23 @@ describe('screen → world (arena/world-relative, no camera)', () => {
     const stick = screenToWorld(screenVectorFromStick(0.7071, -0.7071));
     expect(Math.hypot(stick.x, stick.z)).toBeLessThanOrEqual(1);
   });
-
-  it('cameraYawFromRight/cameraYawOf still exist for the diagnostic readout, but are never passed into screenToWorld', () => {
-    for (const [position, target] of [
-      [new THREE.Vector3(0, 10, -8), new THREE.Vector3(0, 0, 0)],
-      [new THREE.Vector3(-9, 6, 0), new THREE.Vector3(0, 0, 0)],
-    ] as const) {
-      const camera = new THREE.PerspectiveCamera();
-      camera.position.copy(position);
-      camera.lookAt(target);
-      camera.updateMatrixWorld();
-      // Just confirms the helper still computes a sane yaw for display — it
-      // has no bearing on screenToWorld, which takes no such argument.
-      expect(Number.isFinite(cameraYawOf(camera))).toBe(true);
-    }
-    expect(cameraYawFromRight(1, 0)).toBeCloseTo(Math.PI, 12);
-  });
 });
 
-describe('DirectionalController: the camera cannot change what a held key means', () => {
-  it('Test A/B/C: the resolved world direction is identical while the camera yaw sweeps 3 rad mid-hold, for several starting yaws', () => {
-    let yaw = 0;
-    const controller = new DirectionalController(held(Action.MoveForward), { cameraYaw: () => yaw });
-    for (const startYaw of [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2]) {
-      yaw = startYaw;
-      const first = controller.sampleActions(CONTEXT).moveIntent;
-      for (let delta = 0; delta < 3; delta += 0.1) {
-        yaw = startYaw + delta;
-        expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(first);
-      }
+describe('DirectionalController: has no camera dependency at all', () => {
+  it('Test A/B/C: DirectionalSources exposes only `stick` — nothing shaped like a camera reading can be threaded through it', () => {
+    const controller = new DirectionalController(held(Action.MoveForward), { stick: () => null });
+    const first = controller.sampleActions(CONTEXT).moveIntent;
+    // Sampling repeatedly with the same held key, with no camera input of
+    // any kind available to the controller, always resolves to the same
+    // world vector.
+    for (let i = 0; i < 30; i++) {
+      expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(first);
     }
   });
 
-  it('Test D: with no direction held, orbiting the camera produces no thrust/steering — moveIntent stays the zero vector', () => {
-    let yaw = 0;
-    const controller = new DirectionalController(held(), { cameraYaw: () => yaw });
+  it('Test D: with no direction held, moveIntent stays the zero vector', () => {
+    const controller = new DirectionalController(held(), { stick: () => null });
     for (let i = 0; i < 40; i++) {
-      yaw += 0.2;
       expect(controller.sampleActions(CONTEXT).moveIntent).toEqual({ x: 0, z: 0 });
     }
   });
@@ -120,17 +103,14 @@ describe('DirectionalController: the camera cannot change what a held key means'
       [Action.MoveBackward, { x: 0, z: -1 }],
       [Action.SteerRight, { x: 1, z: 0 }],
     ];
-    const controller = new DirectionalController(
-      {
-        sampleActions: (): ControllerActions => ({
-          held: new Set([currentAction]),
-          pressedThisFrame: new Set(),
-          attackHoldDurationSeconds: 0,
-          jumpDriftHoldDurationSeconds: 0,
-        }),
-      },
-      { cameraYaw: () => 1.7 }, // fixed but arbitrary — must have zero effect
-    );
+    const controller = new DirectionalController({
+      sampleActions: (): ControllerActions => ({
+        held: new Set([currentAction]),
+        pressedThisFrame: new Set(),
+        attackHoldDurationSeconds: 0,
+        jumpDriftHoldDurationSeconds: 0,
+      }),
+    });
     let currentAction: Action = cycle[0]![0];
     for (let rep = 0; rep < 3; rep++) {
       for (const [action, expected] of cycle) {
@@ -141,7 +121,7 @@ describe('DirectionalController: the camera cannot change what a held key means'
   });
 
   it('turns arrows into moveIntent and removes the four movement actions', () => {
-    const controller = new DirectionalController(held(Action.MoveForward, Action.SteerRight, Action.Attack), { cameraYaw: () => 0 });
+    const controller = new DirectionalController(held(Action.MoveForward, Action.SteerRight, Action.Attack));
     const actions = controller.sampleActions(CONTEXT);
     expect([...actions.held]).toEqual([Action.Attack]);
     expect([...actions.pressedThisFrame]).toEqual([Action.Attack]);
@@ -151,31 +131,26 @@ describe('DirectionalController: the camera cannot change what a held key means'
   });
 
   it('with no direction held it still emits a zero intent (directional frame, not classic)', () => {
-    const actions = new DirectionalController(held(), { cameraYaw: () => 0 }).sampleActions(CONTEXT);
+    const actions = new DirectionalController(held()).sampleActions(CONTEXT);
     expect(actions.moveIntent).toEqual({ x: 0, z: 0 });
   });
 
   it('the stick wins over digital directions when pushed', () => {
-    const controller = new DirectionalController(held(Action.MoveForward), { cameraYaw: () => 0, stick: () => [1, 0] });
+    const controller = new DirectionalController(held(Action.MoveForward), { stick: () => [1, 0] });
     expect(controller.getDebug().screen).toEqual({ x: 0, y: 0 });
     const actions = controller.sampleActions(CONTEXT);
     expect(actions.moveIntent).toEqual(screenToWorld({ x: 1, y: 0 }));
   });
 
-  it("getDebug() reports the camera yaw alongside the world vector, purely for display — changing it never changes `world`", () => {
-    let yaw = 0;
-    const controller = new DirectionalController(held(Action.MoveForward), { cameraYaw: () => yaw });
+  it('getDebug() reports only the screen and world vectors — no camera field exists to report', () => {
+    const controller = new DirectionalController(held(Action.MoveForward));
     controller.sampleActions(CONTEXT);
-    expect(controller.getDebug().cameraYawRad).toBe(0);
-    expect(controller.getDebug().world).toEqual({ x: 0, z: 1 });
-    yaw = 2.5;
-    controller.sampleActions(CONTEXT);
-    expect(controller.getDebug().cameraYawRad).toBe(2.5);
-    expect(controller.getDebug().world).toEqual({ x: 0, z: 1 });
+    expect(controller.getDebug()).toEqual({ screen: { x: 0, y: 1 }, world: { x: 0, z: 1 } });
+    expect(Object.keys(controller.getDebug())).toEqual(['screen', 'world']);
   });
 
   it('Classic (disabled) passes the device actions through untouched', () => {
-    const controller = new DirectionalController(held(Action.MoveForward, Action.SteerLeft), { cameraYaw: () => 0 });
+    const controller = new DirectionalController(held(Action.MoveForward, Action.SteerLeft));
     controller.setEnabled(false);
     const actions = controller.sampleActions(CONTEXT);
     expect(actions.moveIntent).toBeUndefined();
@@ -184,10 +159,10 @@ describe('DirectionalController: the camera cannot change what a held key means'
 });
 
 describe('control scheme setting', () => {
-  it('defaults to directional, keeps classic, falls back on garbage', () => {
-    expect(DEFAULT_PLAYER_SETTINGS.controlScheme).toBe('directional');
-    expect(sanitizePlayerSettings({ controlScheme: 'classic' }).controlScheme).toBe('classic');
-    expect(sanitizePlayerSettings({ controlScheme: 'tank' }).controlScheme).toBe('directional');
-    expect(sanitizePlayerSettings({ quality: 'Low' }).controlScheme).toBe('directional'); // an M10 save has no scheme
+  it('defaults to classic (Bey-relative), keeps directional as a selectable option, falls back to classic on garbage', () => {
+    expect(DEFAULT_PLAYER_SETTINGS.controlScheme).toBe('classic');
+    expect(sanitizePlayerSettings({ controlScheme: 'directional' }).controlScheme).toBe('directional');
+    expect(sanitizePlayerSettings({ controlScheme: 'tank' }).controlScheme).toBe('classic');
+    expect(sanitizePlayerSettings({ quality: 'Low' }).controlScheme).toBe('classic'); // an M10 save has no scheme
   });
 });

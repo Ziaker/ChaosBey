@@ -37,7 +37,10 @@ export function buildCombatOverlayFields(session: MatchSession): CombatOverlayFi
     headingRad: result.first.movement.headingRad,
     desiredMoveIntent: session.getLastActions('first')?.moveIntent ?? null,
     controlSchemeLabel: directional ? 'Directional' : 'Classic',
-    cameraYawDeg: directional ? (directional.getDebug().cameraYawRad * 180) / Math.PI : null,
+    // The camera's own yaw, read from CameraDirector's own output — never
+    // through the input controller (src/input/ has no camera dependency
+    // at all, see DirectionalController.ts's header).
+    cameraYawDeg: camera.yawDeg,
     firstControllerOwner: firstController instanceof AIController ? 'AI' : 'HUMAN',
     inputLockReason: inputLockReasonFor(session, camera.isHitstopActive),
     floorLine: floorLineFor(session),
