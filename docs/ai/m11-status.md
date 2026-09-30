@@ -435,8 +435,14 @@ From 45% up, Bowl B is no harder than flat. The Lab and the game both scale thru
 - **The test harness never passed the heading to DriftController.** `tickMatch` did. Fixed.
 
 **Changes:**
-- **The drift lasts while X is held.** A turn starts it, either on landing or later while X stays held ("armed"). A turn is the stick/keys asking for a new direction, or the heading already ≥ 0.25 rad off the velocity at ≥ 2 m/s (the heading turns in the air, the velocity does not). Short air time (≤ 0.45 s: the landing bounce, a bump) does not end it. Releasing X starts the 0.5 s grip recovery as before.
-- **Hop vs jump:** moving at ≥ 4 m/s with a direction held, holding X is drift intent and the hop stays small. From rest, or with no direction, holding X is still the variable jump (GDD 20). **This resolves GDD 19 against GDD 20; it is flagged for the owner.**
+- **The drift lasts while X is held.** Short air time (≤ 0.45 s: the landing bounce, a bump) does not end it. Releasing X starts the 0.5 s grip recovery as before.
+- **Jump vs drift (owner's rule): X + going straight = the variable jump; X + a real turn = drift.**
+  - **Reference:** when X is pressed, the drift latches that instant's direction: the Bey's motion at ≥ 2 m/s, otherwise the held direction or the heading.
+  - **Arming:** a turn arms the drift for the rest of that X press. A turn is the held direction more than the existing directional steering threshold (0.25 rad) off that reference, or a turn key in classic control. The current heading is not used, because in directional control it catches up with the held direction within a few ticks.
+  - **Once armed:** the height assist stops (the hop stays small), and the drift starts on landing, or on a later turn while X is still held.
+  - **Without a turn:** the hop is the variable jump, standing or moving.
+  - This replaces an intermediate rule ("moving ≥ 4 m/s with a direction held = drift") that took the high jump away while moving.
+- **Jump on slopes:** the variable jump's height assist ran only while the absolute vertical speed was > 0. Going down a bowl's slope the Bey already falls with the floor (vy −2.9 m/s on Bowl B), so a held jump got no extra height there. "Rising" is now measured against the vertical speed at the hop. On the flat floor that base is 0, as before.
 - **A landing keeps its horizontal speed** (the Motion Lab's landing model). This applies only when the landing step slowed the Bey along the same line, so a landing that also hits a wall or a Bey keeps what physics decided.
 - **AI:** it lets go of X after 0.5 s of drift. Holding it for the whole decision left both AIs drifting round the rim for a full 100 s round.
 
@@ -449,7 +455,15 @@ From 45% up, Bowl B is no harder than flat. The Lab and the game both scale thru
 - **F3 and Debug Lab rows:** drift state, X held, drift armed, grounded, slip angle, lateral grip, heading, velocity direction and heading − velocity.
 
 **Evidence:**
-- `drift.test.ts`: the full transition list, ~1 s of Drifting while X is held, speed kept through the landing, grip < 30% of normal, heading ≥ 45° off the velocity. It fails on the old code.
+- `drift.test.ts`, drift cycle: the full transition list, ~1 s of Drifting while X is held, speed kept through the landing, grip < 30% of normal, heading ≥ 45° off the velocity. It fails on the old code.
+- `drift.test.ts`, jump vs drift:
+  1. running straight + holding X is a tall jump (apex > 1.4× a tap hop) and never a drift;
+  2. running + X + a turn is a small hop into Drifting;
+  3. the drift goes on after the heading has reached the held direction;
+  4. releasing X gives Recovering at once, then Idle;
+  5. at rest, holding X is the variable jump, with or without a direction;
+  6. flat and Bowl A/B/C through the scenario runner: straight + X gets the full height assist (> 0.25 s) and no drift, while X + turn gets none (< 0.05 s) and ≥ 35 Drifting ticks.
+  - Tests 1 and 6 fail on the intermediate speed rule.
 - The `drift` scenario now requires ≥ 35 Drifting ticks and ≥ 20° slip. Measured 47 ticks flat and 66–71 on bowls A/B/C; before, 2 ticks flat.
 - `driftFeedback.spec.ts`, Play mode: DRIFT shows, 15+ skid decals, then GRIP, then Idle.
 - `driftFeedback.spec.ts`, Debug Lab: flat and bowls A/B/C each give one start, one end and 49–62 skid decals.

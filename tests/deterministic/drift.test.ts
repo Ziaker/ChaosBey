@@ -187,3 +187,124 @@ describe('drift grip recovery targets the Bey\'s own archetype grip', () => {
     expect(Math.abs(lastRecoveringGrip! - archetypeGrip)).toBeLessThan(Math.abs(lastRecoveringGrip! - LATERAL_GRIP_PER_S));
   });
 });
+
+describe('jump vs drift: X + straight = variable jump, X + a real turn = drift (owner playtest, after M11)', () => {
+  // A turn is measured against the direction latched when X was pressed, not the current
+  // heading (which in directional control lines up with the held direction within a few ticks).
+  interface Run {
+    transitions: DriftState[];
+    apexM: number;
+    driftTicks: number;
+    driftAfterHeadingAligned: boolean;
+    recoveringRightAfterRelease: boolean;
+    idleAtEnd: boolean;
+  }
+  async function run(opts: { moving: boolean; holdTicks: number; turnAt: number | null; direction?: boolean }): Promise<Run> {
+    const harness = await TestBeyHarness.create({ x: -8, y: BEY_SPAWN_HEIGHT_M, z: -8 });
+    harness.tickMany(intent(0, 0), 30);
+    if (opts.moving) harness.tickMany(intent(0, 1), 50); // ~7.8 m/s along +Z
+    const startY = harness.beyBody.translation().y;
+    const r: Run = { transitions: [], apexM: 0, driftTicks: 0, driftAfterHeadingAligned: false, recoveringRightAfterRelease: false, idleAtEnd: false };
+    let previous = DriftState.Idle;
+    let headingAligned = false;
+    for (let t = 0; t < opts.holdTicks + 45; t++) {
+      const held = t < opts.holdTicks ? [Action.JumpDrift] : [];
+      const turned = opts.turnAt !== null && t >= opts.turnAt;
+      const dir = turned ? { x: 1, z: 0 } : opts.moving || opts.direction ? { x: 0, z: 1 } : { x: 0, z: 0 };
+      const res = harness.tick(intent(dir.x, dir.z, held, t === 0 ? [Action.JumpDrift] : []));
+      if (res.driftState !== previous) r.transitions.push(res.driftState);
+      if (t === opts.holdTicks) r.recoveringRightAfterRelease = res.driftState === DriftState.Recovering;
+      r.apexM = Math.max(r.apexM, harness.beyBody.translation().y - startY);
+      if (res.driftState === DriftState.Drifting) {
+        r.driftTicks++;
+        const err = Math.atan2(Math.sin(harness.movement.getHeadingRad() - Math.PI / 2), Math.cos(harness.movement.getHeadingRad() - Math.PI / 2));
+        if (Math.abs(err) < 0.05) headingAligned = true;
+        else if (headingAligned) headingAligned = true;
+        if (headingAligned) r.driftAfterHeadingAligned = true;
+      }
+      previous = res.driftState;
+    }
+    r.idleAtEnd = previous === DriftState.Idle;
+    return r;
+  }
+
+  it('1. running straight + holding X = a tall jump, never a drift', async () => {
+    const tap = await run({ moving: true, holdTicks: 1, turnAt: null });
+    const hold = await run({ moving: true, holdTicks: 60, turnAt: null });
+    expect(hold.transitions).not.toContain(DriftState.Drifting);
+    expect(hold.apexM).toBeGreaterThan(tap.apexM * 1.4);
+  });
+
+  it('2. running + X + a turn = a small hop into Drifting', async () => {
+    const tap = await run({ moving: true, holdTicks: 1, turnAt: null });
+    // Turning right after the press: the hop stays small (going straight a few ticks first
+    // still adds that much jump height — it was a jump until the turn).
+    const drift = await run({ moving: true, holdTicks: 90, turnAt: 1 });
+    expect(drift.transitions.slice(0, 2)).toEqual([DriftState.Hopping, DriftState.Drifting]);
+    expect(drift.apexM).toBeLessThan(tap.apexM * 1.25);
+  });
+
+  it('3. the drift goes on after the heading has reached the held direction', async () => {
+    const drift = await run({ moving: true, holdTicks: 90, turnAt: 5 });
+    expect(drift.driftAfterHeadingAligned).toBe(true);
+    expect(drift.driftTicks).toBeGreaterThan(30);
+  });
+
+  it('4. releasing X starts the grip recovery at once, then back to Idle', async () => {
+    const drift = await run({ moving: true, holdTicks: 90, turnAt: 5 });
+    expect(drift.recoveringRightAfterRelease).toBe(true);
+    expect(drift.transitions.slice(-2)).toEqual([DriftState.Recovering, DriftState.Idle]);
+    expect(drift.idleAtEnd).toBe(true);
+  });
+
+  it('5. at rest + holding X = the variable jump (with or without a direction held), no drift', async () => {
+    const tap = await run({ moving: false, holdTicks: 1, turnAt: null });
+    const hold = await run({ moving: false, holdTicks: 60, turnAt: null });
+    const holdPointing = await run({ moving: false, holdTicks: 60, turnAt: null, direction: true });
+    for (const r of [hold, holdPointing]) {
+      expect(r.transitions).not.toContain(DriftState.Drifting);
+      expect(r.apexM).toBeGreaterThan(tap.apexM * 1.4);
+    }
+  });
+
+  it('6. flat floor and bowls A/B/C (classic keys, the real scenario runner): straight + X jumps, X + turn drifts', async () => {
+    const { runScenario } = await import('../../src/self-test/scenarios/ScenarioRunner');
+    const { SCENARIO_PRESETS } = await import('../../src/self-test/scenarios/ScenarioPresets');
+    const base = SCENARIO_PRESETS.find((p) => p.id === 'drift')!;
+    const outcomes: Record<string, { jumpAssistS: number; jumpDrift: boolean; driftAssistS: number; driftTicks: number }> = {};
+    for (const floor of ['flat', 'bowl-a', 'bowl-b', 'bowl-c'] as const) {
+      let jump = { assist: 0, drift: false };
+      let drift = { assist: 0, ticks: 0 };
+      await runScenario(
+        {
+          ...base,
+          first: { kind: 'script', frames: [{ fromTick: 0, held: [Action.MoveForward] }, { fromTick: 60, held: [Action.MoveForward, Action.JumpDrift] }, { fromTick: 150, held: [Action.MoveForward] }] },
+          check: (t) => {
+            jump = { assist: t.firstMaxJumpAssistS, drift: t.firstDriftStates.has('Drifting') };
+            return { passed: true, detail: '' };
+          },
+        },
+        { arenaFloor: floor },
+      );
+      await runScenario(
+        {
+          ...base,
+          check: (t) => {
+            drift = { assist: t.firstMaxJumpAssistS, ticks: t.firstDriftTicks };
+            return { passed: true, detail: '' };
+          },
+        },
+        { arenaFloor: floor },
+      );
+      outcomes[floor] = { jumpAssistS: jump.assist, jumpDrift: jump.drift, driftAssistS: drift.assist, driftTicks: drift.ticks };
+    }
+    for (const [floor, o] of Object.entries(outcomes)) {
+      const label = `${floor}: ${JSON.stringify(o)}`;
+      expect(o.jumpDrift, label).toBe(false);
+      // The held jump got its full height assist; the drift hop (turned 2 ticks after X) almost none.
+      expect(o.jumpAssistS, label).toBeGreaterThan(0.25);
+      expect(o.driftAssistS, label).toBeLessThan(0.05);
+      expect(o.driftTicks, label).toBeGreaterThanOrEqual(35);
+    }
+  }, 60_000);
+});
