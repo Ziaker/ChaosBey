@@ -71,8 +71,6 @@ export interface FightFrame {
   readonly roundOver: boolean;
   /** Which fighter left the ring, if any. */
   readonly ringOutIsFirst: boolean | null;
-  /** The player is holding a movement direction this tick (the game only; the lab's frames leave it out). */
-  readonly playerSteering?: boolean;
 }
 
 export interface FightSource {

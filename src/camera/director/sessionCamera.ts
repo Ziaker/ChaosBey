@@ -63,8 +63,6 @@ export interface FightFrameInput {
   readonly clashProgress: number;
   readonly roundOver: boolean;
   readonly ringOutIsFirst: boolean | null;
-  /** The player is holding a movement direction this tick. */
-  readonly playerSteering?: boolean;
 }
 
 const TICK_S = 1 / 60;
@@ -120,7 +118,6 @@ export function buildFightFrame(input: FightFrameInput): FightFrame {
     clashProgress: Math.min(1, Math.max(0, input.clashProgress)),
     roundOver: input.roundOver,
     ringOutIsFirst: input.ringOutIsFirst,
-    playerSteering: input.playerSteering ?? false,
   };
 }
 

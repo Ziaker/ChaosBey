@@ -1,10 +1,22 @@
 // ============================================================
-// SCREEN DIRECTION (M11 directional control)
+// SCREEN DIRECTION (M11 directional control, arena/world-relative)
 // Pure helpers: arrows/D-pad/stick → a screen vector (x right, y up,
-// length 0..1, diagonals normalized), and a screen vector + camera yaw →
-// the world X/Z direction that goes into ControllerActions.moveIntent.
-// The camera only ever reaches the input layer as a yaw number; the
-// simulation never sees it.
+// length 0..1, diagonals normalized), and a screen vector → the world X/Z
+// direction that goes into ControllerActions.moveIntent — a FIXED mapping
+// (Up = world +Z, Right = world +X, etc.), never the camera's.
+//
+// This is a closed decision (playtest, 2026-09): the camera must never
+// participate in the movement calculation, in any way, at any time — not
+// latched, not per-gesture, not re-read on release. A camera-relative
+// scheme (even one that re-reads the camera only between gestures, as an
+// earlier version of this file did via CameraYawLatch) means the same key
+// can produce a different world direction depending on where the camera
+// happens to be pointed, which reads to a player as "the Bey goes the
+// wrong way" or "I lost control" — exactly the failure mode this fixes.
+// cameraYawFromRight/cameraYawOf below still exist, but ONLY for a
+// diagnostic readout (F3/Debug Lab) that shows the camera's yaw next to
+// the desired world vector, to prove the two are independent — nothing
+// here feeds it into screenToWorld.
 // ============================================================
 
 import type { MoveIntent } from '../actions/Action';
@@ -52,63 +64,28 @@ export function screenLength(v: ScreenVector): number {
  * Camera yaw (fromYaw convention: forward = (sin, cos)) from the camera's
  * world-space right vector. The right vector of a camera without roll is
  * horizontal whether it looks straight down or at the horizon, so this
- * never degenerates.
+ * never degenerates. DIAGNOSTIC ONLY (F3/Debug Lab) — see this file's
+ * header. Never pass this into screenToWorld.
  */
 export function cameraYawFromRight(rightX: number, rightZ: number): number {
   // right = (-forward.z, forward.x)  ⇒  forward = (right.z, -right.x)
   return Math.atan2(rightZ, -rightX);
 }
 
-/** A screen vector as a world X/Z direction for a camera with this yaw: screen up = camera forward on the ground. */
-export function screenToWorld(screen: ScreenVector, cameraYawRad: number): MoveIntent {
+/**
+ * A screen vector as a FIXED world X/Z direction: screen up = world +Z,
+ * screen right = world +X (the `fromYaw` convention: yaw 0 faces +Z). No
+ * camera involved, ever — see this file's header. Holding the same key
+ * always produces the same world direction, for the entire match,
+ * regardless of what the camera is doing.
+ */
+export function screenToWorld(screen: ScreenVector): MoveIntent {
   if (screen.x === 0 && screen.y === 0) return { x: 0, z: 0 };
-  const fx = Math.sin(cameraYawRad);
-  const fz = Math.cos(cameraYawRad);
-  // right = (-fz, fx)
-  const x = fx * screen.y - fz * screen.x;
-  const z = fz * screen.y + fx * screen.x;
-  return { x: quantize(x), z: quantize(z) };
+  return { x: quantize(screen.x), z: quantize(screen.y) };
 }
 
 function quantize(value: number): number {
   const q = Math.trunc(value / MOVE_INTENT_QUANTUM) * MOVE_INTENT_QUANTUM;
   // Trunc of a tiny negative gives -0; the replay/state hash treat it as 0, keep it a plain 0.
   return q === 0 ? 0 : Number(q.toFixed(4));
-}
-
-/** Screen angle change (rad) that counts as a new gesture and re-reads the camera. */
-export const GESTURE_CHANGE_RAD = Math.PI / 6;
-
-/**
- * Latches the camera yaw for the duration of one input gesture (a held
- * direction). While the player keeps holding the same direction, the
- * world direction stays put even if the automatic camera turns — so the
- * camera following the Bey can never feed back into the command and send
- * it orbiting. Releasing the direction, or turning it by more than
- * GESTURE_CHANGE_RAD, re-reads the camera.
- */
-export class CameraYawLatch {
-  private latchedYaw: number | null = null;
-  private latchedScreenAngle = 0;
-
-  resolve(screen: ScreenVector, currentCameraYaw: number): MoveIntent {
-    if (screenLength(screen) === 0) {
-      this.latchedYaw = null;
-      return { x: 0, z: 0 };
-    }
-    const angle = Math.atan2(screen.x, screen.y);
-    if (this.latchedYaw === null || Math.abs(wrapAngle(angle - this.latchedScreenAngle)) > GESTURE_CHANGE_RAD) {
-      this.latchedYaw = currentCameraYaw;
-      this.latchedScreenAngle = angle;
-    }
-    return screenToWorld(screen, this.latchedYaw);
-  }
-
-  reset(): void {
-    this.latchedYaw = null;
-  }
-}
-
-export function wrapAngle(rad: number): number {
-  return Math.atan2(Math.sin(rad), Math.cos(rad));
 }

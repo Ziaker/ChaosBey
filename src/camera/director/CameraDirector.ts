@@ -41,8 +41,6 @@ import { angleDelta, clamp, copy3, distXZ, inFrame, lerp3, lerpAngle, set3, smoo
 
 // ---------------- DIRECTOR CONSTANTS (shared by A/B/C; the sliders cover the rest) ----------------
 const DEG = Math.PI / 180;
-/** Arena mode: how far (m) the fight's framing point can wander before the camera starts to follow it. */
-const ARENA_FOCUS_DEADZONE_M = 1.5;
 const ZERO: Vec3 = { x: 0, y: 0, z: 0 };
 const MAX_FOV_CEILING = 120;             // GDD 49 hard ceiling.
 const MIN_FOV = 30;
@@ -141,62 +139,28 @@ export interface DirectorOptions {
    */
   readonly floorHeightAt?: (x: number, z: number) => number;
   /**
-   * The in-game arena camera (owner playtest, M11): omitted = the lab's
-   * behaviour. When set:
-   * - the angle is chosen once, behind the player on the opening fight
-   *   axis, and held for the round: no re-aiming at the fight axis, no
-   *   velocity-mixed heading, no orbit drift or lead, no shoulder switching,
-   *   no impact re-framing turn — so the screen-relative controls keep their
-   *   meaning;
-   * - it stays dynamic by moving and zooming: the framing point follows the
-   *   fight once it leaves a 1.5 m zone (no look-ahead), and distance, FOV,
-   *   shake, knockback follow, Clash, ring-out and finisher all apply;
-   * - it always stays inside the arena: the eye is never farther than
-   *   `containRadiusM` from the centre (pulled in toward the fight and
-   *   raised), so the wall is never between the camera and the Beys.
+   * The in-game arena camera (owner playtest, M11 fix 8 — GDD §§48–50):
+   * the Camera Lab's own dynamic, opponent-focused, two-fighter director,
+   * unchanged, with exactly one addition: the eye is never farther than
+   * `containRadiusM` from the arena's centre (pulled in toward the focus
+   * and raised, never by swinging the angle), so the wall is never between
+   * the camera and the Beys. Every other behaviour — focus bias along the
+   * player↔opponent line, opponent-weighted heading, automatic orbit lead
+   * and close-combat drift, side switching, distance/FOV response to
+   * separation and speed, and offscreen rescue — is exactly the lab's.
+   *
+   * Fix 8 removes the two earlier, narrower in-game modes this option used
+   * to select (a once-per-round held angle, and the fix 5–7 over-the-
+   * shoulder `ShoulderRig` that kept the eye locked to `baseYaw + PI`):
+   * both existed only to keep the screen meaning of the arrows stable while
+   * Directional input read the camera's yaw. Fix 7 already made
+   * `screenToWorld` a fixed, camera-free mapping, so that reason is gone;
+   * keeping either lock after fix 7 left the in-game camera unable to do
+   * what the GDD (and the lab) always specified — see
+   * docs/ai/m11-status.md, "Owner playtest fix 8".
    */
-  readonly arena?: { readonly containRadiusM: number; readonly shoulder?: ShoulderRig };
+  readonly arena?: { readonly containRadiusM: number };
 }
-
-/**
- * The in-game over-the-shoulder framing (owner playtest, after M11): "third
- * person behind the Bey, behind and just a little above, over the shoulder
- * — following the Bey, not filming the arena". Replaces the lab's
- * CombatFollow framing (look at the fight's midpoint from 7–17 m out and
- * 4–6 m up) in the game only; every context (Clash, ring-out, finisher,
- * knockback) still blends on top as approved.
- */
-export interface ShoulderRig {
-  /** Horizontal distance (m) from the player's Bey back to the eye, Beys close together. */
-  readonly distanceM: number;
-  /** Eye height (m) above the player's Bey at that distance. */
-  readonly heightM: number;
-  /** Sideways offset (m) of the eye to the player's right: the shoulder. */
-  readonly shoulderM: number;
-  /** Look point along player → opponent (0 = the player, 1 = the opponent). */
-  readonly framing: number;
-  /** Look point height (m) above the Beys. */
-  readonly lookHeightM: number;
-  /** Extra distance (m) per metre of separation beyond 4 m, so the opponent stays in frame. */
-  readonly separationPull: number;
-  /** Cap on that extra distance (m). */
-  readonly maxExtraDistanceM: number;
-  /** Look-ahead along the player's velocity (s). */
-  readonly lookAheadS: number;
-}
-
-/** Below this separation the fight axis is noise (the Beys touching): the shoulder camera holds its angle. */
-const SHOULDER_AXIS_MIN_SEP_M = 2.5;
-/** Shoulder mode: the opponent may sit this far (rad) off the centre of the view — about the edge of the frame — before the camera turns. */
-const SHOULDER_REAIM_ZONE_RAD = 50 * DEG;
-/** Shoulder mode: the player must have let go of the directions this long (s) before the camera may turn at all. */
-const SHOULDER_REAIM_IDLE_S = 0.6;
-/** Shoulder mode: the fastest the camera re-aims (rad/s). */
-const SHOULDER_REAIM_RAD_S = 20 * DEG;
-/** Shoulder mode: the eye never comes closer than this (m) behind the player, even against the wall. */
-const SHOULDER_MIN_DISTANCE_M = 1.8;
-/** Shoulder mode: the look point is at least this far (m) ahead of the eye, so the view's direction stays defined. */
-const SHOULDER_MIN_LOOK_M = 3;
 
 interface PendingKnock {
   at: number;
@@ -210,8 +174,6 @@ export class CameraDirector {
   // Smoothed camera state
   private readonly eye = v3();
   private readonly focus = v3();
-  /** Shoulder mode: the focus handed out, its horizontal direction locked to the held angle. */
-  private readonly focusOut = v3();
   private fov = 60;
   private yaw = 0;
   private distance = 9;
@@ -239,14 +201,6 @@ export class CameraDirector {
   private finisherTimer = 0;
   private finisherTargetIsFirst = false;
   private clashYaw = 0;
-  /** Arena mode: the framing angle the camera holds until the fight axis moves past the dead zone. */
-  private heldYaw = 0;
-  /** Shoulder mode: how long (s) the player has not been holding a direction. */
-  private shoulderIdleS = 0;
-  /** Shoulder mode: the smoothed eye distance behind the player. */
-  private shoulderDistance = 0;
-  /** Arena mode: the framing point, moved only when the fight leaves ARENA_FOCUS_DEADZONE_M around it. */
-  private readonly heldFocus: Vec3 = { x: 0, y: 0, z: 0 };
   private wasClash = false;
   // Side
   private side = 1;
@@ -286,7 +240,6 @@ export class CameraDirector {
   /** Forget the smoothed state (a new scenario). */
   reset(): void {
     this.initialized = false;
-    this.shoulderIdleS = 0;
     this.time = 0;
     this.pending = [];
     this.knockLevel = 0;
@@ -386,23 +339,8 @@ export class CameraDirector {
     // ---- Focus target ----
     const ft = this.focusTarget;
     lerp3(ft, p1, p2, P.framingBias);
-    if (this.options.arena && !this.options.arena.shoulder) {
-      // Arena mode: the framing point only moves once the fight has left a
-      // small zone around it, so ordinary moves don't drag the camera along.
-      if (!this.initialized) copy3(this.heldFocus, ft);
-      const dx = ft.x - this.heldFocus.x;
-      const dz = ft.z - this.heldFocus.z;
-      const d = Math.hypot(dx, dz);
-      if (d > ARENA_FOCUS_DEADZONE_M) {
-        this.heldFocus.x += (dx / d) * (d - ARENA_FOCUS_DEADZONE_M);
-        this.heldFocus.z += (dz / d) * (d - ARENA_FOCUS_DEADZONE_M);
-      }
-      ft.x = this.heldFocus.x;
-      ft.z = this.heldFocus.z;
-    } else {
-      ft.x += this.lookAhead.x;
-      ft.z += this.lookAhead.z;
-    }
+    ft.x += this.lookAhead.x;
+    ft.z += this.lookAhead.z;
     if (this.hasEncounter) lerp3(ft, ft, this.encounter, encounterW * 0.5);
     const knockPos = this.knockTargetIsFirst ? p1 : p2;
     lerp3(ft, ft, knockPos, wKnock * 0.6 * P.knockbackFollow);
@@ -413,43 +351,12 @@ export class CameraDirector {
     // ---- Yaw: behind the player on the fight axis, to one shoulder, orbiting with the action ----
     const arena = this.options.arena;
     let baseYaw = this.axisYaw;
-    if (!arena && frame.first.speed > 3 && P.opponentWeight < 1) baseYaw = lerpAngle(yawOf(this.velFilt.x, this.velFilt.z), this.axisYaw, P.opponentWeight);
-    const orbitLead = arena ? 0 : clamp(this.axisRate * ORBIT_LEAD_GAIN_S, -ORBIT_LEAD_MAX_RAD, ORBIT_LEAD_MAX_RAD) * P.orbitStrength;
-    if (arena) this.closeDrift = 0;
-    else {
-      this.closeDrift += (wClose > 0.5 ? CLOSE_DRIFT_RAD_S * P.orbitStrength * dt : -this.closeDrift * smoothK(0.5, dt));
-      this.closeDrift = clamp(this.closeDrift, -CLOSE_DRIFT_MAX_RAD, CLOSE_DRIFT_MAX_RAD);
-      this.updateSide(frame, dt, wClash + wFin + wRing);
-    }
+    if (frame.first.speed > 3 && P.opponentWeight < 1) baseYaw = lerpAngle(yawOf(this.velFilt.x, this.velFilt.z), this.axisYaw, P.opponentWeight);
+    const orbitLead = clamp(this.axisRate * ORBIT_LEAD_GAIN_S, -ORBIT_LEAD_MAX_RAD, ORBIT_LEAD_MAX_RAD) * P.orbitStrength;
+    this.closeDrift += (wClose > 0.5 ? CLOSE_DRIFT_RAD_S * P.orbitStrength * dt : -this.closeDrift * smoothK(0.5, dt));
+    this.closeDrift = clamp(this.closeDrift, -CLOSE_DRIFT_MAX_RAD, CLOSE_DRIFT_MAX_RAD);
+    this.updateSide(frame, dt, wClash + wFin + wRing);
     let yawTarget = baseYaw + Math.PI + this.side * P.lateralOffset * DEG + orbitLead + this.closeDrift + this.yawKick;
-    const shoulder = arena?.shoulder;
-    if (arena && shoulder) {
-      // Over the shoulder, behind the player — but it does not follow every
-      // move of the opponent (owner playtest, after M11: following the
-      // player → opponent line turned the camera through a full circle as
-      // the AI circled a standing player, and every turn changed what the
-      // screen-relative arrows mean; a 25° zone still turned it 60°+ while
-      // the player stood still). The angle is held. It never turns while
-      // the player holds a direction, nor in the first moments after they
-      // let go (between taps); only when the opponent is about to leave
-      // the frame, only by the amount it has left that zone, and slowly.
-      // Up close the line is noise: hold.
-      const wanted = baseYaw + Math.PI;
-      this.shoulderIdleS = frame.playerSteering ? 0 : this.shoulderIdleS + dt;
-      if (!this.initialized) this.heldYaw = wanted;
-      else if (sep > SHOULDER_AXIS_MIN_SEP_M && this.shoulderIdleS >= SHOULDER_REAIM_IDLE_S) {
-        const off = angleDelta(this.heldYaw, wanted);
-        if (Math.abs(off) > SHOULDER_REAIM_ZONE_RAD) this.heldYaw += Math.sign(off) * Math.min(Math.abs(off) - SHOULDER_REAIM_ZONE_RAD, SHOULDER_REAIM_RAD_S * dt);
-      }
-      yawTarget = this.heldYaw;
-    } else if (arena) {
-      // The angle is chosen once, behind the player on the opening fight
-      // axis, and held for the round (owner playtest, after M11). It stays
-      // dynamic by moving and zooming (below), and the eye is pulled in and
-      // raised, never swung, to stay inside the arena.
-      if (!this.initialized) this.heldYaw = baseYaw + Math.PI;
-      yawTarget = this.heldYaw;
-    }
     if (Math.abs(orbitLead) > 0.05) this.modifiers.push(`órbita ${(orbitLead / DEG).toFixed(0)}°`);
     if (Math.abs(this.yawKick) > 0.02) this.modifiers.push(`reenquadramento ${(this.yawKick / DEG).toFixed(0)}°`);
 
@@ -484,47 +391,6 @@ export class CameraDirector {
     // ---- Eye target from yaw/distance/height ----
     const et = this.eyeTarget;
     set3(et, ft.x + Math.sin(this.yaw) * this.distance, ft.y + height, ft.z + Math.cos(this.yaw) * this.distance);
-    if (shoulder) {
-      // Behind the player's Bey, a little above it and off its right
-      // shoulder, looking ahead toward the opponent: the player in the
-      // lower part of the frame, the opponent ahead, the horizon visible.
-      let d = shoulder.distanceM + Math.min(shoulder.maxExtraDistanceM, shoulder.separationPull * Math.max(0, sep - 4));
-      d += wKnock * 0.8 + wHigh * 0.6;
-      this.shoulderDistance += (d - this.shoulderDistance) * (this.initialized ? smoothK(P.positionDamping, dt) : 1);
-      const back = { x: Math.sin(this.yaw), z: Math.cos(this.yaw) };
-      const right = { x: -back.z, z: back.x };
-      // With the player's back to the wall the eye can't go that far back:
-      // bring it in (rising a little) and pull the look point toward the
-      // player in proportion, so the player stays in frame.
-      let dBack = this.shoulderDistance;
-      const R = arena.containRadiusM;
-      const bx = p1.x + right.x * shoulder.shoulderM;
-      const bz = p1.z + right.z * shoulder.shoulderM;
-      if (Math.hypot(bx + back.x * dBack, bz + back.z * dBack) > R) {
-        const b = bx * back.x + bz * back.z;
-        const c = bx * bx + bz * bz - R * R;
-        dBack = clamp(-b + Math.sqrt(Math.max(0, b * b - c)), SHOULDER_MIN_DISTANCE_M, dBack);
-      }
-      const inFraction = this.shoulderDistance > 0 ? dBack / this.shoulderDistance : 1;
-      // Brought in, it also comes down in proportion, so the view stays behind the Bey instead of looking down on it.
-      const up = (shoulder.heightM + (this.shoulderDistance - shoulder.distanceM) * 0.25) * (0.55 + 0.45 * inFraction);
-      set3(et, bx + back.x * dBack, p1.y + up, bz + back.z * dBack);
-      lerp3(ft, p1, p2, shoulder.framing * inFraction);
-      ft.x += this.velFilt.x * shoulder.lookAheadS;
-      ft.z += this.velFilt.z * shoulder.lookAheadS;
-      ft.y = p1.y * (1 - shoulder.framing * inFraction) + p2.y * shoulder.framing * inFraction + shoulder.lookHeightM;
-      const knockPos2 = this.knockTargetIsFirst ? p1 : p2;
-      lerp3(ft, ft, knockPos2, wKnock * 0.6 * P.knockbackFollow);
-      // The view looks straight along the held angle: the framing point is
-      // kept on that line (only its distance and height follow the fight).
-      // Aiming at a point between the Beys turned the view ~15–40° as the
-      // opponent moved sideways — and with it what the arrows mean on
-      // screen (owner playtest: "not respecting my movement commands").
-      const along = Math.max(1, (ft.x - et.x) * -back.x + (ft.z - et.z) * -back.z);
-      ft.x = et.x - back.x * along;
-      ft.z = et.z - back.z * along;
-      set3(this.laPoint, ft.x, ft.y, ft.z);
-    }
     if (wClash > 0.01) {
       set3(this.tmp, this.mid.x + Math.sin(this.yaw) * this.distance, this.mid.y + CLASH_HEIGHT_M, this.mid.z + Math.cos(this.yaw) * this.distance);
       lerp3(et, et, this.tmp, wClash);
@@ -588,21 +454,6 @@ export class CameraDirector {
     // The Bey guard can push the eye outward again: contain once more (arena mode).
     if (arena) this.containEye(arena.containRadiusM);
 
-    // Over the shoulder the view always faces the held angle, whatever
-    // the guards did to the eye (pushed off a Bey, brought in at the wall
-    // until it is nearly above the player): the screen's up/right — what
-    // the arrows mean — then turn only when the held angle turns. Clash,
-    // ring-out and finisher shots keep their own aim.
-    copy3(this.focusOut, this.focus);
-    if (shoulder) {
-      const lock = 1 - Math.max(wClash, wRing, wFin);
-      const fx = -Math.sin(this.yaw);
-      const fz = -Math.cos(this.yaw);
-      const along = Math.max(SHOULDER_MIN_LOOK_M, (this.focus.x - this.eye.x) * fx + (this.focus.z - this.eye.z) * fz);
-      this.focusOut.x += (this.eye.x + fx * along - this.focus.x) * lock;
-      this.focusOut.z += (this.eye.z + fz * along - this.focus.z) * lock;
-    }
-
     // ---- FOV ----
     const speedNorm = clamp((this.speedFilt - SPEED_FOV_START_MPS) / (SPEED_FOV_FULL_MPS - SPEED_FOV_START_MPS), 0, 1);
     let fovTarget = P.baseFov + (P.maxFov - P.baseFov) * P.fovSpeedStrength * Math.pow(speedNorm, P.fovSpeedCurve);
@@ -618,8 +469,8 @@ export class CameraDirector {
     const fovOut = clamp(this.fov + this.fovPunch, MIN_FOV, MAX_FOV_CEILING);
 
     // ---- Readability: are both Beys in frame? ----
-    const firstIn = inFrame(p1, this.eye, this.focusOut, fovOut, this.aspect, FRAME_MARGIN);
-    const secondIn = inFrame(p2, this.eye, this.focusOut, fovOut, this.aspect, FRAME_MARGIN);
+    const firstIn = inFrame(p1, this.eye, this.focus, fovOut, this.aspect, FRAME_MARGIN);
+    const secondIn = inFrame(p2, this.eye, this.focus, fovOut, this.aspect, FRAME_MARGIN);
     const inPlay = !frame.roundOver;
     if (!firstIn && inPlay) this.offscreenFirst += dt;
     if (!secondIn && inPlay) this.offscreenSecond += dt;
@@ -647,7 +498,7 @@ export class CameraDirector {
     this.initialized = true;
     return {
       eye: this.eye,
-      focus: this.focusOut,
+      focus: this.focus,
       fov: fovOut,
       shake: this.shakeVec,
       fovPunch: Math.min(this.fovPunch, fovOut - MIN_FOV),
@@ -695,8 +546,10 @@ export class CameraDirector {
       const lost = Math.sqrt(a) * (1 - t);
       this.eye.x = f.x + dx * t;
       this.eye.z = f.z + dz * t;
-      // Raised to keep the framing — but an over-the-shoulder eye stays low (it is already close).
-      this.eye.y += lost * (this.options.arena?.shoulder ? 0.2 : 0.5);
+      // Raised to keep the framing — but the in-game arena camera stays low
+      // and close by design (ARENA_CAMERA_RIGS), so it needs less lift than
+      // the lab's own farther-out distances to keep the same framing.
+      this.eye.y += lost * (this.options.arena ? 0.2 : 0.5);
     }
     this.modifiers.push('proteção: dentro da arena');
   }
