@@ -1,7 +1,7 @@
 // ============================================================
 // MAIN MENU (GDD sections 1.2, 56)
 // The page the plain game URL opens. Player entries sit at the top level;
-// the developer tools (DEBUG LAB, SELF TEST) live in a separate
+// the developer tools (Labs / Self Test) live in a separate
 // "Developer / Debug" section, per the owner's decision (option C), so
 // they are never mixed with the normal player flow.
 //
@@ -32,7 +32,7 @@ export interface MainMenuModel {
   readonly developer: readonly MainMenuEntry[];
 }
 
-/** GDD 56: PLAY, SETTINGS (M10), SELF TEST and DEBUG LAB. */
+/** GDD 56: player flow plus the developer/test tools. */
 export const MAIN_MENU: MainMenuModel = {
   player: [
     { id: 'play', label: 'PLAY', mode: 'play' },
@@ -41,6 +41,7 @@ export const MAIN_MENU: MainMenuModel = {
   developerSectionLabel: 'Developer / Debug',
   developer: [
     { id: 'debug-lab', label: 'DEBUG LAB', mode: 'debug-lab' },
+    { id: 'combat-hud-lab', label: 'COMBAT HUD LAB', mode: 'combat-hud-lab' },
     { id: 'self-test', label: 'SELF TEST', mode: 'self-test' },
   ],
 };
