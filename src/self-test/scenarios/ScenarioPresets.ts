@@ -132,6 +132,17 @@ function faceOff(d: number): (a: ScenarioActors) => void {
 const COOLDOWN_DASH_TIMES_S = [6.5, 9.5, 12.5];
 /** ...and second holds its charge this many ticks longer, releasing later. */
 const COOLDOWN_SECOND_EXTRA_HOLD_TICKS = 24;
+/**
+ * Arena scale pass: on the old 12 m arena the wall brought the two thrown-apart,
+ * turned Beys back toward each other; 36 m away it no longer does, and every
+ * release-time / hold sweep missed (0 hits). So first turns right for this
+ * many ticks starting at COOLDOWN_STEER_AT_S (just after the Clash throws
+ * them apart, before the 6.5 s Dash), which re-aims its Dash at second.
+ * Swept: 30 and 40 ticks both give 2-3 hits for second's extra hold of 8, 24
+ * and 40 ticks.
+ */
+const COOLDOWN_FIRST_STEER_TICKS = 40;
+const COOLDOWN_STEER_AT_S = 6;
 
 // ---- the presets ----
 
@@ -463,8 +474,9 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     // Both Dash at 6.5, 9.5 and 12.5 s (all inside the cooldown), second
     // releasing 24 ticks after first — the middle of the 8–40 tick range
     // that lands hits (measured: 1–3 hits during the cooldown; 0 for any
-    // same-tick release, or a 7/9/11/13 s schedule).
-    first: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...COOLDOWN_DASH_TIMES_S.flatMap((s) => hold(Action.Attack, Math.round(s * FIXED_TICKS_PER_SECOND), FULL_DASH_HOLD_TICKS))]),
+    // same-tick release, or a 7/9/11/13 s schedule). First's steering pulse
+    // (COOLDOWN_FIRST_STEER_TICKS) is the arena scale pass's addition.
+    first: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...hold(Action.SteerRight, Math.round(COOLDOWN_STEER_AT_S * FIXED_TICKS_PER_SECOND), COOLDOWN_FIRST_STEER_TICKS), ...COOLDOWN_DASH_TIMES_S.flatMap((s) => hold(Action.Attack, Math.round(s * FIXED_TICKS_PER_SECOND), FULL_DASH_HOLD_TICKS))]),
     second: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...COOLDOWN_DASH_TIMES_S.flatMap((s) => hold(Action.Attack, Math.round(s * FIXED_TICKS_PER_SECOND), FULL_DASH_HOLD_TICKS + COOLDOWN_SECOND_EXTRA_HOLD_TICKS))]),
     check: (t) => ok(t.clashStarts === 1 && t.hitsDuringClashCooldown > 0, `Clash starts ${t.clashStarts}; hits during cooldown ${t.hitsDuringClashCooldown}`),
   },
