@@ -8,6 +8,7 @@
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
+import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { AttackState } from '../../src/combat/attacks/AttackController';
 import { DodgeState } from '../../src/dodge/DodgeController';
 import { DriftState } from '../../src/drift/DriftController';
@@ -241,10 +242,10 @@ describe('ActionSelector — steering discipline (M7 Part 2)', () => {
 
   it('reverses back toward the center for RecoverFromEdge when facing out of the ring', () => {
     const selector = new ActionSelector();
-    // At z=11 facing +Z = facing straight at the boundary.
+    // 1.9 m inside the ring-out radius facing +Z = facing straight at the boundary.
     const actions = selector.selectActions(
       AiIntent.RecoverFromEdge,
-      world({ positionXZ: { x: 0, z: 11 }, headingRad: 0 }, { positionXZ: { x: 5, z: 0 } }),
+      world({ positionXZ: { x: 0, z: RINGOUT_RADIUS_M - 1.9 }, headingRad: 0 }, { positionXZ: { x: 5, z: 0 } }),
       ATTACK_AI_PERSONALITY,
       false,
       DT,
@@ -256,11 +257,11 @@ describe('ActionSelector — steering discipline (M7 Part 2)', () => {
 
   it('never retreats straight out of the ring when the opponent is between it and the center', () => {
     const selector = new ActionSelector();
-    // Own at x=11 facing the opponent (heading -90° faces -X), opponent at
-    // x=9: "straight away" is straight out. Reversing would do exactly that.
+    // Own 1.9 m inside the ring-out radius facing the opponent (heading -90°
+    // faces -X), opponent 2 m further in: "straight away" is straight out. Reversing would do exactly that.
     const actions = selector.selectActions(
       AiIntent.Retreat,
-      world({ positionXZ: { x: 11, z: 0 }, headingRad: -Math.PI / 2 }, { positionXZ: { x: 9, z: 0 } }),
+      world({ positionXZ: { x: RINGOUT_RADIUS_M - 1.9, z: 0 }, headingRad: -Math.PI / 2 }, { positionXZ: { x: RINGOUT_RADIUS_M - 3.9, z: 0 } }),
       ATTACK_AI_PERSONALITY,
       false,
       DT,
@@ -328,13 +329,13 @@ describe('ActionSelector — Circular counter timing (M7 Part 2)', () => {
 
 describe('ActionSelector — edge pressure (M7 Part 2)', () => {
   // Opponent near the +X edge; "center side" means own sits at smaller x.
-  const nearEdgeOpponent = { positionXZ: { x: 11, z: 0 }, isBroken: false };
+  const nearEdgeOpponent = { positionXZ: { x: RINGOUT_RADIUS_M - 1.9, z: 0 }, isBroken: false };
 
   it('does not swing from the outside/flank — moves around toward the center side first', () => {
     const selector = new ActionSelector();
     const actions = selector.selectActions(
       AiIntent.PressAdvantage,
-      world({ positionXZ: { x: 11, z: 1.8 }, headingRad: Math.PI }, nearEdgeOpponent),
+      world({ positionXZ: { x: RINGOUT_RADIUS_M - 1.9, z: 1.8 }, headingRad: Math.PI }, nearEdgeOpponent),
       ATTACK_AI_PERSONALITY,
       false,
       DT,
@@ -347,7 +348,7 @@ describe('ActionSelector — edge pressure (M7 Part 2)', () => {
     const selector = new ActionSelector();
     const actions = selector.selectActions(
       AiIntent.PressAdvantage,
-      world({ positionXZ: { x: 9.2, z: 0 }, headingRad: Math.PI / 2 }, nearEdgeOpponent),
+      world({ positionXZ: { x: RINGOUT_RADIUS_M - 3.7, z: 0 }, headingRad: Math.PI / 2 }, nearEdgeOpponent),
       ATTACK_AI_PERSONALITY,
       false,
       DT,

@@ -6,16 +6,20 @@
 // first value, not a final locked design.
 // ============================================================
 
-// Radius of the circular play area, in meters. "Medium" per GDD section 35;
-// not yet validated against real gameplay pacing/camera framing.
-export const ARENA_FLOOR_RADIUS = 12;
+// Radius of the circular play area, in meters. Owner request (arena scale
+// pass): the stage is 3x its previous size on the horizontal plane, so
+// 12 m -> 36 m. Only the horizontal plane scales: wall height/thickness,
+// floor thickness and the Bey itself keep their sizes.
+export const ARENA_FLOOR_RADIUS = 36;
 export const ARENA_FLOOR_THICKNESS = 0.5;
 
 // The boundary wall is approximated by flat box segments arranged in a
 // circle (Rapier has no native "inside of a cylinder" collider shape that
 // stays cheap and robust). More segments = smoother circle, more static
-// colliders.
-export const ARENA_WALL_SEGMENT_COUNT = 32;
+// colliders. 3x the radius needs 3x the segments (32 -> 96) to keep the
+// same ~2.4 m chord, so the polygon's sagitta (how far a segment's middle
+// sits inside the circle) stays a few centimetres instead of tripling.
+export const ARENA_WALL_SEGMENT_COUNT = 96;
 export const ARENA_WALL_HEIGHT = 2;
 export const ARENA_WALL_THICKNESS = 0.6;
 // Segments are widened slightly beyond their exact chord length so

@@ -119,7 +119,7 @@ describe('centerControl (Defense: uses arena positioning)', () => {
   it('Defense circles inward toward the center far more than Attack', () => {
     // Line to the opponent runs radially, so plain sideways circling is
     // tangential (no inward component at all).
-    const outOnTheRing = world({ positionXZ: { x: 10, z: 0 } }, { positionXZ: { x: 6, z: 0 } });
+    const outOnTheRing = world({ positionXZ: { x: RINGOUT_RADIUS_M - 2.9, z: 0 } }, { positionXZ: { x: RINGOUT_RADIUS_M - 6.9, z: 0 } });
     const inward = (personality: AiPersonality) => dot(circleDirection(outOnTheRing, personality, 1), outOnTheRing.own.directionTowardCenter);
     expect(length(circleDirection(outOnTheRing, DEFENSE_AI_PERSONALITY, 1))).toBeCloseTo(1, 5);
     expect(inward(DEFENSE_AI_PERSONALITY)).toBeGreaterThan(0.6);

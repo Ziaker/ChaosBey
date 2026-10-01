@@ -4,16 +4,21 @@
 // collider, visuals, spawns, placement, camera floor guard and debug all
 // read h(r) from here.
 //
-// The three bowl profiles are the ones approved in
-// docs/design-decisions/visual-prototypes-approval.md §2 (depth 3.2 m at
-// R = 12 m, one profile per arena direction in the lab):
-//   A  parabolic dish     h(r) = 3.2 · (r/R)²
-//   B  funnel             h(r) = 3.2 · (r/R)^1.3
-//   C  central plateau    h(r) = 0 for r ≤ 2.6, else 3.2 · ((r−2.6)/(R−2.6))^1.4
-// `flat` is the current arena (h = 0), kept as the default and as the
-// baseline to compare against. Choosing one is a playtest decision the
-// owner has not made (approval §4 items 3–5): these are options, and a
-// profile is independent of the visual theme.
+// The three bowl profiles are the shapes approved in
+// docs/design-decisions/visual-prototypes-approval.md §2, one per arena
+// direction in the lab. Arena scale pass (owner request): the stage is 3x
+// wider (R = 12 m -> 36 m) and the centre is sunk BOWL_DEPTH_M = 2.5 m below
+// the rim (was 3.2 m at R = 12). Each profile keeps its approved curve, in
+// units of R (the plateau radius scales with R too):
+//   A  parabolic dish     h(r) = D · (r/R)²
+//   B  funnel             h(r) = D · (r/R)^1.3
+//   C  central plateau    h(r) = 0 for r ≤ P, else D · ((r−P)/(R−P))^1.4   (P = 0.2167·R = 7.8 m)
+// A and B are smooth at the centre (slope 0 there), C is flat to P and
+// then eases up (exponent > 1: slope 0 at P) — none has a hard corner.
+// `flat` (h = 0) is no longer the default: it is kept only as the
+// explicit baseline to compare the bowls against. The default floor is the
+// parabolic dish (DEFAULT_ARENA_FLOOR). A profile is independent of the
+// visual theme.
 //
 // What the slope does to gameplay comes only from gravity and the real
 // contact with the concave collider — no extra "slope pull" force is
@@ -26,10 +31,10 @@ import { ARENA_FLOOR_RADIUS } from '../colliders/ArenaTuning';
 
 export type ArenaFloorId = 'flat' | 'bowl-a' | 'bowl-b' | 'bowl-c';
 
-/** Rim height above the centre for every bowl (approval §2.1). */
-export const BOWL_DEPTH_M = 3.2;
-/** Profile C's flat central plateau radius (approval §2.2). */
-export const BOWL_C_PLATEAU_RADIUS_M = 2.6;
+/** Rim height above the centre for every bowl: the target depth of the central basin (owner request: 2.5 m; approval §2.1 had 3.2 m at R = 12 m). */
+export const BOWL_DEPTH_M = 2.5;
+/** Profile C's flat central plateau radius: the approved 2.6 m at R = 12 m, scaled with the arena (3x -> 7.8 m, approval §2.2). */
+export const BOWL_C_PLATEAU_RADIUS_M = 7.8;
 
 export interface ArenaFloorProfile {
   readonly id: ArenaFloorId;
@@ -52,22 +57,22 @@ const clampR = (r: number): number => Math.min(R, Math.max(0, r));
 export const ARENA_FLOORS: Readonly<Record<ArenaFloorId, ArenaFloorProfile>> = {
   flat: {
     id: 'flat',
-    label: 'Flat (current)',
-    description: 'The current flat arena: no slope. The baseline to compare the bowls against.',
+    label: 'Flat (baseline)',
+    description: 'No slope at all. Kept only as the baseline to compare the bowls against; no longer the default.',
     heightAtRadius: () => 0,
     slopeAtRadius: () => 0,
   },
   'bowl-a': {
     id: 'bowl-a',
     label: 'Bowl A — Parabolic dish',
-    description: 'Gentle centre, slope growing toward the wall (3.2 m rim).',
+    description: 'Gentle centre, slope growing toward the wall (2.5 m rim).',
     heightAtRadius: (r) => D * (clampR(r) / R) ** 2,
     slopeAtRadius: (r) => (2 * D * clampR(r)) / (R * R),
   },
   'bowl-b': {
     id: 'bowl-b',
     label: 'Bowl B — Funnel',
-    description: 'Slopes almost all the way to the centre (3.2 m rim).',
+    description: 'Slopes almost all the way to the centre (2.5 m rim).',
     heightAtRadius: (r) => D * (clampR(r) / R) ** 1.3,
     slopeAtRadius: (r) => {
       const x = clampR(r);
@@ -77,7 +82,7 @@ export const ARENA_FLOORS: Readonly<Record<ArenaFloorId, ArenaFloorProfile>> = {
   'bowl-c': {
     id: 'bowl-c',
     label: 'Bowl C — Central plateau',
-    description: 'A flat 2.6 m plateau in the middle, then a curve up to the wall (3.2 m rim).',
+    description: 'A flat 7.8 m plateau in the middle, then a curve up to the wall (2.5 m rim).',
     heightAtRadius: (r) => {
       const x = clampR(r);
       return x <= P ? 0 : D * ((x - P) / (R - P)) ** 1.4;
@@ -90,7 +95,8 @@ export const ARENA_FLOORS: Readonly<Record<ArenaFloorId, ArenaFloorProfile>> = {
 };
 
 export const ARENA_FLOOR_IDS: readonly ArenaFloorId[] = ['flat', 'bowl-a', 'bowl-b', 'bowl-c'];
-export const DEFAULT_ARENA_FLOOR: ArenaFloorId = 'flat';
+/** The stage is never flat by default: the parabolic dish (smooth everywhere, slope 0 at the centre, steepest at the wall). */
+export const DEFAULT_ARENA_FLOOR: ArenaFloorId = 'bowl-a';
 
 export function isArenaFloorId(value: unknown): value is ArenaFloorId {
   return typeof value === 'string' && (ARENA_FLOOR_IDS as readonly string[]).includes(value);
@@ -101,7 +107,7 @@ export function floorHeightAt(floor: ArenaFloorId, x: number, z: number): number
   return ARENA_FLOORS[floor].heightAtRadius(Math.hypot(x, z));
 }
 
-/** Height of the rim (the floor at its edge) above the centre: 0 flat, 3.2 m for a bowl. */
+/** Height of the rim (the floor at its edge) above the centre: 0 flat, 2.5 m (BOWL_DEPTH_M) for a bowl. */
 export function floorRimHeight(floor: ArenaFloorId): number {
   return ARENA_FLOORS[floor].heightAtRadius(R);
 }

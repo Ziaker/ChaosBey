@@ -76,7 +76,7 @@ export function createArenaColliders(
 
   if (floor === 'flat') {
     const floorMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(ARENA_FLOOR_RADIUS, ARENA_FLOOR_RADIUS, ARENA_FLOOR_THICKNESS, 48),
+      new THREE.CylinderGeometry(ARENA_FLOOR_RADIUS, ARENA_FLOOR_RADIUS, ARENA_FLOOR_THICKNESS, 144),
       new THREE.MeshStandardMaterial({ color: theme.floorHex, roughness: theme.floorRoughness, metalness: theme.floorMetalness }),
     );
     floorMesh.position.y = -ARENA_FLOOR_THICKNESS / 2;
@@ -91,7 +91,7 @@ export function createArenaColliders(
       points.push(new THREE.Vector2(r, profile.heightAtRadius(r)));
     }
     const bowlMesh = new THREE.Mesh(
-      new THREE.LatheGeometry(points, 96),
+      new THREE.LatheGeometry(points, 288),
       new THREE.MeshStandardMaterial({ color: theme.floorHex, roughness: theme.floorRoughness, metalness: theme.floorMetalness, side: THREE.DoubleSide }),
     );
     bowlMesh.name = `arena-floor-${floor}`;
@@ -102,7 +102,7 @@ export function createArenaColliders(
   // (on a bowl a ring of constant r is level, at h(r)).
   const lineMaterial = new THREE.MeshBasicMaterial({ color: theme.floorLineHex, transparent: true, opacity: theme.floorLineOpacity, depthWrite: false });
   for (const radius of [ARENA_FLOOR_RADIUS * 0.33, ARENA_FLOOR_RADIUS * 0.66, ARENA_FLOOR_RADIUS - 0.35]) {
-    const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.04, radius + 0.04, 96), lineMaterial);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.04, radius + 0.04, 288), lineMaterial);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = profile.heightAtRadius(radius) + 0.005;
     group.add(ring);
@@ -151,7 +151,7 @@ export function createArenaColliders(
 
   // Emissive trim along the top of the wall: shows where the rim is at a glance.
   const rim = new THREE.Mesh(
-    new THREE.TorusGeometry(ARENA_FLOOR_RADIUS + ARENA_WALL_THICKNESS / 2, 0.05, 6, 96),
+    new THREE.TorusGeometry(ARENA_FLOOR_RADIUS + ARENA_WALL_THICKNESS / 2, 0.05, 6, 288),
     new THREE.MeshBasicMaterial({ color: theme.rimHex }),
   );
   rim.rotation.x = Math.PI / 2;
@@ -194,10 +194,10 @@ export function createArenaColliders(
   return { group };
 }
 
-/** Heightfield resolution for a bowl floor (cells per side). ~0.26 m cells for a 0.6 m-radius Bey. */
-export const BOWL_HEIGHTFIELD_CELLS = 96;
-/** Visual lathe resolution along the radius. */
-const BOWL_VISUAL_RADIAL_STEPS = 48;
+/** Heightfield resolution for a bowl floor (cells per side). ~0.25 m cells for a 0.6 m-radius Bey: 3x the radius needs 3x the cells (96 -> 288), or the cells would triple to ~0.75 m. */
+export const BOWL_HEIGHTFIELD_CELLS = 288;
+/** Visual lathe resolution along the radius (3x the radius, 3x the steps: 48 -> 144). */
+const BOWL_VISUAL_RADIAL_STEPS = 144;
 /**
  * Past the floor edge the heightfield drops this far below the rim: there
  * is no floor outside the arena (as with the flat floor, which ends at

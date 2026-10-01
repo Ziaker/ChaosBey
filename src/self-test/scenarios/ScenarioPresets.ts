@@ -16,6 +16,7 @@
 import type { MatchConfig } from '../../config/match/MatchConfig';
 import type { Bey } from '../../bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../bey/core/BeyTuning';
+import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
 import { floorHeightAt } from '../../arena/floor/ArenaFloorProfile';
 import { DASH_MAX_CHARGE_S, TAP_MAX_HOLD_S } from '../../combat/attacks/AttackTuning';
 import { JUMP_RELEASE_WINDOW_S } from '../../drift/DriftTuning';
@@ -77,6 +78,15 @@ export interface ScenarioPreset {
 }
 
 // ---- building blocks ----
+
+/**
+ * Arena scale pass (floor radius 12 m -> 36 m): the scenarios about the wall /
+ * the ring-out were laid out for a wall 12 m from the centre. Their starting
+ * spots are moved this much outward (toward +Z, or radially for the ricochet)
+ * so each starts the same distance from the wall as before; the speeds,
+ * angles and checks are unchanged (the radius checks use ARENA_FLOOR_RADIUS).
+ */
+const WALL_SHIFT_M = ARENA_FLOOR_RADIUS - 12;
 
 /** Places a Bey at (x, z), upright, stopped, facing `headingRad` (yaw 0 = +Z). */
 export function placeBey(bey: Bey, x: number, z: number, headingRad: number): void {
@@ -190,7 +200,7 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     id: 'ring-out',
     label: 'Test Ring-Out',
     description:
-      'Second releases a full Dash outward at a low-Stability, exhausted first (z = 5), who jumps just before it arrives; the Dash catches the airborne Bey and its own knockback lift adds to the jump\'s residual vy, sending it over the wall. The round ends by ring-out through the physics, not by rule.',
+      'Second releases a full Dash outward at a low-Stability, exhausted first (5 m from the centre on the old 12 m arena, now 29 m: the same 7 m from the wall), who jumps just before it arrives; the Dash catches the airborne Bey and its own knockback lift adds to the jump\'s residual vy, sending it over the wall. The round ends by ring-out through the physics, not by rule.',
     // Jump/air-control hotfix follow-up (owner review, PR #73 then this
     // follow-up): the old setup had first jump a FULL, uncut jump (its own
     // apex alone used to clear the 2 m wall at ~2.33 m, pre-hotfix) and
@@ -215,8 +225,8 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     supported: true,
     durationTicks: 8 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
-      placeBey(first, 0, 5, Math.PI);
-      placeBey(second, 0, -1, 0);
+      placeBey(first, 0, 5 + WALL_SHIFT_M, Math.PI);
+      placeBey(second, 0, -1 + WALL_SHIFT_M, 0);
       // Maximally vulnerable to knockback (GDD section 27/30's own
       // formula, not a new rule): zero Stamina (max staminaVulnerability),
       // low-but-not-zero Stability (close to the knockback formula's own
@@ -245,16 +255,16 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     supported: true,
     durationTicks: 2 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
-      placeBey(first, 0, 8, 0);
+      placeBey(first, 0, 8 + WALL_SHIFT_M, 0);
       first.body.setLinvel({ x: 0, y: 0, z: 12 }, true);
-      placeBey(second, 0, -8, 0);
+      placeBey(second, 0, -8 + WALL_SHIFT_M, 0);
     },
     // Driven for the first half second: with no input the idle damping
     // (owner playtest, after M11) settles a Bey on a bowl's slope before it
     // reaches the wall.
     first: script(hold(Action.MoveForward, 0, 30)),
     second: idle,
-    check: (t) => ok(t.firstMaxImpactMps > 0 && t.firstMaxRadiusM < 12 && t.firstMinRadialVelocityAfterImpact < 0, `impact Δv ${t.firstMaxImpactMps.toFixed(2)} m/s, max radius ${t.firstMaxRadiusM.toFixed(2)} m, rebound radial speed ${t.firstMinRadialVelocityAfterImpact.toFixed(2)} m/s`),
+    check: (t) => ok(t.firstMaxImpactMps > 0 && t.firstMaxRadiusM < ARENA_FLOOR_RADIUS && t.firstMinRadialVelocityAfterImpact < 0, `impact Δv ${t.firstMaxImpactMps.toFixed(2)} m/s, max radius ${t.firstMaxRadiusM.toFixed(2)} m, rebound radial speed ${t.firstMinRadialVelocityAfterImpact.toFixed(2)} m/s`),
   },
   {
     id: 'wall-ricochet',
@@ -263,10 +273,12 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     supported: true,
     durationTicks: 2 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
-      // At (-6, 8) (r = 10): 30° off the wall's tangent, mostly along it.
-      placeBey(first, -6, 8, 0);
+      // At (-6, 8) (r = 10) on the old arena, moved radially out to r = 34 (same
+      // 2 m from the wall): 30° off the wall's tangent, mostly along it.
+      const k = (ARENA_FLOOR_RADIUS - 2) / 10;
+      placeBey(first, -6 * k, 8 * k, 0);
       first.body.setLinvel({ x: 4.75, y: 0, z: 11.06 }, true);
-      placeBey(second, 0, -8, 0);
+      placeBey(second, 0, -8 + WALL_SHIFT_M, 0);
     },
     // Driven for the first half second, as in wall-hit (idle damping).
     first: script(hold(Action.MoveForward, 0, 30)),
