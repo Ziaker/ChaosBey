@@ -1,0 +1,61 @@
+name: Desktop build (Windows)
+
+# Builds the portable Windows desktop test build (see electron/README.md) on
+# a real Windows runner and publishes it as a downloadable artifact — and,
+# optionally, a GitHub Release — so the owner can get ChaosBey.exe without
+# installing Node, npm, or any dev tooling locally.
+#
+# Manual only: this does not run on every push (the portable build is a
+# local-testing convenience, not the deploy target — that's still
+# deploy.yml → GitHub Pages). Trigger it from the Actions tab when a new
+# Windows build is wanted.
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Also publish a GitHub Release with the build attached'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - run: npm run build:exe
+
+      - name: Zip the portable build
+        shell: pwsh
+        run: Compress-Archive -Path release/win-unpacked/* -DestinationPath ChaosBey-windows-portable.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChaosBey-windows-portable
+          path: ChaosBey-windows-portable.zip
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.create_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-build-${{ github.run_number }}
+          name: ChaosBey desktop test build ${{ github.run_number }}
+          body: |
+            Portable Windows test build, built from commit ${{ github.sha }}.
+            Download `ChaosBey-windows-portable.zip`, extract it anywhere, and
+            run `ChaosBey.exe` inside — no installer, no admin rights. See
+            `electron/README.md` for details. This is a local-testing
+            convenience only; the real deploy target is still GitHub Pages.
+          files: ChaosBey-windows-portable.zip
+          prerelease: true

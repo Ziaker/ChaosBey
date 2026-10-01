@@ -6,7 +6,16 @@ deployment target — that's still the web build on GitHub Pages
 (https://ziaker.github.io/ChaosBey/). This exists purely so the owner can
 double-click something and play.
 
-## Build it
+## Get a build without installing anything
+
+The simplest path, no Node/npm/terminal needed at all: go to this repo's
+**Actions** tab → **Desktop build (Windows)** → **Run workflow**. It builds
+on a real Windows runner and attaches a `ChaosBey-windows-portable.zip`
+artifact to that run (and, if you tick "Also publish a GitHub Release" when
+running it, a Release too). Download the zip, extract it, open
+`ChaosBey.exe` inside.
+
+## Build it locally
 
 ```bash
 npm install          # once
