@@ -25,7 +25,7 @@ import { Action, type ControllerActions } from '../../input/actions/Action';
 import { KeyboardController } from '../../input/devices/KeyboardController';
 import { CombinedController, GamepadController } from '../../input/devices/GamepadController';
 import { DirectionalController, type DirectionalDebug } from '../../input/directional/DirectionalController';
-import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ControlScheme } from '../../config/settings/PlayerSettings';
+import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ConditionLayerSetting, type ControlScheme } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 
@@ -60,6 +60,8 @@ export interface MatchPresentation {
   readonly trails: boolean;
   /** M11: the player's camera preset (A/B/C); the Clash forces B regardless. Default B. */
   readonly cameraPreset?: CameraPresetSetting;
+  /** Condition languages to show (A, B, C; at least one) when the `conditionVisuals` flag is on. */
+  readonly conditionLayers?: readonly ConditionLayerSetting[];
 }
 
 export interface MatchRunnerEvents {
@@ -164,6 +166,7 @@ export class MatchRunner {
       beys: start.beys,
       arenaTheme: start.arenaTheme,
       cameraPreset: start.presentation?.cameraPreset,
+      conditionLayers: start.presentation?.conditionLayers,
     });
     sessionForCameraYaw = session;
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
@@ -205,6 +208,7 @@ export class MatchRunner {
     this.presentation = presentation;
     this.session.getVfxManager().setLayerVisible('trails', presentation.trails);
     if (presentation.cameraPreset) this.session.setCameraPreset(presentation.cameraPreset);
+    if (presentation.conditionLayers) this.session.setConditionLayers(presentation.conditionLayers);
   }
 
   /** Switches Directional / Classic control live (from the Pause menu's settings). */

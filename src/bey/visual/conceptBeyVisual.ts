@@ -18,11 +18,22 @@
 import * as THREE from 'three';
 import type { BeyDefinition } from '../archetype/BeyDefinition';
 import type { BeyVisual } from '../procedural-model/createBeyMesh';
-import { assembleConcept } from './model/assembleConcept';
+import { assembleConcept, type BuiltConcept } from './model/assembleConcept';
 import type { ConceptDefinition } from './model/types';
 
 /** Prototype units to metres: the labs' BEY_SCALE (a ~6-unit ring becomes a ~1.4 m Bey). */
 export const CONCEPT_BEY_SCALE = 0.24;
+
+/** The built concept behind a visual made here (materials, pieces, seam control), for presentation systems that dress it further. */
+export interface ConceptVisualModel {
+  readonly concept: ConceptDefinition;
+  readonly built: BuiltConcept;
+}
+const MODELS = new WeakMap<BeyVisual, ConceptVisualModel>();
+
+export function getConceptVisualModel(visual: BeyVisual): ConceptVisualModel | undefined {
+  return MODELS.get(visual);
+}
 
 export function createConceptBeyVisual(concept: ConceptDefinition, gameplay: BeyDefinition): BeyVisual {
   const built = assembleConcept(concept);
@@ -32,5 +43,7 @@ export function createConceptBeyVisual(concept: ConceptDefinition, gameplay: Bey
   built.root.scale.setScalar(CONCEPT_BEY_SCALE);
   built.root.position.y = -gameplay.physical.colliderHalfHeightM;
   spinGroup.add(built.root);
-  return { group, spinGroup };
+  const visual: BeyVisual = { group, spinGroup };
+  MODELS.set(visual, { concept, built });
+  return visual;
 }
