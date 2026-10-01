@@ -81,13 +81,13 @@ function awayFromCamera(yawRad: number): { x: number; z: number } {
   return { x: -Math.sin(yawRad), z: -Math.cos(yawRad) };
 }
 
-describe('Directional control reads the camera on purpose through a real 30 s fight ("Fix 7")', () => {
+describe('Directional control reads the camera once per gesture through a real 30 s fight ("Fix 9")', () => {
   for (const arenaFloor of ['flat', 'bowl-a', 'bowl-b', 'bowl-c'] as const) {
-    it(`${arenaFloor}: holding ArrowUp always resolves to a direction that reads as "away from the camera" on screen, controller owner never flips to AI, camera actually moves`, async () => {
+    it(`${arenaFloor}: holding ArrowUp keeps one fixed world direction while the camera orbits, controller owner never flips to AI, camera actually moves`, async () => {
       const { session, camera, keySource, directional } = await createDirectionalMatch(arenaFloor, `fix7-${arenaFloor}`);
       const TICKS = 1800; // 30 s at 60 Hz
       const cameraYaws: number[] = [];
-      const dots: number[] = [];
+      let firstWorld: { x: number; z: number } = { x: 0, z: 0 };
       let anyDrift = false;
       let anyAirborne = false;
       let anyKnockback = false;
@@ -100,20 +100,17 @@ describe('Directional control reads the camera on purpose through a real 30 s fi
 
         const world = session.getLastActions('first')?.moveIntent;
         expect(world, `tick ${tick}: moveIntent missing on a directional frame`).toBeDefined();
-        // Use the EXACT camera yaw the controller itself used to resolve this
-        // tick's moveIntent (one tick behind session.getLastCameraOutput(),
-        // since the camera updates after input is sampled) — not a value
-        // recomputed after the fact, which would be off by one tick.
-        const yawDegUsed = (directional.getDebug().cameraYawRad * 180) / Math.PI;
-        const away = awayFromCamera(directional.getDebug().cameraYawRad);
-        const len = Math.hypot(world!.x, world!.z);
-        const dot = len > 0 ? (world!.x * away.x + world!.z * away.z) / len : 1;
-        dots.push(dot);
-        // Up must read as "away from the camera" on screen: the resolved
-        // world direction and the camera's own "away" direction must point
-        // the same way (dot ≈ 1), for EVERY tick, exactly the property the
-        // real-browser repro proved missing for the old defaults.
-        expect(dot, `tick ${tick}: ArrowUp did not read as "away from camera" (dot ${dot.toFixed(3)}, yaw ${yawDegUsed.toFixed(1)}°)`).toBeGreaterThan(0.999);
+        // "Fix 9": the camera is read once, on the first tick of the gesture
+        // (ArrowUp held for the whole run), and frozen. However far the real
+        // camera orbits afterwards, the resolved world direction must never
+        // change — only the player moves the Bey.
+        if (tick === 0) {
+          firstWorld = world!;
+          const away = awayFromCamera(directional.getDebug().cameraYawRad);
+          const len = Math.hypot(world!.x, world!.z);
+          expect((world!.x * away.x + world!.z * away.z) / len, 'at the start of the gesture ArrowUp reads "away from the camera"').toBeGreaterThan(0.999);
+        }
+        expect(world, `tick ${tick}: the camera moved the Bey's input (world intent changed while the key was held)`).toEqual(firstWorld);
 
         expect(session.getController('first')).not.toBeInstanceOf(AIController);
         expect(session.getController('first')).toBe(directional);
@@ -126,20 +123,18 @@ describe('Directional control reads the camera on purpose through a real 30 s fi
       }
 
       const yawRange = Math.max(...cameraYaws) - Math.min(...cameraYaws);
-      expect(yawRange, 'the camera never moved at all — this run does not actually exercise the camera-relative mapping').toBeGreaterThan(3);
+      expect(yawRange, 'the camera never moved at all — this run does not actually exercise the camera-independence of held input').toBeGreaterThan(3);
       expect(anyDrift || anyAirborne || anyKnockback, 'no Drift/airborne/knockback event happened at all in 30 s').toBe(true);
     }, 30_000);
   }
 });
 
 // The two-fighter camera must be free to orbit however the fight demands
-// (owner playtest fix 8, GDD §§48–50) — "Fix 7" makes the controller
-// deliberately follow it, so this proves the FOLLOWING is smooth: a held
-// key's world direction tracks the camera's own rotation tick by tick,
-// with no jump larger than the camera's own step, as the opponent circles
-// a stationary player and the camera sweeps a continuous, wide orbit.
-describe('fundamental test ("Fix 7"): a held direction tracks the camera\'s own orbit smoothly, tick by tick, with no jump larger than the camera\'s own step', () => {
-  it('opponent circles the stationary player 360°: camera yaw sweeps most of a full turn, held ArrowUp always reads "away from camera" and never jumps ahead of the camera\'s own step', () => {
+// (owner playtest fix 8, GDD §§48–50) — and "Fix 9" guarantees that orbit
+// never steers the Bey: a held key's world direction stays put while the
+// opponent circles a stationary player and the camera sweeps a wide orbit.
+describe('fundamental test ("Fix 9"): a held direction is frozen while the camera orbits — the camera never moves the Bey', () => {
+  it('opponent circles the stationary player 360°: camera yaw sweeps most of a full turn, held ArrowUp keeps exactly one world direction', () => {
     for (const preset of PRESET_IDS) {
       const keySource = new HeldKeySource();
       keySource.setHeld(Action.MoveForward); // held for the entire test, never released or changed
@@ -148,8 +143,8 @@ describe('fundamental test ("Fix 7"): a held direction tracks the camera\'s own 
       const rig = new CameraRig(preset);
       const ticks = 360;
       let prevYawDeg: number | null = null;
-      let prevWorldAngleDeg: number | null = null;
       let totalRotationDeg = 0;
+      let firstWorld: { x: number; z: number } | null = null;
 
       for (let t = 0; t < ticks; t++) {
         const a = (t / ticks) * Math.PI * 2;
@@ -173,18 +168,8 @@ describe('fundamental test ("Fix 7"): a held direction tracks the camera\'s own 
 
         const actions = directional.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
         const world = actions.moveIntent!;
-        const away = awayFromCamera((yawDeg * Math.PI) / 180);
-        const len = Math.hypot(world.x, world.z);
-        const dot = len > 0 ? (world.x * away.x + world.z * away.z) / len : 1;
-        expect(dot, `${preset} tick ${t}: ArrowUp must read "away from camera" (dot ${dot.toFixed(3)}, yaw ${yawDeg.toFixed(1)}°)`).toBeGreaterThan(0.999);
-
-        const worldAngleDeg = (Math.atan2(world.x, world.z) * 180) / Math.PI;
-        if (prevWorldAngleDeg !== null) {
-          const worldStepDeg = Math.abs(((worldAngleDeg - prevWorldAngleDeg + 540) % 360) - 180);
-          // No latch, no stale state: the world direction never jumps ahead of (or lags visibly behind) the camera's own per-tick step.
-          expect(worldStepDeg, `${preset} tick ${t}: world direction jumped ${worldStepDeg.toFixed(1)}° while the camera only moved ${cameraStepDeg.toFixed(1)}°`).toBeLessThan(cameraStepDeg + 1);
-        }
-        prevWorldAngleDeg = worldAngleDeg;
+        if (firstWorld === null) firstWorld = world;
+        expect(world, `${preset} tick ${t}: the camera (yaw ${yawDeg.toFixed(1)}°) moved the Bey's input`).toEqual(firstWorld);
       }
 
       // The opponent went all the way around the stationary player, so the
