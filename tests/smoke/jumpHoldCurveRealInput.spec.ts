@@ -40,12 +40,14 @@ import { expect, test, type Page } from '@playwright/test';
 // jitter per call (confirmed via the game's own jumpAssistElapsedS
 // instrumentation — see JumpInputDiagnostics.ts — logging a *larger*
 // internally-measured hold for a "shorter" labeled one often enough to
-// flake a tightly-spaced assertion). A real physical key press has no such
-// jitter (OS keyboard scan rate is ~1ms), so this is a Playwright/CDP
-// limitation on how fine a duration CI can reliably request — not a
-// statement about how finely the game itself can distinguish hold
-// durations. The instrumented build (?jumpDiag=1) is how the owner's own,
-// real keyboard gets the fine-grained picture.
+// flake a tightly-spaced assertion). This jitter is specific to Playwright
+// issuing each down/up as a separate CDP round trip; it is not a claim
+// about how precisely any particular keyboard or OS can time a real press
+// (that varies by hardware and isn't needed to explain what's measured
+// here). This is a Playwright/CDP limitation on how fine a duration CI can
+// reliably request — not a statement about how finely the game itself can
+// distinguish hold durations. The instrumented build (?jumpDiag=1) is how
+// the owner's own real keyboard gets the fine-grained picture.
 
 const HOLDS_MS = [0, 130, 260, 450];
 
