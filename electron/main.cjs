@@ -101,7 +101,12 @@ function startServerAndWindow() {
         sandbox: true,
       },
     });
-    mainWindow.loadURL(`http://127.0.0.1:${port}${BASE_PATH}`);
+    // ONE-OFF DIAGNOSTIC BUILD (2026-10-01 jump investigation, not part of
+    // PR #75's shipped electron/main.cjs): ?jumpDiag=1 turns on
+    // src/debug/diagnostics/JumpInputDiagnostics.ts, and DevTools opens
+    // automatically so the console log is visible without extra steps.
+    mainWindow.loadURL(`http://127.0.0.1:${port}${BASE_PATH}?jumpDiag=1`);
+    mainWindow.webContents.openDevTools({ mode: 'bottom' });
   });
 }
 

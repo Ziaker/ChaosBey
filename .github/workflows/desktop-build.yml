@@ -35,6 +35,13 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/desktop-build.yml'
+  # TEMPORARY, one-off: this branch (claude/jump-diag-exe-oneoff) only
+  # exists to get the jump-diagnostic instrumented build to the owner via
+  # a GitHub Actions artifact link (the zip is too large for direct chat
+  # delivery). Never merged anywhere; remove if this branch is reused.
+  push:
+    branches:
+      - claude/jump-diag-exe-oneoff
 
 permissions:
   contents: write
