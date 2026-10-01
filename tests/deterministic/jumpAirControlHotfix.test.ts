@@ -120,6 +120,19 @@ describe('jump/air-control hotfix — hold-duration sweep (section 29)', () => {
     const c = await measureJumpArc(msToTicks(800), 220);
     expect(b.apexM).toBeCloseTo(a.apexM, 2);
     expect(c.apexM).toBeCloseTo(a.apexM, 2);
+    // Follow-up regression guard (owner review item 4): the full jump's own
+    // absolute apex/airtime must stay pinned to the historical, approved
+    // result (apex 1.1798 m, airtime 0.950 s — sections 10/11's 1.0-1.5 m /
+    // 0.85-1.2 s target), not just "consistent with itself" — so a future
+    // short-hop tweak that silently drags the full jump along with it fails
+    // loudly here instead of only showing up in a hold-duration sweep's
+    // console output.
+    expect(a.apexM).toBeGreaterThan(1.0);
+    expect(a.apexM).toBeLessThan(1.5);
+    expect(a.apexM).toBeCloseTo(1.1798, 1);
+    const airtimeS = a.primaryAirborneTicks / TICKS_PER_SECOND;
+    expect(airtimeS).toBeGreaterThan(0.85);
+    expect(airtimeS).toBeLessThan(1.2);
   });
 });
 
@@ -139,7 +152,7 @@ describe('jump/air-control hotfix — short hop +15% (sections 6/32)', () => {
     expect(ratio).toBeLessThan(1.3); // explicitly: not 1.30x, per section 32.
   });
 
-  it('quick-tap consistency (section 33, follow-up): ticks 1-2 (up to ~33 ms) stay within the exact-cut window and read as the same hop; ticks 3-5 are reported, not hidden, and must grow far more gently than the pre-follow-up model', async () => {
+  it('quick-tap consistency (section 33, follow-up, owner review item 4): ticks 1-2 (up to ~33 ms) both land within tight tolerance of the +15% target AND of each other; ticks 3-5 are reported, not hidden, and must grow far more gently than the pre-follow-up model', async () => {
     const results = await Promise.all([1, 2, 3, 4, 5].map((t) => measureJumpArc(t, 90)));
     const apexes = results.map((r) => r.apexM);
     const airtimes = results.map((r) => r.primaryAirborneTicks);
@@ -148,9 +161,17 @@ describe('jump/air-control hotfix — short hop +15% (sections 6/32)', () => {
     // computeJumpReleaseCapMps's own exact-window math (see DriftController.ts)
     // says ticks 1-2 land inside the window where the release cut hits
     // JUMP_SHORT_HOP_TARGET_APEX_M exactly, regardless of which of the two
-    // ticks releases — require that explicitly, not just "doesn't regress".
-    expect(apexes[1]! / apexes[0]!).toBeGreaterThan(0.85);
-    expect(apexes[1]! / apexes[0]!).toBeLessThan(1.15);
+    // ticks releases. Two independent guarantees, not one: each tick's own
+    // apex must be close to the +15% target (not just close to each other —
+    // a future change could drift both away from the target in lockstep and
+    // still pass a same-as-each-other-only check), AND the two ticks must
+    // read as the same hop to a player.
+    for (const apex of [apexes[0]!, apexes[1]!]) {
+      expect(apex).toBeGreaterThan(TARGET_APEX_M * 0.85);
+      expect(apex).toBeLessThan(TARGET_APEX_M * 1.15);
+    }
+    expect(apexes[1]! / apexes[0]!).toBeGreaterThan(0.9);
+    expect(apexes[1]! / apexes[0]!).toBeLessThan(1.1);
     // Ticks 3-5 are past that window by construction (the window's width is
     // a function of JUMP_LAUNCH_VELOCITY_MPS and the target height alone —
     // see computeJumpReleaseCapMps's comment for why it can't be widened
