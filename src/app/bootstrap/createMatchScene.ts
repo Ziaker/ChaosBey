@@ -25,6 +25,8 @@ import { matchSpawnsFor } from './matchSpawns';
 export interface BeyVisualHandle {
   readonly definition: BeyVisualDefinition;
   readonly anchors: BeyVisualAnchors;
+  /** The built visual (two groups), for presentation systems that dress it. Never reaches the body. */
+  readonly visual: BeyVisual;
 }
 
 export interface MatchScene {
@@ -111,8 +113,8 @@ export function createMatchScene(
   const firstVisual = firstVisualDefinition.create(first.definition);
   const secondVisual = secondVisualDefinition.create(second.definition);
   const visuals = {
-    first: { definition: firstVisualDefinition, anchors: new BeyVisualAnchors(firstVisual, firstVisualDefinition.anchors) },
-    second: { definition: secondVisualDefinition, anchors: new BeyVisualAnchors(secondVisual, secondVisualDefinition.anchors) },
+    first: { definition: firstVisualDefinition, anchors: new BeyVisualAnchors(firstVisual, firstVisualDefinition.anchors), visual: firstVisual },
+    second: { definition: secondVisualDefinition, anchors: new BeyVisualAnchors(secondVisual, secondVisualDefinition.anchors), visual: secondVisual },
   };
   scene.add(firstVisual.group);
   scene.add(secondVisual.group);

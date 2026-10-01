@@ -7,7 +7,8 @@
 // Keyboard: ↑/↓ row, ←/→ change, Esc back.
 // ============================================================
 
-import { CAMERA_PRESET_SETTINGS, QUALITY_PROFILES, DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ControlScheme, type PlayerSettings } from '../../config/settings/PlayerSettings';
+import { CAMERA_PRESET_SETTINGS, QUALITY_PROFILES, DEFAULT_PLAYER_SETTINGS, toggleConditionLayer, type CameraPresetSetting, type ConditionLayerSetting, type ControlScheme, type PlayerSettings } from '../../config/settings/PlayerSettings';
+import { presentationFeaturesFromLocation } from '../../presentation/features';
 import { CAMERA_PRESET_NAMES, CAMERA_PRESET_NOTES } from '../../camera/director/CameraRig';
 import { QualityPreset } from '../../config/runtime/QualityPreset';
 import { GAMEPAD_BINDINGS, currentGamepads, readFirstGamepad } from '../../input/devices/gamepadMapping';
@@ -22,6 +23,12 @@ export interface SettingsOptions {
   /** Over a paused match (translucent) instead of a full page. */
   readonly overlay?: boolean;
 }
+
+const CONDITION_LAYER_LABELS: readonly (readonly [ConditionLayerSetting, string])[] = [
+  ['A', 'A · Mechanical wear'],
+  ['B', 'B · Spirit aura'],
+  ['C', 'C · Floor instrument'],
+];
 
 type BooleanKey = 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart';
 
@@ -133,6 +140,25 @@ export class SettingsScreen {
       this.toggleRow('control-hints', 'Control hints on the HUD', 'controlHints'),
       this.toggleRow('debug-overlay', 'Developer overlay (F3) on start', 'debugOverlayOnStart'),
     );
+
+    // Condition languages (A / B / C): shown only while the conditionVisuals presentation flag is on, so the flag-off Settings screen is unchanged.
+    if (presentationFeaturesFromLocation().conditionVisuals) {
+      const condition = this.section('Condition (Stamina, Stability, Broken)');
+      for (const [id, label] of CONDITION_LAYER_LABELS) {
+        condition.append(
+          this.choiceRow<boolean>(
+            `condition-${id.toLowerCase()}`,
+            label,
+            [{ value: true, label: 'On' }, { value: false, label: 'Off' }],
+            (s) => s.conditionLayers.includes(id),
+            (s, v) => ({ ...s, conditionLayers: toggleConditionLayer(s.conditionLayers, id, v) }),
+          ),
+        );
+      }
+      const note = el('p', 'cb-hint', 'settings-condition-note');
+      note.textContent = 'Pick any combination; at least one stays on. The spin slowing and the blur are always shown.';
+      condition.append(note);
+    }
 
     const controls = this.section('Controls');
     const table = el('table', 'cb-settings__controls', 'settings-controls');

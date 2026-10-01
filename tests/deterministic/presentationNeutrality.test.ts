@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { GameStateMachine } from '../../src/app/lifecycle/GameState';
-import { MatchSession } from '../../src/app/session/MatchSession';
+import { MatchSession, type MatchSessionOptions } from '../../src/app/session/MatchSession';
 import { IdleController } from '../../src/automation/scripted-scenarios/IdleController';
 import { createDefaultAttackProfileSettings } from '../../src/config/attack-profile/AttackProfileSettings';
 import { resolveMatchConfig } from '../../src/config/match/MatchConfig';
@@ -42,7 +42,7 @@ const SEED = 'presentation-neutrality-1';
 const TICKS = 900;
 const FINGERPRINT = { buildVersion: 'test', commit: null, rapierVersion: 'test' } as const;
 
-async function createSession(features: PresentationFeatures | undefined, seed = SEED) {
+async function createSession(features: PresentationFeatures | undefined, seed = SEED, extra: Partial<MatchSessionOptions> = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 1000);
   scene.add(camera);
@@ -57,6 +57,7 @@ async function createSession(features: PresentationFeatures | undefined, seed = 
     controllers: { first: { kind: 'ai', personality: 'archetype' }, second: { kind: 'ai', personality: 'archetype' } },
     keyboard: new IdleController(),
     ...(features ? { presentationFeatures: features } : {}),
+    ...extra,
   });
   return { session, scene, camera };
 }
@@ -122,8 +123,8 @@ interface RunResult {
   readonly recorder: Recorder | null;
 }
 
-async function run(features: PresentationFeatures | undefined, attach: boolean): Promise<RunResult> {
-  const { session, camera } = await createSession(features);
+async function run(features: PresentationFeatures | undefined, attach: boolean, extra: Partial<MatchSessionOptions> = {}): Promise<RunResult> {
+  const { session, camera } = await createSession(features, SEED, extra);
   let recorder: Recorder | null = null;
   if (attach) {
     recorder = new Recorder();
@@ -141,6 +142,8 @@ async function run(features: PresentationFeatures | undefined, attach: boolean):
     hashes.push(session.getStateHash());
     const cam = session.getLastCameraOutput();
     if (cam) cameraSamples.push(JSON.stringify([cam.cameraPositionM, cam.focusPositionM, cam.fovDeg, cam.shakeOffsetM, cam.mode]));
+    // The real camera object too (what a presentation system could be tempted to touch): pose, lens and projection.
+    cameraSamples.push(JSON.stringify([camera.position.toArray(), camera.quaternion.toArray(), camera.fov, camera.near, camera.far, Array.from(camera.projectionMatrix.elements), camera.children.length]));
     if (attach) {
       // Anchors are read every frame, as a visual system would.
       const out = { x: 0, y: 0, z: 0 };
@@ -166,6 +169,22 @@ describe('presentation foundation is behaviour-neutral on a real session', () =>
       expect(other.camera).toBe(off.camera);
     }
   }, 120_000);
+
+  it('conditionVisuals with all three languages leaves the simulation, replay and the camera object untouched', async () => {
+    const off = await run(undefined, false);
+    const features = resolvePresentationFeatures({ conditionVisuals: true });
+    for (const layers of [['A'], ['B'], ['C'], ['A', 'B', 'C']] as const) {
+      const on = await run(features, false, { conditionLayers: layers });
+      expect(on.hashes).toEqual(off.hashes);
+      expect(on.replayIntegrity).toBe(off.replayIntegrity);
+      expect(on.camera).toBe(off.camera);
+    }
+    // With the Bey models on as well (wear, rattle and seams dress the four pieces).
+    const withModels = await run(resolvePresentationFeatures({ conditionVisuals: true, newBeyVisuals: true }), false, { conditionLayers: ['A', 'B', 'C'] });
+    expect(withModels.hashes).toEqual(off.hashes);
+    expect(withModels.replayIntegrity).toBe(off.replayIntegrity);
+    expect(withModels.camera).toBe(off.camera);
+  }, 300_000);
 
   it('delivers real events and states to an attached system, in tick order, without gameplay-derived events twice', async () => {
     const { recorder } = await run(ALL_ON, true);
@@ -197,12 +216,15 @@ describe('presentation lifecycle on a real session', () => {
       const { session } = await createSession(features);
       expect(session.getPresentation().systemIds()).toEqual([]);
       expect(session.getPresentationStats().hub.systems).toBe(0);
+      expect(session.getConditionLayers()).toBeNull();
       expect(session.match.visuals.first.definition.id).toBe('placeholder:attack-prototype');
       expect(session.match.visuals.second.definition.id).toBe('placeholder:defense-prototype');
       session.dispose();
     }
     const { session } = await createSession(ALL_ON);
-    expect(session.getPresentation().systemIds()).toEqual([]);
+    // The only system a flag attaches by itself so far: the condition languages (conditionVisuals).
+    expect(session.getPresentation().systemIds()).toEqual(['condition-visuals']);
+    expect(session.getConditionLayers()).toEqual(['A']);
     // Provisional mapping: each archetype wears the A concept of its own family.
     expect(session.match.visuals.first.definition.id).toBe('concept:attack-a');
     expect(session.match.visuals.second.definition.id).toBe('concept:defense-a');
@@ -270,7 +292,7 @@ describe('presentation lifecycle on a real session', () => {
 
     const second = await createSession(ALL_ON, `${SEED}-restart`);
     expect(second.session.getPresentation()).not.toBe(first.session.getPresentation());
-    expect(second.session.getPresentation().systemIds()).toEqual([]);
+    expect(second.session.getPresentation().systemIds()).toEqual(['condition-visuals']);
     const newRecorder = new Recorder();
     second.session.getPresentation().attach(newRecorder);
     for (let i = 0; i < 10; i++) second.session.tick();

@@ -689,6 +689,22 @@ describe('dependency direction', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('keeps the ported visual batches (Bey models, condition languages) away from the camera, Rapier, the AI, sessions and UI', () => {
+    // The camera is frozen by the owner: the only camera import allowed is the read-only ImpactEvents type.
+    const forbidden = [/rapier/i, /(^|\/)physics\//, /(^|\/)ai\//, /camera\/(?!ImpactEvents)/, /app\/session/, /app\/frontend/, /app\/lifecycle/, /(^|\/)debug\//];
+    const dirs = ['bey/visual', 'vfx/condition'];
+    expect(dirs.every((dir) => sourceFiles(join(SRC, dir)).length >= 8)).toBe(true);
+    const offenders: string[] = [];
+    for (const dir of dirs) {
+      for (const file of sourceFiles(join(SRC, dir))) {
+        for (const spec of importsOf(file)) {
+          if (forbidden.some((pattern) => pattern.test(spec))) offenders.push(`${relative(SRC, file)} → ${spec}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('keeps the HUD contract free of Three.js and the DOM', () => {
     for (const file of ['hud.ts', 'events.ts', 'state.ts', 'clash.ts']) {
       const specs = importsOf(join(SRC, 'presentation', file));

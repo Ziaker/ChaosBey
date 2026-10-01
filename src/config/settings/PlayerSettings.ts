@@ -42,6 +42,22 @@ export const CONTROL_SCHEMES: readonly ControlScheme[] = ['directional', 'classi
 export type CameraPresetSetting = 'A' | 'B' | 'C';
 export const CAMERA_PRESET_SETTINGS: readonly CameraPresetSetting[] = ['A', 'B', 'C'];
 
+/**
+ * Stamina / Stability / Broken languages (condition-visual-approval.md): A Desgaste Mecânico, B Aura de Espírito,
+ * C Instrumento no Chão. The player may show any combination of 1, 2 or 3 (never none); the shared physical layer is always on.
+ * Only used while the `conditionVisuals` presentation flag is on; with it off the Settings screen does not show it either.
+ */
+export type ConditionLayerSetting = 'A' | 'B' | 'C';
+export const CONDITION_LAYER_SETTINGS: readonly ConditionLayerSetting[] = ['A', 'B', 'C'];
+/** OPEN DECISION (ASK FIRST): the first-time default for new players is the owner's to pick. A alone is a neutral placeholder. */
+export const DEFAULT_CONDITION_LAYERS: readonly ConditionLayerSetting[] = ['A'];
+
+/** Turns one condition layer on or off. The last layer on cannot be turned off: at least one always shows. */
+export function toggleConditionLayer(layers: readonly ConditionLayerSetting[], id: ConditionLayerSetting, on: boolean): readonly ConditionLayerSetting[] {
+  const next = CONDITION_LAYER_SETTINGS.filter((layer) => (layer === id ? on : layers.includes(layer)));
+  return next.length > 0 ? next : layers;
+}
+
 export interface PlayerSettings {
   readonly quality: QualityPreset;
   readonly cameraPreset: CameraPresetSetting;
@@ -54,6 +70,8 @@ export interface PlayerSettings {
   readonly controlHints: boolean;
   /** The F3 developer overlay open when the player flow starts. */
   readonly debugOverlayOnStart: boolean;
+  /** Which condition languages show (at least one). Presentation only; needs the `conditionVisuals` flag. */
+  readonly conditionLayers: readonly ConditionLayerSetting[];
 }
 
 export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
@@ -65,6 +83,7 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   pauseOnFocusLoss: true,
   controlHints: true,
   debugOverlayOnStart: false,
+  conditionLayers: DEFAULT_CONDITION_LAYERS,
 };
 
 /** What each quality preset changes. Render cost only. */
@@ -88,6 +107,8 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
   const quality = Object.values(QualityPreset).find((q) => q === input.quality) ?? DEFAULT_PLAYER_SETTINGS.quality;
   const controlScheme = CONTROL_SCHEMES.find((c) => c === input.controlScheme) ?? DEFAULT_PLAYER_SETTINGS.controlScheme;
   const cameraPreset = CAMERA_PRESET_SETTINGS.find((c) => c === input.cameraPreset) ?? DEFAULT_PLAYER_SETTINGS.cameraPreset;
+  const picked = Array.isArray(input.conditionLayers) ? CONDITION_LAYER_SETTINGS.filter((id) => (input.conditionLayers as unknown[]).includes(id)) : [];
+  const conditionLayers = picked.length > 0 ? picked : DEFAULT_CONDITION_LAYERS;
   return {
     quality,
     cameraPreset,
@@ -96,6 +117,7 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
     pauseOnFocusLoss: bool('pauseOnFocusLoss'),
     controlHints: bool('controlHints'),
     debugOverlayOnStart: bool('debugOverlayOnStart'),
+    conditionLayers,
   };
 }
 

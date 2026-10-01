@@ -51,6 +51,8 @@ import { selectClashPresentationSnapshot } from '../../presentation/clash';
 import { selectBeyPresentationState, type CameraPresentationSnapshot, type RecentImpact } from '../../presentation/state';
 import type { PresentationSide } from '../../presentation/events';
 import { collectSceneStats, type SceneStats } from '../../presentation/sceneStats';
+import { ConditionVisualsSystem, normalizeConditionLayers } from '../../vfx/condition/ConditionVisualsSystem';
+import type { LanguageId } from '../../vfx/condition/types';
 import { HeadingArrow } from '../../vfx/HeadingArrow';
 import { DriftVfx } from '../../vfx/DriftVfx';
 import { VfxManager } from '../../vfx/VfxManager';
@@ -88,6 +90,8 @@ export interface MatchSessionOptions {
   readonly cameraPreset?: PresetId;
   /** Presentation feature flags (src/presentation/features.ts). Omit for the page's `?pfx=` flags (all off when there are none): the game as it was. Render only. */
   readonly presentationFeatures?: PresentationFeatures;
+  /** Which condition languages (A, B, C) show when the `conditionVisuals` flag is on; at least one. Default A. Render only. */
+  readonly conditionLayers?: readonly LanguageId[];
 }
 
 export interface SessionTickOutput {
@@ -144,6 +148,8 @@ export class MatchSession {
   private readonly vfxManager: VfxManager;
   /** Presentation foundation: derives events and state after each tick and runs attached presentation systems (none by default). Render only. */
   private readonly presentation: PresentationHub;
+  /** The approved Stamina / Stability / Broken languages, attached only with the `conditionVisuals` flag (render only). */
+  private conditionVisuals: ConditionVisualsSystem | null = null;
   /** Owner playtest (after M11): skid marks, sparks and grip-regain ring while a Bey drifts. Render only. */
   private readonly driftVfx: { readonly first: DriftVfx; readonly second: DriftVfx };
   /** M11: the approved camera director running the three presets; the Clash forces B without orbit. Render only. */
@@ -291,6 +297,19 @@ export class MatchSession {
     const floorAt = (x: number, z: number): number => floorHeightAt(arenaFloor, x, z);
     this.driftVfx = { first: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt), second: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt) };
     this.root.add(this.driftVfx.first.object3D, this.driftVfx.second.object3D);
+    if (presentationFeatures.conditionVisuals) {
+      this.conditionVisuals = new ConditionVisualsSystem({
+        scene: this.root,
+        camera: options.camera,
+        beys: {
+          first: { visual: this.match.visuals.first.visual, gameplay: this.match.first.definition },
+          second: { visual: this.match.visuals.second.visual, gameplay: this.match.second.definition },
+        },
+        floorHeightAt: floorAt,
+        layers: normalizeConditionLayers(options.conditionLayers ?? ['A']),
+      });
+      this.presentation.attach(this.conditionVisuals);
+    }
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
     this.anomalyDetector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(options.matchConfig.arenaFloor ?? 'flat') + options.matchConfig.arenaWallHeightM });
@@ -676,6 +695,16 @@ export class MatchSession {
   /** The presentation hub: future visual systems attach here. Nothing is attached by default. */
   getPresentation(): PresentationHub {
     return this.presentation;
+  }
+
+  /** Which condition languages show, live (the Settings screen). No effect unless the `conditionVisuals` flag is on. */
+  setConditionLayers(layers: readonly LanguageId[]): void {
+    this.conditionVisuals?.setLayers(layers);
+  }
+
+  /** The condition languages showing now, or null while the `conditionVisuals` flag is off. */
+  getConditionLayers(): readonly LanguageId[] | null {
+    return this.conditionVisuals?.getLayers() ?? null;
   }
 
   /** World position of a named VFX anchor on a Bey (presentation only). False if the name is not an anchor. */

@@ -247,6 +247,7 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
         controllers: { first: controllers.first, second: controllers.second },
         keyboard: playerInput,
         cameraPreset,
+        conditionLayers: loadPlayerSettings().conditionLayers,
       });
       if (myToken !== restartToken) {
         // A newer restart (Restart/New Seed/loadPreset clicked again before
