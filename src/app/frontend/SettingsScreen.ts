@@ -42,17 +42,17 @@ const KEYBOARD_BINDINGS: readonly { readonly label: string; readonly keys: strin
 
 /** The control scheme's note and its two movement rows (action, keyboard, gamepad) in the controls table. */
 const CONTROL_TEXT: Readonly<Record<ControlScheme, { readonly note: string; readonly rows: readonly (readonly [string, string, string])[] }>> = {
+  directional: {
+    note: 'Default. ↑ always goes away from the camera, → to its right, and so on — wherever the camera currently is. The Bey turns toward the direction with its own weight and grip.',
+    // One movement row: the second (throttle) is Classic only and hidden here.
+    rows: [['Move toward (screen direction)', '← → ↑ ↓', 'Left stick / D-pad']],
+  },
   classic: {
-    note: 'Default. Kart-like: ← → steer the Bey, ↑ ↓ accelerate and brake/reverse along the way it\'s facing. The camera can move freely without changing what the arrows do.',
+    note: 'Kart-like: ← → steer the Bey, ↑ ↓ accelerate and brake/reverse along the way it\'s facing, regardless of the camera.',
     rows: [
       ['Steer', '← →', 'Left stick ← → / D-pad ← →'],
       ['Accelerate / brake', '↑ ↓', 'Left stick ↑ ↓ / D-pad ↑ ↓ / RT, LT'],
     ],
-  },
-  directional: {
-    note: 'Experimental. ↑ goes up the screen, → to the right, and so on, fixed to the arena regardless of the camera. The Bey turns toward the direction with its own weight and grip.',
-    // One movement row: the second (throttle) is Classic only and hidden here.
-    rows: [['Move toward (screen direction)', '← → ↑ ↓', 'Left stick / D-pad']],
   },
 };
 
@@ -122,8 +122,8 @@ export class SettingsScreen {
         'control-scheme',
         'Control',
         [
+          { value: 'directional', label: 'Directional' },
           { value: 'classic', label: 'Classic' },
-          { value: 'directional', label: 'Directional (experimental)' },
         ],
         (s) => s.controlScheme,
         (s, v) => ({ ...s, controlScheme: v }),

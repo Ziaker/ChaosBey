@@ -13,18 +13,24 @@
 import { DEFAULT_QUALITY_PRESET, QualityPreset } from '../runtime/QualityPreset';
 
 /**
- * How the arrows / stick drive the Bey (M11, default revised 2026-09-30 —
- * "Fix 6" of the M11 playtest round, see screenDirection.ts's header).
- * - classic (default): Bey-relative, kart-like — ←/→ steer the Bey's own
- *   heading, ↑/↓ accelerate/decelerate along it (turn rate, momentum, grip
- *   all still apply; this is not a snap-to-input). No absolute axis, so it
- *   has nothing to fall out of alignment with when the camera orbits.
- * - directional: arena/world-relative — ↑ = world +Z on screen, and so on;
- *   fully camera-independent (screenToWorld takes no camera parameter),
- *   but because it maps to FIXED world axes, a screen "up" that no longer
- *   visually matches world +Z once a dynamic camera has turned can read as
- *   "wrong" even though the Bey's own trajectory never changed. Kept as a
- *   selectable, experimental option, not the default.
+ * How the arrows / stick drive the Bey (M11, default revised 2026-10-01 —
+ * "Fix 7" of the M11 playtest round, see screenDirection.ts's header for
+ * the full history, including why "Fix 6"'s classic-by-default didn't
+ * actually solve this).
+ * - directional (default): camera-relative — ↑ always goes away from the
+ *   camera on screen, →/← always go to the camera's right/left, ↓ toward
+ *   it, recomputed fresh from the camera's current yaw every tick (no
+ *   latching, no stale state). The industry's standard answer for a
+ *   camera that isn't fixed to the world or to the player's own heading
+ *   (Zelda, Dark Souls, God of War): the Bey's world trajectory bends
+ *   smoothly as the camera moves, by design, so the screen always reads
+ *   right.
+ * - classic: Bey-relative, kart-like — ←/→ steer the Bey's own heading,
+ *   ↑/↓ accelerate/decelerate along it (turn rate, momentum, grip all
+ *   still apply; this is not a snap-to-input). No camera dependency at
+ *   all. Kept as a selectable option for a player who prefers it — proven
+ *   in a real browser (2026-10-01) to still look "backwards" on screen
+ *   about as often as it looks right, since this camera isn't a chase cam.
  */
 export type ControlScheme = 'directional' | 'classic';
 export const CONTROL_SCHEMES: readonly ControlScheme[] = ['directional', 'classic'];
@@ -55,7 +61,7 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   quality: DEFAULT_QUALITY_PRESET,
   // B until the owner picks the first-time default (camera-approval.md 10.1 recommends B).
   cameraPreset: 'B',
-  controlScheme: 'classic',
+  controlScheme: 'directional',
   cameraEffects: true,
   pauseOnFocusLoss: true,
   controlHints: true,
