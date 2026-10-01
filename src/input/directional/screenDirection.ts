@@ -49,6 +49,14 @@
 //    for the input layer to be blind to the camera as "Fix 5"/"Fix 6"
 //    tried. Classic (Bey-relative, no camera at all) stays selectable for
 //    a player who prefers it.
+// 4. "Fix 9" (owner playtest, same day): "a câmera move o bey sozinho —
+//    só o jogador move o jogador". Re-reading the yaw on every tick meant
+//    the automatic camera orbiting under a held key steered the Bey with
+//    nobody touching the controls. The camera is now read once, when the
+//    player starts to move, and frozen until every direction is released
+//    (DirectionalController.gestureYaw): the screen still reads right at
+//    the moment of input, but from then on only the player moves the Bey.
+//    No mid-hold re-read boundary, so failure 1 above cannot recur.
 // ============================================================
 
 import { fromYaw, perpendicular, scale, type Vec2 } from '../../physics/Vec2';

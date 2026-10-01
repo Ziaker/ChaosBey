@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// M11 directional control, "Fix 7" (2026-10-01, see screenDirection.ts's
+// M11 directional control, "Fix 7" (2026-10-01; "Fix 9" now freezes that
+// camera read for the length of one gesture — each key below is pressed
+// fresh, so it still reads the camera at press time, see screenDirection.ts's
 // header for the full history): ↑/↓/←/→ move the player's Bey relative to
 // the CURRENT camera — ↑ always away from it, → always to its right, and
 // so on, recomputed fresh every tick, no latching. Verified across several
@@ -45,16 +47,18 @@ async function holdAndMeasure(page: Page, key: Direction, opponentXZ: { x: numbe
     { opponentXZ },
   );
   await nextFrame(page);
+  // "Fix 9": the camera is read once when the key goes down and frozen while held, so that is the yaw the Bey's heading must be measured against — not wherever the camera has orbited to 1.25 s later.
+  const cameraYawAtPressDeg = await page.evaluate(() => window.__chaosBeyDebugLab!.getSession()!.getLastCameraOutput()?.yawDeg ?? 0);
   await page.keyboard.down(key);
   // 1.25 s: long enough for a full turnaround (brake, pivot, go) at the Bey's turn rate — short enough that it never reaches the arena wall (a bounce there would contaminate the reading).
   await page.evaluate(() => window.__chaosBeyDebugLab!.step(75));
   const result = await page.evaluate(() => {
     const session = window.__chaosBeyDebugLab!.getSession()!;
     const v = session.getBey('first').body.linvel();
-    return { velocity: { x: v.x, z: v.z }, cameraYawDeg: session.getLastCameraOutput()?.yawDeg ?? 0 };
+    return { velocity: { x: v.x, z: v.z } };
   });
   await page.keyboard.up(key);
-  return result;
+  return { ...result, cameraYawDeg: cameraYawAtPressDeg };
 }
 
 /** "Away from the camera" on the ground, for a CameraDirector-convention yaw in degrees. */
@@ -215,14 +219,14 @@ test('real keyboard, real AI fight: holding a direction through jump/drift/knock
   expect(errors).toEqual([]);
 });
 
-test('Directional (default): a held key always reads "away from the camera" on screen through a real AI fight with a real orbiting camera', async ({ page }) => {
-  // Reproduces the owner's bug report directly and proves "Fix 7" fixes
-  // it: holding ArrowUp the entire time through a real fight (so the
+test('Directional (default): the camera never moves the Bey — a held key keeps one world direction through a real AI fight with a real orbiting camera', async ({ page }) => {
+  // "Fix 9" (owner: "a câmera move o bey sozinho — só o jogador move o
+  // jogador"): holding ArrowUp the entire time through a real fight (so the
   // camera genuinely swings through a wide orbit), the resolved world
-  // direction must keep pointing away from the camera's CURRENT position
-  // on every single tick — not a fixed world vector (that's what read
-  // "backwards" about half the time before this fix, verified with the
-  // same dot-product measurement used to diagnose the original report).
+  // direction must read "away from the camera" on the first tick of the
+  // gesture and then NEVER change while the key stays held, however far
+  // the camera orbits. Re-reading the camera every tick ("Fix 7") bent the
+  // Bey's path with nobody touching the controls.
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/ChaosBey/?mode=debug-lab');
@@ -237,6 +241,7 @@ test('Directional (default): a held key always reads "away from the camera" on s
     const session = lab.getSession()!;
     const violations: unknown[] = [];
     const cameraYawsDeg: number[] = [];
+    let first: { x: number; z: number } | null = null;
     for (let i = 0; i < 300; i++) {
       lab.step(1);
       const actions = session.getLastActions('first');
@@ -249,11 +254,14 @@ test('Directional (default): a held key always reads "away from the camera" on s
         violations.push({ tick: session.getTickIndex(), reason: 'moveIntent missing or zero while ArrowUp held', moveIntent: move ?? null });
         continue;
       }
-      const yawRad = (yawDeg * Math.PI) / 180;
-      const away = { x: -Math.sin(yawRad), z: -Math.cos(yawRad) };
-      const dot = (move.x * away.x + move.z * away.z) / len;
-      if (dot < 0.95) {
-        violations.push({ tick: session.getTickIndex(), reason: 'did not read as away-from-camera', dot, moveIntent: move, cameraYawDeg: yawDeg });
+      if (first === null) {
+        first = { x: move.x, z: move.z };
+        const yawRad = (yawDeg * Math.PI) / 180;
+        const away = { x: -Math.sin(yawRad), z: -Math.cos(yawRad) };
+        const dot = (move.x * away.x + move.z * away.z) / len;
+        if (dot < 0.9) violations.push({ tick: session.getTickIndex(), reason: 'did not read as away-from-camera at the start of the gesture', dot, moveIntent: move, cameraYawDeg: yawDeg });
+      } else if (Math.abs(move.x - first.x) > 1e-9 || Math.abs(move.z - first.z) > 1e-9) {
+        violations.push({ tick: session.getTickIndex(), reason: 'the camera moved the Bey: world intent changed while the key was held', moveIntent: move, first, cameraYawDeg: yawDeg });
       }
     }
     return { violations, cameraYawRangeDeg: Math.max(...cameraYawsDeg) - Math.min(...cameraYawsDeg) };
