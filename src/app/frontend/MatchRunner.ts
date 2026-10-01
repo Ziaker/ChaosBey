@@ -136,10 +136,14 @@ export class MatchRunner {
     // player drives with the keyboard and/or the first gamepad.
     const keyboard = new KeyboardController();
     const gamepad = new GamepadController();
-    // Arena/world-relative directional control: a selectable, non-default
-    // option (PlayerSettings.ts) with no camera dependency at all — not
-    // even diagnostic (see DirectionalController.ts's header).
+    // Camera-relative directional control: the player default
+    // (PlayerSettings.ts, "Fix 7" — see DirectionalController.ts's and
+    // screenDirection.ts's headers). The camera reaches it only as a
+    // number (radians), read from the session's own camera output once
+    // `session` exists below — never a camera type/import.
+    let sessionForCameraYaw: MatchSession | null = null;
     const directional = new DirectionalController(new CombinedController([keyboard, gamepad]), {
+      cameraYaw: () => ((sessionForCameraYaw?.getLastCameraOutput()?.yawDeg ?? 0) * Math.PI) / 180,
       stick: () => gamepad.getStick(),
     });
     directional.setEnabled((start.controlScheme ?? DEFAULT_PLAYER_SETTINGS.controlScheme) === 'directional');
@@ -157,6 +161,7 @@ export class MatchRunner {
       arenaTheme: start.arenaTheme,
       cameraPreset: start.presentation?.cameraPreset,
     });
+    sessionForCameraYaw = session;
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
     deps.stateMachine.transitionTo(GameState.Combat);
     const runner = new MatchRunner(session, keyboard, gamepad, directional, deps, events);

@@ -108,10 +108,16 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
 
   const keyboard = new KeyboardController();
   keyboard.attach();
-  // M11: the player's control scheme from Settings (Classic/Bey-relative by
-  // default; Directional is a selectable, camera-independent option — see
-  // DirectionalController.ts's header for why it has no camera dependency).
-  const playerInput = new DirectionalController(keyboard);
+  // M11: the player's control scheme from Settings (Directional/camera-
+  // relative by default, "Fix 7" — see DirectionalController.ts's and
+  // screenDirection.ts's headers; Classic/Bey-relative is a selectable
+  // option). The camera reaches this only as a number (radians), read
+  // from the Lab's current session below (declared further down, but this
+  // closure isn't called until a real tick runs, long after `session` is
+  // first assigned) — never a camera type/import.
+  const playerInput = new DirectionalController(keyboard, {
+    cameraYaw: () => ((session?.getLastCameraOutput()?.yawDeg ?? 0) * Math.PI) / 180,
+  });
   playerInput.setEnabled(loadPlayerSettings().controlScheme === 'directional');
   // M11: the game camera preset from Settings (A/B/C; the Clash forces B).
   let cameraPreset: CameraPresetSetting = loadPlayerSettings().cameraPreset;

@@ -1,39 +1,57 @@
 // ============================================================
-// SCREEN DIRECTION (M11 directional control — now an experimental/debug
-// option, not the player default; see fix 9/"Fix 6" below)
+// SCREEN DIRECTION (M11 directional control — the player default again,
+// "Fix 7" of this playtest round, 2026-10-01, superseding "Fix 6")
 // Pure helpers: arrows/D-pad/stick → a screen vector (x right, y up,
-// length 0..1, diagonals normalized), and a screen vector → the world X/Z
-// direction that goes into ControllerActions.moveIntent — a FIXED mapping
-// (Up = world +Z, Right = world +X, etc.), never the camera's.
+// length 0..1, diagonals normalized), and a screen vector + the camera's
+// current yaw → the world X/Z direction that goes into
+// ControllerActions.moveIntent — screen up = away from the camera, screen
+// right = the camera's right, on the ground plane, recomputed fresh every
+// single tick. Up always looks like "away" on screen, right always looks
+// like "right" on screen, no matter where the camera currently is.
 //
-// This module has no camera dependency at all — not even for diagnostics.
-// The debug overlay/inspector reads the camera's own yaw directly from
-// MatchSession.getLastCameraOutput().yawDeg, never through src/input/. An
-// architectural regression-guard test asserts src/input/ never imports
-// from src/camera/.
-//
-// History: a camera-relative scheme (even one that re-reads the camera
-// only between gestures, as an earlier version of this file did via
-// CameraYawLatch) meant the same key could produce a different world
-// direction depending on where the camera happened to be pointed, which
-// read to a player as "the Bey goes the wrong way" or "I lost control".
-// Fixing that by making the world mapping fixed and camera-free removed
-// that failure mode. But with the camera itself now free to orbit widely
-// (the fix 8 two-fighter director), a FIXED arena mapping has its own
-// failure mode: when the camera turns 90/180/270°, "up" on screen no
-// longer lines up with world +Z, so a constant, unchanging key can *look*
-// wrong on screen even though the Bey's world trajectory never changed —
-// this is a screen-reading problem, not a control coupling. The owner's
-// decision (2026-09-30, "Fix 6" of this playtest round): the player
-// DEFAULT is no longer this arena/world-relative scheme. It is now
-// Bey-relative/kart-like (Classic, see PlayerSettings.ts and
-// MovementController's no-moveIntent path) — a scheme with no absolute
-// axis to fall out of alignment with the screen in the first place. This
-// module and its arena-relative mapping are kept as a selectable,
-// non-default option (still fully camera-independent, just not what a
-// player gets without changing Settings).
+// History, in order:
+// 1. The original scheme (camera-relative, but LATCHED to the camera's
+//    yaw at the start of each input gesture — CameraYawLatch) meant the
+//    same held key could silently change its world meaning mid-hold, the
+//    moment the automatic camera crossed a latch boundary: "eu perco
+//    controle", "vai pra direção errada" (owner playtest). Fixed by
+//    removing the camera dependency entirely ("Fix 5"/2451e8d): a FIXED
+//    world mapping (Up = world +Z always), proven camera-independent by
+//    construction.
+// 2. That fixed mapping is indeed camera-independent, but with the camera
+//    itself free to orbit widely (the fix 8 two-fighter director), a
+//    constant, unchanging key can still *look* wrong on screen once the
+//    camera has turned 90/180/270° — a screen-reading problem, not a
+//    control-coupling bug. "Fix 6" (2026-09-30) replaced the player
+//    default with Bey-relative/kart-like steering (Classic) specifically
+//    to have no world axis to fall out of alignment with the screen.
+// 3. Verified in a real browser against the real two-fighter camera
+//    (2026-10-01): Classic doesn't actually fix the perceptual problem
+//    either, because this camera isn't a chase cam — it frames both
+//    fighters, so it can end up on any side of the player's own heading.
+//    Holding a single key the entire time, the dot product between the
+//    Bey's actual velocity and the camera's forward view flipped sign
+//    repeatedly (+0.93, -0.17, -0.84, +0.26, -0.26, +0.85, …): the SAME
+//    held key alternates between "moving away" and "moving toward the
+//    camera" on screen, with nothing the player did causing the flip.
+//    This is mathematically unavoidable for ANY mapping that doesn't read
+//    the camera, given a camera that isn't fixed to the world OR to the
+//    player's heading. The owner's decision (2026-10-01, "Fix 7"):
+//    reinstate camera-relative mapping as the default — the industry's
+//    standard answer to exactly this problem (Zelda, Dark Souls, God of
+//    War) — but WITHOUT the gesture latch that caused failure 1: this
+//    version re-reads the camera's actual current yaw on every tick, with
+//    no latching, no gesture boundaries and no stale state at all. A
+//    continuously-held key that keeps meaning "away from the camera" as
+//    the camera itself slowly orbits is the camera genuinely being read
+//    on purpose now, by design — the point is for the Bey's trajectory to
+//    bend smoothly with the camera so the screen always reads right, not
+//    for the input layer to be blind to the camera as "Fix 5"/"Fix 6"
+//    tried. Classic (Bey-relative, no camera at all) stays selectable for
+//    a player who prefers it.
 // ============================================================
 
+import { fromYaw, perpendicular, scale, type Vec2 } from '../../physics/Vec2';
 import type { MoveIntent } from '../actions/Action';
 
 /** Screen-space direction: +x right, +y up, length 0..1. */
@@ -76,15 +94,31 @@ export function screenLength(v: ScreenVector): number {
 }
 
 /**
- * A screen vector as a FIXED world X/Z direction: screen up = world +Z,
- * screen right = world +X (the `fromYaw` convention: yaw 0 faces +Z). No
- * camera involved, ever — see this file's header. Holding the same key
- * always produces the same world direction, for the entire match,
- * regardless of what the camera is doing.
+ * Yaw (fromYaw convention: x = sin, z = cos) of a camera, from its
+ * world-space right axis (the 1st column of its world matrix). The right
+ * vector of a camera without roll is horizontal whether it looks down or
+ * at the horizon, so this never degenerates — unlike reading the forward
+ * axis, which flattens to zero length looking straight down.
  */
-export function screenToWorld(screen: ScreenVector): MoveIntent {
+export function cameraYawFromRight(rightX: number, rightZ: number): number {
+  // right = (cos(yaw), -sin(yaw))  ⇒  yaw = atan2(-rightZ, rightX)
+  return Math.atan2(-rightZ, rightX);
+}
+
+/**
+ * A screen vector as a world X/Z direction for a camera at this yaw:
+ * screen up = straight away from the camera (on the ground plane), screen
+ * right = the camera's right. No latch, no memory — purely a function of
+ * the screen vector and the yaw passed in this call, recomputed fresh on
+ * every tick by the caller.
+ */
+export function screenToWorld(screen: ScreenVector, cameraYawRad: number): MoveIntent {
   if (screen.x === 0 && screen.y === 0) return { x: 0, z: 0 };
-  return { x: quantize(screen.x), z: quantize(screen.y) };
+  const away: Vec2 = scale(fromYaw(cameraYawRad), -1); // away from the camera, on the ground
+  const right: Vec2 = perpendicular(fromYaw(cameraYawRad)); // the camera's right, on the ground
+  const x = away.x * screen.y + right.x * screen.x;
+  const z = away.z * screen.y + right.z * screen.x;
+  return { x: quantize(x), z: quantize(z) };
 }
 
 function quantize(value: number): number {

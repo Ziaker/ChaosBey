@@ -1,20 +1,25 @@
 // ============================================================
 // ARCHITECTURAL BOUNDARY: src/input/ AND THE MOVEMENT CONTROLLER MUST
-// NEVER IMPORT FROM src/camera/ (owner decision 2026-09-30, "Fix 6" of the
-// M11 playtest round)
+// NEVER IMPORT FROM src/camera/ (owner decision 2026-09-30, "Fix 6",
+// narrowed 2026-10-01 by "Fix 7" — see below)
 //
-// The bug this guards against: a previous version of DirectionalController
-// read the render camera's yaw — at first to drive movement, later merely
-// for a diagnostic readout — and each time it came back as "the Bey moves
-// wrong when the camera moves". The owner's fix removed the coupling
-// entirely and asked for it to be enforced structurally, not by a comment,
-// so it can never quietly grow back even for "just a diagnostic".
+// "Fix 6" made DirectionalController entirely camera-free, including
+// diagnostics. "Fix 7" (screenDirection.ts's header) reinstated
+// camera-relative mapping as the player default, which needs the camera's
+// current yaw on purpose, every tick. What stays true, and what this test
+// still enforces: that dependency arrives ONLY as a plain number
+// (radians), handed in by a caller-supplied function
+// (DirectionalSources.cameraYaw) — never a Camera/CameraRig TYPE, never a
+// src/camera/ MODULE import. MatchRunner.ts and DebugLabMode.ts are the
+// callers that read MatchSession.getLastCameraOutput().yawDeg and convert
+// it to radians; src/input/ itself never imports anything from
+// src/camera/ to do that conversion or anything else.
 //
 // This test reads the actual source files (not a bundler graph) and fails
 // if anything under src/input/ or src/bey/movement/ resolves an import to
-// a module inside src/camera/. The debug overlay/inspector may still show
-// the camera's yaw — they read it from MatchSession.getLastCameraOutput(),
-// entirely outside this boundary.
+// a module inside src/camera/. The debug overlay/inspector may also show
+// the camera's yaw — they read it from MatchSession.getLastCameraOutput()
+// directly, entirely outside this boundary too.
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
