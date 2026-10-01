@@ -24,8 +24,9 @@ import { SCENARIO_PRESETS } from '../../src/self-test/scenarios/ScenarioPresets'
 import { setResourceFraction } from '../../src/debug/cheats/DebugMutations';
 import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecorder';
 
-// A long fight with many hitstop freezes (see replayPlayback.test.ts).
-const LONG_SEED = 'replay-41';
+// A long fight with many hitstop freezes (see replayPlayback.test.ts, whose
+// header comment explains this seed's re-pinning history).
+const LONG_SEED = 'replay-3';
 /** The tampered-inputs check flips MoveForward on ticks 300 up to (not including) this. */
 const EDIT_END_TICK = 700;
 

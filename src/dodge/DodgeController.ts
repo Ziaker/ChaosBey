@@ -31,7 +31,7 @@ import {
   DODGE_STAMINA_COST,
   LAUNCH_PENDING_WINDOW_S,
 } from './DodgeTuning';
-import type { CanonicalRecord } from '../replay/state/CanonicalValue';
+import { vec2, type CanonicalRecord } from '../replay/state/CanonicalValue';
 import { intentMagnitude } from '../bey/movement/directionalIntent';
 
 export enum DodgeState {
@@ -42,8 +42,18 @@ export enum DodgeState {
 
 export interface DodgeTickResult {
   state: DodgeState;
-  /** Passed straight to MovementController.applyPreStep's lateralGripOverridePerS parameter; null means "defer to whatever else wants it (e.g. Drift)". */
+  /** Passed straight to MovementController.applyPreStep's lateralGripOverridePerS parameter; null means "defer to whatever else wants it (e.g. Drift)". Only still meaningful while dodgeOverride is null (an airborne dodge, or once MovementController adds a grounded-only check) — see dodgeOverride below for the grounded flat-velocity phase. */
   lateralGripOverridePerS: number | null;
+  /**
+   * MovementController.applyPreStep's highest-priority override, set for
+   * every tick of the ground dodge's flat-velocity phase (owner decision,
+   * "Fix 1" of the movement/weight/dodge playtest pass): the direction
+   * latched the instant Dodge was pressed, at DODGE_BURST_SPEED_MPS,
+   * replacing the Bey's entire horizontal velocity regardless of prior
+   * momentum or any input since. Null outside that phase (Idle, Cooldown,
+   * or the one-shot airborne recovery path, which never calls applyBurst).
+   */
+  dodgeOverride: { velocityMps: Vec2 } | null;
   /** True while incoming hits must be ignored entirely (see tickMatch). */
   hasIFrames: boolean;
   /** True this tick if a hit landing right now would count as a Perfect Dodge — tighter than hasIFrames alone. */
@@ -62,6 +72,8 @@ export class DodgeController {
   private airRecoveryAvailable = false;
   private launchPending = false;
   private launchPendingRemainingS = 0;
+  /** Direction latched once at the Idle->Dodging transition ("Fix 1" — see dodgeOverride on DodgeTickResult). Null outside Dodging. */
+  private latchedDirection: Vec2 | null = null;
 
   getState(): DodgeState {
     return this.state;
@@ -178,7 +190,7 @@ export class DodgeController {
           this.state = DodgeState.Dodging;
           this.activeTimerS = 0;
           staminaCostThisTick = DODGE_STAMINA_COST;
-          this.applyBurst(body, actions, headingRad);
+          this.latchedDirection = this.computeDodgeDirection(actions, headingRad);
         }
         break;
 
@@ -187,6 +199,7 @@ export class DodgeController {
         if (this.activeTimerS >= DODGE_ACTIVE_DURATION_S) {
           this.state = DodgeState.Cooldown;
           this.cooldownTimerS = 0;
+          this.latchedDirection = null;
         }
         break;
 
@@ -199,10 +212,20 @@ export class DodgeController {
     }
 
     const grantsGroundIFrames = grounded && this.state === DodgeState.Dodging;
+    // Fix 1 (movement/weight/dodge playtest pass): for the Dodging state's
+    // entire duration — including a tick or two airborne if the dodge
+    // carries the Bey off a ledge, since this is one short committed action,
+    // not something that should flicker on/off with ground contact — the
+    // latched direction and DODGE_BURST_SPEED_MPS fully replace horizontal
+    // velocity. Never set outside Dodging (Idle, Cooldown, or the one-shot
+    // airborne recovery path above, which only flips triggeredAirRecovery
+    // and never touches latchedDirection).
+    const dodgeOverride = this.state === DodgeState.Dodging && this.latchedDirection ? { velocityMps: scale(this.latchedDirection, DODGE_BURST_SPEED_MPS) } : null;
 
     return {
       state: this.state,
       lateralGripOverridePerS: grantsGroundIFrames ? DODGE_GRIP_OVERRIDE_PER_S : null,
+      dodgeOverride,
       hasIFrames: grantsGroundIFrames,
       isPerfectWindow: grantsGroundIFrames && this.activeTimerS <= DODGE_PERFECT_WINDOW_S,
       triggeredAirRecovery,
@@ -210,26 +233,19 @@ export class DodgeController {
     };
   }
 
-  /** GDD section 22: dodges in the direction currently pressed/selected, relative to the Bey (forward/back/lateral, diagonals normalized) — defaults to forward when no direction is held. Adds the burst on top of existing velocity rather than replacing it, so momentum stays relevant (GDD section 15/88). */
-  private applyBurst(body: RAPIER.RigidBody, actions: ControllerActions, headingRad: number): void {
+  /** GDD section 22: dodges in the direction currently pressed/selected, relative to the Bey (forward/back/lateral, diagonals normalized) — defaults to forward when no direction is held. Only computes the direction; Fix 1 latches it once and the dodge's own flat speed replaces velocity for the whole Dodging state instead of adding a burst on top of whatever momentum existed at press time (GDD section 15/88 "momentum stays relevant" is now scoped to normal movement only — see DodgeTickResult.dodgeOverride). */
+  private computeDodgeDirection(actions: ControllerActions, headingRad: number): Vec2 {
     const forward = fromYaw(headingRad);
     const right = perpendicular(forward);
 
-    let direction: Vec2;
     if (actions.moveIntent) {
       // Directional control (M11): dodge toward the held world direction.
-      direction = intentMagnitude(actions.moveIntent) > 0 ? normalize(actions.moveIntent) : forward;
-    } else {
-      const lateralInput = (actions.held.has(Action.SteerRight) ? 1 : 0) - (actions.held.has(Action.SteerLeft) ? 1 : 0);
-      const forwardInput = (actions.held.has(Action.MoveForward) ? 1 : 0) - (actions.held.has(Action.MoveBackward) ? 1 : 0);
-      direction = add(scale(forward, forwardInput), scale(right, lateralInput));
-      if (lateralInput === 0 && forwardInput === 0) direction = forward; // no direction held — default to forward.
-      direction = normalize(direction);
+      return intentMagnitude(actions.moveIntent) > 0 ? normalize(actions.moveIntent) : forward;
     }
-
-    const vel = body.linvel();
-    const burst = scale(direction, DODGE_BURST_SPEED_MPS);
-    body.setLinvel({ x: vel.x + burst.x, y: vel.y, z: vel.z + burst.z }, true);
+    const lateralInput = (actions.held.has(Action.SteerRight) ? 1 : 0) - (actions.held.has(Action.SteerLeft) ? 1 : 0);
+    const forwardInput = (actions.held.has(Action.MoveForward) ? 1 : 0) - (actions.held.has(Action.MoveBackward) ? 1 : 0);
+    if (lateralInput === 0 && forwardInput === 0) return forward; // no direction held — default to forward.
+    return normalize(add(scale(forward, forwardInput), scale(right, lateralInput)));
   }
 
   /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
@@ -242,6 +258,7 @@ export class DodgeController {
       airRecoveryAvailable: this.airRecoveryAvailable,
       launchPending: this.launchPending,
       launchPendingRemainingS: this.launchPendingRemainingS,
+      latchedDirection: vec2(this.latchedDirection),
     };
   }
 }
