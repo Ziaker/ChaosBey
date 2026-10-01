@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "playwright test -c tests/smoke/playwright.config.ts",
-    "build:exe": "npm run build && electron-builder --win --publish=never"
+    "build:exe": "npm run build && electron-builder --win --publish=never",
+    "build:mac": "npm run build && electron-builder --mac zip --universal --publish=never"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.21.0",
@@ -48,6 +49,15 @@
           "arch": ["x64"]
         }
       ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": ["universal"]
+        }
+      ],
+      "artifactName": "ChaosBey-Mac-Universal.${ext}"
     },
     "portable": {
       "artifactName": "ChaosBey-Portable.exe"
