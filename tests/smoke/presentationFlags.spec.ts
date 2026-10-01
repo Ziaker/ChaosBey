@@ -37,8 +37,8 @@ test('?pfx=all, no flags and a mistyped flag all start the same match; only newB
 
   for (const run of seen) {
     expect(run.errors).toEqual([]);
-    // conditionVisuals is the only flag that attaches a system so far.
-    expect(run.stats).toMatchObject({ systems: run.features.conditionVisuals ? 1 : 0, systemErrors: 0 });
+    // conditionVisuals and hybridVfx are the only flags that attach a system so far.
+    expect(run.stats).toMatchObject({ systems: (run.features.conditionVisuals ? 1 : 0) + (run.features.hybridVfx ? 1 : 0), systemErrors: 0 });
     expect(run.ids).toEqual(run.features.newBeyVisuals ? ['concept:attack-a', 'concept:defense-a'] : ['placeholder:attack-prototype', 'placeholder:defense-prototype']);
   }
   expect(Object.values(seen[0]!.features).some(Boolean)).toBe(false);
@@ -73,8 +73,8 @@ test('a restart builds a fresh presentation hub and disposes what was attached t
   });
   expect(after.probe.creates).toBe(1);
   expect(after.probe.disposes).toBe(1);
-  // The restarted session builds its own condition system again (flag on); the probe is gone.
-  expect(after.systemIds).toEqual(['condition-visuals']);
+  // The restarted session builds its own flag systems again; the probe is gone.
+  expect(after.systemIds).toEqual(['condition-visuals', 'hybrid-vfx']);
   // The restarted session reads the same page flags again.
   expect(Object.values(after.features).every(Boolean)).toBe(true);
   expect(errors).toEqual([]);
@@ -117,5 +117,61 @@ test('conditionVisuals in a real browser: three languages on worn Beys, no conso
   expect(off.layers).toBeNull();
   expect(on.layers).toEqual(['A', 'B', 'C']);
   expect(on.stats).toMatchObject({ layers: 6 });
+  expect(on.camera).toBe(off.camera);
+});
+
+test('hybridVfx in a real browser: real effects from real events, screen overlay below the HUD, camera as with the flag off', async ({ browser }) => {
+  const run = async (search: string): Promise<{ camera: string; stats: Record<string, number> | null; overlay: string | null; legacyBursts: boolean; errors: string[] }> => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const errors: string[] = [];
+    await openDebugLab(page, search, errors);
+    await page.evaluate(async () => {
+      const lab = window.__chaosBeyDebugLab!;
+      lab.setPaused(true);
+      await lab.restart('hybrid-camera-proof');
+      const session = lab.getSession()!;
+      const hybrid = session.getHybridVfx();
+      if (hybrid) {
+        const a = session.match.first.body.translation();
+        const at = { x: a.x, y: a.y, z: a.z };
+        hybrid.onEvents(
+          [
+            { kind: 'hitResolved', tick: 1, defenderSide: 'second', attackerSide: 'first', magnitude: 0.95, position: at, hitboxKind: 'circular', caughtOpponentDashing: false },
+            { kind: 'perfectDodge', tick: 1, side: 'first', magnitude: 0.9, position: at },
+            { kind: 'stabilityBroken', tick: 1, side: 'second', magnitude: 0.9, position: at },
+          ],
+          null as never,
+        );
+      }
+      lab.step(60);
+    });
+    await page.waitForTimeout(300);
+    const result = await page.evaluate(() => {
+      const lab = window.__chaosBeyDebugLab!;
+      const camera = lab.getCamera();
+      const session = lab.getSession()!;
+      const overlay = document.querySelector('[data-testid="hybrid-vfx-overlay"]') as HTMLElement | null;
+      return {
+        camera: JSON.stringify([camera.position.toArray().map((v) => +v.toFixed(5)), camera.fov, camera.children.length]),
+        stats: (session.getPresentationStats().hub.perSystem['hybrid-vfx'] ?? null) as Record<string, number> | null,
+        overlay: overlay ? getComputedStyle(overlay).zIndex : null,
+        legacyBursts: session.getVfxManager().isLayerVisible('impactBursts'),
+      };
+    });
+    await context.close();
+    return { ...result, errors };
+  };
+  const off = await run('');
+  const on = await run('&pfx=hybridVfx,newBeyVisuals');
+  expect(off.errors).toEqual([]);
+  expect(on.errors).toEqual([]);
+  expect(off.stats).toBeNull();
+  expect(off.overlay).toBeNull();
+  expect(off.legacyBursts).toBe(true);
+  // (The Debug Lab re-applies its own VFX layer toggles on a restart, so the legacy-burst switch is proven on the session in presentationNeutrality.)
+  expect(on.overlay).toBe('900');
+  expect(on.stats!.fx! + on.stats!.sparks!).toBeGreaterThan(5);
+  expect(on.stats!.droppedShake).toBeGreaterThan(0);
   expect(on.camera).toBe(off.camera);
 });

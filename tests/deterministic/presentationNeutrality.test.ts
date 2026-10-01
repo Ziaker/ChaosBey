@@ -121,6 +121,8 @@ interface RunResult {
   readonly replayIntegrity: string;
   readonly camera: string;
   readonly recorder: Recorder | null;
+  /** Presentation systems that threw during the run (isolated by the hub, but never expected). */
+  readonly systemErrors: number;
 }
 
 async function run(features: PresentationFeatures | undefined, attach: boolean, extra: Partial<MatchSessionOptions> = {}): Promise<RunResult> {
@@ -151,8 +153,9 @@ async function run(features: PresentationFeatures | undefined, attach: boolean, 
     }
   }
   const { replay } = session.finishReplayCapture();
+  const systemErrors = session.getPresentationStats().hub.systemErrors;
   session.dispose();
-  return { hashes, replayIntegrity: replay.integrity, camera: cameraSamples.join('\n'), recorder };
+  return { hashes, replayIntegrity: replay.integrity, camera: cameraSamples.join('\n'), recorder, systemErrors };
 }
 
 describe('presentation foundation is behaviour-neutral on a real session', () => {
@@ -170,6 +173,20 @@ describe('presentation foundation is behaviour-neutral on a real session', () =>
     }
   }, 120_000);
 
+  it('hybridVfx leaves the simulation, replay and the camera object untouched, and hides only the legacy impact bursts', async () => {
+    const off = await run(undefined, false);
+    const on = await run(resolvePresentationFeatures({ hybridVfx: true }), false);
+    expect(on.hashes).toEqual(off.hashes);
+    expect(on.replayIntegrity).toBe(off.replayIntegrity);
+    expect(on.camera).toBe(off.camera);
+    expect(on.systemErrors).toBe(0);
+    const both = await run(resolvePresentationFeatures({ hybridVfx: true, conditionVisuals: true, newBeyVisuals: true }), false, { conditionLayers: ['A', 'B', 'C'] });
+    expect(both.hashes).toEqual(off.hashes);
+    expect(both.replayIntegrity).toBe(off.replayIntegrity);
+    expect(both.camera).toBe(off.camera);
+    expect(both.systemErrors).toBe(0);
+  }, 300_000);
+
   it('conditionVisuals with all three languages leaves the simulation, replay and the camera object untouched', async () => {
     const off = await run(undefined, false);
     const features = resolvePresentationFeatures({ conditionVisuals: true });
@@ -178,6 +195,7 @@ describe('presentation foundation is behaviour-neutral on a real session', () =>
       expect(on.hashes).toEqual(off.hashes);
       expect(on.replayIntegrity).toBe(off.replayIntegrity);
       expect(on.camera).toBe(off.camera);
+      expect(on.systemErrors).toBe(0);
     }
     // With the Bey models on as well (wear, rattle and seams dress the four pieces).
     const withModels = await run(resolvePresentationFeatures({ conditionVisuals: true, newBeyVisuals: true }), false, { conditionLayers: ['A', 'B', 'C'] });
@@ -212,19 +230,24 @@ describe('presentation foundation is behaviour-neutral on a real session', () =>
 
 describe('presentation lifecycle on a real session', () => {
   it('ships with nothing attached; the legacy placeholder visuals are used unless newBeyVisuals is on', async () => {
-    for (const features of [undefined, PRESENTATION_FEATURES_OFF, resolvePresentationFeatures({ hybridVfx: true, newHud: true })]) {
+    for (const features of [undefined, PRESENTATION_FEATURES_OFF, resolvePresentationFeatures({ clashPresentation: true, newHud: true, arenaVisuals: true })]) {
       const { session } = await createSession(features);
       expect(session.getPresentation().systemIds()).toEqual([]);
       expect(session.getPresentationStats().hub.systems).toBe(0);
       expect(session.getConditionLayers()).toBeNull();
+      expect(session.getHybridVfx()).toBeNull();
+      expect(session.getVfxManager().isLayerVisible('impactBursts')).toBe(true);
       expect(session.match.visuals.first.definition.id).toBe('placeholder:attack-prototype');
       expect(session.match.visuals.second.definition.id).toBe('placeholder:defense-prototype');
       session.dispose();
     }
     const { session } = await createSession(ALL_ON);
-    // The only system a flag attaches by itself so far: the condition languages (conditionVisuals).
-    expect(session.getPresentation().systemIds()).toEqual(['condition-visuals']);
+    // The only systems a flag attaches by itself so far: the condition languages and the hybrid VFX.
+    expect(session.getPresentation().systemIds()).toEqual(['condition-visuals', 'hybrid-vfx']);
     expect(session.getConditionLayers()).toEqual(['A']);
+    // The legacy impact bursts give way to the approved hybrid language, through the existing layer switch.
+    expect(session.getVfxManager().isLayerVisible('impactBursts')).toBe(false);
+    expect(session.getVfxManager().isLayerVisible('trails')).toBe(true);
     // Provisional mapping: each archetype wears the A concept of its own family.
     expect(session.match.visuals.first.definition.id).toBe('concept:attack-a');
     expect(session.match.visuals.second.definition.id).toBe('concept:defense-a');
@@ -292,7 +315,7 @@ describe('presentation lifecycle on a real session', () => {
 
     const second = await createSession(ALL_ON, `${SEED}-restart`);
     expect(second.session.getPresentation()).not.toBe(first.session.getPresentation());
-    expect(second.session.getPresentation().systemIds()).toEqual(['condition-visuals']);
+    expect(second.session.getPresentation().systemIds()).toEqual(['condition-visuals', 'hybrid-vfx']);
     const newRecorder = new Recorder();
     second.session.getPresentation().attach(newRecorder);
     for (let i = 0; i < 10; i++) second.session.tick();

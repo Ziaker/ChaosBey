@@ -52,6 +52,8 @@ import { selectBeyPresentationState, type CameraPresentationSnapshot, type Recen
 import type { PresentationSide } from '../../presentation/events';
 import { collectSceneStats, type SceneStats } from '../../presentation/sceneStats';
 import { ConditionVisualsSystem, normalizeConditionLayers } from '../../vfx/condition/ConditionVisualsSystem';
+import { HybridVfxSystem } from '../../vfx/hybrid/HybridVfxSystem';
+import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
 import type { LanguageId } from '../../vfx/condition/types';
 import { HeadingArrow } from '../../vfx/HeadingArrow';
 import { DriftVfx } from '../../vfx/DriftVfx';
@@ -150,6 +152,8 @@ export class MatchSession {
   private readonly presentation: PresentationHub;
   /** The approved Stamina / Stability / Broken languages, attached only with the `conditionVisuals` flag (render only). */
   private conditionVisuals: ConditionVisualsSystem | null = null;
+  /** The approved Hybrid VFX (Cel Cyclone wind), attached only with the `hybridVfx` flag (render only). */
+  private hybridVfx: HybridVfxSystem | null = null;
   /** Owner playtest (after M11): skid marks, sparks and grip-regain ring while a Bey drifts. Render only. */
   private readonly driftVfx: { readonly first: DriftVfx; readonly second: DriftVfx };
   /** M11: the approved camera director running the three presets; the Clash forces B without orbit. Render only. */
@@ -309,6 +313,22 @@ export class MatchSession {
         layers: normalizeConditionLayers(options.conditionLayers ?? ['A']),
       });
       this.presentation.attach(this.conditionVisuals);
+    }
+    if (presentationFeatures.hybridVfx) {
+      this.hybridVfx = new HybridVfxSystem({
+        scene: this.root,
+        camera: options.camera,
+        beys: {
+          first: { visual: this.match.visuals.first.visual, gameplay: this.match.first.definition },
+          second: { visual: this.match.visuals.second.visual, gameplay: this.match.second.definition },
+        },
+        floorHeightAtR: (r) => floorAt(r, 0),
+        arenaSparks: [theme.sparkHotHex, theme.sparkCoolHex],
+        arenaRadiusM: ARENA_FLOOR_RADIUS,
+      });
+      this.presentation.attach(this.hybridVfx);
+      // The legacy spark and landing bursts give way to the approved language (the existing layer switch; the tick code is untouched).
+      this.vfxManager.setLayerVisible('impactBursts', false);
     }
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
@@ -700,6 +720,11 @@ export class MatchSession {
   /** Which condition languages show, live (the Settings screen). No effect unless the `conditionVisuals` flag is on. */
   setConditionLayers(layers: readonly LanguageId[]): void {
     this.conditionVisuals?.setLayers(layers);
+  }
+
+  /** The Hybrid VFX system, or null while the `hybridVfx` flag is off (tests and visual checks drive its runtime). */
+  getHybridVfx(): HybridVfxSystem | null {
+    return this.hybridVfx;
   }
 
   /** The condition languages showing now, or null while the `conditionVisuals` flag is off. */
