@@ -188,8 +188,17 @@ export function createArenaColliders(
   return { group };
 }
 
-/** Heightfield resolution for a bowl floor (cells per side). ~0.25 m cells for a 0.6 m-radius Bey: 3x the radius needs 3x the cells (96 -> 288), or the cells would triple to ~0.75 m. */
-export const BOWL_HEIGHTFIELD_CELLS = 288;
+/**
+ * Heightfield resolution for the floor (cells per side): 144 = ~0.5 m cells
+ * over the 72 m square. The arena scale pass first used 288 (~0.25 m, the old
+ * 96-cell density at 3x the radius), but simulation cost grows with the cell
+ * count: measured per AI-vs-AI tick 0.24 ms (72 cells), 0.30 (144), 0.36
+ * (192), 0.46 (288) against 0.14 ms for the old 12 m flat arena, and CI's
+ * accelerated Self Test fell under its 4x-real-time check at 288. The floor
+ * is a smooth parabola (curvature 0.004 /m), so 0.5 m cells deviate from
+ * h(r) by well under a millimetre.
+ */
+export const BOWL_HEIGHTFIELD_CELLS = 144;
 /** Visual lathe resolution along the radius (3x the radius, 3x the steps: 48 -> 144). */
 const BOWL_VISUAL_RADIAL_STEPS = 144;
 /**
