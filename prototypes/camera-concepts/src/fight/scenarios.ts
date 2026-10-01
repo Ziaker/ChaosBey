@@ -167,17 +167,35 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     id: 'ring-out-chase',
     label: 'Ring-Out Chase',
-    description: 'Um Dash carregado acerta o oponente no meio de um pulo e o lança por cima da parede; a câmera persegue a trajetória.',
+    description: 'Um Dash carregado acerta o oponente, já vulnerável e no meio de um pulo, e o lança por cima da parede; a câmera persegue a trajetória.',
     contexts: ['KnockbackFollow', 'RingOut', 'Finisher'],
     durationS: 5.5,
-    // Was the AI's opening (a Circular catching a Dash that carried the dasher out at ~2 s) until a
-    // caught Dash stopped keeping its speed. Under the game's movement a ring-out comes from a Dash
-    // hitting a Bey in the air: first holds a full Dash, second jumps; any jump from 1.28 to 1.48 s
-    // rings out at 2.0 s (swept), so 1.38 s.
+    // Jump/air-control hotfix follow-up: the old setup had second's own,
+    // then-uncut full jump (apex ~2.33 m) alone clear the 2 m wall. The
+    // hotfix's approved full-jump target (1.0-1.5 m) can never do that by
+    // itself any more, with or without a plain Dash's modest knockback
+    // lift (see src/self-test/scenarios/ScenarioPresets.ts's 'ring-out'
+    // preset for the full writeup and the measurements behind this). The
+    // same fix applies here: make second maximally vulnerable to knockback
+    // (GDD section 27/30's own formula — zero Stamina, low-but-not-zero
+    // Stability so a Dash's own stability damage doesn't zero it out and
+    // freeze the round before the physics can play out), so the Dash's
+    // knockback impulse — additive to whatever vy the jump already has —
+    // stacks with the jump's own residual velocity. Swept (the hit always
+    // lands at ~1.47 s regardless of second's own jump timing): starting
+    // the jump anywhere from 1.22 to 1.26 s rang out; earlier left second
+    // still grounded when the Dash arrived (no hit registered at all —
+    // the Dash's own approach reads differently against a grounded vs. an
+    // already-airborne target), later gave the jump too little time to
+    // build height before the hit added its own knockback vy.
     firstSpawn: { x: 0, z: -1 },
     secondSpawn: { x: 0, z: 5 },
+    setup: ({ second }) => {
+      second.stamina.resource.set(0);
+      second.stability.debugSetValue(30);
+    },
     first: { kind: 'script', held: (t) => when(t < 1.25, Z) },
-    second: { kind: 'script', held: (t) => when(between(t, 1.38, 1.58), J) },
+    second: { kind: 'script', held: (t) => when(between(t, 1.24, 1.44), J) },
     expects: ['hit', 'ringOut', 'roundOver'],
   },
   {

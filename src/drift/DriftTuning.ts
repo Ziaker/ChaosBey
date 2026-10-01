@@ -29,22 +29,35 @@
 // "vy(t+1) <= vy(t) + tolerance" and "exactly one apex" by construction,
 // not by a separate check bolted on after the fact.
 export const JUMP_LAUNCH_VELOCITY_MPS = 5;
-// The release-cut floor: releasing (or arming a drift) the instant
-// JumpDrift is pressed clamps vy down to roughly this much added lift —
-// this is what actually produces the short hop's apex (picked, with
-// JUMP_LAUNCH_VELOCITY_MPS/JUMP_RELEASE_WINDOW_S below, to land the short
-// hop at +15% over the movement/weight/dodge pass's own measured baseline
-// apex of 0.177 m — see the hold-duration sweep in
-// physicsWeightFeelPass.test.ts for the measured result).
-export const JUMP_SHORT_RELEASE_FLOOR_MPS = 1.62;
+// Jump/air-control hotfix FOLLOW-UP (owner review): the first version of
+// this release cut targeted a fixed VELOCITY floor (JUMP_SHORT_RELEASE_FLOOR_MPS,
+// since removed), which only gave a genuinely consistent short hop for a
+// true single-tick tap — by 2 ticks the apex was already ~45% taller. The
+// owner correctly rejected a mandatory test that just widened its
+// tolerance to paper over that instead of fixing it. The fix: target a
+// fixed APEX HEIGHT instead (same technique DRIFT_HOP_TARGET_APEX_M/
+// computeDriftHopCutMps already used), so a release stays pinned to the
+// SAME apex for as long as the arc's own natural (uncut) height hasn't yet
+// reached that target — computeJumpReleaseCapMps's own comment proves this
+// window exactly, and why it cannot be widened further without either
+// shrinking the full-jump target below its approved 1.0-1.5 m floor or
+// accepting a much longer hold-to-reach-full-jump time: height under a
+// fixed launch velocity grows as V0*t for small t, independent of
+// whatever happens to vy afterward (cut or not), so the width of the
+// "exactly reproducible" window is set by V0 and this target alone, not by
+// the cut formula's shape. With V0 = 5 and this target, that window is
+// ~2.5-3 ticks (42-50 ms) — not the full 1-5 ticks initially hoped for,
+// but a real, measured improvement (previously 1 tick), and, past that
+// window, growth is now a smooth ramp toward the natural full arc instead
+// of linear-in-velocity-from-tick-1. 0.2036 m = the movement/weight/dodge
+// pass's own measured baseline apex (0.177 m) x1.15.
+export const JUMP_SHORT_HOP_TARGET_APEX_M = 0.1265;
 // How long, from the press, a release still shapes the jump's height at
-// all: release (or drift-arm) before this and the cut floor above still
-// applies in full; hold at least this long and the jump is already
-// committed to its full, uncut JUMP_LAUNCH_VELOCITY_MPS arc (saturation —
-// holding further changes nothing, since there is nothing left to cut).
-// In between, the cut floor rises smoothly (linearly in hold time) from
-// the short-hop floor to the arc's own natural velocity at this exact
-// moment, so the hold-duration-to-height curve has no step.
+// all: release before this and computeJumpReleaseCapMps's ramp (fixed
+// target, then smoothly toward the natural arc) applies; hold at least
+// this long and the jump is already committed to its full, uncut
+// JUMP_LAUNCH_VELOCITY_MPS arc (saturation — holding further changes
+// nothing, since there is nothing left to cut).
 export const JUMP_RELEASE_WINDOW_S = 0.22;
 // Drift's own hop profile (GDD section 19/20): arming a drift mid-press
 // cuts the rise down to this APEX HEIGHT target instead of the
@@ -58,11 +71,18 @@ export const JUMP_RELEASE_WINDOW_S = 0.22;
 // timing-independent drift hop as a one-time, no-position-snap correction
 // can — see the hold-duration sweep for exactly how early the turn needs
 // to be for that solve to still hit this target exactly, versus only
-// minimizing the overshoot once it can't). 0.204 m matches the short
-// hop's own +15%-over-baseline apex target (DRIFT_HOP_TARGET_APEX_M and
-// JUMP_SHORT_RELEASE_FLOOR_MPS are tuned to produce the same apex at
-// holdElapsedS=0 — an instant turn and an instant release should feel the
-// same small hop).
+// minimizing the overshoot once it can't (the same width limit
+// JUMP_SHORT_HOP_TARGET_APEX_M's own comment proves for the short hop —
+// this is the same formula, same V0, same physical ceiling). Unlike the
+// regular jump release, a later-arming drift is never allowed to ramp up
+// toward the full arc — GDD section 21/22 wants the SAME small drift-hop
+// profile no matter when within the press the turn happens, so this
+// always cuts toward this one fixed target, even once that can only
+// minimize the overshoot rather than hit it exactly. 0.127, not
+// JUMP_SHORT_HOP_TARGET_APEX_M's own 0.2036, because this target is hit
+// via a different code path with a different measured discrete-tick
+// offset — both are tuned so an instant turn and an instant release reach
+// the same ~0.2 m apex in practice (see the hold-duration sweep).
 export const DRIFT_HOP_TARGET_APEX_M = 0.127;
 // Minimum time to stay in the "hopping" state before a drift can begin,
 // so the hop is visually readable even if the ground check re-triggers
