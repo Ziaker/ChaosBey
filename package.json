@@ -4,6 +4,7 @@
   "private": true,
   "description": "ChaosBey - 3D spinning-top arena combat simulator (browser, GitHub Pages)",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -11,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:smoke": "playwright test -c tests/smoke/playwright.config.ts"
+    "test:smoke": "playwright test -c tests/smoke/playwright.config.ts",
+    "build:exe": "npm run build && electron-builder --win --publish=never"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.21.0",
@@ -21,8 +23,31 @@
     "@playwright/test": "1.63.0",
     "@types/node": "22.20.4",
     "@types/three": "0.186.0",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
     "typescript": "7.0.2",
     "vite": "8.3.1",
     "vitest": "5.0.2"
+  },
+  "build": {
+    "appId": "com.chaosbey.desktoptest",
+    "productName": "ChaosBey",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "!node_modules/**/*"
+    ],
+    "asar": false,
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        }
+      ]
+    }
   }
 }
