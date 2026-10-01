@@ -114,7 +114,7 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
   const movementDebug = bey.movement.getDebugState();
   const dodge = bey.dodge.getDebugTimers();
   const dodgeState = bey.dodge.getState();
-  const drift = bey.drift.getDebugTimers();
+  const drift = bey.drift.getDebugTimers(body);
   const attack = bey.attack.getDebugState();
   const condition = bey.stamina.getPhysicalCondition();
   const actions = session.getLastActions(side);

@@ -36,7 +36,9 @@ import { FIXED_DELTA_SECONDS } from '../fixed-step/FixedTimestepLoop';
 // a bare-tap hop's airtime drops 0.883s -> 0.817s, a medium knockback's
 // apex/airtime drop ~7-8% — real, modest, uncompensated improvements in the
 // same direction the owner asked for, without the larger change's fallout.
-const GRAVITY_Y = -10.5;
+export const GRAVITY_Y = -10.5;
+/** Downward acceleration magnitude (positive), for systems (e.g. DriftController's variable-jump release-cut math) that need the actual number Rapier applies rather than re-deriving it from observed body velocity. */
+export const GRAVITY_MPS2 = -GRAVITY_Y;
 
 export class PhysicsWorld {
   /** Bey-Bey bumper colliders (see physics/collision/CollisionGroups.ts) → half-height of their Bey's own body. */

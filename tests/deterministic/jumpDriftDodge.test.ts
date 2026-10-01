@@ -17,7 +17,7 @@ import {
   DODGE_PERFECT_WINDOW_S,
   DODGE_STAMINA_COST,
 } from '../../src/dodge/DodgeTuning';
-import { JUMP_ASSIST_MAX_DURATION_S } from '../../src/drift/DriftTuning';
+import { JUMP_RELEASE_WINDOW_S } from '../../src/drift/DriftTuning';
 import { LATERAL_GRIP_PER_S } from '../../src/bey/movement/MovementTuning';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { ScriptedController, type ScriptedFrame } from '../../src/automation/scripted-scenarios/ScriptedController';
@@ -103,7 +103,7 @@ describe('variable jump height', () => {
 
     const heldHarness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(heldHarness);
-    const holdTicks = Math.ceil(JUMP_ASSIST_MAX_DURATION_S / FIXED_DELTA_SECONDS) + 5;
+    const holdTicks = Math.ceil(JUMP_RELEASE_WINDOW_S / FIXED_DELTA_SECONDS) + 5;
     const heldController = heldJumpController(holdTicks);
     let heldApex = 0;
     for (let i = 0; i < 60; i++) {
@@ -150,7 +150,7 @@ describe('landing data (Milestone 4 prep)', () => {
     expect(intensity).toBeGreaterThan(0);
     // A bare tap barely holds JumpDrift (released after 2 ticks) — nowhere
     // near the assist cap.
-    expect(jumpAssistElapsedS).toBeLessThan(JUMP_ASSIST_MAX_DURATION_S * 0.2);
+    expect(jumpAssistElapsedS).toBeLessThan(JUMP_RELEASE_WINDOW_S * 0.2);
     // No handling penalty: grip is exactly normal the moment landing is reported.
     expect(gripAtLanding).toBeCloseTo(LATERAL_GRIP_PER_S, 2);
   });
@@ -168,7 +168,7 @@ describe('landing data (Milestone 4 prep)', () => {
 
     const heldHarness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(heldHarness);
-    const holdTicks = Math.ceil(JUMP_ASSIST_MAX_DURATION_S / FIXED_DELTA_SECONDS) + 5;
+    const holdTicks = Math.ceil(JUMP_RELEASE_WINDOW_S / FIXED_DELTA_SECONDS) + 5;
     const heldController = heldJumpController(holdTicks);
     let heldIntensity = -1;
     let heldJumpAssistElapsedS = -1;
@@ -184,7 +184,7 @@ describe('landing data (Milestone 4 prep)', () => {
     }
 
     expect(heldIntensity).toBeGreaterThan(tapIntensity);
-    expect(heldJumpAssistElapsedS).toBeGreaterThan(JUMP_ASSIST_MAX_DURATION_S * 0.5);
+    expect(heldJumpAssistElapsedS).toBeGreaterThan(JUMP_RELEASE_WINDOW_S * 0.5);
     expect(gripAtLanding).toBeCloseTo(LATERAL_GRIP_PER_S, 2);
   });
 

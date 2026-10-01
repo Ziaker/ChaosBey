@@ -72,15 +72,19 @@ interface Recording {
 // Motion Lab integration (M11), replay-45 / replay-40 after it, replay-50
 // after its follow-up fixes, replay-66 / replay-30 with the first
 // owner-playtest controls, replay-41 / replay-64 with the drift fix,
-// replay-3 / replay-4 with the dodge rewrite alone, and now, after the
-// movement/weight/dodge playtest pass's full set of changes (dodge rewrite,
-// steering/grip tightening, gravity, short hop) — each one shifts AI-vs-AI
-// dynamics (section 20: report the real consequence, don't mask it) —
-// re-pinned once more against the final state: replay-13 lasts 1036 ticks
-// with 122 frozen, replay-27 lasts 1066 with 147, and in both the first Bey
-// still reads its movement input after tick 900.
+// replay-3 / replay-4 with the dodge rewrite alone, replay-13 / replay-27
+// with the movement/weight/dodge playtest pass's full set of changes,
+// replay-99 with the jump/air-control hotfix's vertical-jump rewrite
+// alone, and now, after that same hotfix's +20% air-control change (yet
+// another AI-vs-AI dynamics shift, same section-20 principle: report the
+// real consequence, don't mask it) — re-pinned once more: replay-62 lasts
+// 1638 ticks with 140 frozen; replay-27 (the dodge-pass seed) still
+// qualifies unchanged (now 1250 ticks, 180 frozen — AI dynamics shifted
+// but it stayed well above the thresholds) and is kept as the
+// mutation-path seed. Both still read the first Bey's movement input after
+// tick 900.
 // Most seeds end within a few hundred ticks.
-const LONG_SEED = 'replay-13';
+const LONG_SEED = 'replay-62';
 const MUTATION_SEED = 'replay-27';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
