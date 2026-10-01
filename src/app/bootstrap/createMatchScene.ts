@@ -16,6 +16,7 @@ import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../bey/archetype/BeyArch
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import { applyAttackProfileSettings, createDefaultAttackProfileSettings, type BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
+import { ensureApprovedBeyVisualsRegistered } from '../../bey/visual/approvedBeyVisuals';
 import { BeyVisualAnchors, resolveBeyVisualDefinition, type BeyVisualDefinition } from '../../presentation/beyVisual';
 import { PRESENTATION_FEATURES_OFF, type PresentationFeatures } from '../../presentation/features';
 import { matchSpawnsFor } from './matchSpawns';
@@ -104,6 +105,7 @@ export function createMatchScene(
   // With every presentation flag off (the default) this resolves to the
   // legacy placeholder: the same `definition.appearance.createVisual()` call
   // the scene always made. The visual never reaches the body or the stats.
+  if (features.newBeyVisuals) ensureApprovedBeyVisualsRegistered();
   const firstVisualDefinition = resolveBeyVisualDefinition(first.definition, features);
   const secondVisualDefinition = resolveBeyVisualDefinition(second.definition, features);
   const firstVisual = firstVisualDefinition.create(first.definition);

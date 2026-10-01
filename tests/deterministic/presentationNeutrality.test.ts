@@ -192,8 +192,8 @@ describe('presentation foundation is behaviour-neutral on a real session', () =>
 });
 
 describe('presentation lifecycle on a real session', () => {
-  it('ships with nothing attached and the legacy placeholder visuals, whatever the flags', async () => {
-    for (const features of [undefined, ALL_ON]) {
+  it('ships with nothing attached; the legacy placeholder visuals are used unless newBeyVisuals is on', async () => {
+    for (const features of [undefined, PRESENTATION_FEATURES_OFF, resolvePresentationFeatures({ hybridVfx: true, newHud: true })]) {
       const { session } = await createSession(features);
       expect(session.getPresentation().systemIds()).toEqual([]);
       expect(session.getPresentationStats().hub.systems).toBe(0);
@@ -201,6 +201,35 @@ describe('presentation lifecycle on a real session', () => {
       expect(session.match.visuals.second.definition.id).toBe('placeholder:defense-prototype');
       session.dispose();
     }
+    const { session } = await createSession(ALL_ON);
+    expect(session.getPresentation().systemIds()).toEqual([]);
+    // Provisional mapping: each archetype wears the A concept of its own family.
+    expect(session.match.visuals.first.definition.id).toBe('concept:attack-a');
+    expect(session.match.visuals.second.definition.id).toBe('concept:defense-a');
+    session.dispose();
+  });
+
+  it('newBeyVisuals changes only the picture: collider, mass, stats and ratings are identical', async () => {
+    const read = async (features: PresentationFeatures | undefined) => {
+      const { session } = await createSession(features);
+      const out = ['first', 'second'].map((side) => {
+        const bey = session.getBey(side as 'first' | 'second');
+        const collider = bey.collider;
+        return JSON.stringify({
+          shape: collider.shapeType(),
+          halfHeight: collider.halfHeight(),
+          radius: collider.radius(),
+          mass: bey.body.mass(),
+          stats: bey.stats,
+          ratings: bey.definition.ratings,
+          physical: bey.definition.physical,
+          handling: bey.definition.handling,
+        });
+      });
+      session.dispose();
+      return out;
+    };
+    expect(await read(resolvePresentationFeatures({ newBeyVisuals: true }))).toEqual(await read(undefined));
   });
 
   it('answers VFX anchors on the live Bey: the tip is under the body and follows it', async () => {
