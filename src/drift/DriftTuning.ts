@@ -6,32 +6,64 @@
 // approved (GDD section 19: "Do not automatically add Mario-Kart-style
 // mini-turbo unless the user asks for/approves it").
 //
-// Milestone 3 layers a variable-height jump onto the same hop: holding
-// JumpDrift *without* steering through the ascent adds extra lift
-// (classic "hold to jump higher"), so a quick tap still gives exactly the
-// old small hop while a held-without-steering press reaches higher.
-// Steering signals drift intent instead and stops the height assist
-// immediately, so entering a drift never accidentally becomes a tall jump.
+// Jump/weight/air-control hotfix (owner feedback): the variable-height jump
+// used to be "small fixed liftoff + a continuous upward acceleration every
+// tick JumpDrift stayed held, up to a cap". That accel (23 m/s^2) exceeded
+// gravity's magnitude (10.5), so the NET vertical acceleration while held
+// was positive — vy kept rising after liftoff instead of only decaying —
+// which read as a second impulsion mid-air ("double jump"), not one
+// continuous arc. See DriftController.ts for the audit that found this.
 //
-// Landing is detected generically (any airborne->grounded transition, not
-// just from a jump) and reported as data only — descent speed, a derived
-// intensity metric, and how long jump-height assist applied — with no
-// handling penalty of its own. Milestone 4's VFX/camera work consumes that
-// data; it isn't produced here.
-// ============================================================
-
-// Vertical velocity added the instant JumpDrift is pressed while grounded
-// — the same small, quick liftoff for both a bare tap and a held jump.
-// Movement/weight/dodge playtest pass (owner feedback, section 7-9): the
-// short hop read as "a flattened full jump" (low but travelling/hanging too
-// long) because this one fixed impulse was the ENTIRE tap-release case —
-// a bare tap got essentially this value and nothing else, and even alone,
-// under this codebase's gravity, it produced a ~0.6s hang. Halved (3.2 ->
-// 1.6) so a genuine tap (JumpDrift held only 1-2 ticks) is a real quick hop
-// — still long enough to clear HOP_MIN_AIRBORNE_DURATION_S and start a
-// drift, nowhere near a "compressed full jump". JUMP_ASSIST_ACCEL_MPS2
-// below is raised to put the full held jump's height back where it was.
-export const HOP_IMPULSE_MPS = 1.6;
+// The model is now "single initial launch velocity + at most one release
+// cut": JUMP_LAUNCH_VELOCITY_MPS is applied once, in full, the instant
+// JumpDrift is pressed (immediate liftoff, GDD section 13 of that
+// feedback — no waiting to see how long the press lasts). From there, vy
+// only ever decreases (gravity, automatic, every tick, same as a free
+// fall) — there is no per-tick addition at all. The HEIGHT the jump
+// actually reaches is shaped by at most one, one-time reduction applied
+// the instant JumpDrift is released (or a drift arms, or the hold window
+// below elapses) while still rising: computeJumpReleaseCapMps in
+// DriftController.ts picks a velocity that is always <= the natural,
+// uncut decay curve at that moment (provably, see its own comment), so
+// this can only ever cut the arc short, never add to it — satisfying
+// "vy(t+1) <= vy(t) + tolerance" and "exactly one apex" by construction,
+// not by a separate check bolted on after the fact.
+export const JUMP_LAUNCH_VELOCITY_MPS = 5;
+// The release-cut floor: releasing (or arming a drift) the instant
+// JumpDrift is pressed clamps vy down to roughly this much added lift —
+// this is what actually produces the short hop's apex (picked, with
+// JUMP_LAUNCH_VELOCITY_MPS/JUMP_RELEASE_WINDOW_S below, to land the short
+// hop at +15% over the movement/weight/dodge pass's own measured baseline
+// apex of 0.177 m — see the hold-duration sweep in
+// physicsWeightFeelPass.test.ts for the measured result).
+export const JUMP_SHORT_RELEASE_FLOOR_MPS = 1.62;
+// How long, from the press, a release still shapes the jump's height at
+// all: release (or drift-arm) before this and the cut floor above still
+// applies in full; hold at least this long and the jump is already
+// committed to its full, uncut JUMP_LAUNCH_VELOCITY_MPS arc (saturation —
+// holding further changes nothing, since there is nothing left to cut).
+// In between, the cut floor rises smoothly (linearly in hold time) from
+// the short-hop floor to the arc's own natural velocity at this exact
+// moment, so the hold-duration-to-height curve has no step.
+export const JUMP_RELEASE_WINDOW_S = 0.22;
+// Drift's own hop profile (GDD section 19/20): arming a drift mid-press
+// cuts the rise down to this APEX HEIGHT target instead of the
+// release-window curve above — a height target, not a fixed velocity,
+// because a turn can arm the drift at any point in the press, and the
+// height already gained while rising at the full, uncut launch velocity
+// before the cut can apply is structurally un-cuttable by any
+// velocity-only correction (DriftController.computeDriftHopCutMps solves
+// "height already gained, plus the remaining rise from the cut velocity,
+// equals this target" for the cut velocity, which gets as close to a
+// timing-independent drift hop as a one-time, no-position-snap correction
+// can — see the hold-duration sweep for exactly how early the turn needs
+// to be for that solve to still hit this target exactly, versus only
+// minimizing the overshoot once it can't). 0.204 m matches the short
+// hop's own +15%-over-baseline apex target (DRIFT_HOP_TARGET_APEX_M and
+// JUMP_SHORT_RELEASE_FLOOR_MPS are tuned to produce the same apex at
+// holdElapsedS=0 — an instant turn and an instant release should feel the
+// same small hop).
+export const DRIFT_HOP_TARGET_APEX_M = 0.127;
 // Minimum time to stay in the "hopping" state before a drift can begin,
 // so the hop is visually readable even if the ground check re-triggers
 // early.
@@ -56,14 +88,6 @@ export const DRIFT_AIRBORNE_GRACE_S = 0.45;
 // than MovementTuning's DIRECTIONAL_STEERING_THRESHOLD_RAD off it (the same
 // threshold that counts as steering), or a turn key in classic control.
 export const DRIFT_REFERENCE_MIN_SPEED_MPS = 2;
-
-// --- Variable jump height (Milestone 3) ---
-// Extra upward acceleration applied every tick JumpDrift is still held
-// while ascending, on top of the fixed liftoff impulse above.
-export const JUMP_ASSIST_ACCEL_MPS2 = 23;
-// Caps how long the assist can apply — holding forever must not give
-// unbounded height.
-export const JUMP_ASSIST_MAX_DURATION_S = 0.3;
 
 // --- Landing data (Milestone 3 detects/reports; Milestone 4 consumes) ---
 // Descent speed (m/s) that maps to a landing intensity of 1.0 (clamped

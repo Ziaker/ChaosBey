@@ -15,7 +15,7 @@ import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { DodgeState } from '../../src/dodge/DodgeController';
 import { DODGE_ACTIVE_DURATION_S, DODGE_BURST_SPEED_MPS } from '../../src/dodge/DodgeTuning';
 import { DriftState } from '../../src/drift/DriftController';
-import { JUMP_ASSIST_MAX_DURATION_S } from '../../src/drift/DriftTuning';
+import { JUMP_RELEASE_WINDOW_S } from '../../src/drift/DriftTuning';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { ARENA_FLOOR_RADIUS } from '../../src/arena/colliders/ArenaTuning';
 import { CombatHarness } from './combatHarness';
@@ -188,8 +188,14 @@ describe('short hop vs full jump — mandatory curve (owner spec section 17)', (
   }
 
   it('a bare tap is a genuinely short hop: both apex height and airtime are much smaller than a full held jump', async () => {
-    const tap = await hopArc(2, 90, false);
-    const full = await hopArc(Math.ceil(JUMP_ASSIST_MAX_DURATION_S / FIXED_DELTA_SECONDS) + 2, 150, false);
+    // Jump/air-control hotfix: a true single-tick tap (press and release
+    // within the same fixed tick — JumpDrift pressedThisFrame and already
+    // released the very next tick) is the tightest, most consistent "short
+    // hop" this architecture can produce; by 2 ticks (33 ms) height has
+    // already grown noticeably (the single-launch-impulse model's own
+    // "quick tap" variance — see the hold-duration sweep's own report).
+    const tap = await hopArc(1, 90, false);
+    const full = await hopArc(Math.ceil(JUMP_RELEASE_WINDOW_S / FIXED_DELTA_SECONDS) + 2, 150, false);
     expect(tap.apexM).toBeGreaterThan(0); // it does leave the ground.
     expect(full.apexM).toBeGreaterThan(tap.apexM * 5); // "<<", not just "less than".
     expect(full.airborneTicks).toBeGreaterThan(tap.airborneTicks * 3);

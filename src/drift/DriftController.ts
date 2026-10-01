@@ -25,15 +25,17 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { Action, type ControllerActions } from '../input/actions/Action';
 import { DIRECTIONAL_STEERING_THRESHOLD_RAD, LATERAL_GRIP_PER_S } from '../bey/movement/MovementTuning';
+import { GRAVITY_MPS2 } from '../physics/world/PhysicsWorld';
 import {
   DRIFT_AIRBORNE_GRACE_S,
+  DRIFT_HOP_TARGET_APEX_M,
   DRIFT_REFERENCE_MIN_SPEED_MPS,
   DRIFT_GRIP_RECOVERY_DURATION_S,
   DRIFT_LATERAL_GRIP_PER_S,
-  HOP_IMPULSE_MPS,
   HOP_MIN_AIRBORNE_DURATION_S,
-  JUMP_ASSIST_ACCEL_MPS2,
-  JUMP_ASSIST_MAX_DURATION_S,
+  JUMP_LAUNCH_VELOCITY_MPS,
+  JUMP_RELEASE_WINDOW_S,
+  JUMP_SHORT_RELEASE_FLOOR_MPS,
   LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS,
 } from './DriftTuning';
 import type { CanonicalRecord } from '../replay/state/CanonicalValue';
@@ -63,7 +65,10 @@ export class DriftController {
   private state = DriftState.Idle;
   private hopTimerS = 0;
   private recoveryTimerS = 0;
+  /** Seconds JumpDrift has been continuously held since this hop's single launch impulse — used only to look up where on the release-cut curve a release (or a drift arming) currently falls. Stops advancing, and stops mattering, once jumpCutApplied is true. */
   private jumpAssistElapsedS = 0;
+  /** The one-time release cut (short/medium/full height, or the drift-hop profile) has already been applied for this hop — or there was nothing left to cut (already past its own apex). At most one per hop, by construction (see DriftTuning.ts's header comment). */
+  private jumpCutApplied = false;
   private wasGrounded = true;
   private lastAirborneVerticalVelocityMps = 0;
   /** A turn away from the hop's reference happened during this X press: the drift starts on (or after) landing. */
@@ -93,14 +98,15 @@ export class DriftController {
     return this.state;
   }
 
-  /** Read-only jump/drift timers for Debug Lab inspection (GDD section 69). No gameplay code may branch on this. */
-  getDebugTimers(): { hopTimerS: number; recoveryTimerS: number; jumpAssistElapsedS: number; jumpVerticalSpeedAddedMps: number; driftArmed: boolean } {
+  /** Read-only jump/drift timers for Debug Lab inspection (GDD section 69). No gameplay code may branch on this. `body` is only read for the live vertical-speed-added readout (there is no per-tick assist to reconstruct from internal state alone any more — see DriftTuning.ts). */
+  getDebugTimers(body: RAPIER.RigidBody): { hopTimerS: number; recoveryTimerS: number; jumpAssistElapsedS: number; jumpVerticalSpeedAddedMps: number; driftArmed: boolean } {
+    const addedNow = this.state === DriftState.Hopping ? body.linvel().y - this.hopBaseVerticalMps : 0;
     return {
       driftArmed: this.driftArmed,
       hopTimerS: this.hopTimerS,
       recoveryTimerS: this.recoveryTimerS,
       jumpAssistElapsedS: this.jumpAssistElapsedS,
-      jumpVerticalSpeedAddedMps: this.state === DriftState.Hopping ? HOP_IMPULSE_MPS + JUMP_ASSIST_ACCEL_MPS2 * this.jumpAssistElapsedS : 0,
+      jumpVerticalSpeedAddedMps: Math.max(0, addedNow),
     };
   }
 
@@ -163,21 +169,44 @@ export class DriftController {
       case DriftState.Hopping: {
         this.hopTimerS += fixedDeltaSeconds;
 
-        // Variable jump height (Milestone 3): holding X without turning
-        // keeps adding lift, up to a cap — also while moving. A turn arms
-        // the drift instead and stops the lift, so the drift hop stays
-        // small and consistent. Never applies once falling (vel.y <= 0) —
-        // this is height assist, not a hover.
-        if (jumpDriftHeld && !this.driftArmed && this.jumpAssistElapsedS < JUMP_ASSIST_MAX_DURATION_S) {
-          // "Rising" is measured against the vertical speed the Bey had
-          // when it hopped: going down a bowl's slope it already falls with
-          // the floor (vy −2.9 m/s measured on Bowl B), so an absolute
-          // vy > 0 test never allowed the variable jump there. On the flat
-          // floor the base is 0, as before.
+        // Variable jump height: a single launch impulse was already applied
+        // in beginHop(); from here, vy only ever decreases (gravity, same as
+        // any free fall — nothing adds to it per tick any more). The ONLY
+        // thing this state still does to vy is apply, at most once, the
+        // release cut that actually shapes short/medium/full height, the
+        // instant one of three things happens while still rising: a drift
+        // arms (drift's own small, fixed profile), JumpDrift is released (the
+        // hold-duration-shaped cut), or the release window elapses while
+        // still held (nothing to cut — already committed to the full arc).
+        // "Rising" is measured against the vertical speed the Bey had when
+        // it hopped: going down a bowl's slope it already falls with the
+        // floor (vy −2.9 m/s measured on Bowl B), so an absolute vy > 0 test
+        // never allowed the variable jump there. On the flat floor the base
+        // is 0, as before.
+        if (!this.jumpCutApplied) {
           const vel = body.linvel();
           if (vel.y > this.hopBaseVerticalMps) {
-            body.setLinvel({ x: vel.x, y: vel.y + JUMP_ASSIST_ACCEL_MPS2 * fixedDeltaSeconds, z: vel.z }, true);
-            this.jumpAssistElapsedS += fixedDeltaSeconds;
+            if (this.driftArmed) {
+              const target = this.hopBaseVerticalMps + this.computeDriftHopCutMps(this.jumpAssistElapsedS);
+              if (vel.y > target) body.setLinvel({ x: vel.x, y: target, z: vel.z }, true);
+              this.jumpCutApplied = true;
+            } else if (!jumpDriftHeld) {
+              const target = this.hopBaseVerticalMps + this.computeJumpReleaseCapMps(this.jumpAssistElapsedS);
+              if (vel.y > target) body.setLinvel({ x: vel.x, y: target, z: vel.z }, true);
+              this.jumpCutApplied = true;
+            } else if (this.jumpAssistElapsedS >= JUMP_RELEASE_WINDOW_S) {
+              // Held through the whole release window: already committed to
+              // the full, uncut arc — there is nothing left to cut, ever,
+              // for the rest of this hop (holding longer changes nothing).
+              this.jumpCutApplied = true;
+            } else {
+              this.jumpAssistElapsedS += fixedDeltaSeconds;
+            }
+          } else {
+            // Already past this hop's own apex (or never really rising at
+            // all, off a downslope) — too late for a release cut to mean
+            // anything.
+            this.jumpCutApplied = true;
           }
         }
 
@@ -262,9 +291,62 @@ export class DriftController {
     else this.hopReference = { x: Math.sin(headingRad), z: Math.cos(headingRad) };
     this.hopTimerS = 0;
     this.jumpAssistElapsedS = 0;
+    this.jumpCutApplied = false;
     const vel = body.linvel();
     this.hopBaseVerticalMps = vel.y;
-    body.setLinvel({ x: vel.x, y: vel.y + HOP_IMPULSE_MPS, z: vel.z }, true);
+    // The entire vertical launch, applied once, immediately (no waiting to
+    // see how long the press lasts — GDD section 13 of the jump/air-control
+    // hotfix). Every other height (short/medium, or the drift hop) comes
+    // from cutting THIS SAME arc short later, in the Hopping state above —
+    // never from a second application of force.
+    body.setLinvel({ x: vel.x, y: vel.y + JUMP_LAUNCH_VELOCITY_MPS, z: vel.z }, true);
+  }
+
+  /**
+   * The release-cut target, in added-velocity terms (relative to
+   * hopBaseVerticalMps — see DriftTuning.ts's header comment for why this
+   * decomposition is exact under constant gravity): JUMP_SHORT_RELEASE_FLOOR_MPS
+   * at holdElapsedS=0, rising LINEARLY to this arc's own natural (uncut)
+   * velocity at holdElapsedS=JUMP_RELEASE_WINDOW_S. Both endpoints — and
+   * every point in between, since both curves are straight lines that meet
+   * exactly at the window's end — sit at or below the natural decay curve
+   * (JUMP_LAUNCH_VELOCITY_MPS - GRAVITY_MPS2 * holdElapsedS), so applying
+   * this via `vy = min(vy, hopBase + this)` can only ever cut the arc
+   * short, never add to it. That is what makes "no positive vy
+   * reacceleration after launch" and "exactly one apex" true by
+   * construction rather than by a separate safety check.
+   */
+  private computeJumpReleaseCapMps(holdElapsedS: number): number {
+    const t = Math.min(holdElapsedS, JUMP_RELEASE_WINDOW_S);
+    const naturalAtWindowEnd = JUMP_LAUNCH_VELOCITY_MPS - GRAVITY_MPS2 * JUMP_RELEASE_WINDOW_S;
+    return JUMP_SHORT_RELEASE_FLOOR_MPS + (naturalAtWindowEnd - JUMP_SHORT_RELEASE_FLOOR_MPS) * (t / JUMP_RELEASE_WINDOW_S);
+  }
+
+  /**
+   * The drift-hop's own release-cut target, in added-velocity terms
+   * (relative to hopBaseVerticalMps, same decomposition as above): unlike
+   * the variable-jump cut, this one targets a fixed APEX HEIGHT
+   * (DRIFT_HOP_TARGET_APEX_M) rather than a fixed velocity, because a turn
+   * can arm the drift at any point in the press — a fixed-velocity cut
+   * would still leave a taller hop the later the turn happens (the height
+   * already gained while rising at the full, uncut launch velocity before
+   * the cut can apply is structurally un-cuttable by any velocity-only
+   * correction — the same effect the hold-duration sweep documents for
+   * short-hop quick-tap variance). Solving "height already gained at
+   * holdElapsedS, under the known uncut launch arc, plus the remaining rise
+   * from the cut velocity, equals the target apex" for the cut velocity
+   * gets the closest a one-time, no-position-snap, no-second-event
+   * reduction can get to a timing-independent drift hop: exact while the
+   * turn comes early enough that height-already-gained hasn't yet reached
+   * the target (see the hold-duration sweep for exactly how late "early
+   * enough" is), and "stop rising immediately" — never "keep rising" — once
+   * it hasn't.
+   */
+  private computeDriftHopCutMps(holdElapsedS: number): number {
+    const t = Math.min(holdElapsedS, JUMP_RELEASE_WINDOW_S);
+    const heightAlreadyGainedM = JUMP_LAUNCH_VELOCITY_MPS * t - 0.5 * GRAVITY_MPS2 * t * t;
+    const remainingM = Math.max(0, DRIFT_HOP_TARGET_APEX_M - heightAlreadyGainedM);
+    return Math.sqrt(2 * GRAVITY_MPS2 * remainingM);
   }
 
   private computeLateralGripOverride(): number | null {
@@ -285,6 +367,7 @@ export class DriftController {
       hopTimerS: this.hopTimerS,
       recoveryTimerS: this.recoveryTimerS,
       jumpAssistElapsedS: this.jumpAssistElapsedS,
+      jumpCutApplied: this.jumpCutApplied,
       wasGrounded: this.wasGrounded,
       lastAirborneVerticalVelocityMps: this.lastAirborneVerticalVelocityMps,
       driftArmed: this.driftArmed,

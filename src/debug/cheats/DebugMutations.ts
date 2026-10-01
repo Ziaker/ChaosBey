@@ -13,7 +13,7 @@ import type { MatchSession, Side } from '../../app/session/MatchSession';
 import { BEY_SPAWN_HEIGHT_M } from '../../bey/core/BeyTuning';
 import { floorHeightAt } from '../../arena/floor/ArenaFloorProfile';
 import { DASH_MAX_CHARGE_S } from '../../combat/attacks/AttackTuning';
-import { JUMP_ASSIST_MAX_DURATION_S } from '../../drift/DriftTuning';
+import { JUMP_RELEASE_WINDOW_S } from '../../drift/DriftTuning';
 import { Action } from '../../input/actions/Action';
 import { FIXED_TICKS_PER_SECOND } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
@@ -39,7 +39,7 @@ export interface ForcedAction {
 }
 
 const DASH_HOLD_TICKS = Math.ceil(DASH_MAX_CHARGE_S * FIXED_TICKS_PER_SECOND) + FORCED_DASH_EXTRA_HOLD_TICKS;
-const JUMP_HOLD_TICKS = Math.ceil(JUMP_ASSIST_MAX_DURATION_S * FIXED_TICKS_PER_SECOND) + 3;
+const JUMP_HOLD_TICKS = Math.ceil(JUMP_RELEASE_WINDOW_S * FIXED_TICKS_PER_SECOND) + 3;
 
 export const FORCED_ACTIONS: readonly ForcedAction[] = [
   {

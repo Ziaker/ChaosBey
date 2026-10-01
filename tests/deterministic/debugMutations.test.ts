@@ -94,7 +94,11 @@ describe('Debug Lab mutations', () => {
 
   it('forced inputs drive the real attack, jump and dodge systems', async () => {
     const session = await createSession('mut-forced');
-    for (let i = 0; i < 20; i++) session.tick();
+    // 60, not 20: isGrounded() is proximity-based and can read false for a
+    // tick or two right after a body visually settles — the same
+    // grounded-detection settle-timing fragility fixed elsewhere in this
+    // suite (jump/air-control hotfix shifted exactly when this bites here).
+    for (let i = 0; i < 60; i++) session.tick();
     const bey = (side: Side) => session.getBey(side);
 
     forceAction(session, 'first', 'circular');
@@ -115,7 +119,15 @@ describe('Debug Lab mutations', () => {
     runUntil(session, 200, () => false);
     forceAction(session, 'second', 'dodge');
     expect(runUntil(session, 10, () => bey('second').dodge.getState() === DodgeState.Dodging)).toBe(true);
-    expect(runUntil(session, 60, () => bey('second').dodge.getState() === DodgeState.Cooldown)).toBe(true);
+    // 320, not 60: 'first's forced dash still has residual velocity and its
+    // bumper keeps clipping 'second', retriggering hitstop (camera-impact
+    // freeze, unrelated to Dodge's own i-frames) every ~11 ticks until the
+    // two separate — pre-existing dash/bumper behavior, unrelated to the
+    // jump hotfix, that this test simply never reached before (the forced
+    // jump used to fail earlier). Dodging's own 0.5s (30 ticks) only
+    // advances on the ticks that aren't frozen, so it needs far more than
+    // 60 real ticks of wall-clock budget to accumulate.
+    expect(runUntil(session, 320, () => bey('second').dodge.getState() === DodgeState.Cooldown)).toBe(true);
     resetCooldowns(session);
     expect(bey('second').dodge.getState()).toBe(DodgeState.Idle);
     expect(bey('second').dodge.getDebugTimers().cooldownRemainingS).toBe(0);

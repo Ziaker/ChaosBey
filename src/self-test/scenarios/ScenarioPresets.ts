@@ -18,7 +18,7 @@ import type { Bey } from '../../bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../bey/core/BeyTuning';
 import { floorHeightAt } from '../../arena/floor/ArenaFloorProfile';
 import { DASH_MAX_CHARGE_S, TAP_MAX_HOLD_S } from '../../combat/attacks/AttackTuning';
-import { JUMP_ASSIST_MAX_DURATION_S } from '../../drift/DriftTuning';
+import { JUMP_RELEASE_WINDOW_S } from '../../drift/DriftTuning';
 import { Action } from '../../input/actions/Action';
 import { FIXED_TICKS_PER_SECOND } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
@@ -38,7 +38,7 @@ const SHORT_DASH_HOLD_TICKS = Math.ceil(TAP_MAX_HOLD_S * FIXED_TICKS_PER_SECOND)
 /** Ticks the scripted ring-out jump holds JumpDrift (a short hop). */
 const JUMP_TAP_HOLD_TICKS = 12;
 /** Ticks a scripted full jump holds JumpDrift. */
-const FULL_JUMP_HOLD_TICKS = Math.ceil(JUMP_ASSIST_MAX_DURATION_S * FIXED_TICKS_PER_SECOND) + 3;
+const FULL_JUMP_HOLD_TICKS = Math.ceil(JUMP_RELEASE_WINDOW_S * FIXED_TICKS_PER_SECOND) + 3;
 
 export interface ScenarioActors {
   readonly first: Bey;
