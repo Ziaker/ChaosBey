@@ -409,11 +409,11 @@ Isto é uma pendência estreita de UI/legibilidade, não uma licença para repro
 
 ## 13.5 Arena — gameplay, não aparência
 
-- força real da inclinação/gravidade do bowl;
+- força real da inclinação/gravidade do bowl (quanto ela deve puxar o Bey para o centro, afetar drift/ring-out/IA — isso é tuning/feel, não a integração em si);
 - posição final do volume de ring-out;
 - aberturas finais de parede;
 - arena inicial/default, se não houver override posterior;
-- integração física do bowl quando ainda diferente da apresentação visual.
+- ~~integração física do bowl quando ainda diferente da apresentação visual~~ **RESOLVIDO (M11 lane 4):** o colisor físico (heightfield do Rapier) já usa o mesmo perfil `h(r)` da apresentação visual para os três bowls — ver `src/arena/colliders/createArenaColliders.ts`. Não há mais divergência física × visual a integrar.
 
 ## 13.6 Clash
 
@@ -421,7 +421,7 @@ Isto é uma pendência estreita de UI/legibilidade, não uma licença para repro
 - sobreposição dos Beys no enquadramento;
 - variante reduzida para jogadores sensíveis;
 - eventual shake próprio do pulso além do Camera Director;
-- integração física real do bowl.
+- ~~integração física real do bowl~~ **RESOLVIDO (M11 lane 4), mesmo item da seção 13.5.**
 
 ## 13.7 Outros
 

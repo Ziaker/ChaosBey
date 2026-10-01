@@ -109,6 +109,25 @@ export const DRIFT_AIRBORNE_GRACE_S = 0.45;
 // threshold that counts as steering), or a turn key in classic control.
 export const DRIFT_REFERENCE_MIN_SPEED_MPS = 2;
 
+// Jump input buffer (hotfix: a JumpDrift press arriving in Idle/Recovering
+// while grounded is transiently false — a bounce, a Clash knockback
+// settling, the ground check re-triggering a tick or two late right before
+// a real landing — used to be silently and permanently dropped; confirmed
+// happening in real AI matches via direct input-event/landing instrumentation,
+// not inferred from height data. This is NOT coyote time: coyote time would
+// let a hop start with no press at all near a ledge; this only keeps an
+// ALREADY-HAPPENED real press alive a little longer so the landing a few
+// ticks later can still consume it, exactly once (DriftController.beginHop
+// clears it the instant it's consumed). 0.1 s = 6 ticks at
+// FIXED_TICKS_PER_SECOND (60): several times wider than the 1-3 tick
+// grounded-signal noise actually observed before a real landing, but far
+// shorter than HOP_MIN_AIRBORNE_DURATION_S (0.12 s) or any real hop's own
+// airborne arc — short enough that a buffered press can never plausibly
+// reach a LATER, unrelated landing instead of the bounce it was meant for,
+// so it can't be mistaken for a second, phantom input and can't produce a
+// double hop.
+export const JUMP_INPUT_BUFFER_WINDOW_S = 0.1;
+
 // --- Landing data (Milestone 3 detects/reports; Milestone 4 consumes) ---
 // Descent speed (m/s) that maps to a landing intensity of 1.0 (clamped
 // above). An engineering placeholder per GDD section 167 — not a

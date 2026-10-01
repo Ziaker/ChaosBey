@@ -377,7 +377,7 @@ Não fechar silenciosamente:
 - sobreposição dos Beys no enquadramento;
 - variante reduzida para jogadores sensíveis;
 - eventual shake próprio do pulso além do Camera Director;
-- integração física real do bowl.
+- ~~integração física real do bowl~~ **RESOLVIDO (M11 lane 4):** o colisor físico do bowl já usa o mesmo perfil `h(r)` da apresentação visual (`src/arena/colliders/createArenaColliders.ts`).
 
 > **Fechados em 2026-09-28 (não reabrir):** câmera do Clash (sempre B) e ganho ×4/cores da barra (parte da revisão 2 aprovada).
 
