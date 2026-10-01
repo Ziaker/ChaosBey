@@ -35,7 +35,7 @@ import {
   HOP_MIN_AIRBORNE_DURATION_S,
   JUMP_LAUNCH_VELOCITY_MPS,
   JUMP_RELEASE_WINDOW_S,
-  JUMP_SHORT_RELEASE_FLOOR_MPS,
+  JUMP_SHORT_HOP_TARGET_APEX_M,
   LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS,
 } from './DriftTuning';
 import type { CanonicalRecord } from '../replay/state/CanonicalValue';
@@ -303,23 +303,79 @@ export class DriftController {
   }
 
   /**
+   * The natural (uncut) apex JUMP_LAUNCH_VELOCITY_MPS alone would reach
+   * under constant gravity — the energy-conservation identity
+   * height(t) + vy(t)^2/(2*GRAVITY_MPS2) = this, for every t along the
+   * uncut arc, is what makes computeJumpReleaseCapMps below exact at both
+   * of its ends.
+   */
+  private get naturalFullApexM(): number {
+    return (JUMP_LAUNCH_VELOCITY_MPS * JUMP_LAUNCH_VELOCITY_MPS) / (2 * GRAVITY_MPS2);
+  }
+
+  /**
+   * The hold-time at which the arc's own natural (uncut) height first
+   * reaches JUMP_SHORT_HOP_TARGET_APEX_M — the root of
+   * JUMP_LAUNCH_VELOCITY_MPS*t - 0.5*GRAVITY_MPS2*t^2 = target (the
+   * smaller of the quadratic's two roots). Below this, the release cut
+   * hits the short-hop target exactly, by construction (see
+   * computeJumpReleaseCapMps); this is the width of that exact window, and
+   * it is set entirely by JUMP_LAUNCH_VELOCITY_MPS and the target height —
+   * for small t, height ~= V0*t regardless of what happens to vy
+   * afterward, so no shape of release cut can widen it without either
+   * lowering V0 (shrinking the full jump below its approved 1.0-1.5 m
+   * floor) or raising the target (no longer a "short" hop). Jump/air-control
+   * hotfix follow-up (owner review): this replaces a first version whose
+   * release cut was only exact for a single tick.
+   */
+  private get shortHopExactWindowS(): number {
+    const v0 = JUMP_LAUNCH_VELOCITY_MPS;
+    const g = GRAVITY_MPS2;
+    const discriminant = v0 * v0 - 2 * g * JUMP_SHORT_HOP_TARGET_APEX_M;
+    return (v0 - Math.sqrt(Math.max(0, discriminant))) / g;
+  }
+
+  /**
    * The release-cut target, in added-velocity terms (relative to
    * hopBaseVerticalMps — see DriftTuning.ts's header comment for why this
-   * decomposition is exact under constant gravity): JUMP_SHORT_RELEASE_FLOOR_MPS
-   * at holdElapsedS=0, rising LINEARLY to this arc's own natural (uncut)
-   * velocity at holdElapsedS=JUMP_RELEASE_WINDOW_S. Both endpoints — and
-   * every point in between, since both curves are straight lines that meet
-   * exactly at the window's end — sit at or below the natural decay curve
-   * (JUMP_LAUNCH_VELOCITY_MPS - GRAVITY_MPS2 * holdElapsedS), so applying
-   * this via `vy = min(vy, hopBase + this)` can only ever cut the arc
-   * short, never add to it. That is what makes "no positive vy
-   * reacceleration after launch" and "exactly one apex" true by
-   * construction rather than by a separate safety check.
+   * decomposition is exact under constant gravity). Two regimes, joined
+   * continuously at shortHopExactWindowS:
+   * - holdElapsedS <= shortHopExactWindowS: cuts to hit
+   *   JUMP_SHORT_HOP_TARGET_APEX_M exactly — "height already gained under
+   *   the uncut arc, plus the remaining rise from the cut velocity, equals
+   *   the target" (same technique as computeDriftHopCutMps), which is
+   *   always solvable with a non-negative cut velocity in this regime by
+   *   definition of shortHopExactWindowS.
+   * - holdElapsedS > shortHopExactWindowS (up to JUMP_RELEASE_WINDOW_S):
+   *   the target apex itself ramps LINEARLY from the short-hop target up
+   *   to naturalFullApexM, reaching naturalFullApexM exactly at
+   *   JUMP_RELEASE_WINDOW_S — by the energy-conservation identity, the cut
+   *   velocity this produces at JUMP_RELEASE_WINDOW_S exactly equals the
+   *   arc's own natural vy there, so this joins continuously with "already
+   *   committed, nothing left to cut" past the window, with no step.
+   * Every value this returns is <= the natural decay curve
+   * (JUMP_LAUNCH_VELOCITY_MPS - GRAVITY_MPS2 * holdElapsedS) at that same
+   * holdElapsedS (both regimes solve "height so far + remaining rise =
+   * some target <= naturalFullApexM", which can only ever require a cut
+   * velocity at or below the natural one), so applying this via
+   * `vy = min(vy, hopBase + this)` can only ever cut the arc short, never
+   * add to it — "no positive vy reacceleration after launch" and "exactly
+   * one apex" by construction, not by a separate safety check.
    */
   private computeJumpReleaseCapMps(holdElapsedS: number): number {
     const t = Math.min(holdElapsedS, JUMP_RELEASE_WINDOW_S);
-    const naturalAtWindowEnd = JUMP_LAUNCH_VELOCITY_MPS - GRAVITY_MPS2 * JUMP_RELEASE_WINDOW_S;
-    return JUMP_SHORT_RELEASE_FLOOR_MPS + (naturalAtWindowEnd - JUMP_SHORT_RELEASE_FLOOR_MPS) * (t / JUMP_RELEASE_WINDOW_S);
+    const exactWindowS = this.shortHopExactWindowS;
+    const heightAlreadyGainedM = JUMP_LAUNCH_VELOCITY_MPS * t - 0.5 * GRAVITY_MPS2 * t * t;
+    let targetApexM: number;
+    if (t <= exactWindowS) {
+      targetApexM = JUMP_SHORT_HOP_TARGET_APEX_M;
+    } else {
+      const naturalFullApexM = this.naturalFullApexM;
+      const frac = (t - exactWindowS) / (JUMP_RELEASE_WINDOW_S - exactWindowS);
+      targetApexM = JUMP_SHORT_HOP_TARGET_APEX_M + (naturalFullApexM - JUMP_SHORT_HOP_TARGET_APEX_M) * frac;
+    }
+    const remainingM = Math.max(0, targetApexM - heightAlreadyGainedM);
+    return Math.sqrt(2 * GRAVITY_MPS2 * remainingM);
   }
 
   /**

@@ -35,8 +35,6 @@ const TAP_TICKS = 2;
 const FULL_DASH_HOLD_TICKS = Math.ceil(DASH_MAX_CHARGE_S * FIXED_TICKS_PER_SECOND) + 3;
 /** Ticks a scripted short Dash holds Attack (just past the tap window). */
 const SHORT_DASH_HOLD_TICKS = Math.ceil(TAP_MAX_HOLD_S * FIXED_TICKS_PER_SECOND) + 6;
-/** Ticks the scripted ring-out jump holds JumpDrift (a short hop). */
-const JUMP_TAP_HOLD_TICKS = 12;
 /** Ticks a scripted full jump holds JumpDrift. */
 const FULL_JUMP_HOLD_TICKS = Math.ceil(JUMP_RELEASE_WINDOW_S * FIXED_TICKS_PER_SECOND) + 3;
 
@@ -191,21 +189,51 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
   {
     id: 'ring-out',
     label: 'Test Ring-Out',
-    description: 'Second releases a full Dash outward at first (z = 5), who jumps just before it arrives; a Dash that hits an airborne Bey sends it over the wall. The round ends by ring-out through the physics, not by rule.',
+    description:
+      'Second releases a full Dash outward at a low-Stability, exhausted first (z = 5), who jumps just before it arrives; the Dash catches the airborne Bey and its own knockback lift adds to the jump\'s residual vy, sending it over the wall. The round ends by ring-out through the physics, not by rule.',
+    // Jump/air-control hotfix follow-up (owner review, PR #73 then this
+    // follow-up): the old setup had first jump a FULL, uncut jump (its own
+    // apex alone used to clear the 2 m wall at ~2.33 m, pre-hotfix) and
+    // relied only on that height. The hotfix's own approved full-jump
+    // target (1.0-1.5 m) can never clear 2 m by itself, with or without a
+    // plain Dash's modest knockback lift added — verified: neither the
+    // jump alone, nor a maximally-exploited knockback alone (zero Stamina,
+    // near-zero Stability, full Attack/Defense mismatch — the biggest
+    // knockback this engine's combat formulas can produce without touching
+    // any of them — gives vy ≈ 5.9-6.5 m/s, still short given how fast the
+    // resulting ~32 m/s horizontal launch crosses the wall's radius) clears
+    // it on its own. What does: a Dash hit landing on a Bey already
+    // mid-jump — the knockback impulse is an ADDITIVE velocity change
+    // (RAPIER.RigidBody.applyImpulse), not a replacement, so it stacks on
+    // top of whatever vy the jump already has. Catching it 10-15 ticks
+    // into the jump (this preset's own jump timing below), not right at
+    // liftoff, gave the most reliable clearance in a sweep — enough
+    // existing height plus the stacked knockback vy (now ~9-11 m/s
+    // combined) outruns the wall-crossing math this time. No combat,
+    // arena, or knockback value was changed to make this work — only this
+    // scenario's own setup (first's Stamina/Stability) and jump timing.
     supported: true,
     durationTicks: 8 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
       placeBey(first, 0, 5, Math.PI);
       placeBey(second, 0, -1, 0);
+      // Maximally vulnerable to knockback (GDD section 27/30's own
+      // formula, not a new rule): zero Stamina (max staminaVulnerability),
+      // low-but-not-zero Stability (close to the knockback formula's own
+      // ceiling without a Dash's stability damage reaching exactly zero —
+      // which freezes the round via an instant break/KO before the
+      // physics can carry the launch out).
+      first.stamina.resource.set(0);
+      first.stability.debugSetValue(30);
     },
-    // Jump 8 ticks after the Dash release (the hit lands 18 ticks after
-    // it): the middle of the 2–16 tick range that produces this ring-out.
-    // M11 (Motion Lab movement): the old setup — first's Circular catching
-    // the Dash, whose own momentum carried it out — no longer rings out,
-    // since a caught dasher now keeps 30% of its speed (the fix for the
-    // ~2 s opening ring-outs). The AI ring-out traced under B came from
-    // this: a Dash hitting a Bey in the air.
-    first: script(hold(Action.JumpDrift, FULL_DASH_HOLD_TICKS + 8, JUMP_TAP_HOLD_TICKS)),
+    // Jump 10 ticks after the Dash release (the hit lands 18 ticks after
+    // it, same as before this follow-up): swept 85-90 (10-15 ticks after
+    // release) and all rang out; closer to the hit (16-18 ticks after
+    // release) the jump's own vy hadn't built up enough height yet despite
+    // its own higher residual velocity at the moment of the hit — total
+    // clearance depends on height-already-gained plus the knockback's
+    // added vy together, not the added vy alone.
+    first: script(hold(Action.JumpDrift, FULL_DASH_HOLD_TICKS + 10, 20)),
     second: script(hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS)),
     doneWhen: (t) => t.roundOver,
     check: (t) => ok(t.outcome === 'SecondWinsByRingOut', `outcome ${t.outcome}; Dash hits ${t.hits.filter((h) => !h.attackerIsFirst).length}`),
