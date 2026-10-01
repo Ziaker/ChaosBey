@@ -173,7 +173,7 @@ Altura `h(r)` em metros, com `R = 12`.
 - Arena inicial: uma das três ou as três como presets visuais no pré-jogo.
 - Quanto a inclinação do bowl puxa os Beys para o centro no gameplay; isso afeta aceleração, drift, ring-out e IA e precisa de playtest.
 - Onde fica o volume de ring-out com o chão côncavo e se a parede ganha aberturas.
-- O jogo da `main` ainda usa chão plano; o colisor côncavo é a primeira etapa de integração futura.
+- ~~O jogo da `main` ainda usa chão plano; o colisor côncavo é a primeira etapa de integração futura.~~ **RESOLVIDO (M11 lane 4):** o colisor côncavo (heightfield do Rapier, mesmo perfil `h(r)` dos três bowls) já está integrado em `src/arena/colliders/createArenaColliders.ts` / `src/arena/floor/ArenaFloorProfile.ts`, selecionável no Motion Lab/Pregame. A arena padrão continua plana (`DEFAULT_ARENA_FLOOR`), então "arena inicial" (item acima) segue em aberto, mas a integração física em si não é mais um passo futuro.
 
 # 6. VFX Language Lab
 

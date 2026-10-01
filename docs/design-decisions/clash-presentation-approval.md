@@ -134,7 +134,7 @@ Valores exatos de `prototypes/clash-presentation-concepts/src/presentation/direc
 5. **Leitura do comeback:** em viradas muito tardias (últimos ~0,15 s), o HUD mostra a recuperação e a resolução completa a virada.
 6. **Intensidade para jogadores sensíveis:** a C tem câmera lenta forte na entrada e hitstop de 0,07 s por mash. Uma variante reduzida (GDD 121) não foi definida.
 7. **`pulse.shakeMeters` (0,22 na C)** está declarado na configuração, mas o lab não aplica. O shake do Clash vem do diretor de câmera. Falta decidir se a direção deve somar um shake próprio.
-8. **Bowl na física:** o bowl é só visual. O piso físico do jogo ainda é plano (`visual-prototypes-approval.md` §5).
+8. ~~**Bowl na física: o bowl é só visual, piso ainda plano.**~~ **RESOLVIDO (M11 lane 4):** o bowl virou colisor físico de verdade (heightfield côncavo do Rapier, `src/arena/colliders/createArenaColliders.ts`, mesmo perfil `h(r)` dos três bowls A/B/C em `src/arena/floor/ArenaFloorProfile.ts`), selecionável no Motion Lab/Pregame. A arena padrão (`DEFAULT_ARENA_FLOOR`) continua plana — isso não mudou, só a alegação de que o bowl físico "ainda não existe".
 9. **Valores provisórios (GDD 167):** tudo na seção 4 pode ser ajustado em playtest.
 
 ---
