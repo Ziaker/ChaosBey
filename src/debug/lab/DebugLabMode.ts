@@ -28,6 +28,7 @@ import { resolveAttackProfileSettings } from '../../config/attack-profile/Attack
 import { loadAttackProfileOverrides } from '../../config/attack-profile/AttackProfileStorage';
 import { KeyboardController } from '../../input/devices/KeyboardController';
 import { createPlayerControl } from '../../input/directional/createPlayerControl';
+import { controlSetupFor } from '../../app/frontend/controlReferences';
 import { loadPlayerSettings, type CameraPresetSetting } from '../../config/settings/PlayerSettings';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, isArenaFloorId, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { DEFAULT_MOTION_DIRECTION, isMotionDirectionId, MOTION_DIRECTION_IDS, MOTION_DIRECTIONS, type MotionDirectionId } from '../../bey/motion/MotionPresets';
@@ -116,7 +117,8 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   // same factory as the real PLAY flow; its frame of reference is
   // gameplay-owned and never the camera (input/directional/
   // ControlReference.ts).
-  const playerInput = createPlayerControl(keyboard, { directional: loadPlayerSettings().controlScheme === 'directional' });
+  const controlSetup = controlSetupFor(loadPlayerSettings().controlScheme, { session: () => session ?? null });
+  const playerInput = createPlayerControl(keyboard, { directional: controlSetup.directional, reference: controlSetup.reference });
   // M11: the game camera preset from Settings (A/B/C; the Clash forces B).
   let cameraPreset: CameraPresetSetting = loadPlayerSettings().cameraPreset;
   // M11 lane 4: the floor profile to test (`&floor=bowl-a`, the panel, or the handle); flat by default.

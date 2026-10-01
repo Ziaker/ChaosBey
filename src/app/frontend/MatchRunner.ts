@@ -25,6 +25,7 @@ import { Action, type ControllerActions } from '../../input/actions/Action';
 import { KeyboardController } from '../../input/devices/KeyboardController';
 import { CombinedController, GamepadController } from '../../input/devices/GamepadController';
 import { createPlayerControl } from '../../input/directional/createPlayerControl';
+import { controlSetupFor } from './controlReferences';
 import type { DirectionalController, DirectionalDebug } from '../../input/directional/DirectionalController';
 import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ControlScheme } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
@@ -146,8 +147,10 @@ export class MatchRunner {
     // and the camera/gameplay separation tests use. Its frame of reference
     // is gameplay-owned (input/directional/ControlReference.ts): the
     // camera is downstream presentation and never reaches it.
+    const setup = controlSetupFor(start.controlScheme ?? DEFAULT_PLAYER_SETTINGS.controlScheme, { session: () => sessionForJumpBuffer });
     const directional = createPlayerControl(new CombinedController([keyboard, gamepad]), {
-      directional: (start.controlScheme ?? DEFAULT_PLAYER_SETTINGS.controlScheme) === 'directional',
+      directional: setup.directional,
+      reference: setup.reference,
       stick: () => gamepad.getStick(),
     });
     const session = await MatchSession.create({
@@ -206,9 +209,11 @@ export class MatchRunner {
     if (presentation.cameraPreset) this.session.setCameraPreset(presentation.cameraPreset);
   }
 
-  /** Switches Directional / Classic control live (from the Pause menu's settings). */
+  /** Switches the control scheme live (from the Pause menu's settings). */
   setControlScheme(scheme: ControlScheme): void {
-    this.directional.setEnabled(scheme === 'directional');
+    const setup = controlSetupFor(scheme, { session: () => this.session });
+    this.directional.setReference(setup.reference);
+    this.directional.setEnabled(setup.directional);
   }
 
   /** The player's directional input (screen + world), null under Classic control. Debug overlay only. */

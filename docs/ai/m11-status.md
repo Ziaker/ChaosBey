@@ -12,7 +12,7 @@ Owner order for M11:
 ### What changed
 
 **Input semantics (default: Directional).**
-> **SUPERSEDED (2026-10-01).** The control reference is no longer the camera, in any form (no yaw read, no latch, no per-tick tracking). The arrows are resolved in a gameplay-owned `ControlReference` (today the fixed arena frame: ↑ = +Z, → = +X) — see `docs/design-decisions/camera-gameplay-separation.md`. The camera/latch paragraphs below, and fixes 5–9 in this log, are history only.
+> **SUPERSEDED (2026-10-01).** The control reference is no longer the camera, in any form (no yaw read, no latch, no per-tick tracking). The arrows are resolved in a `ControlReference` — four owner-selectable schemes (toward-opponent default, Classic, fixed arena, and the opt-in screen-relative exception) — see `docs/design-decisions/camera-gameplay-separation.md`. The camera/latch paragraphs below, and fixes 5–9 in this log, are history only.
 
 - ↑ means "go up the screen", ↓ means down, ←/→ mean the sides. Diagonals are normalized to length 1.
 - The analog stick gives continuous direction and strength: a 0.2 radial deadzone, then a magnitude from 0 to 1.

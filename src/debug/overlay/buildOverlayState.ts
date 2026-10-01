@@ -36,7 +36,7 @@ export function buildCombatOverlayFields(session: MatchSession): CombatOverlayFi
     speedMps: result.first.movement.speedMps,
     headingRad: result.first.movement.headingRad,
     desiredMoveIntent: session.getLastActions('first')?.moveIntent ?? null,
-    controlSchemeLabel: directional ? 'Directional' : 'Classic',
+    controlSchemeLabel: directional ? { world: 'Arena (fixed)', opponent: 'Toward opponent', latched: 'Screen (reads the camera — opt-in)' }[directional.getReferenceKind()] : 'Classic (Bey-relative)',
     // The camera's own yaw, read from CameraDirector's own output — never
     // through the input controller (src/input/ has no camera dependency
     // at all, see DirectionalController.ts's header).

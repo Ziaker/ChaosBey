@@ -41,6 +41,9 @@ import { createDefaultAttackProfileSettings } from '../../src/config/attack-prof
 import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecorder';
 import { Action, type CombatController, type ControllerActions } from '../../src/input/actions/Action';
 import { createPlayerControl } from '../../src/input/directional/createPlayerControl';
+import { controlSetupFor } from '../../src/app/frontend/controlReferences';
+import type { ControlScheme } from '../../src/config/settings/PlayerSettings';
+import { WORLD_CONTROL_REFERENCE } from '../../src/input/directional/ControlReference';
 import { screenToWorld, screenVectorFromDigital } from '../../src/input/directional/screenDirection';
 import type { ArenaFloorId } from '../../src/arena/floor/ArenaFloorProfile';
 
@@ -93,9 +96,22 @@ class HeldKey implements CombatController {
   }
 }
 
-type DeviceKind = 'idle' | 'script' | 'held-up';
+type DeviceKind = 'idle' | 'script' | 'held-up' | 'taps';
+/** Presses ↑ for 30 ticks, lets go for 10, repeatedly: a fresh gesture every 40 ticks. */
+class TapUp implements CombatController {
+  private tick = 0;
+  private prev = false;
+  sampleActions(): ControllerActions {
+    const down = this.tick++ % 40 < 30;
+    const held = new Set<Action>(down ? [Action.MoveForward] : []);
+    const pressed = new Set<Action>(down && !this.prev ? [Action.MoveForward] : []);
+    this.prev = down;
+    return { held, pressedThisFrame: pressed, attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0 };
+  }
+}
+
 function makeDevice(kind: DeviceKind): CombatController {
-  return kind === 'idle' ? new IdlePlayer() : kind === 'script' ? new ScriptedPlayer() : new HeldKey(Action.MoveForward);
+  return kind === 'idle' ? new IdlePlayer() : kind === 'script' ? new ScriptedPlayer() : kind === 'taps' ? new TapUp() : new HeldKey(Action.MoveForward);
 }
 
 // ---------------------------------------------------------------- cameras
@@ -162,7 +178,7 @@ interface RunSpec {
   readonly floor: ArenaFloorId;
   readonly seed: string;
   readonly device: DeviceKind;
-  readonly scheme: 'directional' | 'classic';
+  readonly scheme: ControlScheme;
   readonly variant: CameraVariant;
   readonly ticks: number;
   /** Identical, test-induced gameplay perturbations (teleports) — applied after the given tick in EVERY variant. */
@@ -200,7 +216,10 @@ async function runMatch(spec: RunSpec): Promise<RunResult> {
   const camera = new THREE.PerspectiveCamera(60, spec.fixed?.aspect ?? 16 / 9, 0.1, 1000);
   scene.add(camera);
   const rig = spec.variant === 'none' ? null : spec.variant === 'static' ? makeStaticRig() : spec.variant === 'hostile' ? makeHostileRig() : undefined;
-  const player = createPlayerControl(makeDevice(spec.device), { directional: spec.scheme === 'directional' });
+  // The player's control chain, built exactly like PLAY builds it (controlSetupFor + createPlayerControl).
+  let sessionRef: MatchSession | null = null;
+  const setup = controlSetupFor(spec.scheme, { session: () => sessionRef });
+  const player = createPlayerControl(makeDevice(spec.device), { directional: setup.directional, reference: setup.reference });
   const session = await MatchSession.create({
     scene,
     camera,
@@ -214,6 +233,7 @@ async function runMatch(spec: RunSpec): Promise<RunResult> {
     cameraPreset: spec.fixed?.preset,
     cameraRig: rig,
   });
+  sessionRef = session;
 
   // Tripwire: nothing that runs inside tick() may read the camera's output through the session API.
   const trace: CameraTrace = { yawsDeg: [], fovs: [], sides: new Set(), modifiers: new Set(), eyeDistances: [], readsDuringTick: 0 };
@@ -349,7 +369,7 @@ afterAll(() => {
 describe('A. zero input: nothing the camera does may move, steer or touch a Bey', () => {
   for (const floor of ['flat', 'bowl-b'] as const) {
     it(`${floor}: no player input, camera none / static / real / hostile ⇒ identical gameplay every tick`, async () => {
-      const runs = await runAll({ floor, seed: `sep-zero-${floor}`, device: 'idle', scheme: 'directional', ticks: TICKS }, ['none', 'static', 'real', 'hostile']);
+      const runs = await runAll({ floor, seed: `sep-zero-${floor}`, device: 'idle', scheme: 'opponent', ticks: TICKS }, ['none', 'static', 'real', 'hostile']);
       // The setup is real: the cameras genuinely differ, and the player really produced no input.
       expect(range(runs.static.camera.yawsDeg)).toBeLessThan(0.001);
       expect(range(runs.real.camera.yawsDeg), 'the real camera never moved').toBeGreaterThan(10);
@@ -361,8 +381,9 @@ describe('A. zero input: nothing the camera does may move, steer or touch a Bey'
   }
 });
 
-describe('B. real player input through the real control chain (Directional AND Classic): static vs extremely dynamic camera', () => {
-  for (const scheme of ['directional', 'classic'] as const) {
+describe('B. real player input through the real control chain (every camera-free control scheme): static vs extremely dynamic camera', () => {
+  // opponent (default) / arena / classic never read the camera. The opt-in 'screen' scheme is the owner's explicit exception and is covered by its own test below.
+  for (const scheme of ['opponent', 'arena', 'classic'] as const) {
     for (const floor of ['flat', 'bowl-a', 'bowl-c'] as const) {
       it(`${scheme} / ${floor}: scripted throttle/steer/diagonals/drift/jump/dodge/attack ⇒ identical gameplay every tick`, async () => {
         const runs = await runAll({ floor, seed: `sep-input-${scheme}-${floor}`, device: 'script', scheme, ticks: TICKS }, ['none', 'static', 'real', 'hostile']);
@@ -378,15 +399,15 @@ describe('B. real player input through the real control chain (Directional AND C
     }
   }
 
-  it('Directional: a held ArrowUp resolves to ONE constant world direction for the whole fight while the camera orbits wildly — the camera is not in the chain', async () => {
+  it('arena scheme: a held ArrowUp resolves to ONE constant world direction for the whole fight while the camera orbits wildly — the camera is not in the chain', async () => {
     const intentsByVariant: Record<string, { x: number; z: number }[]> = {};
     for (const variant of ['none', 'real', 'hostile'] as const) {
-      const run = await runMatch({ floor: 'flat', seed: 'sep-held-up', device: 'held-up', scheme: 'directional', variant, ticks: 600 });
+      const run = await runMatch({ floor: 'flat', seed: 'sep-held-up', device: 'held-up', scheme: 'arena', variant, ticks: 600 });
       intentsByVariant[variant] = run.coverage.intents;
       expect(run.camera.readsDuringTick).toBe(0);
       if (variant === 'real') expect(range(run.camera.yawsDeg), 'the camera must really move for this to prove anything').toBeGreaterThan(10);
     }
-    const expected = screenToWorld(screenVectorFromDigital(true, false, false, false), 0);
+    const expected = screenToWorld(screenVectorFromDigital(true, false, false, false), WORLD_CONTROL_REFERENCE.yawRad(true));
     for (const [variant, intents] of Object.entries(intentsByVariant)) {
       expect(intents.length, variant).toBeGreaterThan(100);
       expect(
@@ -395,6 +416,58 @@ describe('B. real player input through the real control chain (Directional AND C
       ).toBe(true);
     }
   }, 120_000);
+
+  it('opponent scheme: ↑ always points at the opponent (a function of the Beys\' positions) and a held key keeps tracking them while the camera orbits wildly', async () => {
+    for (const variant of ['none', 'hostile'] as const) {
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 1000);
+      scene.add(camera);
+      let sessionRef: MatchSession | null = null;
+      const setup = controlSetupFor('opponent', { session: () => sessionRef });
+      const player = createPlayerControl(new HeldKey(Action.MoveForward), { directional: setup.directional, reference: setup.reference });
+      const session = await MatchSession.create({
+        scene,
+        camera,
+        seedText: 'sep-opponent-bearing',
+        matchConfig: resolveMatchConfig({ arenaFloor: 'flat' }),
+        attackProfileSettings: createDefaultAttackProfileSettings(),
+        telemetry: new TelemetryRecorder(),
+        stateMachine: new GameStateMachine(),
+        controllers: { first: { kind: 'keyboard' }, second: { kind: 'ai', personality: 'archetype' } },
+        keyboard: player,
+        cameraRig: variant === 'none' ? null : makeHostileRig(),
+      });
+      sessionRef = session;
+      let checked = 0;
+      for (let t = 0; t < 300; t++) {
+        const a = session.getBey('first').body.translation(); // positions BEFORE this tick's input is sampled
+        const b = session.getBey('second').body.translation();
+        session.tick();
+        if (variant !== 'none') session.renderFrame(1 / 60, camera);
+        const intent = session.getLastActions('first')?.moveIntent;
+        const d = Math.hypot(b.x - a.x, b.z - a.z);
+        if (!intent || d < 0.5) continue;
+        expect(intent.x, `${variant} tick ${t}`).toBeCloseTo((b.x - a.x) / d, 2);
+        expect(intent.z, `${variant} tick ${t}`).toBeCloseTo((b.z - a.z) / d, 2);
+        checked++;
+      }
+      session.dispose();
+      expect(checked, variant).toBeGreaterThan(200);
+    }
+  }, 120_000);
+
+  it("screen scheme (the owner's opt-in exception) is the ONLY scheme where the camera matters: with fresh gestures its path follows the camera, the other schemes' paths do not", async () => {
+    const base = { floor: 'flat' as const, seed: 'sep-screen-exception', device: 'taps' as const, ticks: 600 };
+    const screenNone = await runMatch({ ...base, scheme: 'screen', variant: 'none' });
+    const screenReal = await runMatch({ ...base, scheme: 'screen', variant: 'real' });
+    expect(range(screenReal.camera.yawsDeg)).toBeGreaterThan(10);
+    expect(firstDivergence(screenNone, screenReal), 'the screen scheme is supposed to follow the camera; if it no longer does, update this test and the docs').not.toBeNull();
+    for (const scheme of ['opponent', 'arena', 'classic'] as const) {
+      const none = await runMatch({ ...base, scheme, variant: 'none' });
+      const real = await runMatch({ ...base, scheme, variant: 'real' });
+      expect(firstDivergence(none, real), scheme).toBeNull();
+    }
+  }, 180_000);
 });
 
 describe('C. offscreen rescue: the camera reframes itself, never the Bey', () => {
@@ -413,7 +486,7 @@ describe('C. offscreen rescue: the camera reframes itself, never the Bey', () =>
   };
 
   it('a Bey ends up (nearly) out of frame: the real camera rescues the framing (eye/focus/FOV/distance/mode), gameplay is identical to having no camera', async () => {
-    const runs = await runAll({ floor: 'flat', seed: 'sep-rescue', device: 'script', scheme: 'directional', ticks: 600, perturb: RESCUE_PERTURB }, ['none', 'real', 'hostile']);
+    const runs = await runAll({ floor: 'flat', seed: 'sep-rescue', device: 'script', scheme: 'opponent', ticks: 600, perturb: RESCUE_PERTURB }, ['none', 'real', 'hostile']);
     const rescues = [...runs.real.camera.modifiers].filter((m) => m.startsWith('resgate'));
     expect(rescues, `the director never ran an offscreen rescue (modifiers seen: ${[...runs.real.camera.modifiers].join(' | ')})`).not.toEqual([]);
     expect(range(runs.real.camera.eyeDistances), 'rescue did not change the camera distance').toBeGreaterThan(0.5);
@@ -456,7 +529,7 @@ describe('C. offscreen rescue: the camera reframes itself, never the Bey', () =>
 
 describe('D. knockback follow: the camera follows the knocked Bey; the Bey follows physics only', () => {
   it('real knockback in a fight: identical knockback, velocities and positions with the camera on, off, frozen or hostile', async () => {
-    const runs = await runAll({ floor: 'flat', seed: 'sep-knockback', device: 'script', scheme: 'directional', ticks: 1200 }, ['none', 'static', 'real', 'hostile']);
+    const runs = await runAll({ floor: 'flat', seed: 'sep-knockback', device: 'script', scheme: 'opponent', ticks: 1200 }, ['none', 'static', 'real', 'hostile']);
     expect(runs.none.coverage.knockback, 'no knockback happened in this fight — the test would prove nothing').toBe(true);
     expect([...runs.real.camera.modifiers].some((m) => m.startsWith('knockback follow')), `KnockbackFollow never engaged (modifiers: ${[...runs.real.camera.modifiers].join(' | ')})`).toBe(true);
     expectIdentical(runs, 'none');
@@ -475,7 +548,7 @@ describe('E. crossing / side switching: the Beys are never adjusted', () => {
     };
     const perturb: Record<number, (s: MatchSession) => void> = {};
     for (let t = 90; t < 700; t += 90) perturb[t] = swap;
-    const runs = await runAll({ floor: 'flat', seed: 'sep-crossing', device: 'script', scheme: 'directional', ticks: 700, perturb }, ['none', 'real', 'hostile']);
+    const runs = await runAll({ floor: 'flat', seed: 'sep-crossing', device: 'script', scheme: 'opponent', ticks: 700, perturb }, ['none', 'real', 'hostile']);
     expect(range(runs.real.camera.yawsDeg), 'the camera never reacted to the crossings').toBeGreaterThan(10);
     expectIdentical(runs, 'none');
   }, 120_000);
@@ -483,7 +556,7 @@ describe('E. crossing / side switching: the Beys are never adjusted', () => {
 
 describe('F. camera settings invariance: preset A/B/C, effects on/off, aspect ratio, overview — same input + same seed ⇒ same gameplay', () => {
   it('every preset × effects combination, plus a very wide and a very tall window, matches the no-camera baseline', async () => {
-    const base = { floor: 'flat' as const, seed: 'sep-settings', device: 'script' as const, scheme: 'directional' as const, ticks: 600 };
+    const base = { floor: 'flat' as const, seed: 'sep-settings', device: 'script' as const, scheme: 'opponent' as const, ticks: 600 };
     const baseline = await runMatch({ ...base, variant: 'none' });
     expect(baseline.coverage.moves).toBe(true);
     for (const preset of PRESET_IDS) {
@@ -502,7 +575,7 @@ describe('F. camera settings invariance: preset A/B/C, effects on/off, aspect ra
 
 describe('G. render disabled: with and without render/camera the gameplay hash is identical', () => {
   it('no camera and no renderFrame() at all vs the real camera rendering every frame: identical per-tick state hash', async () => {
-    const base = { floor: 'flat' as const, seed: 'sep-render', device: 'script' as const, scheme: 'directional' as const, ticks: TICKS };
+    const base = { floor: 'flat' as const, seed: 'sep-render', device: 'script' as const, scheme: 'opponent' as const, ticks: TICKS };
     const headless = await runMatch({ ...base, variant: 'none', renders: false });
     const rendered = await runMatch({ ...base, variant: 'real', renders: true });
     expect(headless.camera.yawsDeg).toEqual([]);

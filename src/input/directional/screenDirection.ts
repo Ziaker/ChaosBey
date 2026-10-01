@@ -18,13 +18,14 @@
 //   the automatic camera orbiting could change where the Bey went. That is
 //   a violation of the rule above, not a tuning problem, and all of it was
 //   removed (docs/design-decisions/camera-gameplay-separation.md).
-// - What remains is the fixed-arena mapping the owner approved in "Fix 5"
-//   (up = world +Z, right = world +X) as the PROVISIONAL default, behind
-//   the ControlReference seam, pending the owner's choice between a
-//   world-fixed and a Bey-relative reference.
+// - Now the reference is a ControlReference with several owner-selectable
+//   implementations (ControlReference.ts / app/frontend/controlReferences.ts).
+//   NOTE: the earlier arena-fixed mapping (up +Z, right +X) was a MIRROR
+//   image (right was the left-hand side of up); right is now always the
+//   clockwise quarter-turn of up, as on a screen.
 // ============================================================
 
-import { fromYaw, perpendicular, type Vec2 } from '../../physics/Vec2';
+import { fromYaw, type Vec2 } from '../../physics/Vec2';
 import type { MoveIntent } from '../actions/Action';
 
 /** Screen-space direction: +x right, +y up, length 0..1. */
@@ -67,16 +68,17 @@ export function screenLength(v: ScreenVector): number {
 }
 
 /**
- * A screen vector as a world X/Z direction for a control reference at this
- * yaw: screen up = fromYaw(referenceYawRad), screen right = its right-hand
- * perpendicular, on the ground plane. A pure function of its two
- * arguments — no latch, no memory, and no camera: the yaw is the gameplay
- * ControlReference's, never the presentation camera's.
+ * A direction vector (x right, y up) as a world X/Z direction in a control
+ * reference with this yaw: "up" = fromYaw(referenceYawRad); "right" = up
+ * turned a quarter-turn CLOCKWISE seen from above (a right-handed frame,
+ * like a screen: up −Z ⇒ right +X). A pure function of its two arguments —
+ * no latch, no memory, and no camera: the yaw is the gameplay
+ * ControlReference's.
  */
 export function screenToWorld(screen: ScreenVector, referenceYawRad: number): MoveIntent {
   if (screen.x === 0 && screen.y === 0) return { x: 0, z: 0 };
   const up: Vec2 = fromYaw(referenceYawRad);
-  const right: Vec2 = perpendicular(up);
+  const right: Vec2 = { x: -up.z, z: up.x }; // NOT perpendicular(up): that one is the mirror image (left of up)
   const x = up.x * screen.y + right.x * screen.x;
   const z = up.z * screen.y + right.z * screen.x;
   return { x: quantize(x), z: quantize(z) };

@@ -9,7 +9,8 @@
 // drift — stays physics (MovementController).
 //
 // THE REFERENCE IS GAMEPLAY-OWNED, NEVER THE CAMERA (owner requirement,
-// 2026-10-01: "A CÂMERA NUNCA MOVE O BEY"). The only external input this
+// 2026-10-01: "A CÂMERA NUNCA MOVE O BEY"; the single opt-in exception, the
+// 'screen' scheme, is wired outside src/input/). The only external input this
 // class accepts besides the device is a ControlReference (see
 // ControlReference.ts) — there is deliberately no `cameraYaw` callback,
 // no number that could carry camera output, and no camera type or import
@@ -48,13 +49,19 @@ export interface DirectionalDebug {
 export class DirectionalController implements CombatController {
   private last: DirectionalDebug = { screen: ZERO_SCREEN, world: { x: 0, z: 0 }, referenceYawRad: 0 };
   private enabled = true;
-  private readonly reference: ControlReference;
+  private reference: ControlReference;
 
   constructor(
     private readonly inner: CombatController,
     private readonly sources: DirectionalSources = {},
   ) {
     this.reference = sources.reference ?? WORLD_CONTROL_REFERENCE;
+  }
+
+  /** Swaps the frame of reference live (control scheme changed in Settings). Takes effect on the next sample. */
+  setReference(reference: ControlReference): void {
+    this.reference = reference;
+    this.reset();
   }
 
   sampleActions(context: ControllerContext): ControllerActions {
@@ -71,7 +78,7 @@ export class DirectionalController implements CombatController {
             actions.held.has(Action.SteerLeft),
             actions.held.has(Action.SteerRight),
           );
-    const referenceYawRad = this.reference.yawRad();
+    const referenceYawRad = this.reference.yawRad(screenLength(screen) > 0);
     const world = screenToWorld(screen, referenceYawRad);
     this.last = { screen, world, referenceYawRad };
     const held = new Set(actions.held);
@@ -92,6 +99,11 @@ export class DirectionalController implements CombatController {
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  /** Which frame of reference the arrows are resolved in (debug overlay). */
+  getReferenceKind(): ControlReference['kind'] {
+    return this.reference.kind;
   }
 
   /** The last sampled direction, world direction and reference yaw — for the debug overlay. */

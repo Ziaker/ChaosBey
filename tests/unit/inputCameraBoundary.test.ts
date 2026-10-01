@@ -25,6 +25,10 @@
 //     may be read only by presentation/debug code: MatchSession's own
 //     renderFrame() and the debug overlay/inspector. Not by MatchRunner,
 //     not by DebugLabMode, not by any controller.
+//     ONE owner-approved exception: app/frontend/controlReferences.ts, which
+//     implements the opt-in 'screen' control scheme (read once per gesture;
+//     never the default). It is allowlisted by name and by this comment so
+//     the exception is visible and cannot spread.
 //  4. Inside MatchSession, the camera rig and its output are touched only
 //     by the camera/render members, and the camera tick writes nothing but
 //     `lastCameraOutput`.
@@ -56,6 +60,7 @@ const CAMERA_OUTPUT_READERS = [
   resolve(SRC, 'app/session/MatchSession.ts'),
   resolve(SRC, 'debug/overlay/buildOverlayState.ts'),
   resolve(SRC, 'debug/inspectors/buildInspection.ts'),
+  resolve(SRC, 'app/frontend/controlReferences.ts'), // OPT-IN 'screen' scheme only — explicit owner exception, 2026-10-01
 ];
 const CAMERA_OUTPUT_IDENTIFIERS = new Set(['getLastCameraOutput', 'lastCameraOutput', 'SessionCameraOutput']);
 
@@ -181,7 +186,7 @@ describe('guard 1: gameplay layers never depend on the camera', () => {
 
   it('the player control chain has no camera-shaped seam: DirectionalSources / createPlayerControl expose no camera parameter', () => {
     for (const file of [resolve(SRC, 'input/directional/DirectionalController.ts'), resolve(SRC, 'input/directional/createPlayerControl.ts'), resolve(SRC, 'input/directional/ControlReference.ts')]) {
-      expect(codeWords(parse(file)).filter((w) => /camera|yaw.*from|gesture/i.test(w.text) && !/^yawRad$|referenceYawRad/.test(w.text))).toEqual([]);
+      expect(codeWords(parse(file)).filter((w) => /camera/i.test(w.text))).toEqual([]);
     }
   });
 });
@@ -217,6 +222,16 @@ describe('guard 3: camera OUTPUT is read only by presentation/debug code', () =>
     for (const file of [resolve(SRC, 'app/frontend/MatchRunner.ts'), resolve(SRC, 'debug/lab/DebugLabMode.ts')]) {
       expect(codeWords(parse(file)).filter((w) => CAMERA_OUTPUT_IDENTIFIERS.has(w.text))).toEqual([]);
     }
+  });
+  it('the camera-reading exception is confined to the "screen" scheme: the other three schemes in controlReferences.ts never touch the camera', () => {
+    const text = readFileSync(resolve(SRC, 'app/frontend/controlReferences.ts'), 'utf8');
+    const lines = text.split('\n');
+    const readAt = lines.map((l, i) => (/getLastCameraOutput/.test(l) ? i : -1)).filter((i) => i >= 0);
+    expect(readAt.length).toBe(1);
+    const screenCase = lines.findIndex((l) => /case 'screen':/.test(l));
+    expect(screenCase).toBeGreaterThan(-1);
+    expect(readAt[0]).toBeGreaterThan(screenCase);
+    expect(lines.slice(screenCase + 1).some((l) => /^\s*case '/.test(l)), "'screen' must be the last case, so nothing else falls under it").toBe(false);
   });
   it('every allowlisted reader actually reads it (the allowlist is not stale)', () => {
     for (const file of CAMERA_OUTPUT_READERS) expect(codeWords(parse(file)).some((w) => CAMERA_OUTPUT_IDENTIFIERS.has(w.text)), rel(file)).toBe(true);

@@ -35,22 +35,29 @@ Sem causa na câmera, verificados e limpos: `MovementController`, drift, jump, d
 
 ## Arquitetura depois
 
-- **Controle:** `input/directional/ControlReference.ts` — o referencial das setas é responsabilidade de **input/gameplay**. `DirectionalController` não aceita nenhum callback/número de câmera. `createPlayerControl()` é a fábrica única usada por PLAY, Debug Lab e testes.
+- **Controle:** `input/directional/ControlReference.ts` — o referencial das setas é responsabilidade de **input/gameplay** (arena fixa, bearing ao oponente, ou — só no esquema opt-in `screen` — um yaw lido uma vez por gesto). `DirectionalController` não aceita nenhum callback/número de câmera. `createPlayerControl()` é a fábrica única usada por PLAY, Debug Lab e testes.
 - **Câmera:** `CameraObserver` (`CameraRig.ts`) — o que o `MatchSession` precisa de uma câmera. `MatchSession.create({ cameraRig })`: omitido = Camera Director real; `null` = sem câmera (render desligado). Saída da câmera só alimenta `lastCameraOutput`, lida por `renderFrame()` e pelos readouts de debug.
 - **Guard** (`tests/unit/inputCameraBoundary.test.ts`, AST): (1) camadas de gameplay não importam `src/camera/` nem mencionam "camera" em código; (2) a câmera só importa de si mesma + o tipo `ImpactEvent` e o enum `AttackState` (nada que ela possa mutar); (3) a saída da câmera só é lida por `MatchSession.renderFrame` e pelo overlay/inspector de debug; (4) dentro do `MatchSession`, rig/saída só são tocados pelos membros de câmera/render, e o tick da câmera só escreve `lastCameraOutput`.
 - **Prova em runtime** (`tests/deterministic/cameraGameplaySeparation.test.ts`, sem retries): mesma luta com câmera ausente / congelada / real (presets A/B/C, efeitos, aspect, overview) / hostil (teleporta eye/focus, FOV 5°–145°, shake enorme, tenta mutar o frame) ⇒ estado de gameplay idêntico em **todo tick** (ações, `moveIntent`, snapshot completo por Bey, eventos, knockback, aceleração, posição, velocidades linear/angular, rotação, heading, hash canônico). Cobre zero input, input real complexo (Directional **e** Classic pelo mesmo controller do PLAY), offscreen rescue, knockback follow, crossing/side switch, settings e render desligado.
 
-## ⚠️ DECISÃO PENDENTE DO OWNER — referencial das setas (Directional)
+## Esquemas de controle (owner: "adiciona TODOS como opção", 2026-10-01)
 
-A invariante acima **não** está pendente. O que está pendente é **qual referencial de gameplay** o modo Directional (padrão) usa, agora que a câmera não pode ser um:
+Todos selecionáveis em Settings → Control. A invariante vale para os três primeiros; o quarto é uma **exceção opt-in explícita do owner**.
 
-| Opção | Efeito | Observação |
+| Esquema (`ControlScheme`) | Significado | Lê a câmera? |
 |---|---|---|
-| **Arena fixa** (interino, o que está no código) | ↑ = +Z, → = +X, sempre | É o mapeamento que o owner já aprovou em "Fix 5". Com a câmera orbitando livremente, "para cima" nas setas pode não ser "para cima" na tela. A câmera é quem deve compensar, não o controle. |
-| **Relativo ao Bey** | ↑ ao longo do heading, ←/→ giram | É o Classic. Sem eixo de mundo para desalinhar da tela. |
-| Outro referencial de gameplay (ex.: linha jogador→oponente) | — | **Só com decisão explícita do owner.** Nenhum foi implementado. |
+| `opponent` (**padrão — escolha do agente, confirmar com o owner**) | ↑ em direção ao oponente, ↓ afasta, ←/→ circulam. Só depende das posições dos Beys. | Não |
+| `classic` | Relativo ao Bey (kart): ←/→ giram, ↑/↓ aceleram/freiam no sentido do heading. | Não |
+| `arena` | Direções fixas da arena: ↑ = −Z, → = +X. | Não |
+| `screen` | ↑ = "para cima na tela" como a câmera estava ao começar a mover; travado até soltar. | **Sim — única exceção.** Lido uma vez por gesto, nunca é o padrão. |
 
-O ponto de encaixe é único: `ControlReference` + `createPlayerControl`. Nenhuma opção envolve a câmera. Até o owner decidir, o código usa **arena fixa**.
+- O ponto único de configuração é `app/frontend/controlReferences.ts` (`controlSetupFor`), usado por PLAY, Debug Lab e testes. É o **único** arquivo permitido a ler a saída da câmera para o controle (guard em `inputCameraBoundary.test.ts`, que também garante que só o `case 'screen'` a lê).
+- Os testes de separação (`cameraGameplaySeparation.test.ts`) provam independência da câmera para `opponent`, `arena` e `classic`, e provam que `screen` é o **único** esquema em que a câmera muda a trajetória (para a exceção não se espalhar).
+- Saves antigos com `controlScheme: "directional"` migram para o padrão (`opponent`).
+
+### Bug corrigido junto: espelhamento esquerda/direita
+
+O mapeamento antigo usava `right = perpendicular(up)`, que é o lado **esquerdo** de `up` (espelhado): com ↑ = +Z, → ia para +X, que é a esquerda de quem olha para +Z. `right` agora é sempre o quarto de volta horário de `up` visto de cima (`right = (−up.z, up.x)`), como numa tela; testado para qualquer yaw de referência.
 
 ## Não resolver assim (proibido pelo owner)
 

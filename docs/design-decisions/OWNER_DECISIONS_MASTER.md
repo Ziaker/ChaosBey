@@ -103,7 +103,7 @@ Direções do Motion Lab preservadas:
 - Escopo: toda a cadeia input → movimento → física → combate. Vale direta e indiretamente (um `number` vindo da câmera continua sendo dado da câmera).
 - Efeito sobre decisões anteriores: **supersede** qualquer texto/fix ("Fix 5/6/7/9", `CameraYawLatch`, `gestureYaw`, "camera-relative como padrão da indústria") que fizesse o controle ler a câmera.
 - Detalhes, auditoria e guards: `camera-gameplay-separation.md`.
-- **Pendente** (decisão de design, não da invariante): qual referencial de gameplay o Directional usa — arena fixa (interino) ou relativo ao Bey. Ver §13.7.
+- Esquemas de controle selecionáveis (owner: "adiciona TODOS como opção"): `opponent` (padrão, escolha do agente a confirmar), `classic` (relativo ao Bey), `arena` (fixo) e `screen` (relativo à tela — **única exceção opt-in** que lê a câmera, nunca o padrão). Ver §13.7.
 
 ---
 
@@ -436,7 +436,7 @@ Isto é uma pendência estreita de UI/legibilidade, não uma licença para repro
 
 ## 13.7 Outros
 
-- **referencial das setas no modo Directional** (arena fixa — interino — vs. relativo ao Bey; nunca a câmera): ver `camera-gameplay-separation.md`;
+- **qual esquema de controle é o padrão** (hoje `opponent`, escolha do agente — o owner pediu os quatro como opção): ver `camera-gameplay-separation.md`;
 - identidade individual de partículas/trails por Bey;
 - pacote específico de pulo / ataque aéreo / air recovery onde o VFX aprovado não cobrir o comportamento pretendido;
 - bloom/chromatic aberration e Post-FX final, se o owner decidir usar;

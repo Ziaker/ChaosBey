@@ -13,20 +13,24 @@
 import { DEFAULT_QUALITY_PRESET, QualityPreset } from '../runtime/QualityPreset';
 
 /**
- * How the arrows / stick drive the Bey. Neither scheme depends on the
- * presentation camera: the camera is downstream of gameplay and never
- * moves the Bey (docs/design-decisions/camera-gameplay-separation.md).
- * - directional (default): the arrows are resolved in a gameplay-owned
- *   control reference (input/directional/ControlReference.ts) — today the
- *   fixed arena frame (↑ = world +Z, → = world +X). Which reference the
- *   default uses is a PENDING OWNER DECISION; the camera is not a
- *   candidate.
+ * How the arrows / stick drive the Bey. All four are selectable; the first
+ * three never depend on the presentation camera (the camera is downstream
+ * of gameplay and never moves the Bey — docs/design-decisions/
+ * camera-gameplay-separation.md).
+ * - opponent (default): ↑ goes toward the opponent, ↓ away, ←/→ circle
+ *   around them. Derived from gameplay positions only.
  * - classic: Bey-relative, kart-like — ←/→ steer the Bey's own heading,
  *   ↑/↓ accelerate/decelerate along it (turn rate, momentum, grip all
  *   still apply; this is not a snap-to-input).
+ * - arena: ↑ = fixed arena direction (−Z), → = +X, whichever way the
+ *   camera is facing.
+ * - screen: ↑ goes "up the screen" as the camera is when you start to move;
+ *   frozen until every direction is released. THE ONLY SCHEME THAT READS
+ *   THE CAMERA — an opt-in exception the owner explicitly asked for
+ *   (2026-10-01); never the default.
  */
-export type ControlScheme = 'directional' | 'classic';
-export const CONTROL_SCHEMES: readonly ControlScheme[] = ['directional', 'classic'];
+export type ControlScheme = 'opponent' | 'classic' | 'arena' | 'screen';
+export const CONTROL_SCHEMES: readonly ControlScheme[] = ['opponent', 'classic', 'arena', 'screen'];
 
 /**
  * Combat camera (M11, docs/design-decisions/camera-approval.md): one of the
@@ -54,7 +58,7 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   quality: DEFAULT_QUALITY_PRESET,
   // B until the owner picks the first-time default (camera-approval.md 10.1 recommends B).
   cameraPreset: 'B',
-  controlScheme: 'directional',
+  controlScheme: 'opponent',
   cameraEffects: true,
   pauseOnFocusLoss: true,
   controlHints: true,
@@ -80,6 +84,7 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
   const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const bool = (key: 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart'): boolean => (typeof input[key] === 'boolean' ? (input[key] as boolean) : (DEFAULT_PLAYER_SETTINGS[key] as boolean));
   const quality = Object.values(QualityPreset).find((q) => q === input.quality) ?? DEFAULT_PLAYER_SETTINGS.quality;
+  // 'directional' is what saves before the four schemes stored; it migrates to the default.
   const controlScheme = CONTROL_SCHEMES.find((c) => c === input.controlScheme) ?? DEFAULT_PLAYER_SETTINGS.controlScheme;
   const cameraPreset = CAMERA_PRESET_SETTINGS.find((c) => c === input.cameraPreset) ?? DEFAULT_PLAYER_SETTINGS.cameraPreset;
   return {

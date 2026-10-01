@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { Action, type CombatController, type ControllerActions } from '../../src/input/actions/Action';
 import { DirectionalController } from '../../src/input/directional/DirectionalController';
 import { createPlayerControl } from '../../src/input/directional/createPlayerControl';
-import { WORLD_CONTROL_REFERENCE, type ControlReference } from '../../src/input/directional/ControlReference';
+import { WORLD_CONTROL_REFERENCE, createLatchedReference, createOpponentReference, type ControlReference } from '../../src/input/directional/ControlReference';
 import { screenToWorld, screenVectorFromDigital, screenVectorFromStick, screenLength } from '../../src/input/directional/screenDirection';
 import { sanitizePlayerSettings, DEFAULT_PLAYER_SETTINGS } from '../../src/config/settings/PlayerSettings';
 
@@ -49,11 +49,25 @@ describe('screen vectors', () => {
 });
 
 describe('screen → world (control reference, a pure function of its two arguments)', () => {
-  it('the world reference is the fixed arena frame: up = world +Z, right = world +X (the owner\'s earlier "Fix 5" mapping)', () => {
-    expect(screenToWorld({ x: 0, y: 1 }, WORLD_CONTROL_REFERENCE.yawRad())).toEqual({ x: 0, z: 1 });
-    expect(screenToWorld({ x: 1, y: 0 }, WORLD_CONTROL_REFERENCE.yawRad())).toEqual({ x: 1, z: 0 });
-    expect(screenToWorld({ x: 0, y: -1 }, 0)).toEqual({ x: 0, z: -1 });
-    expect(screenToWorld({ x: -1, y: 0 }, 0)).toEqual({ x: -1, z: 0 });
+  it('the world reference is the fixed arena frame: up = world −Z (away from the default viewpoint), right = world +X', () => {
+    const yaw = WORLD_CONTROL_REFERENCE.yawRad(true);
+    const close = (v: { x: number; z: number }, x: number, z: number) => {
+      expect(v.x).toBeCloseTo(x, 3);
+      expect(v.z).toBeCloseTo(z, 3);
+    };
+    close(screenToWorld({ x: 0, y: 1 }, yaw), 0, -1);
+    close(screenToWorld({ x: 1, y: 0 }, yaw), 1, 0);
+    close(screenToWorld({ x: 0, y: -1 }, yaw), 0, 1);
+    close(screenToWorld({ x: -1, y: 0 }, yaw), -1, 0);
+  });
+
+  it('right is ALWAYS the clockwise quarter-turn of up seen from above (never the mirror image), for every reference yaw', () => {
+    for (const yaw of [0, 0.4, 1.57, Math.PI, -2.2, 5]) {
+      const up = screenToWorld({ x: 0, y: 1 }, yaw);
+      const right = screenToWorld({ x: 1, y: 0 }, yaw);
+      // cross(up, right) in the XZ plane: y-axis component of up × right; clockwise from above ⇒ positive with x right / z toward the viewer.
+      expect(up.x * right.z - up.z * right.x).toBeCloseTo(1, 3);
+    }
   });
 
   it("preserves the direction vector's length for every reference yaw (a pure rotation, no scaling)", () => {
@@ -95,7 +109,8 @@ describe('DirectionalController: gameplay-owned reference, no camera in the chai
   it('defaults to the world reference and is a pure function of the held keys: the same keys give the same intent on every tick', () => {
     const controller = new DirectionalController(held(Action.MoveForward));
     const first = controller.sampleActions(CONTEXT).moveIntent!;
-    expect(first).toEqual({ x: 0, z: 1 });
+    expect(first.x).toBeCloseTo(0, 3);
+    expect(first.z).toBeCloseTo(-1, 3);
     for (let i = 0; i < 200; i++) expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(first);
   });
 
@@ -103,7 +118,8 @@ describe('DirectionalController: gameplay-owned reference, no camera in the chai
     // The constructor takes (device, { reference?, stick? }). A source object with a camera-shaped callback is rejected at the type level (see tsc) and simply ignored at runtime.
     const smuggled = { cameraYaw: () => 2.5 } as unknown as ConstructorParameters<typeof DirectionalController>[1];
     const controller = new DirectionalController(held(Action.MoveForward), smuggled);
-    expect(controller.sampleActions(CONTEXT).moveIntent).toEqual({ x: 0, z: 1 });
+    const intent = controller.sampleActions(CONTEXT).moveIntent!;
+    expect(intent.z).toBeCloseTo(-1, 3);
   });
 
   it('with no direction held the intent is the zero vector', () => {
@@ -139,10 +155,14 @@ describe('DirectionalController: gameplay-owned reference, no camera in the chai
         seen.set(action, world);
       }
     }
-    expect(seen.get(Action.MoveForward)).toEqual({ x: 0, z: 1 });
-    expect(seen.get(Action.MoveBackward)).toEqual({ x: 0, z: -1 });
-    expect(seen.get(Action.SteerLeft)).toEqual({ x: -1, z: 0 });
-    expect(seen.get(Action.SteerRight)).toEqual({ x: 1, z: 0 });
+    const near = (v: { x: number; z: number } | undefined, x: number, z: number) => {
+      expect(v!.x).toBeCloseTo(x, 3);
+      expect(v!.z).toBeCloseTo(z, 3);
+    };
+    near(seen.get(Action.MoveForward), 0, -1);
+    near(seen.get(Action.MoveBackward), 0, 1);
+    near(seen.get(Action.SteerLeft), -1, 0);
+    near(seen.get(Action.SteerRight), 1, 0);
   });
 
   it('turns arrows into moveIntent and removes the four movement actions', () => {
@@ -151,14 +171,14 @@ describe('DirectionalController: gameplay-owned reference, no camera in the chai
     expect([...actions.held]).toEqual([Action.Attack]);
     expect([...actions.pressedThisFrame]).toEqual([Action.Attack]);
     expect(Math.hypot(actions.moveIntent!.x, actions.moveIntent!.z)).toBeLessThanOrEqual(1);
-    expect(actions.moveIntent).toEqual(screenToWorld(screenVectorFromDigital(true, false, false, true), 0));
+    expect(actions.moveIntent).toEqual(screenToWorld(screenVectorFromDigital(true, false, false, true), WORLD_CONTROL_REFERENCE.yawRad(true)));
     expect(controller.getDebug().screen.x).toBeCloseTo(Math.SQRT1_2, 12);
   });
 
   it('the stick wins over digital directions when pushed', () => {
     const controller = new DirectionalController(held(Action.MoveForward), { stick: () => [1, 0] });
     const actions = controller.sampleActions(CONTEXT);
-    expect(actions.moveIntent).toEqual(screenToWorld({ x: 1, y: 0 }, 0));
+    expect(actions.moveIntent).toEqual(screenToWorld({ x: 1, y: 0 }, WORLD_CONTROL_REFERENCE.yawRad(true)));
   });
 
   it('Classic (disabled) passes the device actions through untouched', () => {
@@ -171,15 +191,59 @@ describe('DirectionalController: gameplay-owned reference, no camera in the chai
   it('createPlayerControl(directional: true) is a directional controller', () => {
     const controller = createPlayerControl(held(Action.MoveForward), { directional: true });
     expect(controller.isEnabled()).toBe(true);
-    expect(controller.sampleActions(CONTEXT).moveIntent).toEqual({ x: 0, z: 1 });
+    expect(controller.sampleActions(CONTEXT).moveIntent!.z).toBeCloseTo(-1, 3);
+  });
+});
+
+describe('opponent reference: up = toward the opponent (gameplay positions only)', () => {
+  const at = (px: number, pz: number, ox: number, oz: number) => createOpponentReference(() => ({ from: { x: px, z: pz }, to: { x: ox, z: oz } }));
+  it('↑ heads toward the opponent wherever they are, ↓ away, → to the right of that heading', () => {
+    for (const [ox, oz] of [[0, -5], [4, 0], [0, 7], [-3, 3], [2, -2]] as const) {
+      const ref = at(0, 0, ox, oz);
+      const toward = Math.hypot(ox, oz);
+      const up = screenToWorld({ x: 0, y: 1 }, ref.yawRad(true));
+      const right = screenToWorld({ x: 1, y: 0 }, ref.yawRad(true));
+      expect(up.x).toBeCloseTo(ox / toward, 3);
+      expect(up.z).toBeCloseTo(oz / toward, 3);
+      expect(up.x * right.z - up.z * right.x).toBeCloseTo(1, 3); // right-handed: never mirrored
+    }
+  });
+  it('with the opponent due −Z (camera behind the player looking at them) → is +X, the screen right', () => {
+    const right = screenToWorld({ x: 1, y: 0 }, at(0, 0, 0, -6).yawRad(true));
+    expect(right.x).toBeCloseTo(1, 3);
+    expect(right.z).toBeCloseTo(0, 3);
+  });
+  it('when the Beys overlap there is no bearing: the last one is kept (the controls never snap)', () => {
+    let ox = 3;
+    const ref = createOpponentReference(() => ({ from: { x: 0, z: 0 }, to: { x: ox, z: 0 } }));
+    const before = ref.yawRad(true);
+    ox = 0;
+    expect(ref.yawRad(true)).toBe(before);
+  });
+  it('returns the last bearing when the source is unavailable (no session yet)', () => {
+    const ref = createOpponentReference(() => null);
+    expect(Number.isFinite(ref.yawRad(true))).toBe(true);
+  });
+});
+
+describe('latched reference (the opt-in screen scheme): read once per gesture', () => {
+  it('reads its source when a direction is first held and keeps that value until everything is released', () => {
+    let source = 1;
+    const ref = createLatchedReference(() => source);
+    expect(ref.yawRad(true)).toBe(1);
+    source = 2;
+    expect(ref.yawRad(true)).toBe(1);
+    ref.yawRad(false);
+    expect(ref.yawRad(true)).toBe(2);
   });
 });
 
 describe('control scheme setting', () => {
-  it('defaults to directional, keeps classic, falls back to directional on garbage', () => {
-    expect(DEFAULT_PLAYER_SETTINGS.controlScheme).toBe('directional');
-    expect(sanitizePlayerSettings({ controlScheme: 'classic' }).controlScheme).toBe('classic');
-    expect(sanitizePlayerSettings({ controlScheme: 'tank' }).controlScheme).toBe('directional');
-    expect(sanitizePlayerSettings({ quality: 'Low' }).controlScheme).toBe('directional'); // an M10 save has no scheme
+  it('defaults to the camera-free "opponent" scheme (never the camera-reading "screen"), keeps every valid scheme, falls back on garbage', () => {
+    expect(DEFAULT_PLAYER_SETTINGS.controlScheme).toBe('opponent');
+    for (const scheme of ['opponent', 'classic', 'arena', 'screen'] as const) expect(sanitizePlayerSettings({ controlScheme: scheme }).controlScheme).toBe(scheme);
+    expect(sanitizePlayerSettings({ controlScheme: 'tank' }).controlScheme).toBe('opponent');
+    expect(sanitizePlayerSettings({ controlScheme: 'directional' }).controlScheme).toBe('opponent'); // a save from before the four schemes
+    expect(sanitizePlayerSettings({ quality: 'Low' }).controlScheme).toBe('opponent'); // an M10 save has no scheme
   });
 });
