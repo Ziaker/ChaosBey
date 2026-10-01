@@ -24,8 +24,10 @@ import { startSettingsMode } from './app/modes/settingsMode';
 import { isQuickPlay, resolveAppMode } from './app/modes/appMode';
 import { startDebugLabMode } from './debug/lab/DebugLabMode';
 import { startSelfTestMode } from './debug/self-test-ui/SelfTestMode';
+import { installJumpInputDiagnosticsFromUrl } from './debug/diagnostics/JumpInputDiagnostics'; // TEMPORARY — see that file's header
 
 async function bootstrap(): Promise<void> {
+  installJumpInputDiagnosticsFromUrl(); // TEMPORARY, no-op unless ?jumpDiag=1 — see JumpInputDiagnostics.ts
   showVersionBadge();
   const canvas = document.querySelector<HTMLCanvasElement>('#app-canvas');
   const debugOverlayRoot = document.querySelector<HTMLElement>('#debug-overlay-root');
