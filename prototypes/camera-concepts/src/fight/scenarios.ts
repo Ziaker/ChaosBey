@@ -72,13 +72,13 @@ export const SCENARIOS: readonly Scenario[] = [
     // motion (Clash at 2.0 s, round end at 16.6 s; was 'g'); 'r' since the movement/weight/dodge
     // playtest pass (steering/grip tightened, gravity raised, short hop shortened, dodge rewritten
     // as a flat state) changed fight timing again — 'k' no longer reaches a Clash at all within 15s
-    // (Clash at 2.0 s, no round end within 15 s); 'i' since the arena scale pass (floor radius 12 m ->
-    // 36 m, and the flat floor now a heightfield, changed every AI fight again: 'r' no longer reaches a
-    // Clash; 'i' is the first of a..z with a Clash and no round end within 15 s).
+    // (Clash at 2.0 s, no round end within 15 s); 'b' since the arena scale pass (floor radius 12 m ->
+    // 36 m, the flat floor now a heightfield, then its resolution 288 -> 144 cells, changed every AI fight again: 'r' no longer reaches a
+    // Clash; 'b' is the first of a..z with a Clash and no round end within 15 s).
     firstSpawn: { x: -3, z: -5 },
     secondSpawn: { x: 3, z: 5 },
-    first: { kind: 'ai', seed: 'duel-p-i' },
-    second: { kind: 'ai', seed: 'duel-o-i' },
+    first: { kind: 'ai', seed: 'duel-p-b' },
+    second: { kind: 'ai', seed: 'duel-o-b' },
     expects: ['hit', 'clashActive'],
   },
   {

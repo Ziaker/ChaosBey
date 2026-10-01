@@ -3,7 +3,7 @@
 // live and headless, per-side AI RNG).
 
 import * as THREE from 'three';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { GameStateMachine } from '../../src/app/lifecycle/GameState';
 import { MatchSession } from '../../src/app/session/MatchSession';
 import type { SideControllerSpec } from '../../src/app/session/SideControllers';
@@ -197,6 +197,11 @@ describe('one simulation (M9-0)', () => {
   }, 180_000);
 
   it('camera and VFX never change the simulation (render every tick with effects on vs never render)', async () => {
+    // The drift VFX paints its soft-dot texture on a DOM canvas the first time a
+    // skid mark is drawn. This fight does not drift (or does, depending on the
+    // arena physics), and Node has no `document`: give it a canvas with no 2D
+    // context (the VFX code tolerates that) so the check never depends on it.
+    vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => null }) });
     const rendered = await liveSession('render-independence');
     const bare = await liveSession('render-independence');
     const camera = new THREE.PerspectiveCamera();
@@ -209,6 +214,7 @@ describe('one simulation (M9-0)', () => {
     }
     rendered.dispose();
     bare.dispose();
+    vi.unstubAllGlobals();
   }, 120_000);
 
   it('the simulation never draws from the gameplay RNG stream (if this fails, add it to CanonicalMatchStateV1 and bump the schema)', async () => {

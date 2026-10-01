@@ -164,7 +164,8 @@ describe('every bowl plays clean (no invalid state)', () => {
 
   it('AI vs AI, every pairing: rounds resolve, no invalid state', async () => {
     for (const floor of BOWLS) {
-      const batch = await runFloorAiBatch(floor, 1);
+      // 7200 ticks (2 min, was 3600): on the 36 m stage one bowl-B pairing was still going at 60 s (arena scale pass: longer rounds).
+      const batch = await runFloorAiBatch(floor, 1, 7200);
       expect(batch.matches).toBe(9);
       expect(batch.invalidStates, floor).toBe(0);
       expect(batch.unresolved, floor).toBe(0);
