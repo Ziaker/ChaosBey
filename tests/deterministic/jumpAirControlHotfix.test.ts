@@ -120,6 +120,19 @@ describe('jump/air-control hotfix — hold-duration sweep (section 29)', () => {
     const c = await measureJumpArc(msToTicks(800), 220);
     expect(b.apexM).toBeCloseTo(a.apexM, 2);
     expect(c.apexM).toBeCloseTo(a.apexM, 2);
+    // Follow-up regression guard (owner review item 4): the full jump's own
+    // absolute apex/airtime must stay pinned to the historical, approved
+    // result (apex 1.1798 m, airtime 0.950 s — sections 10/11's 1.0-1.5 m /
+    // 0.85-1.2 s target), not just "consistent with itself" — so a future
+    // short-hop tweak that silently drags the full jump along with it fails
+    // loudly here instead of only showing up in a hold-duration sweep's
+    // console output.
+    expect(a.apexM).toBeGreaterThan(1.0);
+    expect(a.apexM).toBeLessThan(1.5);
+    expect(a.apexM).toBeCloseTo(1.1798, 1);
+    const airtimeS = a.primaryAirborneTicks / TICKS_PER_SECOND;
+    expect(airtimeS).toBeGreaterThan(0.85);
+    expect(airtimeS).toBeLessThan(1.2);
   });
 });
 
@@ -139,24 +152,36 @@ describe('jump/air-control hotfix — short hop +15% (sections 6/32)', () => {
     expect(ratio).toBeLessThan(1.3); // explicitly: not 1.30x, per section 32.
   });
 
-  it('quick-tap variance (section 33): reports min/max/mean apex and airtime for 1-5 ticks — this architecture\'s own determined "quick tap" range is narrower than that (see the finding below), reported honestly rather than asserted away', async () => {
+  it('quick-tap consistency (section 33, follow-up, owner review item 4): ticks 1-2 (up to ~33 ms) both land within tight tolerance of the +15% target AND of each other; ticks 3-5 are reported, not hidden, and must grow far more gently than the pre-follow-up model', async () => {
     const results = await Promise.all([1, 2, 3, 4, 5].map((t) => measureJumpArc(t, 90)));
     const apexes = results.map((r) => r.apexM);
     const airtimes = results.map((r) => r.primaryAirborneTicks);
     // eslint-disable-next-line no-console
-    console.log('hold 1-5 ticks variance:', JSON.stringify({ apexes, airtimes, apexRangeM: Math.max(...apexes) - Math.min(...apexes), airtimeRangeTicks: Math.max(...airtimes) - Math.min(...airtimes) }));
-    // FINDING (section 8): with JUMP_LAUNCH_VELOCITY_MPS tuned for the
-    // full-jump height target, the height already gained during ANY hold
-    // before a release cut can apply is structurally un-cuttable (see
-    // DriftTuning.ts/DriftController.ts's own comments) — so only a true
-    // single-tick tap (1/60s) is a tight, consistent "short hop" by this
-    // measure; by 2 ticks apex is already ~45% taller, and it keeps
-    // growing roughly linearly through 5 ticks. This is reported in the
-    // mandatory report, not hidden — only a sanity ceiling here, to catch
-    // a gross regression (e.g. a reintroduced continuous assist), not to
-    // assert a false "all taps feel the same" that the physics doesn't
-    // support in this architecture.
-    expect(Math.max(...apexes) / Math.min(...apexes)).toBeLessThan(3);
+    console.log('hold 1-5 ticks, after the height-targeted release cut:', JSON.stringify({ apexes, airtimes }));
+    // computeJumpReleaseCapMps's own exact-window math (see DriftController.ts)
+    // says ticks 1-2 land inside the window where the release cut hits
+    // JUMP_SHORT_HOP_TARGET_APEX_M exactly, regardless of which of the two
+    // ticks releases. Two independent guarantees, not one: each tick's own
+    // apex must be close to the +15% target (not just close to each other —
+    // a future change could drift both away from the target in lockstep and
+    // still pass a same-as-each-other-only check), AND the two ticks must
+    // read as the same hop to a player.
+    for (const apex of [apexes[0]!, apexes[1]!]) {
+      expect(apex).toBeGreaterThan(TARGET_APEX_M * 0.85);
+      expect(apex).toBeLessThan(TARGET_APEX_M * 1.15);
+    }
+    expect(apexes[1]! / apexes[0]!).toBeGreaterThan(0.9);
+    expect(apexes[1]! / apexes[0]!).toBeLessThan(1.1);
+    // Ticks 3-5 are past that window by construction (the window's width is
+    // a function of JUMP_LAUNCH_VELOCITY_MPS and the target height alone —
+    // see computeJumpReleaseCapMps's comment for why it can't be widened
+    // further without lowering the full jump below its approved 1.0-1.5 m
+    // floor) and do grow — but the height-targeted cut's smooth ramp
+    // (instead of the pre-follow-up model's linear-in-velocity-from-tick-1
+    // cut) must keep that growth far gentler: tick 3 within 1.6x of tick 1
+    // (was ~2x), tick 5 within 2.5x (was ~2.7x and still linear past it).
+    expect(apexes[2]! / apexes[0]!).toBeLessThan(1.6);
+    expect(apexes[4]! / apexes[0]!).toBeLessThan(2.5);
   });
 });
 
