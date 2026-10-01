@@ -32,6 +32,17 @@ export class KeyboardController implements CombatController {
   private readonly currentlyDown = new Set<Action>();
   private readonly buffer = new ActionSampleBuffer();
 
+  /**
+   * `onInputDisrupted`: called from handleWindowBlur (so on detach() too —
+   * see its own comment), after currentlyDown/the hold buffer are already
+   * cleared. Lets a caller that owns gameplay state of its own, outside
+   * ControllerActions (e.g. DriftController's jump input buffer — GDD
+   * section on the jump-input-buffer hotfix), forget it at the exact same
+   * moment this controller forgets every held/pending key, instead of
+   * risking the two falling out of sync.
+   */
+  constructor(private readonly onInputDisrupted?: () => void) {}
+
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     const action = KEY_TO_ACTION[event.code];
     if (!action) return;
@@ -58,6 +69,7 @@ export class KeyboardController implements CombatController {
     // Clears stuck keys on focus loss (GDD section 131).
     this.currentlyDown.clear();
     this.buffer.clearHoldTracking();
+    this.onInputDisrupted?.();
   };
 
   attach(): void {

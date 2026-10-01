@@ -33,6 +33,7 @@ import {
   DRIFT_GRIP_RECOVERY_DURATION_S,
   DRIFT_LATERAL_GRIP_PER_S,
   HOP_MIN_AIRBORNE_DURATION_S,
+  JUMP_INPUT_BUFFER_WINDOW_S,
   JUMP_LAUNCH_VELOCITY_MPS,
   JUMP_RELEASE_WINDOW_S,
   JUMP_SHORT_HOP_TARGET_APEX_M,
@@ -83,6 +84,19 @@ export class DriftController {
   private driftAirborneS = 0;
   /** Horizontal velocity on the last airborne tick (the hop's landing keeps it — see below). */
   private lastAirborneHorizontal = { x: 0, z: 0 };
+  /**
+   * Jump input buffer (hotfix — see DriftTuning.ts's JUMP_INPUT_BUFFER_WINDOW_S
+   * for why this exists and isn't coyote time): seconds since a JumpDrift
+   * press arrived in Idle/Recovering while grounded was transiently false;
+   * null = no press pending. Consumed exactly once (cancelBufferedJump,
+   * called from beginHop) the instant grounded becomes true, same as a
+   * same-tick press would be. Ages every tick and is dropped once older
+   * than the window (no ghost hop long after the original press), and is
+   * explicitly cancelled on window blur/focus loss (see cancelBufferedJump
+   * and KeyboardController.handleWindowBlur, GDD 131) so a stale press
+   * can never survive a disruption that already forgets every held key.
+   */
+  private bufferedJumpElapsedS: number | null = null;
 
   /**
    * normalLateralGripPerS: the grip Recovering eases back toward — must be
@@ -155,10 +169,26 @@ export class DriftController {
     }
     this.wasGrounded = grounded;
 
+    // Jump input buffer: age/expire a pending press before this tick's
+    // Idle/Recovering case looks at it (see bufferedJumpElapsedS's own
+    // comment and DriftTuning.ts's JUMP_INPUT_BUFFER_WINDOW_S).
+    if (this.bufferedJumpElapsedS !== null) {
+      this.bufferedJumpElapsedS += fixedDeltaSeconds;
+      if (this.bufferedJumpElapsedS > JUMP_INPUT_BUFFER_WINDOW_S) {
+        this.bufferedJumpElapsedS = null;
+      }
+    }
+
     switch (this.state) {
       case DriftState.Idle:
-        if (jumpDriftPressed && grounded) {
+        if (grounded && (jumpDriftPressed || this.bufferedJumpElapsedS !== null)) {
           this.beginHop(body, actions, headingRad);
+        } else if (jumpDriftPressed && !grounded) {
+          // Can't begin the hop this tick (transiently airborne — a bounce,
+          // a knockback settling, the ground check a tick or two late) —
+          // buffer the press instead of dropping it; beginHop() above
+          // consumes it the instant grounded is true again.
+          this.bufferedJumpElapsedS = 0;
         } else if (this.driftArmed && grounded) {
           // Landed from the hop still holding X and turned since: drift.
           this.state = DriftState.Drifting;
@@ -243,9 +273,12 @@ export class DriftController {
 
       case DriftState.Recovering:
         this.recoveryTimerS += fixedDeltaSeconds;
-        if (jumpDriftPressed && grounded) {
+        if (grounded && (jumpDriftPressed || this.bufferedJumpElapsedS !== null)) {
           // Chaining into a fresh drift is allowed mid-recovery.
           this.beginHop(body, actions, headingRad);
+        } else if (jumpDriftPressed && !grounded) {
+          // Same airborne-press buffering as Idle (see that case's comment).
+          this.bufferedJumpElapsedS = 0;
         } else if (this.recoveryTimerS >= DRIFT_GRIP_RECOVERY_DURATION_S) {
           this.state = DriftState.Idle;
         }
@@ -276,7 +309,20 @@ export class DriftController {
     return Math.acos(Math.max(-1, Math.min(1, cos))) > DIRECTIONAL_STEERING_THRESHOLD_RAD;
   }
 
+  /**
+   * Cancels a buffered jump press, if any. Call on window blur/focus loss
+   * (KeyboardController.handleWindowBlur, GDD 131) — the same disruption
+   * that already forgets every held/pending key must also forget a press
+   * this controller is still privately holding onto, or a stale press from
+   * before the disruption could fire a ghost hop after it. A no-op when
+   * nothing is buffered.
+   */
+  cancelBufferedJump(): void {
+    this.bufferedJumpElapsedS = null;
+  }
+
   private beginHop(body: RAPIER.RigidBody, actions: ControllerActions, headingRad: number): void {
+    this.bufferedJumpElapsedS = null;
     this.state = DriftState.Hopping;
     this.driftArmed = false;
     this.holdingSinceHop = true;
@@ -432,6 +478,7 @@ export class DriftController {
       hopReference: { x: this.hopReference.x, z: this.hopReference.z },
       driftAirborneS: this.driftAirborneS,
       lastAirborneHorizontal: { x: this.lastAirborneHorizontal.x, z: this.lastAirborneHorizontal.z },
+      bufferedJumpElapsedS: this.bufferedJumpElapsedS,
     };
   }
 }
