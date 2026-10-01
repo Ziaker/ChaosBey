@@ -155,7 +155,17 @@ describe('Twin Simulation Test: static vs. dynamic camera never diverges the pla
       const seedText = `twin-sim-${arenaFloor}`;
       const TICKS = 900; // 15 s at 60 Hz — enough real combat to touch drift, knockback and jump along the way.
 
-      const [staticRun, dynamicRun] = await Promise.all([runTwinSimulation(arenaFloor, seedText, TICKS, 'static'), runTwinSimulation(arenaFloor, seedText, TICKS, 'dynamic')]);
+      // Sequential, not Promise.all: "static" mode spies on
+      // CameraRig.prototype.tick (a PROTOTYPE-level mock, shared by every
+      // instance) for the whole span from before its first await to its
+      // own loop's end. Run concurrently, if "dynamic"'s own async setup
+      // happens to resolve and run its (fully synchronous) tick loop while
+      // that spy is still installed — a real race, observed under full
+      // test-suite load — the "dynamic" camera gets silently frozen too,
+      // reading a false 0° yaw range. One run fully finishing before the
+      // next starts removes the race entirely.
+      const staticRun = await runTwinSimulation(arenaFloor, seedText, TICKS, 'static');
+      const dynamicRun = await runTwinSimulation(arenaFloor, seedText, TICKS, 'dynamic');
 
       // The setup itself must be real: the "static" run's camera barely
       // moved, the "dynamic" run's genuinely orbited. Otherwise a pass below

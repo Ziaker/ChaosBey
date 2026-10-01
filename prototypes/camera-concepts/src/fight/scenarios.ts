@@ -60,11 +60,14 @@ export const SCENARIOS: readonly Scenario[] = [
     // after its follow-up fixes: no seed a..z keeps a Clash and 24 s without a round end any more
     // (fights end by KO in 8–16 s), so 15 s; 'g' since the owner-playtest controls (Clash at
     // 5.9 s, round end at 16.6 s; was 'u'); 'k' since wall bounces without input settle like idle
-    // motion (Clash at 2.0 s, round end at 16.6 s; was 'g').
+    // motion (Clash at 2.0 s, round end at 16.6 s; was 'g'); 'r' since the movement/weight/dodge
+    // playtest pass (steering/grip tightened, gravity raised, short hop shortened, dodge rewritten
+    // as a flat state) changed fight timing again — 'k' no longer reaches a Clash at all within 15s
+    // (Clash at 2.0 s, no round end within 15 s).
     firstSpawn: { x: -3, z: -5 },
     secondSpawn: { x: 3, z: 5 },
-    first: { kind: 'ai', seed: 'duel-p-k' },
-    second: { kind: 'ai', seed: 'duel-o-k' },
+    first: { kind: 'ai', seed: 'duel-p-r' },
+    second: { kind: 'ai', seed: 'duel-o-r' },
     expects: ['hit', 'clashActive'],
   },
   {
