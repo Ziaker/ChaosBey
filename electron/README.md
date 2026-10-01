@@ -8,12 +8,31 @@ double-click something and play.
 
 ## Get a build without installing anything
 
-The simplest path, no Node/npm/terminal needed at all: go to this repo's
+The simplest path, no Node/npm/Git/terminal needed at all: go to this repo's
 **Actions** tab → **Desktop build (Windows)** → **Run workflow**. It builds
-on a real Windows runner and attaches a `ChaosBey-windows-portable.zip`
-artifact to that run (and, if you tick "Also publish a GitHub Release" when
-running it, a Release too). Download the zip, extract it, open
-`ChaosBey.exe` inside.
+on a real Windows runner (`windows-latest`) — checkout, `npm ci`, typecheck,
+web build, Electron packaging, a step that fails the whole run if
+`ChaosBey.exe` wasn't actually produced — then publishes the result as a
+workflow artifact named **`ChaosBey-Windows-Portable`**. Open that run's
+summary page, download that artifact (GitHub names the downloaded file
+**`ChaosBey-Windows-Portable.zip`**), extract it, and run **`ChaosBey.exe`**
+directly inside the extracted folder (it sits at the top level next to a
+`resources/` folder and a `README.txt` — no extra nested folder to dig
+through). That `README.txt` records the exact game version and git commit
+the build was made from, so you can always say precisely which build you're
+testing; the running game shows the same version/commit badge in its
+bottom-right corner.
+
+If you tick "Also publish a GitHub Release" when running the workflow, it
+additionally zips the folder and attaches it to a Release on this repo. The
+workflow also tries, best-effort and non-blocking, to produce a single-file
+portable `.exe` (`ChaosBey-Portable.exe`, electron-builder's NSIS "portable"
+target) as a second, smaller artifact — real Windows can build that target
+natively, unlike the Linux/no-GPU environment this project is usually
+developed in. If present, it's a single double-clickable file; if that step
+fails or isn't produced for any reason, it's skipped and the main
+`ChaosBey-Windows-Portable` artifact above is unaffected — that's the
+primary, always-produced deliverable.
 
 ## Build it locally
 

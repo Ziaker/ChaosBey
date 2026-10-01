@@ -48,6 +48,9 @@
           "arch": ["x64"]
         }
       ]
+    },
+    "portable": {
+      "artifactName": "ChaosBey-Portable.exe"
     }
   }
 }
