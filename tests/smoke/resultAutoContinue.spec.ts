@@ -13,10 +13,13 @@ type Side = 'first' | 'second';
 const OUTSIDE_RING_OUT_M = 40;
 
 async function ringOut(page: Page, sides: Side[]): Promise<void> {
-  await page.evaluate((list) => {
-    const s = window.__chaosBeyPlay!.getSession()!;
-    for (const side of list) s.getBey(side).body.setTranslation({ x: side === 'first' ? OUTSIDE_RING_OUT_M : -OUTSIDE_RING_OUT_M, y: 2, z: 0 }, true);
-  }, sides);
+  await page.evaluate(
+    ({ list, outside }) => {
+      const s = window.__chaosBeyPlay!.getSession()!;
+      for (const side of list) s.getBey(side).body.setTranslation({ x: side === 'first' ? outside : -outside, y: 2, z: 0 }, true);
+    },
+    { list: sides, outside: OUTSIDE_RING_OUT_M },
+  );
 }
 
 const screen = (page: Page) => page.evaluate(() => window.__chaosBeyPlay?.getScreen());
