@@ -58,8 +58,20 @@ describe('AI difficulty tiers in real matches', () => {
     // 40 vs 24, dodges 20 vs 13, wins 17 vs 7 (48 matches: 95/216, 102/61, 45/29, 30/18). Before
     // the fix (a wall with gaps) it was hits dodged 51 vs 8 and dodges 23 vs 7, so the 2x margins
     // were partly the broken arena; Ace still clearly dodges more and wins more.
+    //
+    // Movement/weight/dodge playtest pass, Fix 1 (dodge replaced with a
+    // short, flat, latched-direction burst instead of one that adds to and
+    // keeps riding existing momentum — see DodgeController.ts): a real,
+    // reported consequence of that physics change, not masked by retuning
+    // AI/stats here (that pass's own section 20 forbids it). The flat burst
+    // travels less far than momentum-stacked old bursts at high closing
+    // speed, so hitsDodged's margin narrows a bit: errors 156 vs 371, hits
+    // dodged 234 vs 173 (1.35x, was 1.5x+), dodges 98 vs 55 (1.78x), wins 45
+    // vs 27. Ace still clearly hesitates less, dodges more often and more
+    // effectively, and wins more — only the hitsDodged threshold moves, to
+    // stay below the new measured ratio with margin.
     expect(totals.ace.deliberateErrors).toBeLessThan(totals.rookie.deliberateErrors * 0.7);
-    expect(totals.ace.hitsDodged).toBeGreaterThan(totals.rookie.hitsDodged * 1.5);
+    expect(totals.ace.hitsDodged).toBeGreaterThan(totals.rookie.hitsDodged * 1.25);
     expect(totals.ace.dodges).toBeGreaterThan(totals.rookie.dodges * 1.4);
     expect(totals.ace.wins).toBeGreaterThan(totals.rookie.wins);
   }, 300_000);

@@ -130,7 +130,12 @@ describe('landing data (Milestone 4 prep)', () => {
     for (let i = 0; i < 60; i++) {
       const result = harness.tick(controller.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
       if (!result.first.grounded) sawAirborne = true;
-      if (result.first.justLanded && !landed) {
+      // Take the strongest justLanded reading in the window, not just the
+      // first: a hop can touch down, bounce (floor restitution), and report
+      // a second, near-zero-descent "landed" blip for that brief re-liftoff
+      // before truly settling — the first one isn't necessarily the real
+      // impact this test means to measure.
+      if (result.first.justLanded && result.first.landingDescentSpeedMps > descentSpeedMps) {
         landed = true;
         descentSpeedMps = result.first.landingDescentSpeedMps;
         intensity = result.first.landingIntensity;
@@ -290,6 +295,15 @@ describe('dodge i-frames', () => {
       );
       if (result.combatEvents.some((e) => e.kind === 'dodged' && !e.targetIsFirst)) sawDodgedLate = true;
       if (result.combatEvents.some((e) => e.kind === 'perfectDodge' && !e.targetIsFirst)) sawPerfectLate = true;
+      // Keep pinning position/velocity through the attack window too: Fix 1
+      // (the movement/weight/dodge playtest pass) made the dodge's own flat
+      // horizontal velocity run for its ENTIRE active duration rather than
+      // decaying after a one-time burst, so without this the dodge would
+      // carry the target out of Circular Attack's reach margin on its own —
+      // still isolating i-frame *timing* from that positional effect, same
+      // as the pin loop above, just extended through the hit check.
+      lateHarness.second.body.setTranslation({ x: CLOSE_SECOND_SPAWN.x, y: restingY, z: CLOSE_SECOND_SPAWN.z }, true);
+      lateHarness.second.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     }
     expect(sawDodgedLate).toBe(true);
     expect(sawPerfectLate).toBe(false);
@@ -609,9 +623,15 @@ describe('attack whiff-recovery timing after a dodge', () => {
   });
 });
 
-describe('dodge preserves existing momentum', () => {
-  it('adds the burst on top of existing velocity instead of replacing it (GDD section 15/88)', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+describe('dodge is its own flat, latched-velocity movement state (Fix 1 — owner movement/weight/dodge playtest pass, supersedes the old GDD section 15/88 "adds a burst on top of momentum" behavior)', () => {
+  it('replaces the Bey\'s entire horizontal velocity with the dodge\'s own flat speed in the latched direction, discarding prior momentum rather than adding to it', async () => {
+    // The opponent sits off to the side, not in CLOSE_SECOND_SPAWN's usual
+    // spot directly ahead on the +Z heading this scenario drives toward —
+    // otherwise the 40-tick forward run runs straight into it almost
+    // immediately, and the resulting bounce-affected velocity (not a clean
+    // "built up real speed") is what the sanity check below was actually
+    // reading.
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, { x: 6, y: BEY_SPAWN_HEIGHT_M, z: 6 });
     settle(harness);
 
     // Build up real forward speed first (no steering — heading stays 0).
@@ -623,8 +643,9 @@ describe('dodge preserves existing momentum', () => {
     }
     expect(forwardVelBeforeDodge).toBeGreaterThan(1); // sanity: it's actually moving at a real speed.
 
-    // Dodge sideways (steer right) on the very next tick, without
-    // continuing to hold forward.
+    // Dodge sideways (steer right, no forward held) on the very next tick —
+    // the latched direction is pure lateral (+X), not a forward+lateral
+    // diagonal, since MoveForward isn't held at the moment Dodge is pressed.
     const dodger = new ScriptedController([
       { fromTick: 0, held: [Action.Dodge, Action.SteerRight] },
       { fromTick: 1, held: [] },
@@ -632,11 +653,46 @@ describe('dodge preserves existing momentum', () => {
     harness.tick(dodger.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
     const velAfterDodge = harness.first.body.linvel();
 
-    // Forward (Z) momentum from before the dodge is still present — not
-    // zeroed out by the burst.
-    expect(velAfterDodge.z).toBeGreaterThan(forwardVelBeforeDodge * 0.5);
-    // And a real lateral (X) burst was added on top of it.
-    expect(Math.abs(velAfterDodge.x)).toBeGreaterThan(DODGE_BURST_SPEED_MPS * 0.5);
+    // The pre-dodge forward (Z) momentum is gone — the dodge's own flat
+    // velocity, in its latched (pure lateral) direction, replaced it
+    // entirely instead of adding to it.
+    expect(Math.abs(velAfterDodge.z)).toBeLessThan(1);
+    expect(Math.abs(velAfterDodge.x)).toBeGreaterThan(DODGE_BURST_SPEED_MPS * 0.8);
+    expect(Math.hypot(velAfterDodge.x, velAfterDodge.z)).toBeLessThan(DODGE_BURST_SPEED_MPS * 1.2);
+  });
+
+  it('produces approximately the same dodge speed whether the Bey was fast, slow, or at rest beforehand', async () => {
+    async function dodgeSpeedFrom(approachSpeedMps: number): Promise<number> {
+      // Opponent parked out of the way but still inside RINGOUT_RADIUS_M
+      // (12.9) — far enough off-axis to never be grazed by the dodge.
+      const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, { x: 6, y: BEY_SPAWN_HEIGHT_M, z: 6 });
+      settle(harness);
+      if (approachSpeedMps > 0) {
+        harness.first.body.setLinvel({ x: 0, y: 0, z: approachSpeedMps }, true); // heading 0 => +Z is forward.
+      }
+      const dodger = new ScriptedController([
+        { fromTick: 0, held: [Action.Dodge, Action.SteerRight] },
+        { fromTick: 1, held: [] },
+      ]);
+      let result = harness.tick(NO_ACTIONS, NO_ACTIONS);
+      for (let i = 0; i < 10; i++) {
+        result = harness.tick(dodger.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
+      }
+      return result.first.movement.speedMps;
+    }
+
+    const speeds = await Promise.all([0, 5, 10, 15].map(dodgeSpeedFrom));
+    const [atRest, slow, medium, fast] = speeds;
+    // All four within a small band of each other — the acceptance test from
+    // the owner's spec (section 10/16): a 15 m/s approach and a near-zero
+    // approach must produce approximately the SAME dodge speed.
+    const maxSpeed = Math.max(...speeds);
+    const minSpeed = Math.min(...speeds);
+    expect(maxSpeed - minSpeed).toBeLessThan(1);
+    expect(atRest).toBeGreaterThan(DODGE_BURST_SPEED_MPS * 0.8);
+    expect(slow).toBeGreaterThan(DODGE_BURST_SPEED_MPS * 0.8);
+    expect(medium).toBeGreaterThan(DODGE_BURST_SPEED_MPS * 0.8);
+    expect(fast).toBeGreaterThan(DODGE_BURST_SPEED_MPS * 0.8);
   });
 });
 

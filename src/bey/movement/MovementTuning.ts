@@ -17,7 +17,12 @@ export const REVERSE_ACCELERATION_MPS2 = 8;
 // snappier, lower feels heavier/more top-like). This is what makes
 // direction change take physical time instead of snapping instantly.
 export const STEERING_MAX_TURN_RATE_RAD_S = 2.6;
-export const STEERING_RESPONSE_PER_S = 6;
+// Movement/weight/dodge playtest pass (owner feedback, section 2): "reduced
+// input-to-trajectory lag" — moderately quicker easing toward the target
+// turn rate (was 6), so a held direction change registers sooner. The CAP
+// above is untouched: this is still a top settling onto a new heading over
+// a few ticks, not an instant snap (GDD section 15).
+export const STEERING_RESPONSE_PER_S = 8;
 
 // Top speed: thrust only adds up to it; above it (a bounce, a knockback,
 // a slope) the excess bleeds away at this rate instead of being clamped
@@ -29,17 +34,66 @@ export const OVERSPEED_RETURN_PER_S = 1.5;
 // Lateral grip: fraction of sideways (non-heading) velocity removed per
 // second, at full grip. High = tight, low-slip turning. Low = kart-style
 // sliding. Drift temporarily substitutes a much lower value (see
-// DriftTuning.ts). The motion direction (bey/motion/MotionPresets.ts)
-// scales it and owns the rest of the grip model: rolling drag while
-// coasting (longitudinalGrip), the slip threshold, grip while slipping,
-// grip recovery and airborne grip.
+// DriftTuning.ts) through its own override, architecturally isolated from
+// this one — raising it cannot touch drift. The motion direction
+// (bey/motion/MotionPresets.ts) scales it and owns the rest of the grip
+// model: rolling drag while coasting (longitudinalGrip), the slip
+// threshold, grip while slipping, grip recovery and airborne grip.
+//
+// Movement/weight/dodge playtest pass (owner feedback, section 2/3/21): "a
+// moderate increase in normal lateral grip" was tried here first (5.5 -> 7)
+// but this coefficient is also the one the FULL-grip (not-slipping) case
+// uses, and above ~6.3 it eats enough of bowl B's steepest-at-the-centre
+// slope creep (a light 35% stick) to fall under the GDD's "light input
+// can't leave bowl B's centre" regression floor (arenaFloor.test.ts) — a
+// real, measured interaction with the slope-projection code. A sustained
+// hard turn (the owner's own measurement scenario B) spends almost all its
+// time in the SLIPPING state instead, governed by SLIP_GRIP_FLOOR_MULTIPLIER
+// below, not this value — so this stays at the original 5.5 and the actual
+// "less slip in a turn" improvement comes from that multiplier, which bowl
+// B's light climb never reaches (it never crosses slipThreshold).
 export const LATERAL_GRIP_PER_S = 5.5;
 
 // Motion Lab slip model: once slipping, grip falls at this rate (per
 // second) toward the direction's slipGrip; the tip re-grips only once the
 // sideways speed is below this fraction of the slip threshold (hysteresis).
+//
+// SLIP_REGRIP_FRACTION: 0.6 -> 0.8 (movement/weight/dodge playtest pass,
+// owner feedback section 2: "reduced excess side-slip after a direction
+// change") — regrips once sideways speed drops below 0.8x the threshold
+// instead of 0.6x, so full grip comes back sooner after a turn instead of
+// lingering in the loose slipping state. Only changes the EXIT from an
+// already-slipping turn (large lateral speed, well above bowl B's light-
+// stick slope creep that never enters this state at all — see
+// LATERAL_GRIP_PER_S's own comment on that regression floor), so this is
+// safe to move further than the base grip coefficient was.
 export const SLIP_GRIP_LOSS_PER_S = 4;
-export const SLIP_REGRIP_FRACTION = 0.6;
+export const SLIP_REGRIP_FRACTION = 0.8;
+
+// Multiplies the motion direction's own slipGrip (a Lab-locked value — see
+// MotionPresets.ts's header — never edited directly here) when computing
+// how low the grip multiplier is allowed to fall once actually slipping.
+// Movement/weight/dodge playtest pass (owner feedback, section 2/3): the
+// main source of "excess slip in a sustained turn" (measurement scenario B:
+// 12 m/s into a 90° turn) is this floor, not the full/not-slipping grip
+// coefficient above — a hard turn spends nearly all of it in the slipping
+// state. Raising this moderately tightens turns measurably (slip angle
+// -40%+ in scenario B) without touching LATERAL_GRIP_PER_S, so bowl B's
+// light-stick creep (which never crosses slipThreshold, never slips, never
+// reads this multiplier) is unaffected, and drift's own fully separate
+// 1.1/s override stays untouched regardless.
+export const SLIP_GRIP_FLOOR_MULTIPLIER = 1.3;
+
+// Multiplies the motion direction's own gripRecovery (a Lab-locked value —
+// see MotionPresets.ts's header — never edited directly here). Movement/
+// weight/dodge playtest pass (owner feedback, section 2), same reasoning as
+// SLIP_REGRIP_FRACTION above: once broken loose, the grip multiplier climbs
+// back toward 1 faster, cutting how long a turn spends at the slip floor
+// without changing the floor itself (slipGrip) or any direction's own
+// recovery personality (A recovers faster than B, C slower — this scales
+// all three by the same ratio). Also only affects the slipping exit, not
+// bowl B's light-stick case.
+export const GRIP_RECOVERY_MULTIPLIER = 1.8;
 
 // Airborne movement gets much less thrust, per the approved "low air
 // control" baseline (GDD section 12/20): mostly trajectory correction,

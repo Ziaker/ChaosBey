@@ -22,7 +22,16 @@
 
 // Vertical velocity added the instant JumpDrift is pressed while grounded
 // — the same small, quick liftoff for both a bare tap and a held jump.
-export const HOP_IMPULSE_MPS = 3.2;
+// Movement/weight/dodge playtest pass (owner feedback, section 7-9): the
+// short hop read as "a flattened full jump" (low but travelling/hanging too
+// long) because this one fixed impulse was the ENTIRE tap-release case —
+// a bare tap got essentially this value and nothing else, and even alone,
+// under this codebase's gravity, it produced a ~0.6s hang. Halved (3.2 ->
+// 1.6) so a genuine tap (JumpDrift held only 1-2 ticks) is a real quick hop
+// — still long enough to clear HOP_MIN_AIRBORNE_DURATION_S and start a
+// drift, nowhere near a "compressed full jump". JUMP_ASSIST_ACCEL_MPS2
+// below is raised to put the full held jump's height back where it was.
+export const HOP_IMPULSE_MPS = 1.6;
 // Minimum time to stay in the "hopping" state before a drift can begin,
 // so the hop is visually readable even if the ground check re-triggers
 // early.
@@ -51,7 +60,7 @@ export const DRIFT_REFERENCE_MIN_SPEED_MPS = 2;
 // --- Variable jump height (Milestone 3) ---
 // Extra upward acceleration applied every tick JumpDrift is still held
 // while ascending, on top of the fixed liftoff impulse above.
-export const JUMP_ASSIST_ACCEL_MPS2 = 16;
+export const JUMP_ASSIST_ACCEL_MPS2 = 23;
 // Caps how long the assist can apply — holding forever must not give
 // unbounded height.
 export const JUMP_ASSIST_MAX_DURATION_S = 0.3;

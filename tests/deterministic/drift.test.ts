@@ -201,7 +201,12 @@ describe('jump vs drift: X + straight = variable jump, X + a real turn = drift (
   }
   async function run(opts: { moving: boolean; holdTicks: number; turnAt: number | null; direction?: boolean }): Promise<Run> {
     const harness = await TestBeyHarness.create({ x: -8, y: BEY_SPAWN_HEIGHT_M, z: -8 });
-    harness.tickMany(intent(0, 0), 30);
+    // 60, not a shorter settle: grounded detection can still read false for a
+    // tick or two right after the initial drop settles, and the "at rest"
+    // (opts.moving: false) runs have no later movement phase to cover for
+    // that — a hop pressed on an exact tick that happens to read ungrounded
+    // never starts, so the whole run measures a false 0 m apex.
+    harness.tickMany(intent(0, 0), 60);
     if (opts.moving) harness.tickMany(intent(0, 1), 50); // ~7.8 m/s along +Z
     const startY = harness.beyBody.translation().y;
     const r: Run = { transitions: [], apexM: 0, driftTicks: 0, driftAfterHeadingAligned: false, recoveringRightAfterRelease: false, idleAtEnd: false };

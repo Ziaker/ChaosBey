@@ -52,6 +52,7 @@ describe('archetype handling profiles (GDD section 6/31)', () => {
           lateralGripOverridePerS: null,
           staminaAccelFactor: 1,
           dashOverride: null,
+          dodgeOverride: null,
         });
         physics.step();
         speed = bey.movement.postStep(bey.body, true).speedMps;
