@@ -16,11 +16,21 @@ import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../bey/archetype/BeyArch
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import { applyAttackProfileSettings, createDefaultAttackProfileSettings, type BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
+import { BeyVisualAnchors, resolveBeyVisualDefinition, type BeyVisualDefinition } from '../../presentation/beyVisual';
+import { PRESENTATION_FEATURES_OFF, type PresentationFeatures } from '../../presentation/features';
 import { matchSpawnsFor } from './matchSpawns';
+
+/** Which visual one Bey wears and where effects attach to it (presentation only). */
+export interface BeyVisualHandle {
+  readonly definition: BeyVisualDefinition;
+  readonly anchors: BeyVisualAnchors;
+}
 
 export interface MatchScene {
   readonly first: Bey;
   readonly second: Bey;
+  /** Presentation-only: the visual each Bey wears and its VFX anchors. */
+  readonly visuals: { readonly first: BeyVisualHandle; readonly second: BeyVisualHandle };
   syncVisualsToPhysics(first: BeyVisualPose, second: BeyVisualPose): void;
 }
 
@@ -81,6 +91,7 @@ export function createMatchScene(
   beys: MatchBeys = DEFAULT_MATCH_BEYS,
   arena: MatchArena = { geometry: STANDARD_ARENA_GEOMETRY, theme: FOUNDRY_PIT.theme },
   motion: MotionDirectionId = 'B',
+  features: PresentationFeatures = PRESENTATION_FEATURES_OFF,
 ): MatchScene {
   const motionValues = motionParams(motion);
   createArenaColliders(scene, physics, arena.geometry, arena.theme, motionValues);
@@ -90,8 +101,17 @@ export function createMatchScene(
   const first = createBey(physics, spawns.first, applyAttackProfileSettings(beys.first, attackProfileSettings), floor, motionValues);
   const second = createBey(physics, spawns.second, applyAttackProfileSettings(beys.second, attackProfileSettings), floor, motionValues);
 
-  const firstVisual = first.definition.appearance.createVisual();
-  const secondVisual = second.definition.appearance.createVisual();
+  // With every presentation flag off (the default) this resolves to the
+  // legacy placeholder: the same `definition.appearance.createVisual()` call
+  // the scene always made. The visual never reaches the body or the stats.
+  const firstVisualDefinition = resolveBeyVisualDefinition(first.definition, features);
+  const secondVisualDefinition = resolveBeyVisualDefinition(second.definition, features);
+  const firstVisual = firstVisualDefinition.create(first.definition);
+  const secondVisual = secondVisualDefinition.create(second.definition);
+  const visuals = {
+    first: { definition: firstVisualDefinition, anchors: new BeyVisualAnchors(firstVisual, firstVisualDefinition.anchors) },
+    second: { definition: secondVisualDefinition, anchors: new BeyVisualAnchors(secondVisual, secondVisualDefinition.anchors) },
+  };
   scene.add(firstVisual.group);
   scene.add(secondVisual.group);
 
@@ -101,6 +121,7 @@ export function createMatchScene(
   return {
     first,
     second,
+    visuals,
     syncVisualsToPhysics: (firstPose, secondPose) => {
       syncFirst(firstPose);
       syncSecond(secondPose);
