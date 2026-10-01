@@ -130,7 +130,12 @@ describe('landing data (Milestone 4 prep)', () => {
     for (let i = 0; i < 60; i++) {
       const result = harness.tick(controller.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
       if (!result.first.grounded) sawAirborne = true;
-      if (result.first.justLanded && !landed) {
+      // Take the strongest justLanded reading in the window, not just the
+      // first: a hop can touch down, bounce (floor restitution), and report
+      // a second, near-zero-descent "landed" blip for that brief re-liftoff
+      // before truly settling — the first one isn't necessarily the real
+      // impact this test means to measure.
+      if (result.first.justLanded && result.first.landingDescentSpeedMps > descentSpeedMps) {
         landed = true;
         descentSpeedMps = result.first.landingDescentSpeedMps;
         intensity = result.first.landingIntensity;
@@ -620,7 +625,13 @@ describe('attack whiff-recovery timing after a dodge', () => {
 
 describe('dodge is its own flat, latched-velocity movement state (Fix 1 — owner movement/weight/dodge playtest pass, supersedes the old GDD section 15/88 "adds a burst on top of momentum" behavior)', () => {
   it('replaces the Bey\'s entire horizontal velocity with the dodge\'s own flat speed in the latched direction, discarding prior momentum rather than adding to it', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    // The opponent sits off to the side, not in CLOSE_SECOND_SPAWN's usual
+    // spot directly ahead on the +Z heading this scenario drives toward —
+    // otherwise the 40-tick forward run runs straight into it almost
+    // immediately, and the resulting bounce-affected velocity (not a clean
+    // "built up real speed") is what the sanity check below was actually
+    // reading.
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, { x: 6, y: BEY_SPAWN_HEIGHT_M, z: 6 });
     settle(harness);
 
     // Build up real forward speed first (no steering — heading stays 0).
