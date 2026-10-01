@@ -689,10 +689,10 @@ describe('dependency direction', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('keeps the ported visual batches (Bey models, condition languages) away from the camera, Rapier, the AI, sessions and UI', () => {
+  it('keeps the ported visual batches (Bey models, condition languages, hybrid VFX) away from the camera, Rapier, the AI, sessions and UI', () => {
     // The camera is frozen by the owner: the only camera import allowed is the read-only ImpactEvents type.
     const forbidden = [/rapier/i, /(^|\/)physics\//, /(^|\/)ai\//, /camera\/(?!ImpactEvents)/, /app\/session/, /app\/frontend/, /app\/lifecycle/, /(^|\/)debug\//];
-    const dirs = ['bey/visual', 'vfx/condition'];
+    const dirs = ['bey/visual', 'vfx/condition', 'vfx/hybrid'];
     expect(dirs.every((dir) => sourceFiles(join(SRC, dir)).length >= 8)).toBe(true);
     const offenders: string[] = [];
     for (const dir of dirs) {
