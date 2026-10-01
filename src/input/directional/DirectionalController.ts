@@ -1,14 +1,21 @@
 // ============================================================
 // DIRECTIONAL CONTROLLER (M11 — the player default again, "Fix 7" of this
-// playtest round, 2026-10-01; see screenDirection.ts's header for the full
-// history of why)
+// playtest round, 2026-10-01, amended by "Fix 9" below; see
+// screenDirection.ts's header for the full history of why)
 // Wraps the player's device controller (keyboard + gamepad). The arrows,
 // D-pad and stick mean "go this way on the screen": ↑ away from the
 // camera, ↓ toward it, ←/→ the camera's left/right, diagonals normalized,
 // the stick continuous in direction and strength. That resolved WORLD
 // direction — recomputed fresh from the camera's CURRENT yaw on every
 // single tick, no memory of any previous tick — is what goes into
-// ControllerActions.moveIntent and the replay. How the Bey gets there —
+// ControllerActions.moveIntent and the replay. "Fix 9" (owner playtest,
+// 2026-10-01: "a câmera move o bey sozinho — só o jogador move o jogador"):
+// the camera yaw is read ONCE, on the tick the player starts to move, and
+// stays frozen until every direction is released. The automatic camera
+// orbiting while a key is held therefore never bends the Bey's path — only
+// the player's own input does. (Unlike the original CameraYawLatch there is
+// no mid-hold re-read boundary: adding/changing a direction while still
+// holding keeps the same frame.) How the Bey gets there —
 // turn rate, momentum, grip, drift — stays physics (MovementController).
 //
 // The camera reaches this class only as a plain number (radians) returned
@@ -50,6 +57,8 @@ export interface DirectionalDebug {
 export class DirectionalController implements CombatController {
   private last: DirectionalDebug = { screen: ZERO_SCREEN, world: { x: 0, z: 0 }, cameraYawRad: 0 };
   private enabled = true;
+  /** Camera yaw frozen for the current gesture; null while nothing is held. */
+  private gestureYaw: number | null = null;
 
   constructor(
     private readonly inner: CombatController,
@@ -70,7 +79,9 @@ export class DirectionalController implements CombatController {
             actions.held.has(Action.SteerLeft),
             actions.held.has(Action.SteerRight),
           );
-    const cameraYawRad = this.sources.cameraYaw();
+    if (screenLength(screen) === 0) this.gestureYaw = null;
+    else if (this.gestureYaw === null) this.gestureYaw = this.sources.cameraYaw();
+    const cameraYawRad = this.gestureYaw ?? 0;
     const world = screenToWorld(screen, cameraYawRad);
     this.last = { screen, world, cameraYawRad };
     const held = new Set(actions.held);
@@ -99,6 +110,7 @@ export class DirectionalController implements CombatController {
   }
 
   reset(): void {
+    this.gestureYaw = null;
     this.last = { screen: ZERO_SCREEN, world: { x: 0, z: 0 }, cameraYawRad: 0 };
   }
 }

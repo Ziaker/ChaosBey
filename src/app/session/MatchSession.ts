@@ -190,6 +190,18 @@ export class MatchSession {
   }
 
   /**
+   * Cancels any pending jump-input-buffer press on both Beys. Call on
+   * window blur/focus loss (KeyboardController's onInputDisrupted, GDD
+   * 131) — the same disruption that already forgets every held/pending
+   * key must also forget a press DriftController is still privately
+   * buffering, or it could fire as a ghost hop after the disruption.
+   */
+  cancelBufferedJumps(): void {
+    this.match.first.drift.cancelBufferedJump();
+    this.match.second.drift.cancelBufferedJump();
+  }
+
+  /**
    * Ends the recording. `debugMutations` lists the Debug Lab state edits
    * made while recording: they aren't inputs, so a replay with any of them
    * can't reproduce the match and playback will diverge where they happened.

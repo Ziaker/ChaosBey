@@ -98,7 +98,30 @@ export const GRIP_RECOVERY_MULTIPLIER = 1.8;
 // Airborne movement gets much less thrust, per the approved "low air
 // control" baseline (GDD section 12/20): mostly trajectory correction,
 // not free steering. (Airborne lateral grip is the direction's airGrip.)
-export const AIRBORNE_ACCELERATION_FACTOR = 0.15; // fraction of normal thrust available while airborne
+//
+// Jump/air-control hotfix (owner decision, section 14): "at least +20%
+// more trajectory-correction capability" during a normal jump, measured —
+// not a blind ×1.20 of this constant — by the actual angular correction a
+// fixed ~267 ms (16-tick) perpendicular input produces after liftoff, at
+// 0/5/10/15 m/s initial horizontal speed, against the pre-hotfix baseline
+// (0.15). This exact scenario, both constant values, one measurement run
+// each (see tests/deterministic/jumpAirControlHotfix.test.ts, which prints
+// and asserts the same numbers — this comment, the test and the PR report
+// must always agree; an earlier draft of this comment quoted a different,
+// stale run and was corrected). Doubling it to 0.30 measured
+// +43.8%/+43.8%/+35.6% at 5/10/15 m/s respectively (smaller at higher
+// speed, as section 19 allows: momentum dominates more there) and +96.1%
+// on lateral displacement at 0 m/s, where the angle metric itself is
+// unstable (a near-stationary Bey's velocity direction is barely defined,
+// so section 15's "use both, state which is primary" applies — lateral
+// displacement is the one that means something at 0 m/s). A
+// full-perpendicular-input sanity check through an entire full jump still
+// only redirects ~17°, nowhere near the 90° instant-strafe section 16
+// forbids: heading can already turn freely in the air (this constant only
+// throttles how fast thrust rebuilds speed along it), so the low-air-control
+// character comes from how slowly velocity follows, not
+// from capping the turn itself.
+export const AIRBORNE_ACCELERATION_FACTOR = 0.3; // fraction of normal thrust available while airborne
 
 // Motion Lab landing bounce: a landing bounces up at descent × the
 // direction's floorBounce, unless that is below this (then it just lands).

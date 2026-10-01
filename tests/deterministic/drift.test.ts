@@ -3,6 +3,7 @@ import { Action } from '../../src/input/actions/Action';
 import { LATERAL_GRIP_PER_S } from '../../src/bey/movement/MovementTuning';
 import { ScriptedController } from '../../src/automation/scripted-scenarios/ScriptedController';
 import { DriftController, DriftState } from '../../src/drift/DriftController';
+import { JUMP_RELEASE_WINDOW_S } from '../../src/drift/DriftTuning';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { TestBeyHarness } from './physicsHarness';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
@@ -262,6 +263,31 @@ describe('jump vs drift: X + straight = variable jump, X + a real turn = drift (
     expect(drift.idleAtEnd).toBe(true);
   });
 
+  it('4b. a drift armed within the first few ticks of the press produces the same small hop regardless of exactly when (jump/air-control hotfix section 21/22)', async () => {
+    const turn1 = await run({ moving: true, holdTicks: 90, turnAt: 1 });
+    const turn2 = await run({ moving: true, holdTicks: 90, turnAt: 2 });
+    const turn3 = await run({ moving: true, holdTicks: 90, turnAt: 3 });
+    for (const r of [turn1, turn2, turn3]) expect(r.transitions.slice(0, 2)).toEqual([DriftState.Hopping, DriftState.Drifting]);
+    // DriftController.computeDriftHopCutMps targets a fixed APEX HEIGHT, not
+    // a fixed velocity, specifically so a turn arming within this early
+    // window still lands on (near enough) the same small hop regardless of
+    // exactly which of these ticks it happens on.
+    expect(turn2.apexM).toBeCloseTo(turn1.apexM, 1);
+    expect(turn3.apexM).toBeCloseTo(turn1.apexM, 1);
+  });
+
+  it('4c. a drift armed late in the press is capped by physics, not by a second vertical event: taller than an early turn, but never taller than holding straight through to that same moment (jump/air-control hotfix section 2 finding — the height already gained before ANY cut can apply is structurally un-cuttable by a velocity-only correction; see the hold-duration sweep in the mandatory report for the measured curve)', async () => {
+    const turnedEarly = await run({ moving: true, holdTicks: 90, turnAt: 1 });
+    const turnedLate = await run({ moving: true, holdTicks: 90, turnAt: 10 });
+    const heldStraightToSamePoint = await run({ moving: true, holdTicks: 10, turnAt: null });
+    expect(turnedLate.transitions.slice(0, 2)).toEqual([DriftState.Hopping, DriftState.Drifting]);
+    expect(turnedLate.apexM).toBeGreaterThan(turnedEarly.apexM);
+    // Still strictly a reduction versus not cutting at all at that point:
+    // this is the one-time cut doing the best it physically can, never a
+    // "keeps rising" result that would mean a second vertical event.
+    expect(turnedLate.apexM).toBeLessThan(heldStraightToSamePoint.apexM);
+  });
+
   it('5. at rest + holding X = the variable jump (with or without a direction held), no drift', async () => {
     const tap = await run({ moving: false, holdTicks: 1, turnAt: null });
     const hold = await run({ moving: false, holdTicks: 60, turnAt: null });
@@ -306,8 +332,11 @@ describe('jump vs drift: X + straight = variable jump, X + a real turn = drift (
     for (const [floor, o] of Object.entries(outcomes)) {
       const label = `${floor}: ${JSON.stringify(o)}`;
       expect(o.jumpDrift, label).toBe(false);
-      // The held jump got its full height assist; the drift hop (turned 2 ticks after X) almost none.
-      expect(o.jumpAssistS, label).toBeGreaterThan(0.25);
+      // The held jump reached the full release window (jump/air-control
+      // hotfix: holding past it commits to the uncut arc, so the tracked
+      // hold-elapsed value saturates there and never exceeds it); the drift
+      // hop (turned 2 ticks after X) almost none.
+      expect(o.jumpAssistS, label).toBeGreaterThan(JUMP_RELEASE_WINDOW_S * 0.8);
       expect(o.driftAssistS, label).toBeLessThan(0.05);
       expect(o.driftTicks, label).toBeGreaterThanOrEqual(35);
     }

@@ -360,13 +360,17 @@ describe('attacking mid-jump', () => {
     // the Bey mid-fall (not yet in contact) at this spawn height.
     settle(harness, 40);
 
-    // Hop first (a couple of ticks of pure JumpDrift, no steering — GDD
-    // section 19 needs steering too to actually drift, we just want the
-    // vertical hop here), then tap Circular Attack while still airborne.
+    // Hop first (hold JumpDrift — jump/air-control hotfix: releasing it
+    // early applies one legitimate, one-time height-shaping cut, which is
+    // not what this test is checking and would otherwise be indistinguishable
+    // from "something disrupted the jump"; keep holding it so no cut fires
+    // at all during the window below, same as a committed full-jump rise),
+    // then tap Circular Attack mid-air without letting go of JumpDrift.
     const attacker = new ScriptedController([
       { fromTick: 0, held: [Action.JumpDrift] },
-      { fromTick: 2, held: [Action.Attack] },
-      { fromTick: 4, held: [] },
+      { fromTick: 2, held: [Action.JumpDrift, Action.Attack] },
+      { fromTick: 4, held: [Action.JumpDrift] },
+      { fromTick: 16, held: [] },
     ]);
 
     let sawAirborne = false;
@@ -374,12 +378,10 @@ describe('attacking mid-jump', () => {
     let previousVerticalVelocity: number | null = null;
     let maxVerticalVelocityDeltaWhileRising = 0;
 
-    // Only the ascent/early-fall matters here — stop comfortably before
-    // this particular hop's ground bounce (confirmed by tracing this exact
-    // scenario — the movement/weight/dodge playtest pass's shorter hop
-    // impulse moved the bounce from tick ~29 to tick ~22), whose own
-    // legitimate velocity discontinuity would otherwise be indistinguishable
-    // from "something disrupted the jump".
+    // Only the ascent matters here — stop comfortably before this jump's
+    // own ground bounce (confirmed by tracing this exact scenario), whose
+    // own legitimate velocity discontinuity would otherwise be
+    // indistinguishable from "something disrupted the jump".
     for (let i = 0; i < 20; i++) {
       const result = harness.tick(attacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
       const verticalVelocity = harness.first.body.linvel().y;

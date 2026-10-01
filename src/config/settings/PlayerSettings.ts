@@ -17,14 +17,13 @@ import { DEFAULT_QUALITY_PRESET, QualityPreset } from '../runtime/QualityPreset'
  * "Fix 7" of the M11 playtest round, see screenDirection.ts's header for
  * the full history, including why "Fix 6"'s classic-by-default didn't
  * actually solve this).
- * - directional (default): camera-relative — ↑ always goes away from the
- *   camera on screen, →/← always go to the camera's right/left, ↓ toward
- *   it, recomputed fresh from the camera's current yaw every tick (no
- *   latching, no stale state). The industry's standard answer for a
- *   camera that isn't fixed to the world or to the player's own heading
- *   (Zelda, Dark Souls, God of War): the Bey's world trajectory bends
- *   smoothly as the camera moves, by design, so the screen always reads
- *   right.
+ * - directional (default): camera-relative, read ONCE per gesture
+ *   ("Fix 9") — ↑ goes away from the camera, →/← to its right/left, ↓
+ *   toward it, as the camera is on the tick the player starts to move;
+ *   that yaw stays frozen until every direction is released, so the
+ *   automatic camera orbiting never steers the Bey ("só o jogador move o
+ *   jogador"). The next press re-reads the camera, so the screen still
+ *   reads right.
  * - classic: Bey-relative, kart-like — ←/→ steer the Bey's own heading,
  *   ↑/↓ accelerate/decelerate along it (turn rate, momentum, grip all
  *   still apply; this is not a snap-to-input). No camera dependency at

@@ -106,21 +106,35 @@ describe('screen → world (camera-relative, recomputed fresh every call — "Fi
   });
 });
 
-describe('DirectionalController: resolves camera-relative, re-reading the camera fresh every tick', () => {
-  it('Test A: holding a direction while the camera yaw sweeps continuously rotates the world vector by exactly the camera\'s own delta — no latch, no stale value', () => {
-    let yaw = 0;
+describe('DirectionalController: reads the camera once per gesture ("Fix 9") — only the player moves the Bey', () => {
+  it('Test A: holding a direction while the camera yaw sweeps does NOT change the world vector — the camera never steers the Bey', () => {
+    let yaw = 0.4;
     const controller = new DirectionalController(held(Action.MoveForward), { cameraYaw: () => yaw });
     const first = controller.sampleActions(CONTEXT).moveIntent!;
-    let previousAngle = Math.atan2(first.x, first.z);
-    for (let delta = 0.1; delta < 3; delta += 0.1) {
+    expect(first).toEqual(screenToWorld({ x: 0, y: 1 }, 0.4));
+    for (let delta = 0.5; delta < 6; delta += 0.1) {
       yaw = delta;
-      const world = controller.sampleActions(CONTEXT).moveIntent!;
-      const angle = Math.atan2(world.x, world.z);
-      let step = angle - previousAngle;
-      step = Math.atan2(Math.sin(step), Math.cos(step));
-      expect(step).toBeCloseTo(0.1, 2); // the world direction rotates exactly with the camera, tick by tick
-      previousAngle = angle;
+      expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(first);
     }
+  });
+
+  it('Test B: releasing every direction re-reads the camera on the next press; changing/adding a direction mid-hold does not', () => {
+    let yaw = 0;
+    let keys: Action[] = [Action.MoveForward];
+    const controller = new DirectionalController(
+      { sampleActions: (): ControllerActions => ({ held: new Set(keys), pressedThisFrame: new Set(), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0 }) },
+      { cameraYaw: () => yaw },
+    );
+    controller.sampleActions(CONTEXT); // gesture starts at yaw 0
+    yaw = 1.5;
+    keys = [Action.MoveForward, Action.SteerRight]; // still holding Up, adding Right: same frame (yaw 0)
+    expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(screenToWorld(screenVectorFromDigital(true, false, false, true), 0));
+    keys = [Action.SteerLeft]; // a wholly different direction, but never fully released: still the yaw-0 frame
+    expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(screenToWorld({ x: -1, y: 0 }, 0));
+    keys = []; // everything released
+    expect(controller.sampleActions(CONTEXT).moveIntent).toEqual({ x: 0, z: 0 });
+    keys = [Action.MoveForward]; // new gesture: reads the camera at yaw 1.5
+    expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(screenToWorld({ x: 0, y: 1 }, 1.5));
   });
 
   it('Test D: with no direction held, orbiting the camera produces no thrust/steering — moveIntent stays the zero vector', () => {
@@ -190,16 +204,26 @@ describe('DirectionalController: resolves camera-relative, re-reading the camera
     expect(actions.moveIntent).toEqual(screenToWorld({ x: 1, y: 0 }, 0));
   });
 
-  it("getDebug() reports the camera yaw alongside the world vector — changing a FIXED yaw between samples changes `world` by design now (camera-relative)", () => {
+  it('getDebug() reports the frozen gesture yaw alongside the world vector; a new gesture picks up the new camera yaw', () => {
     let yaw = 0;
-    const controller = new DirectionalController(held(Action.MoveForward), { cameraYaw: () => yaw });
+    let keys = [Action.MoveForward];
+    const controller = new DirectionalController(
+      { sampleActions: (): ControllerActions => ({ held: new Set(keys), pressedThisFrame: new Set(), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0 }) },
+      { cameraYaw: () => yaw },
+    );
     controller.sampleActions(CONTEXT);
     expect(controller.getDebug().cameraYawRad).toBe(0);
     const atYawZero = controller.getDebug().world;
     yaw = 2.5;
     controller.sampleActions(CONTEXT);
+    expect(controller.getDebug().cameraYawRad).toBe(0); // frozen mid-hold
+    expect(controller.getDebug().world).toEqual(atYawZero);
+    keys = [];
+    controller.sampleActions(CONTEXT);
+    keys = [Action.MoveForward];
+    controller.sampleActions(CONTEXT);
     expect(controller.getDebug().cameraYawRad).toBe(2.5);
-    expect(controller.getDebug().world).not.toEqual(atYawZero); // this is the point of "Fix 7": it tracks the camera on purpose
+    expect(controller.getDebug().world).not.toEqual(atYawZero);
   });
 
   it('Classic (disabled) passes the device actions through untouched', () => {

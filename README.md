@@ -18,24 +18,16 @@ Those documents distinguish **prototyped**, **approved** and **integrated** work
 
 ## Status
 
-Milestones 0–11 are merged, plus the owner's post-M11 playtest passes (camera, movement, drift, over-the-shoulder camera, result auto-continue) — see [`docs/ai/m11-status.md`](docs/ai/m11-status.md). M10 (Pregame / Presentation) added the player flow, the Pregame Simulator with Rookie / Rival / Ace AI, arena presets, Settings, pause, gamepad support and the combat HUD — see [`docs/ai/m10-status.md`](docs/ai/m10-status.md). The milestone history below is kept for context.
+Milestones 0–11 are merged and playable end to end, plus several rounds of owner playtest fixes on top (camera, movement/drift, jump height, input buffering, desktop packaging — see `docs/ai/*.md` and the git history for the detailed trail). This is a full match loop, not a prototype:
 
-## Milestone 1 — Physical Movement Prototype
+- **Movement & physics:** force/response-based movement on real Rapier 3D rigid bodies (no position/velocity snapping) — steering inertia, lateral/longitudinal grip and slip, wall/floor bounce with restitution, Bey-vs-Bey collision, a hop → drift → recover cycle (tap `X` for a small hop, hold + steer to drift), a variable-height jump (tap vs. hold shapes short/medium/full height), and a visual spin/tilt/wobble layer decoupled from the physics body's own (locked) rotation.
+- **Combat:** Attack (`Z`, with a Dash Attack charge), Dodge (`C`, including Perfect Dodge), Knockback (impulse-based, reacts to Attack/Defense/Stability/approach angle), Stamina and Stability (with a Stability Break state), ring-out and KO win conditions, and a Clash (simultaneous-attack) mini-mechanic with its own mash-based resolution.
+- **AI:** a full opponent AI (`src/ai/`) with per-archetype personalities and selectable difficulty tiers, used both in the Pregame Simulator and the headless Self Test batches.
+- **Camera:** a single, data-driven `CameraDirector` (`src/camera/director/`) with three owner-approved presets (A/B/C, picked in Settings) — dynamic, opponent-focused framing, automatic orbit and side switching, context modes for high speed/close combat/knockback/Clash/ring-out/finisher. See `docs/design-decisions/camera-approval.md`.
+- **Presentation:** a player flow (Main Menu → Character Select → Pregame Simulator → rounds → Results), a combat HUD (Stamina/Stability/Clash bars), VFX (impact bursts, speed lines, drift skid marks/sparks), gamepad support, Settings (quality, camera preset, shake, pause-on-focus-loss), and three selectable arena floors (flat + bowls A/B/C, both visually and physically — see `docs/design-decisions/visual-prototypes-approval.md`).
+- **Tooling:** a Debug Lab (raw-state inspector, pause/step/speed, live controller switching, scenario presets, replay recording/playback), a browser Self Test (headless AI-vs-AI batches with an anomaly detector), deterministic replays (GDD/M9: a full match replays bit-for-bit from recorded inputs), and portable desktop test builds for Windows and macOS (see below).
 
-**Milestone 0 (Foundation)** — merged: Vite + TypeScript project under the `/ChaosBey/` GitHub Pages subpath, Three.js renderer bootstrap, Rapier 3D physics world with a fixed 60 Hz timestep loop decoupled from render FPS, seeded deterministic RNG (gameplay/AI/cosmetic streams), top-level game state machine skeleton, `CombatController` abstraction with a `KeyboardController`, runtime quality-preset config, telemetry event bus, debug overlay (`F3`), physics safety diagnostics, unit tests + a production smoke test, and a GitHub Actions workflow (typecheck → test → build → smoke test → deploy to Pages).
-
-**Milestone 1 (this branch)** — one temporary Bey that behaves like a spinning object, not a sliding puck (GDD section 137):
-
-- One temporary Bey rigid body + a circular arena (floor + wall-segment boundary).
-- Force/response-based movement: acceleration/steering never snap position or velocity directly. Heading is its own gameplay value with steering inertia; the actual velocity only gradually realigns to it via lateral/longitudinal grip, producing real slip at speed.
-- Rotation split per GDD section 17/83: the physics rigid body's real orientation carries collision-driven **tilt**, corrected by an upright recovery torque + damping; a decoupled **spin** value drives fast continuous visual rotation that never touches physics; a small bounded **wobble** oscillation (visual-only) grows on impact and decays.
-- Wall/floor bounce with restitution materials, and impacts feed an angular impulse into the spin/tilt system (knockback rotation).
-- Drift: tap `X` for a small hop, hold it while steering to slide with reduced lateral grip, release to gradually recover normal grip. No mini-turbo (not approved).
-- Debug overlay now shows the full translational/rotational diagnostic set: intended steering vector, actual velocity vector, speed, heading, slip angle, lateral/longitudinal grip, grounded state, drift state, angular velocity, spin rate, tilt, wobble energy.
-- A `ScriptedController` (drives the same `CombatController` interface as keyboard/AI) backs a deterministic physics self-test suite: straight acceleration, high-speed steering/slip, wall bounce (no tunneling, angular response, no runaway energy), long-run wobble/finite-value stability, upright recovery, and the full hop→drift→recover flow.
-- A temporary, non-final camera just follows the Bey so movement is actually testable — not the approved camera director (that's Milestone 4).
-
-Not yet implemented: combat, stamina/stability/attack-energy, Clash, AI, real camera direction, VFX, UI screens, Debug Lab, replay. See the master design document's milestone list.
+Not yet done / still genuinely open: a final Combat HUD visual design, final per-Bey particle/trail identity (only per-archetype exists today), the full 4-piece Bey mesh (a 3-piece engineering placeholder ships today), Intro/Launch presentation, and the other items tracked in `docs/design-decisions/OWNER_DECISIONS_MASTER.md` §13. That file (read via `docs/design-decisions/README.md` first) is the up-to-date source for "what's still pending" — this README summarizes, it doesn't replace it.
 
 ## Development
 
@@ -52,6 +44,15 @@ npm run test:smoke # Playwright smoke test against the production build
 Smoke-test environment variables:
 
 - `CHAOSBEY_PW_CHROMIUM_PATH=/path/to/chrome` runs the smoke tests with an existing Chromium binary. Use it when a sandboxed container ships a Chromium revision that doesn't match what `@playwright/test` expects and can't download another one. CI leaves it unset and installs its own browser.
+
+### Desktop local test build (Windows + macOS)
+
+```bash
+npm run build:exe   # Windows: builds the real production bundle, then packages it
+npm run build:mac   # macOS (Intel + Apple Silicon): same, packaged as an unsigned .app
+```
+
+Windows produces a portable folder at `release/win-unpacked/` — copy the whole folder, then double-click `ChaosBey.exe` inside it. macOS produces `release/mac/ChaosBey.app` (Intel) and `release/mac-arm64/ChaosBey.app` (Apple Silicon) — right-click → Open the first time (unsigned app, Gatekeeper will otherwise refuse it). Either way it's the same production build GitHub Pages serves (no code changes for packaging), running in a plain Electron window; see [`electron/README.md`](electron/README.md) for details. The GitHub Actions workflow `.github/workflows/desktop-build.yml` builds both platforms on demand (Actions tab → "Desktop build (Windows + macOS)" → Run workflow) without needing any of this installed locally. This is a local-testing convenience only — the project's real target is still the web build above.
 
 ## Main Menu
 
@@ -77,13 +78,16 @@ The panel also loads the GDD 68 scenario presets into the live match and shows t
 
 Open the Self Test from the Main Menu (Developer / Debug → SELF TEST) or with `?mode=self-test` for the browser Self Test (GDD 66, 162–164): AI-vs-AI batches over any matchups and seeds, the GDD 68 scenario presets (scripted vs scripted, or with one side swapped for the AI), the GDD 67 anomaly detector on every tick, and the GDD 163 report (download as JSON; failing seeds can be replayed). It runs the shared headless core in `src/self-test/`, 1× (real time) to 64× or as fast as the CPU allows — always more fixed ticks, never a bigger timestep — with a 2D minimap instead of the 3D renderer.
 
-Progress on the rest of Milestone 8 is tracked in [`docs/ai/m8-status.md`](docs/ai/m8-status.md).
+Milestone 8's own history is in [`docs/ai/m8-status.md`](docs/ai/m8-status.md) and [`docs/ai/m8-readiness-inventory.md`](docs/ai/m8-readiness-inventory.md).
 
 ## Keyboard bindings
 
-- Arrow keys — steer / move (connected — drives the Milestone 1 movement prototype)
-- `X` — hop / drift (connected — tap for a small hop, hold + steer to drift)
-- `Z` — attack (reserved — not yet connected to any combat system)
-- `C` — dodge (reserved — not yet connected to any dodge system)
-- `Esc` — pause (reserved — not yet connected to a pause state)
-- `F3` — toggle debug overlay (connected)
+- Arrow keys — move (camera-relative "Directional" by default — ↑ is always away from the camera; Classic/Bey-relative tank steering is a Settings option)
+- `X` — hop / drift (tap for a small hop, hold + steer to drift, hold alone for a variable-height jump)
+- `Z` — attack (hold to charge a Dash Attack)
+- `C` — dodge (tight timing window for a Perfect Dodge)
+- `Esc` — pause (losing window focus pauses too, if enabled in Settings)
+- `F3` — toggle debug overlay
+- `F4` — toggle the attack-profile settings panel
+
+A standard gamepad works everywhere too — see "Main Menu" above.

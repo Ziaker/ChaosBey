@@ -168,7 +168,7 @@ export function recordScenarioTick(trace: ScenarioTrace, facts: ScenarioTickFact
   trace.firstMinAccelFactor = Math.min(trace.firstMinAccelFactor, first.stamina.getPhysicalCondition().accelFactor);
   if (a.justLanded) trace.firstMaxLandingIntensity = Math.max(trace.firstMaxLandingIntensity, a.landingIntensity);
 
-  trace.firstMaxJumpAssistS = Math.max(trace.firstMaxJumpAssistS, first.drift.getDebugTimers().jumpAssistElapsedS);
+  trace.firstMaxJumpAssistS = Math.max(trace.firstMaxJumpAssistS, first.drift.getDebugTimers(first.body).jumpAssistElapsedS);
   const p = first.body.translation();
   const radius = Math.hypot(p.x, p.z);
   trace.firstMaxRadiusM = Math.max(trace.firstMaxRadiusM, radius);

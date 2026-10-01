@@ -45,6 +45,10 @@ Antes de criar um novo Lab, identificar exatamente a lacuna que permanece aberta
 
 Em particular, qualquer trabalho futuro de Combat HUD deve tratar somente layout/estética/legibilidade do HUD geral enquanto isso continuar sem escolha final documentada. Ele não deve recriar câmera, arena, movimento, VFX, condição, Clash, física, recursos ou IA.
 
+## Sobre as referências "GDD §N"
+
+Todos os documentos deste diretório citam números de seção de um "GDD" (Game Design Document). Esse documento **não está neste repositório** — é fornecido por fora, diretamente para os agentes de desenvolvimento (ver `CLAUDE.md`, seção 3). Uma referência "GDD §N" não é, portanto, verificável só com o que está na `main`; trate-a como vinda de uma fonte externa que o dono/agente tem em mãos, não como um arquivo que falta encontrar aqui.
+
 ## Regra de manutenção
 
 Ao registrar uma nova decisão:
