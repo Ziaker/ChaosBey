@@ -71,17 +71,17 @@ interface Recording {
 // re-pinned whenever the fights change: replay-15 / replay-17 before the
 // Motion Lab integration (M11), replay-45 / replay-40 after it, replay-50
 // after its follow-up fixes, replay-66 / replay-30 with the first
-// owner-playtest controls, replay-41 / replay-64 with the drift fix, and
-// now, with the movement/weight/dodge playtest pass's Fix 1 (dodge is a
-// flat, latched-velocity state instead of adding a burst on top of
-// momentum — it measurably changes AI-vs-AI dodge usage and so match
-// length/outcomes, per that pass's own section 20: report the real
-// consequence, don't mask it): replay-3 lasts 1433 ticks with 144 frozen,
-// replay-4 lasts 1485 with 121, and in both the first Bey still reads its
-// movement input after tick 900.
+// owner-playtest controls, replay-41 / replay-64 with the drift fix,
+// replay-3 / replay-4 with the dodge rewrite alone, and now, after the
+// movement/weight/dodge playtest pass's full set of changes (dodge rewrite,
+// steering/grip tightening, gravity, short hop) — each one shifts AI-vs-AI
+// dynamics (section 20: report the real consequence, don't mask it) —
+// re-pinned once more against the final state: replay-13 lasts 1036 ticks
+// with 122 frozen, replay-27 lasts 1066 with 147, and in both the first Bey
+// still reads its movement input after tick 900.
 // Most seeds end within a few hundred ticks.
-const LONG_SEED = 'replay-3';
-const MUTATION_SEED = 'replay-4';
+const LONG_SEED = 'replay-13';
+const MUTATION_SEED = 'replay-27';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {
