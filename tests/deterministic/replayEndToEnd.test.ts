@@ -26,7 +26,8 @@ import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecord
 
 // A long fight with many hitstop freezes (see replayPlayback.test.ts, whose
 // header comment explains this seed's re-pinning history).
-const LONG_SEED = 'replay-62';
+// Re-pinned in the arena scale pass: see the seed notes in replayPlayback.test.ts.
+const LONG_SEED = 'replay-0';
 /** The tampered-inputs check flips MoveForward on ticks 300 up to (not including) this. */
 const EDIT_END_TICK = 700;
 
