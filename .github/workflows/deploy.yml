@@ -12,6 +12,15 @@ permissions:
   id-token: write
 
 jobs:
+  # Fast gate (~2-3 min): typecheck, the fast suite, the production build.
+  # This is the PR/push signal and the only thing deploy waits on — it does
+  # NOT include the full Playwright smoke suite, which takes 20-45 minutes
+  # serially (single worker — see tests/smoke/playwright.config.ts's own
+  # comment) and used to block both the PR check and every Pages deploy on
+  # every single push, turning any change, however small, into a ~1 hour
+  # round trip. Split out into its own `smoke` job below instead: it still
+  # runs on every PR/push (CLAUDE.md section 2's policy), it just no longer
+  # gates the fast feedback loop or the deploy.
   build:
     runs-on: ubuntu-latest
     steps:
@@ -29,12 +38,29 @@ jobs:
       - run: npm test
       - run: npm run build
 
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:smoke
-
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
+
+  # Full Playwright smoke suite (20-45 min). Runs in parallel with `deploy`,
+  # not before it: a regression here is caught and fixed forward, not held
+  # as a gate on every iteration. Still required reading after any change
+  # that could plausibly affect what it covers (CLAUDE.md section 2).
+  smoke:
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:smoke
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
