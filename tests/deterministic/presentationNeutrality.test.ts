@@ -187,6 +187,15 @@ describe('presentation foundation is behaviour-neutral on a real session', () =>
     expect(both.systemErrors).toBe(0);
   }, 300_000);
 
+  it('clashPresentation leaves the simulation, replay and the camera object untouched', async () => {
+    const off = await run(undefined, false);
+    const on = await run(resolvePresentationFeatures({ clashPresentation: true }), false);
+    expect(on.hashes).toEqual(off.hashes);
+    expect(on.replayIntegrity).toBe(off.replayIntegrity);
+    expect(on.camera).toBe(off.camera);
+    expect(on.systemErrors).toBe(0);
+  }, 300_000);
+
   it('conditionVisuals with all three languages leaves the simulation, replay and the camera object untouched', async () => {
     const off = await run(undefined, false);
     const features = resolvePresentationFeatures({ conditionVisuals: true });
@@ -230,20 +239,21 @@ describe('presentation foundation is behaviour-neutral on a real session', () =>
 
 describe('presentation lifecycle on a real session', () => {
   it('ships with nothing attached; the legacy placeholder visuals are used unless newBeyVisuals is on', async () => {
-    for (const features of [undefined, PRESENTATION_FEATURES_OFF, resolvePresentationFeatures({ clashPresentation: true, newHud: true, arenaVisuals: true })]) {
+    for (const features of [undefined, PRESENTATION_FEATURES_OFF, resolvePresentationFeatures({ newHud: true, arenaVisuals: true })]) {
       const { session } = await createSession(features);
       expect(session.getPresentation().systemIds()).toEqual([]);
       expect(session.getPresentationStats().hub.systems).toBe(0);
       expect(session.getConditionLayers()).toBeNull();
       expect(session.getHybridVfx()).toBeNull();
+      expect(session.getClashPresentation()).toBeNull();
       expect(session.getVfxManager().isLayerVisible('impactBursts')).toBe(true);
       expect(session.match.visuals.first.definition.id).toBe('placeholder:attack-prototype');
       expect(session.match.visuals.second.definition.id).toBe('placeholder:defense-prototype');
       session.dispose();
     }
     const { session } = await createSession(ALL_ON);
-    // The only systems a flag attaches by itself so far: the condition languages and the hybrid VFX.
-    expect(session.getPresentation().systemIds()).toEqual(['condition-visuals', 'hybrid-vfx']);
+    // The only systems a flag attaches by itself so far: the condition languages, the hybrid VFX and the Clash presentation.
+    expect(session.getPresentation().systemIds()).toEqual(['condition-visuals', 'hybrid-vfx', 'clash-presentation']);
     expect(session.getConditionLayers()).toEqual(['A']);
     // The legacy impact bursts give way to the approved hybrid language, through the existing layer switch.
     expect(session.getVfxManager().isLayerVisible('impactBursts')).toBe(false);
@@ -315,7 +325,7 @@ describe('presentation lifecycle on a real session', () => {
 
     const second = await createSession(ALL_ON, `${SEED}-restart`);
     expect(second.session.getPresentation()).not.toBe(first.session.getPresentation());
-    expect(second.session.getPresentation().systemIds()).toEqual(['condition-visuals', 'hybrid-vfx']);
+    expect(second.session.getPresentation().systemIds()).toEqual(['condition-visuals', 'hybrid-vfx', 'clash-presentation']);
     const newRecorder = new Recorder();
     second.session.getPresentation().attach(newRecorder);
     for (let i = 0; i < 10; i++) second.session.tick();
