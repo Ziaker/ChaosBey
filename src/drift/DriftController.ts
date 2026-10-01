@@ -39,6 +39,7 @@ import {
   LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS,
 } from './DriftTuning';
 import type { CanonicalRecord } from '../replay/state/CanonicalValue';
+import { logJumpDiag } from '../debug/diagnostics/JumpInputDiagnostics'; // TEMPORARY — see that file's header
 
 export enum DriftState {
   Idle = 'Idle',
@@ -157,6 +158,12 @@ export class DriftController {
 
     switch (this.state) {
       case DriftState.Idle:
+        if (jumpDriftPressed && !grounded) {
+          // TEMPORARY diagnostic: a press that lands while airborne is
+          // currently dropped (no retry on landing) — see PR discussion,
+          // "jump input buffering", tracked separately, not fixed here.
+          logJumpDiag('pressDroppedWhileAirborne', { fromState: 'Idle' });
+        }
         if (jumpDriftPressed && grounded) {
           this.beginHop(body, actions, headingRad);
         } else if (this.driftArmed && grounded) {
@@ -187,18 +194,23 @@ export class DriftController {
           const vel = body.linvel();
           if (vel.y > this.hopBaseVerticalMps) {
             if (this.driftArmed) {
+              const vyBefore = vel.y;
               const target = this.hopBaseVerticalMps + this.computeDriftHopCutMps(this.jumpAssistElapsedS);
               if (vel.y > target) body.setLinvel({ x: vel.x, y: target, z: vel.z }, true);
               this.jumpCutApplied = true;
+              logJumpDiag('jumpCut', { reason: 'driftArmed', elapsedS: this.jumpAssistElapsedS, vyBefore, vyAfter: Math.min(vyBefore, target) });
             } else if (!jumpDriftHeld) {
+              const vyBefore = vel.y;
               const target = this.hopBaseVerticalMps + this.computeJumpReleaseCapMps(this.jumpAssistElapsedS);
               if (vel.y > target) body.setLinvel({ x: vel.x, y: target, z: vel.z }, true);
               this.jumpCutApplied = true;
+              logJumpDiag('jumpCut', { reason: 'release', elapsedS: this.jumpAssistElapsedS, vyBefore, vyAfter: Math.min(vyBefore, target) });
             } else if (this.jumpAssistElapsedS >= JUMP_RELEASE_WINDOW_S) {
               // Held through the whole release window: already committed to
               // the full, uncut arc — there is nothing left to cut, ever,
               // for the rest of this hop (holding longer changes nothing).
               this.jumpCutApplied = true;
+              logJumpDiag('jumpCut', { reason: 'windowElapsedStillHeld', elapsedS: this.jumpAssistElapsedS, vyBefore: vel.y, vyAfter: vel.y });
             } else {
               this.jumpAssistElapsedS += fixedDeltaSeconds;
             }
@@ -207,10 +219,12 @@ export class DriftController {
             // all, off a downslope) — too late for a release cut to mean
             // anything.
             this.jumpCutApplied = true;
+            logJumpDiag('jumpCut', { reason: 'alreadyPastApex', elapsedS: this.jumpAssistElapsedS, vyBefore: vel.y, vyAfter: vel.y });
           }
         }
 
         if (this.hopTimerS >= HOP_MIN_AIRBORNE_DURATION_S && grounded) {
+          logJumpDiag('landed', { hopTimerS: this.hopTimerS, jumpDriftHeld, driftArmed: this.driftArmed });
           // Landed with JumpDrift still held: drift at once if a turn armed
           // it; otherwise a turn later in this same X press still does.
           // The drift keeps the hop's momentum: the landing contact's
@@ -243,6 +257,11 @@ export class DriftController {
 
       case DriftState.Recovering:
         this.recoveryTimerS += fixedDeltaSeconds;
+        if (jumpDriftPressed && !grounded) {
+          // TEMPORARY diagnostic — same airborne-press-drop gate as Idle
+          // (see that case's comment); confirmed firing in real matches.
+          logJumpDiag('pressDroppedWhileAirborne', { fromState: 'Recovering' });
+        }
         if (jumpDriftPressed && grounded) {
           // Chaining into a fresh drift is allowed mid-recovery.
           this.beginHop(body, actions, headingRad);
@@ -294,6 +313,7 @@ export class DriftController {
     this.jumpCutApplied = false;
     const vel = body.linvel();
     this.hopBaseVerticalMps = vel.y;
+    logJumpDiag('beginHop', { jumpDriftHeldAtBegin: actions.held.has(Action.JumpDrift) });
     // The entire vertical launch, applied once, immediately (no waiting to
     // see how long the press lasts — GDD section 13 of the jump/air-control
     // hotfix). Every other height (short/medium, or the drift hop) comes
