@@ -113,14 +113,16 @@ describe('collider (one source of truth with the visuals)', () => {
     }
   });
 
-  it('the flat floor is still the plain cylinder (the baseline) with the same spawns; the default match config is the bowl, not flat', async () => {
+  it('the flat floor is the baseline at y = 0 with the same spawns (a flat heightfield: the 36 m cylinder gave ghost obstacles); the default match config is the bowl, not flat', async () => {
     expect(createDefaultMatchConfig().arenaFloor).toBe(DEFAULT_ARENA_FLOOR);
     expect(matchSpawnsFor('flat')).toEqual({ first: FIRST_SPAWN, second: SECOND_SPAWN });
     const physics = await arena('flat');
     const shapes = new Set<number>();
     physics.rapierWorld.forEachCollider((c) => shapes.add(c.shape.type));
-    expect(shapes.has(RAPIER.ShapeType.Cylinder)).toBe(true);
-    expect(shapes.has(RAPIER.ShapeType.HeightField)).toBe(false);
+    expect(shapes.has(RAPIER.ShapeType.HeightField)).toBe(true);
+    expect(shapes.has(RAPIER.ShapeType.Cylinder)).toBe(false);
+    // ...and it is the plane y = 0 all the way out to the wall.
+    for (const [x, z] of [[0, 0], [20, 5], [-30, -10], [0, 34]] as const) expect(20 - firstHit(physics, { x, y: 20, z }, { x: 0, y: -1, z: 0 }, false)!).toBeCloseTo(0, 2);
     physics.rapierWorld.free();
   });
 

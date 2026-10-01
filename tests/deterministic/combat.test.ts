@@ -199,8 +199,8 @@ describe('wall collision after knockback', () => {
     // Defender spawns close to the wall; the attacker's Circular Attack
     // knocks them further outward (away from the attacker), straight into it.
     const harness = await CombatHarness.create(
-      { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 9.8 },
-      { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 11 },
+      { x: 0, y: BEY_SPAWN_HEIGHT_M, z: ARENA_FLOOR_RADIUS - 2.2 },
+      { x: 0, y: BEY_SPAWN_HEIGHT_M, z: ARENA_FLOOR_RADIUS - 1 },
     );
     settle(harness);
 

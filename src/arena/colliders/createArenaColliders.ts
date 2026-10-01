@@ -108,24 +108,18 @@ export function createArenaColliders(
     group.add(ring);
   }
 
-  if (floor === 'flat') {
-    // Match the visual mesh exactly: its top surface is at y=0 (mesh center
-    // at -THICKNESS/2, half-height THICKNESS/2). The collider must be
-    // positioned the same way, not left at the body's default origin — the
-    // Bey should never appear to float or sink relative to what's rendered.
-    const floorBody = physics.rapierWorld.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(0, -ARENA_FLOOR_THICKNESS / 2, 0),
-    );
-    physics.rapierWorld.createCollider(
-      floorMaterial(RAPIER.ColliderDesc.cylinder(ARENA_FLOOR_THICKNESS / 2, ARENA_FLOOR_RADIUS)),
-      floorBody,
-    );
-  } else {
-    physics.rapierWorld.createCollider(
-      floorMaterial(bowlHeightfield(profile.heightAtRadius)),
-      physics.rapierWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed()),
-    );
-  }
+  // Every floor, flat included, is a heightfield sampled from the same h(r) as
+  // the visuals. The flat floor used to be one cylinder collider (radius =
+  // ARENA_FLOOR_RADIUS, a thin slab centred at -THICKNESS/2 so its top is
+  // y = 0); at the 3x arena (radius 36 m, 0.5 m thick) Rapier's
+  // cylinder-vs-cylinder contact produced ghost obstacles for a rolling Bey
+  // 1-2 m inside the wall (a full stop at r = 33.5-34.4 m, measured), which
+  // the heightfield does not (arena scale pass). A flat heightfield is the
+  // same plane (top y = 0) and, like the bowls, has no floor outside the wall.
+  physics.rapierWorld.createCollider(
+    floorMaterial(bowlHeightfield(profile.heightAtRadius)),
+    physics.rapierWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed()),
+  );
 
   const wallMesh = new THREE.Mesh(
     new THREE.CylinderGeometry(
