@@ -1,5 +1,7 @@
 # Arena scale pass: 3x stage, central basin 2.5 m deep
 
+Version: **0.12.0** (was 0.11.0).
+
 Branch `claude/dazzling-sagan-14fgu0`. Separate from any jump/gameplay fix; camera, controls and input semantics were not touched.
 
 ## What changed

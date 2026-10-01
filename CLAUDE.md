@@ -109,3 +109,28 @@ ASK FIRST. It has never required re-running the full slow suite after every
 micro-change, and it does not require holding ready git operations (commit,
 push, PR, rebase, merge) for manual authorization — §1 and §2 above make that
 explicit for this repository so it isn't left to interpretation turn to turn.
+
+## 4. Version and README — always, on every change
+
+Standing owner rule: **every PR that changes the game, its rules, its content
+or its tooling updates the version number and the README. Always, without
+being asked.**
+
+- Bump `version` in `package.json` **and** `package-lock.json` (both entries
+  for the root package): patch (`0.12.0` -> `0.12.1`) for fixes, minor
+  (`0.12.0` -> `0.13.0`) for features, gameplay/arena/content changes.
+  The in-game bottom-right badge (`vX.Y.Z · <commit>`) reads `package.json`,
+  so this is how the owner tells builds apart.
+- Update `README.md`: the **Version** line and a new entry at the top of
+  **Latest changes** (one or two lines: what changed and any open follow-up).
+  If the change affects something the README describes, correct that text too.
+- Mention the new version in the PR description.
+- Doc-only or test-only PRs that touch no shipped behaviour still add a
+  README note; bump the patch version unless the owner says otherwise.
+- `tests/unit/versionSync.test.ts` fails the fast suite if `package.json`,
+  `package-lock.json` and the README **Version** line disagree, so a
+  forgotten update is caught before merge.
+
+This rule is a process rule like §1/§2: it never overrides the design
+documents, and forgetting it is a defect in the PR, not a reason to wait
+for the owner.
