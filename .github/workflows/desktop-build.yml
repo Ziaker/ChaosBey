@@ -7,10 +7,18 @@ name: Desktop build (Windows)
 # artifact zip from this workflow's run page, extract it, double-click
 # ChaosBey.exe.
 #
-# Manual only: this does not run on every push (the portable build is a
-# local-testing convenience, not the deploy target — that's still
-# deploy.yml → GitHub Pages). Trigger it from the Actions tab when a new
-# Windows build is wanted.
+# Two triggers, two purposes:
+#   - pull_request (scoped to the paths that can affect this packaging):
+#     protects any future change to the desktop wrapper by actually building
+#     it on a real windows-latest runner before merge. Unlike
+#     workflow_dispatch, a pull_request-triggered workflow runs from
+#     whatever commit has the file — it does not need to exist on the
+#     default branch first, so this validates a PR's own branch pre-merge.
+#   - workflow_dispatch: lets the owner get a fresh .exe on demand from the
+#     Actions tab ("Run workflow") any time after this file is on `main`.
+# Neither runs on every push to every branch — this is a local-testing
+# convenience, not the deploy target (that's still deploy.yml → GitHub
+# Pages), so it only runs when it can plausibly matter.
 
 on:
   workflow_dispatch:
@@ -19,6 +27,14 @@ on:
         description: 'Also publish a GitHub Release with the build attached'
         type: boolean
         default: false
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'electron/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/desktop-build.yml'
 
 permissions:
   contents: write
