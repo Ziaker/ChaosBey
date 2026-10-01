@@ -577,8 +577,8 @@ export class MatchSession {
       second: { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad, lean: result.second.spin.lean },
     };
 
-    const impactEvents = this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents.clashStarted);
-    this.tickPresentation(tickIndex, result, isFrozenByHitstop, impactEvents, presentationEvents);
+    this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents.clashStarted);
+    this.tickPresentation(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents);
 
     for (const detection of this.anomalyDetector.check({
       tick: tickIndex,
@@ -759,7 +759,7 @@ export class MatchSession {
     clashResolvedThisTick: MatchTickResult['clashResolvedThisTick'],
     currentClashState: ClashState,
     clashStarted: boolean,
-  ): ImpactEvent[] {
+  ): void {
     const match = this.match;
     const fixedDeltaSeconds = FIXED_DELTA_SECONDS;
     const firstPositionM = match.first.body.translation();
@@ -844,7 +844,6 @@ export class MatchSession {
       side: out.player.debug.side,
       modifiers: [...out.player.debug.modifiers],
     };
-    return impactEvents;
   }
 
   private cameraSnapshot(): CameraPresentationSnapshot | null {
@@ -873,12 +872,20 @@ export class MatchSession {
     tickIndex: number,
     result: MatchTickResult,
     isFrozenByHitstop: boolean,
-    impactEvents: readonly ImpactEvent[],
+    clashResolvedThisTick: MatchTickResult['clashResolvedThisTick'],
+    currentClashState: ClashState,
     clashEdges: ReturnType<ClashPresentationTracker['update']>,
   ): void {
     const snapshot = this.lastMatchResult;
     if (!snapshot) return;
     const clash = this.clash.controller;
+    // The same pure mapping the camera and the legacy VFX use, evaluated here so the
+    // camera/VFX block above stays untouched. A Clash tick contributes no impact
+    // events of its own: its presentation events come from the Clash edges.
+    const impactEvents: readonly ImpactEvent[] =
+      clashResolvedThisTick || currentClashState === ClashState.Active || isFrozenByHitstop
+        ? []
+        : buildImpactEventsForTick(result, this.match.first.body.translation(), this.match.second.body.translation());
     this.presentation.onTick(
       {
         tick: tickIndex,
