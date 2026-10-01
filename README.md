@@ -12,6 +12,8 @@ The authoritative design specification and AI-agent operating contract lives in 
 
 Before reopening any visual/design question, read [`docs/design-decisions/README.md`](docs/design-decisions/README.md). For visual prototypes and approvals, the mandatory entry point is [`docs/design-decisions/VISUAL_APPROVALS_MASTER.md`](docs/design-decisions/VISUAL_APPROVALS_MASTER.md).
 
+Where each visual prototype stands today and how it plugs into the game (flags, events, registries) is in [`docs/planning/PROTOTYPE_INTEGRATION_MAP.md`](docs/planning/PROTOTYPE_INTEGRATION_MAP.md).
+
 Those documents distinguish **prototyped**, **approved** and **integrated** work and record later owner overrides over older snapshots. In particular, all **9 approved Bey concepts are selectable/playable**; older text that says to choose only three final Beys is superseded on that point.
 
 ## Status
