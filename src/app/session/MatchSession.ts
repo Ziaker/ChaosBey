@@ -45,6 +45,12 @@ import { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { createRngStreams, type RngStreams } from '../../rng/SeededRng';
 import { TelemetryEventKind } from '../../telemetry/events/TelemetryEvent';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
+import { presentationFeaturesFromLocation, type PresentationFeatures } from '../../presentation/features';
+import { PresentationHub, type PresentationHubStats } from '../../presentation/hub';
+import { selectClashPresentationSnapshot } from '../../presentation/clash';
+import { selectBeyPresentationState, type CameraPresentationSnapshot, type RecentImpact } from '../../presentation/state';
+import type { PresentationSide } from '../../presentation/events';
+import { collectSceneStats, type SceneStats } from '../../presentation/sceneStats';
 import { HeadingArrow } from '../../vfx/HeadingArrow';
 import { DriftVfx } from '../../vfx/DriftVfx';
 import { VfxManager } from '../../vfx/VfxManager';
@@ -80,6 +86,8 @@ export interface MatchSessionOptions {
   readonly arenaTheme?: ArenaTheme;
   /** M11: the player's camera preset (Settings). Render only; default B. */
   readonly cameraPreset?: PresetId;
+  /** Presentation feature flags (src/presentation/features.ts). Omit for the page's `?pfx=` flags (all off when there are none): the game as it was. Render only. */
+  readonly presentationFeatures?: PresentationFeatures;
 }
 
 export interface SessionTickOutput {
@@ -134,6 +142,8 @@ export class MatchSession {
 
   private readonly root = new THREE.Group();
   private readonly vfxManager: VfxManager;
+  /** Presentation foundation: derives events and state after each tick and runs attached presentation systems (none by default). Render only. */
+  private readonly presentation: PresentationHub;
   /** Owner playtest (after M11): skid marks, sparks and grip-regain ring while a Bey drifts. Render only. */
   private readonly driftVfx: { readonly first: DriftVfx; readonly second: DriftVfx };
   /** M11: the approved camera director running the three presets; the Clash forces B without orbit. Render only. */
@@ -247,10 +257,19 @@ export class MatchSession {
     this.clash = new ClashOrchestration(options.matchConfig, new NullAiMashSource());
 
     options.scene.add(this.root);
+    const presentationFeatures = options.presentationFeatures ?? presentationFeaturesFromLocation();
     this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys, {
       geometry: arenaGeometryOf(options.matchConfig),
       theme: options.arenaTheme ?? FOUNDRY_PIT.theme,
-    }, options.matchConfig.motion ?? 'B');
+    }, options.matchConfig.motion ?? 'B', presentationFeatures);
+    this.presentation = new PresentationHub({
+      features: presentationFeatures,
+      beys: [
+        { side: 'first', definitionId: this.match.first.definition.id },
+        { side: 'second', definitionId: this.match.second.definition.id },
+      ],
+      getVfxAnchor: (side, name, out) => this.match.visuals[side].anchors.getWorld(name, out),
+    });
     this.headingArrow = new HeadingArrow(this.root);
     this.camera = options.camera;
     const arenaFloor = options.matchConfig.arenaFloor ?? 'flat';
@@ -546,7 +565,8 @@ export class MatchSession {
       second: { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad, lean: result.second.spin.lean },
     };
 
-    this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents.clashStarted);
+    const impactEvents = this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents.clashStarted);
+    this.tickPresentation(tickIndex, result, isFrozenByHitstop, impactEvents, presentationEvents);
 
     for (const detection of this.anomalyDetector.check({
       tick: tickIndex,
@@ -624,6 +644,7 @@ export class MatchSession {
         });
       }
     }
+    this.presentation.update(frameDeltaSeconds);
   }
 
   /** Drift effect counts per side (render only), for tests and the smoke. */
@@ -640,10 +661,26 @@ export class MatchSession {
     return this.vfxManager;
   }
 
+  /** The presentation hub: future visual systems attach here. Nothing is attached by default. */
+  getPresentation(): PresentationHub {
+    return this.presentation;
+  }
+
+  /** World position of a named VFX anchor on a Bey (presentation only). False if the name is not an anchor. */
+  getVfxAnchor(side: Side, name: string, out: { x: number; y: number; z: number }): boolean {
+    return this.match.visuals[side].anchors.getWorld(name, out);
+  }
+
+  /** Observability for the visual passes: what the hub runs and a census of this session's scene subtree. */
+  getPresentationStats(): { readonly hub: PresentationHubStats; readonly scene: SceneStats } {
+    return { hub: this.presentation.getStats(), scene: collectSceneStats(this.root) };
+  }
+
   /** Frees the physics world and removes/disposes everything this session drew. The session is unusable afterwards. */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.presentation.dispose();
     this.vfxManager.dispose();
     this.driftVfx.first.dispose();
     this.driftVfx.second.dispose();
@@ -710,7 +747,7 @@ export class MatchSession {
     clashResolvedThisTick: MatchTickResult['clashResolvedThisTick'],
     currentClashState: ClashState,
     clashStarted: boolean,
-  ): void {
+  ): ImpactEvent[] {
     const match = this.match;
     const fixedDeltaSeconds = FIXED_DELTA_SECONDS;
     const firstPositionM = match.first.body.translation();
@@ -795,6 +832,65 @@ export class MatchSession {
       side: out.player.debug.side,
       modifiers: [...out.player.debug.modifiers],
     };
+    return impactEvents;
+  }
+
+  private cameraSnapshot(): CameraPresentationSnapshot | null {
+    const c = this.lastCameraOutput;
+    if (!c) return null;
+    return {
+      mode: c.mode,
+      preset: c.preset,
+      fovDeg: c.fovDeg,
+      distanceM: c.distanceM,
+      yawDeg: c.yawDeg,
+      clashBlend: c.clashBlend,
+      highSpeedBlend: c.highSpeedBlend,
+      hitstopActive: c.isHitstopActive,
+      hitstopRemainingS: c.hitstopRemainingS,
+    };
+  }
+
+  /**
+   * Presentation foundation: hands the finished tick to the hub, which derives
+   * PresentationEvents and the presentation state and delivers them to any
+   * attached systems. Read-only: it reads what the tick already produced and
+   * writes nothing the simulation, the replay or the state hash can see.
+   */
+  private tickPresentation(
+    tickIndex: number,
+    result: MatchTickResult,
+    isFrozenByHitstop: boolean,
+    impactEvents: readonly ImpactEvent[],
+    clashEdges: ReturnType<ClashPresentationTracker['update']>,
+  ): void {
+    const snapshot = this.lastMatchResult;
+    if (!snapshot) return;
+    const clash = this.clash.controller;
+    this.presentation.onTick(
+      {
+        tick: tickIndex,
+        result: isFrozenByHitstop ? null : result,
+        impactEvents,
+        clash: {
+          started: clashEdges.clashStarted,
+          result: clashEdges.clashResult,
+          mashEdges: clashEdges.mashInputEvents,
+          progress: Math.min(1, Math.max(0, clash.getElapsedS() / CLASH_TARGET_DURATION_S)),
+        },
+        roundOver: this.roundState.isOver,
+        roundOutcome: this.roundState.result,
+      },
+      (recentImpact: Readonly<Record<PresentationSide, RecentImpact | null>>) => ({
+        tick: tickIndex,
+        round: { over: this.roundState.isOver, outcome: this.roundState.result },
+        first: selectBeyPresentationState(snapshot.first, { side: 'first', definitionId: this.match.first.definition.id, maxSpeedMps: this.match.first.definition.handling.maxSpeedMps }),
+        second: selectBeyPresentationState(snapshot.second, { side: 'second', definitionId: this.match.second.definition.id, maxSpeedMps: this.match.second.definition.handling.maxSpeedMps }),
+        clash: selectClashPresentationSnapshot(clash),
+        camera: this.cameraSnapshot(),
+        recentImpact,
+      }),
+    );
   }
 }
 
