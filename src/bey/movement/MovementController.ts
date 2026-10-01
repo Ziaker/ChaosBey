@@ -22,6 +22,7 @@ import {
   DIRECTIONAL_STEERING_RESPONSE_PER_S,
   DIRECTIONAL_THRUST_ALIGNMENT_POWER,
   DIRECTIONAL_TURN_RATE_MULTIPLIER,
+  GRIP_RECOVERY_MULTIPLIER,
   IDLE_DAMPING_PER_S,
   IMPACT_TANGENTIAL_TRANSFER,
   IMPACT_VELOCITY_DELTA_THRESHOLD_MPS,
@@ -30,6 +31,7 @@ import {
   LANDING_SAME_LINE_COS,
   OVERSPEED_RETURN_PER_S,
   POST_IMPACT_GRIP_SUPPRESSION_S,
+  SLIP_GRIP_FLOOR_MULTIPLIER,
   SLIP_GRIP_LOSS_PER_S,
   SLIP_REGRIP_FRACTION,
   STEERING_RESPONSE_PER_S,
@@ -312,11 +314,12 @@ export class MovementController {
       lateralGripPerS = lateralGripOverridePerS ?? this.motion.airGrip;
     } else {
       const lateralSpeed = length(lateralVec);
-      this.grip += (1 - this.grip) * (1 - Math.exp(-this.motion.gripRecovery * fixedDeltaSeconds));
+      this.grip += (1 - this.grip) * (1 - Math.exp(-this.motion.gripRecovery * GRIP_RECOVERY_MULTIPLIER * fixedDeltaSeconds));
       this.slipping = this.slipping
         ? lateralSpeed > this.motion.slipThreshold * SLIP_REGRIP_FRACTION
         : lateralSpeed > this.motion.slipThreshold;
-      if (this.slipping) this.grip = Math.min(this.grip, Math.max(this.motion.slipGrip, this.grip - SLIP_GRIP_LOSS_PER_S * fixedDeltaSeconds));
+      const slipFloor = Math.min(1, this.motion.slipGrip * SLIP_GRIP_FLOOR_MULTIPLIER);
+      if (this.slipping) this.grip = Math.min(this.grip, Math.max(slipFloor, this.grip - SLIP_GRIP_LOSS_PER_S * fixedDeltaSeconds));
       lateralGripPerS = lateralGripOverridePerS ?? this.handling.lateralGripPerS * this.grip;
     }
     const newLateral = scale(lateralVec, Math.exp(-lateralGripPerS * fixedDeltaSeconds));
