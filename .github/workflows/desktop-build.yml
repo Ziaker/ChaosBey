@@ -1,0 +1,152 @@
+name: Desktop build (Windows)
+
+# Builds the portable Windows desktop test build (see electron/README.md) on
+# a real Windows runner and publishes it as a downloadable artifact — and,
+# optionally, a GitHub Release — so the owner can get ChaosBey.exe without
+# installing Node, npm, Git, or any dev tooling locally: download the
+# artifact zip from this workflow's run page, extract it, double-click
+# ChaosBey.exe.
+#
+# Two triggers, two purposes:
+#   - pull_request (scoped to the paths that can affect this packaging):
+#     protects any future change to the desktop wrapper by actually building
+#     it on a real windows-latest runner before merge. Unlike
+#     workflow_dispatch, a pull_request-triggered workflow runs from
+#     whatever commit has the file — it does not need to exist on the
+#     default branch first, so this validates a PR's own branch pre-merge.
+#   - workflow_dispatch: lets the owner get a fresh .exe on demand from the
+#     Actions tab ("Run workflow") any time after this file is on `main`.
+# Neither runs on every push to every branch — this is a local-testing
+# convenience, not the deploy target (that's still deploy.yml → GitHub
+# Pages), so it only runs when it can plausibly matter.
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Also publish a GitHub Release with the build attached'
+        type: boolean
+        default: false
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'electron/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/desktop-build.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies (from lockfile)
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build web (production bundle)
+        run: npm run build
+
+      - name: Package Electron (portable Windows folder)
+        run: npx electron-builder --win --publish=never
+
+      - name: Validate ChaosBey.exe was actually produced
+        shell: pwsh
+        run: |
+          $exe = "release/win-unpacked/ChaosBey.exe"
+          if (-not (Test-Path $exe)) {
+            Write-Error "electron-builder did not produce $exe — failing the build."
+            exit 1
+          }
+          Write-Host "Found $exe ($((Get-Item $exe).Length) bytes)"
+
+      - name: Write build info (commit, version) into the portable folder
+        shell: pwsh
+        run: |
+          $sha = "${{ github.sha }}"
+          $shortSha = $sha.Substring(0, 8)
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $runNumber = "${{ github.run_number }}"
+          $builtAt = Get-Date -AsUTC -Format "yyyy-MM-dd HH:mm:ss 'UTC'"
+          @"
+          ChaosBey — Windows local test build
+          ====================================
+
+          How to run: double-click ChaosBey.exe in this folder. No install,
+          no admin rights needed — this whole folder is portable, copy it
+          anywhere.
+
+          This build:
+            Game version:   $version
+            Git commit:     $sha
+            Built from run: #$runNumber
+            Built at:       $builtAt
+
+          The running game also shows its version and commit in the
+          bottom-right corner of every screen (e.g. "v$version . $shortSha"),
+          so you can always confirm which build you're playing without
+          opening this file.
+
+          Not a Windows-signed executable: on first run, Windows SmartScreen
+          may show "Windows protected your PC". Click "More info" then
+          "Run anyway" — this is expected for an unsigned local test build,
+          not a sign of a problem.
+
+          This is a local-testing convenience only. ChaosBey's real,
+          supported target is the web build at
+          https://ziaker.github.io/ChaosBey/ — every merge to main deploys
+          there automatically.
+          "@ | Out-File -FilePath "release/win-unpacked/README.txt" -Encoding utf8
+
+      - name: Also try a single-file portable .exe (best effort, non-blocking)
+        shell: pwsh
+        continue-on-error: true
+        run: npx electron-builder --win portable --publish=never
+
+      - name: Upload portable folder as the main artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChaosBey-Windows-Portable
+          path: release/win-unpacked/**
+          retention-days: 30
+
+      - name: Upload single-file portable .exe, if it was produced
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChaosBey-Portable-exe
+          path: release/ChaosBey-Portable.exe
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Zip the portable folder for the Release (if requested)
+        if: ${{ inputs.create_release }}
+        shell: pwsh
+        run: Compress-Archive -Path release/win-unpacked/* -DestinationPath ChaosBey-Windows-Portable.zip
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.create_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-build-${{ github.run_number }}
+          name: ChaosBey desktop test build ${{ github.run_number }}
+          body: |
+            Portable Windows test build, built from commit ${{ github.sha }}.
+            Download `ChaosBey-Windows-Portable.zip`, extract it anywhere,
+            and run `ChaosBey.exe` inside — no installer, no admin rights.
+            See `electron/README.md` for details. This is a local-testing
+            convenience only; the real deploy target is still GitHub Pages.
+          files: |
+            ChaosBey-Windows-Portable.zip
+            release/ChaosBey-Portable.exe
+          prerelease: true

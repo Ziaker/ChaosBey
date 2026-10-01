@@ -51,6 +51,14 @@ Smoke-test environment variables:
 
 - `CHAOSBEY_PW_CHROMIUM_PATH=/path/to/chrome` runs the smoke tests with an existing Chromium binary. Use it when a sandboxed container ships a Chromium revision that doesn't match what `@playwright/test` expects and can't download another one. CI leaves it unset and installs its own browser.
 
+### Desktop local test build (Windows)
+
+```bash
+npm run build:exe   # builds the real production bundle, then packages it
+```
+
+Produces a portable folder at `release/win-unpacked/` — copy the whole folder, then double-click `ChaosBey.exe` inside it. It's the same production build GitHub Pages serves (no code changes for packaging), running in a plain Electron window; see [`electron/README.md`](electron/README.md) for details. This is a local-testing convenience only — the project's real target is still the web build above.
+
 ## Main Menu
 
 The game URL (`/ChaosBey/`) opens the Main Menu (GDD 56).
