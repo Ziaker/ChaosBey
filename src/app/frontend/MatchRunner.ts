@@ -131,17 +131,21 @@ export class MatchRunner {
   }
 
   private static async create(deps: MatchRunnerDeps, start: MatchRunnerStart, events: MatchRunnerEvents): Promise<MatchRunner> {
+    // `session` doesn't exist yet (built below): both closures below read it
+    // through this forward reference once it's assigned further down.
+    let sessionForCameraYaw: MatchSession | null = null;
     // Attached only while the match runs, so a key still down from a menu
     // (Enter/Z to confirm) never reaches the match as a held input. The
-    // player drives with the keyboard and/or the first gamepad.
-    const keyboard = new KeyboardController();
+    // player drives with the keyboard and/or the first gamepad. Blur/focus
+    // loss cancels a pending jump-input-buffer press the same moment
+    // currentlyDown/the hold buffer are cleared (GDD 131).
+    const keyboard = new KeyboardController(() => sessionForCameraYaw?.cancelBufferedJumps());
     const gamepad = new GamepadController();
     // Camera-relative directional control: the player default
     // (PlayerSettings.ts, "Fix 7" — see DirectionalController.ts's and
     // screenDirection.ts's headers). The camera reaches it only as a
     // number (radians), read from the session's own camera output once
     // `session` exists below — never a camera type/import.
-    let sessionForCameraYaw: MatchSession | null = null;
     const directional = new DirectionalController(new CombinedController([keyboard, gamepad]), {
       cameraYaw: () => ((sessionForCameraYaw?.getLastCameraOutput()?.yawDeg ?? 0) * Math.PI) / 180,
       stick: () => gamepad.getStick(),

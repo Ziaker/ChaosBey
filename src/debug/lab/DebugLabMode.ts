@@ -106,7 +106,10 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   const appState = new GameStateMachine();
   appState.transitionTo(GameState.DebugLab);
 
-  const keyboard = new KeyboardController();
+  // Blur/focus loss cancels a pending jump-input-buffer press the same
+  // moment currentlyDown/the hold buffer are cleared (GDD 131) — `session`
+  // (declared further below) is read through this closure once it exists.
+  const keyboard = new KeyboardController(() => session?.cancelBufferedJumps());
   keyboard.attach();
   // M11: the player's control scheme from Settings (Directional/camera-
   // relative by default, "Fix 7" — see DirectionalController.ts's and
