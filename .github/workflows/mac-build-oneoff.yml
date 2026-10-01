@@ -1,0 +1,77 @@
+name: One-off macOS desktop build
+
+on:
+  push:
+    branches:
+      - openai/mac-desktop-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies from lockfile
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build production web bundle
+        run: npm run build
+
+      - name: Package universal macOS app
+        run: npx electron-builder --mac zip --universal --publish=never
+
+      - name: Validate macOS artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="release/ChaosBey-Mac-Universal.zip"
+          test -s "$ZIP"
+          unzip -l "$ZIP" | grep -q 'ChaosBey.app/Contents/MacOS/ChaosBey'
+          echo "Found $ZIP ($(stat -f%z "$ZIP") bytes)"
+
+      - name: Write build metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          cat > README-MAC.txt <<EOF
+          ChaosBey — macOS local test build
+          ==================================
+
+          Artifact: ChaosBey-Mac-Universal.zip
+          Architecture: universal (Apple Silicon arm64 + Intel x64)
+          Game version: $VERSION
+          Git commit: $GITHUB_SHA
+          GitHub Actions run: $GITHUB_RUN_NUMBER
+
+          How to run:
+          1. Extract ChaosBey-Mac-Universal.zip.
+          2. Open ChaosBey.app.
+          3. This local test build is unsigned/not notarized. If macOS blocks the
+             first launch, Control-click ChaosBey.app, choose Open, then Open.
+
+          The web/GitHub Pages build remains the primary supported target.
+          EOF
+
+      - name: Upload universal Mac build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChaosBey-Mac-Universal
+          path: |
+            release/ChaosBey-Mac-Universal.zip
+            README-MAC.txt
+          if-no-files-found: error
+          retention-days: 30
