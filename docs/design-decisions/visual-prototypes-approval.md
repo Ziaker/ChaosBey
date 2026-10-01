@@ -217,7 +217,10 @@ Na implementação: estes valores vão para os arquivos de tuning de `src/vfx/` 
 Ordem sugerida. Cada etapa deve seguir o fluxo de conclusão do GDD 1.5 (typecheck, testes, build, self-test, console).
 
 ### 5.1 Arena côncava (física primeiro)
-1. Trocar o chão plano por um **colisor côncavo** (heightfield ou trimesh do Rapier) gerado pelo mesmo perfil `h(r)` do visual. O perfil deve ter **uma única fonte de verdade** em `src/arena/`, com o tuning comentado no topo do arquivo (GDD 1.3 e 101).
+
+**Item 1 abaixo: RESOLVIDO (M11 lane 4).** O item 5 (expor no Debug Lab) também já existe. Os itens 2–4 (parede/ring-out a partir do rim, revisão de spawn/câmera/IA, self-tests de rampa) não foram confirmados como feitos nesta auditoria — ver `OWNER_DECISIONS_MASTER.md` §13.5, que ainda lista "posição final do volume de ring-out" como pendência real.
+
+1. ~~Trocar o chão plano por um colisor côncavo...~~ **FEITO:** heightfield do Rapier gerado pelo mesmo perfil `h(r)` do visual, fonte única em `src/arena/floor/ArenaFloorProfile.ts` + `src/arena/colliders/createArenaColliders.ts`.
 2. Recalcular parede, altura da parede e volume de ring-out a partir do **rim** (y = 3,2 m), não de y = 0.
 3. Revisar o spawn e o lançamento dos Beys, a câmera (enquadramento com o centro mais baixo) e a percepção da IA (bordas mais altas, rampas).
 4. Rodar os self-tests de física do GDD 150 (aceleração, curva, parede, drift, wobble), adicionando cenários de rampa. Rodar batches de IA contra IA.
