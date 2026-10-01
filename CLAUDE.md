@@ -74,8 +74,14 @@ seconds to at most a couple of minutes, not the full suite.
 
 **FULL SLOW SUITE** (`npm run test:smoke`, the full Playwright suite — this
 is the one that legitimately takes 20-45 minutes serially):
-- Run it in CI on every PR/push to `main` (already wired up in
-  `.github/workflows/deploy.yml`) — that's what CI is for.
+- Runs in CI on every PR/push to `main`, in its own `smoke` job
+  (`.github/workflows/deploy.yml`) — parallel to `deploy`, not a gate in
+  front of it. It used to be the last step of the same job that gated both
+  the PR check and the Pages deploy, turning every push into a ~1 hour
+  round trip before any feedback at all; it was split out specifically
+  because that cost was real and avoidable, not because the suite itself
+  stopped mattering. A red `smoke` run still means fix it, just not by
+  holding up everything else first.
 - Run it locally before merge only when the change could plausibly affect
   something it covers (rendering, the player flow, the Debug Lab, Self Test,
   drift/jump feel visible in a real browser) and you want to validate before
