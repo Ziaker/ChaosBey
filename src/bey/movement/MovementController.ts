@@ -22,6 +22,7 @@ import {
   DIRECTIONAL_STEERING_RESPONSE_PER_S,
   DIRECTIONAL_THRUST_ALIGNMENT_POWER,
   DIRECTIONAL_TURN_RATE_MULTIPLIER,
+  GRIP_RECOVERY_MULTIPLIER,
   IDLE_DAMPING_PER_S,
   IMPACT_TANGENTIAL_TRANSFER,
   IMPACT_VELOCITY_DELTA_THRESHOLD_MPS,
@@ -30,6 +31,7 @@ import {
   LANDING_SAME_LINE_COS,
   OVERSPEED_RETURN_PER_S,
   POST_IMPACT_GRIP_SUPPRESSION_S,
+  SLIP_GRIP_FLOOR_MULTIPLIER,
   SLIP_GRIP_LOSS_PER_S,
   SLIP_REGRIP_FRACTION,
   STEERING_RESPONSE_PER_S,
@@ -57,6 +59,21 @@ export interface MovementPreStepInput {
    * grip override rather than writing velocity itself.
    */
   dashOverride: { headingRad: number; longitudinalSpeedMps: number } | null;
+  /**
+   * From DodgeController during the Dodging state's main flat-velocity
+   * phase ("Fix 1" of the owner's movement/weight/dodge playtest pass):
+   * the dodge's own direction (latched once, at the moment Dodge was
+   * pressed) and speed replace the ENTIRE horizontal velocity this tick —
+   * no steering, no throttle, no grip, no prior momentum. Takes priority
+   * over dashOverride (a dash cannot be active while dodging) and is the
+   * only override that bypasses the heading/steering/throttle computation
+   * below entirely, not just its longitudinal result, since a dodge can
+   * go sideways or backward relative to the current heading. Still goes
+   * through the same post-step impact detection as everything else, so a
+   * wall or another Bey genuinely interrupts/redirects it via physics —
+   * this never sets position directly or skips collision.
+   */
+  dodgeOverride: { velocityMps: Vec2 } | null;
   /**
    * M11 lane 4: the floor's unit normal under the Bey while grounded (from
    * the arena's floor profile), or omitted/null. On a slope the driven
@@ -184,7 +201,12 @@ export class MovementController {
 
   /** Call before physics.step(). Reads/writes the body's linear velocity directly (the "hybrid" model GDD section 16 permits). */
   applyPreStep(body: RAPIER.RigidBody, input: MovementPreStepInput): void {
-    const { actions, fixedDeltaSeconds, grounded, lateralGripOverridePerS, staminaAccelFactor, dashOverride } = input;
+    const { actions, fixedDeltaSeconds, grounded, lateralGripOverridePerS, staminaAccelFactor, dashOverride, dodgeOverride, floorNormal } = input;
+
+    if (dodgeOverride) {
+      this.applyDodgeOverride(body, dodgeOverride, grounded, fixedDeltaSeconds, floorNormal);
+      return;
+    }
 
     const intent = actions.moveIntent;
     let headingForward: Vec2;
@@ -292,11 +314,12 @@ export class MovementController {
       lateralGripPerS = lateralGripOverridePerS ?? this.motion.airGrip;
     } else {
       const lateralSpeed = length(lateralVec);
-      this.grip += (1 - this.grip) * (1 - Math.exp(-this.motion.gripRecovery * fixedDeltaSeconds));
+      this.grip += (1 - this.grip) * (1 - Math.exp(-this.motion.gripRecovery * GRIP_RECOVERY_MULTIPLIER * fixedDeltaSeconds));
       this.slipping = this.slipping
         ? lateralSpeed > this.motion.slipThreshold * SLIP_REGRIP_FRACTION
         : lateralSpeed > this.motion.slipThreshold;
-      if (this.slipping) this.grip = Math.min(this.grip, Math.max(this.motion.slipGrip, this.grip - SLIP_GRIP_LOSS_PER_S * fixedDeltaSeconds));
+      const slipFloor = Math.min(1, this.motion.slipGrip * SLIP_GRIP_FLOOR_MULTIPLIER);
+      if (this.slipping) this.grip = Math.min(this.grip, Math.max(slipFloor, this.grip - SLIP_GRIP_LOSS_PER_S * fixedDeltaSeconds));
       lateralGripPerS = lateralGripOverridePerS ?? this.handling.lateralGripPerS * this.grip;
     }
     const newLateral = scale(lateralVec, Math.exp(-lateralGripPerS * fixedDeltaSeconds));
@@ -328,11 +351,43 @@ export class MovementController {
       }
       if (this.postImpactCooldownRemainingS === 0) this.knockbackPlaying = false;
     } else {
-      const vertical = this.verticalFor(newVelHoriz, currentVel, grounded ? input.floorNormal : null);
+      const vertical = this.verticalFor(newVelHoriz, currentVel, grounded ? floorNormal : null);
       body.setLinvel({ x: newVelHoriz.x, y: vertical, z: newVelHoriz.z }, true);
       this.preStepVerticalMps = vertical;
       this.intendedVelocityThisTick = newVelHoriz;
     }
+    const carried = body.linvel();
+    this.preStepHorizontal = { x: carried.x, z: carried.z };
+  }
+
+  /**
+   * Dodge's own flat-velocity phase ("Fix 1"): the latched direction and
+   * DODGE_BURST_SPEED_MPS replace the entire horizontal velocity this
+   * tick — no steering, no throttle, no grip, no prior momentum, heading
+   * left exactly where it was (nothing is steering it). Still runs
+   * through the same floor-slope projection as normal movement, and the
+   * post-step impact detector still compares the actual result against
+   * this intended velocity — a wall or another Bey genuinely interrupts
+   * the dodge via physics, exactly like any other collision.
+   */
+  private applyDodgeOverride(
+    body: RAPIER.RigidBody,
+    dodgeOverride: { velocityMps: Vec2 },
+    grounded: boolean,
+    fixedDeltaSeconds: number,
+    floorNormal: { x: number; y: number; z: number } | null | undefined,
+  ): void {
+    if (this.postImpactCooldownRemainingS > 0) {
+      this.postImpactCooldownRemainingS = Math.max(0, this.postImpactCooldownRemainingS - fixedDeltaSeconds);
+    }
+    const currentVel = body.linvel();
+    const newVelHoriz = dodgeOverride.velocityMps;
+    this.lastHeadingForward = length(newVelHoriz) > 1e-6 ? scale(newVelHoriz, 1 / length(newVelHoriz)) : this.lastHeadingForward;
+    this.lastLateralGripPerS = 0;
+    const vertical = this.verticalFor(newVelHoriz, currentVel, grounded ? floorNormal : null);
+    body.setLinvel({ x: newVelHoriz.x, y: vertical, z: newVelHoriz.z }, true);
+    this.preStepVerticalMps = vertical;
+    this.intendedVelocityThisTick = newVelHoriz;
     const carried = body.linvel();
     this.preStepHorizontal = { x: carried.x, z: carried.z };
   }

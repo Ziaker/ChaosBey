@@ -249,6 +249,7 @@ export function tickMatch(
     lateralGripOverridePerS: firstDodge.lateralGripOverridePerS ?? firstDrift.lateralGripOverridePerS,
     staminaAccelFactor: firstCondition.accelFactor,
     dashOverride: firstAttack.dashOverride,
+    dodgeOverride: firstDodge.dodgeOverride,
     floorNormal: floorNormalUnder(first, firstGrounded),
   });
   second.movement.applyPreStep(second.body, {
@@ -258,6 +259,7 @@ export function tickMatch(
     lateralGripOverridePerS: secondDodge.lateralGripOverridePerS ?? secondDrift.lateralGripOverridePerS,
     staminaAccelFactor: secondCondition.accelFactor,
     dashOverride: secondAttack.dashOverride,
+    dodgeOverride: secondDodge.dodgeOverride,
     floorNormal: floorNormalUnder(second, secondGrounded),
   });
 

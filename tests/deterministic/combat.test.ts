@@ -376,9 +376,11 @@ describe('attacking mid-jump', () => {
 
     // Only the ascent/early-fall matters here — stop comfortably before
     // this particular hop's ground bounce (confirmed by tracing this exact
-    // scenario), whose own legitimate velocity discontinuity would
-    // otherwise be indistinguishable from "something disrupted the jump".
-    for (let i = 0; i < 30; i++) {
+    // scenario — the movement/weight/dodge playtest pass's shorter hop
+    // impulse moved the bounce from tick ~29 to tick ~22), whose own
+    // legitimate velocity discontinuity would otherwise be indistinguishable
+    // from "something disrupted the jump".
+    for (let i = 0; i < 20; i++) {
       const result = harness.tick(attacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
       const verticalVelocity = harness.first.body.linvel().y;
 

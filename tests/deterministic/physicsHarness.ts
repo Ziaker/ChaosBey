@@ -17,6 +17,7 @@ import { SpinController, type SpinSnapshot } from '../../src/bey/spin/SpinContro
 import { motionParams, type MotionParams } from '../../src/bey/motion/MotionPresets';
 import { FULL_PHYSICAL_CONDITION } from '../../src/bey/stamina/StaminaSystem';
 import { DriftController, type DriftState } from '../../src/drift/DriftController';
+import { DodgeController, type DodgeState } from '../../src/dodge/DodgeController';
 import type { ControllerActions } from '../../src/input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { isGrounded } from '../../src/physics/collision/GroundCheck';
@@ -27,6 +28,7 @@ export interface TickResult {
   spin: SpinSnapshot;
   grounded: boolean;
   driftState: DriftState;
+  dodgeState: DodgeState;
 }
 
 export class TestBeyHarness {
@@ -37,7 +39,11 @@ export class TestBeyHarness {
     readonly movement: MovementController,
     readonly spin: SpinController,
     readonly drift: DriftController,
+    readonly dodge: DodgeController,
   ) {}
+
+  /** A stand-in Stamina value high enough that DodgeController's cost check never blocks a test from dodging. */
+  stamina = 100_000;
 
   /** `motion`: the motion direction (M11 Motion Lab A/B/C); B, the game's default, when omitted. */
   static async create(spawn: { x: number; y: number; z: number } = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, motion: MotionParams = motionParams()): Promise<TestBeyHarness> {
@@ -46,7 +52,7 @@ export class TestBeyHarness {
     createArenaColliders(scene, physics, undefined, undefined, motion);
     const { body, collider } = createBeyRigidBody(physics, spawn, undefined, motion);
     const movement = new MovementController(undefined, motion);
-    return new TestBeyHarness(physics, body, collider, movement, new SpinController(motion), new DriftController(movement.getLateralGripPerS()));
+    return new TestBeyHarness(physics, body, collider, movement, new SpinController(motion), new DriftController(movement.getLateralGripPerS()), new DodgeController());
   }
 
   /**
@@ -62,13 +68,16 @@ export class TestBeyHarness {
     const grounded = isGrounded(this.physics, this.beyCollider);
 
     const driftResult = this.drift.tick(this.beyBody, actions, grounded, FIXED_DELTA_SECONDS, this.movement.getHeadingRad());
+    const dodgeResult = this.dodge.tick(this.beyBody, actions, this.movement.getHeadingRad(), grounded, this.stamina, FIXED_DELTA_SECONDS);
+    this.stamina -= dodgeResult.staminaCostThisTick;
     this.movement.applyPreStep(this.beyBody, {
       actions,
       fixedDeltaSeconds: FIXED_DELTA_SECONDS,
       grounded,
-      lateralGripOverridePerS: driftResult.lateralGripOverridePerS,
+      lateralGripOverridePerS: dodgeResult.lateralGripOverridePerS ?? driftResult.lateralGripOverridePerS,
       staminaAccelFactor: FULL_PHYSICAL_CONDITION.accelFactor,
       dashOverride: null,
+      dodgeOverride: dodgeResult.dodgeOverride,
     });
     midStepEffect?.(this.beyBody);
     this.spin.tick(this.beyBody, FIXED_DELTA_SECONDS, FULL_PHYSICAL_CONDITION, grounded);
@@ -85,6 +94,7 @@ export class TestBeyHarness {
       spin: this.spin.getSnapshot(this.beyBody),
       grounded,
       driftState: driftResult.driftState,
+      dodgeState: dodgeResult.state,
     };
   }
 

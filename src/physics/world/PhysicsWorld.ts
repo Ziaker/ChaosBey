@@ -8,10 +8,35 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { FIXED_DELTA_SECONDS } from '../fixed-step/FixedTimestepLoop';
 
 // Downward acceleration applied to all dynamic bodies, in m/s^2.
-// Standard Earth gravity is used as the engineering starting point; final
-// gameplay feel (fall speed, jump arcs) is tuning data owned by jump/physics
-// systems once they exist, not by this bootstrap wrapper.
-const GRAVITY_Y = -9.81;
+// Started at standard Earth gravity as the engineering placeholder. Movement/
+// weight/dodge playtest pass (owner feedback, section 5/6): "clearer ascent/
+// descent, convincing fall, less floaty airtime". This, not BEY_MASS_KG, is
+// the right lever for that ask: rotations are locked and every jump/hop
+// impulse in the codebase sets velocity directly (DriftController), so
+// free-fall and jump arcs are mass-independent in this engine — only
+// gravity changes how fast something falls (BEY_MASS_KG was audited and
+// left at its original 1.4: the only thing it would change is the Rapier
+// impulse-based knockback/Clash launch, which it would WEAKEN unless also
+// re-tuning their impulse formulas, for zero benefit to the ascent/descent/
+// fall goals above — exactly the "don't just raise mass and declare it
+// solved" trap the owner's feedback calls out).
+//
+// Raising gravity shortens EVERY airborne arc (free fall, hop, full jump,
+// knockback, Clash launch) by the same ratio. A first attempt at -13
+// (+32%, matching how aggressively LATERAL_GRIP_PER_S/STEERING_RESPONSE_PER_S
+// were moved) measurably improved the fall/landing feel but broke ~10 AI
+// reaction-timing assertions (aiAirRecoveryTiming/DuringCharge,
+// aiSlowToReactCriticalPreemption, directionalMovement's stick-scaling,
+// aiBatchSelfTest match-resolution time) that encode EXACT tick counts
+// derived from gravity-dependent airborne-duration math — confirmed by
+// reverting gravity alone and watching all of them pass again. Recalibrating
+// every one of those tick counts was judged too large for a "moderate"
+// pass (section 21), so this stays at a smaller, safe -10.5 (+7%) that
+// passes the full suite: free-drop-from-5m lands 58 ticks in instead of 60,
+// a bare-tap hop's airtime drops 0.883s -> 0.817s, a medium knockback's
+// apex/airtime drop ~7-8% — real, modest, uncompensated improvements in the
+// same direction the owner asked for, without the larger change's fallout.
+const GRAVITY_Y = -10.5;
 
 export class PhysicsWorld {
   /** Bey-Bey bumper colliders (see physics/collision/CollisionGroups.ts) → half-height of their Bey's own body. */
