@@ -28,8 +28,8 @@ import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../../../src/bey/archety
 import { createBey, type Bey } from '../../../../src/bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../../../src/bey/core/BeyTuning';
 import type { BeyVisual } from '../../../../src/bey/procedural-model/createBeyMesh';
-import { buildImpactEventsForTick } from '../../../../src/camera/ImpactEvents';
-import { CLASH_RESOLVED_MAGNITUDE } from '../../../../src/camera/ImpactMagnitude';
+import { buildImpactEventsForTick } from '../../../../src/app/simulation/impact/ImpactEvents';
+import { CLASH_RESOLVED_MAGNITUDE } from '../../../../src/app/simulation/impact/ImpactMagnitude';
 import { AttackState } from '../../../../src/combat/attacks/AttackController';
 import { ClashOutcome, ClashState } from '../../../../src/combat/clash/ClashController';
 import { NullAiMashSource } from '../../../../src/combat/clash/ClashMash';

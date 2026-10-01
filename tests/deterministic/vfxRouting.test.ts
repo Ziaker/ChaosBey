@@ -7,7 +7,7 @@
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
-import type { ImpactEvent, ImpactEventKind } from '../../src/camera/ImpactEvents';
+import type { ImpactEvent, ImpactEventKind } from '../../src/app/simulation/impact/ImpactEvents';
 import { routeImpactEventToVfx } from '../../src/vfx/VfxRouting';
 
 const POS = { x: 0, y: 0, z: 0 };

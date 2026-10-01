@@ -28,7 +28,7 @@ export interface DebugOverlayState {
   desiredMoveIntent: Vec2 | null;
   /** "Directional" or "Classic" (PlayerSettings.controlScheme as actually wired, not just the saved setting). */
   controlSchemeLabel: string;
-  /** The camera's current yaw in degrees, shown ONLY as a side-by-side diagnostic next to desiredMoveIntent — proves the two never move together. Null when the player's side isn't running DirectionalController (e.g. Classic, or an AI/scripted side). */
+  /** The camera's current yaw in degrees, shown ONLY as a display-only diagnostic next to desiredMoveIntent — the camera is downstream presentation and the two must never move together. Null when the player's side isn't running DirectionalController (e.g. Classic, or an AI/scripted side). */
   cameraYawDeg: number | null;
   /** Owner of the 'first' (player) side's controller this tick: 'HUMAN' or 'AI' (Debug Lab can assign either side to AI). */
   firstControllerOwner: 'HUMAN' | 'AI';

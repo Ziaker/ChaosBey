@@ -8,8 +8,8 @@ import { describe, expect, it } from 'vitest';
 import type { ActiveHitbox } from '../../src/combat/attacks/AttackController';
 import type { HitEvent } from '../../src/combat/hit-detection/HitDetection';
 import type { CombatEvent } from '../../src/app/simulation/tickMatch';
-import { buildImpactEventsForTick, type ImpactEventsResultSubset } from '../../src/camera/ImpactEvents';
-import { KO_MAGNITUDE, RING_OUT_MAGNITUDE, STABILITY_BREAK_MAGNITUDE } from '../../src/camera/ImpactMagnitude';
+import { buildImpactEventsForTick, type ImpactEventsResultSubset } from '../../src/app/simulation/impact/ImpactEvents';
+import { KO_MAGNITUDE, RING_OUT_MAGNITUDE, STABILITY_BREAK_MAGNITUDE } from '../../src/app/simulation/impact/ImpactMagnitude';
 
 const FIRST_POS = { x: 1, y: 0, z: 2 };
 const SECOND_POS = { x: -3, y: 0, z: 4 };

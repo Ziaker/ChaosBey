@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HitstopClock } from '../../src/app/simulation/Hitstop';
-import { CAMERA_HITSTOP_DURATION_PER_MAGNITUDE_S, CAMERA_HITSTOP_MAX_DURATION_S, CAMERA_HITSTOP_MIN_MAGNITUDE } from '../../src/camera/CameraTuning';
+import { HITSTOP_DURATION_PER_MAGNITUDE_S, HITSTOP_MAX_DURATION_S, HITSTOP_MIN_MAGNITUDE } from '../../src/app/simulation/HitstopTuning';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { SeededRng } from '../../src/rng/SeededRng';
 
@@ -13,8 +13,8 @@ import { SeededRng } from '../../src/rng/SeededRng';
 function preM9CameraHitstop(remainingS: number, magnitudes: readonly number[], dt: number): number {
   let r = remainingS;
   for (const magnitude of magnitudes) {
-    if (magnitude >= CAMERA_HITSTOP_MIN_MAGNITUDE) {
-      const duration = Math.min(CAMERA_HITSTOP_MAX_DURATION_S, magnitude * CAMERA_HITSTOP_DURATION_PER_MAGNITUDE_S);
+    if (magnitude >= HITSTOP_MIN_MAGNITUDE) {
+      const duration = Math.min(HITSTOP_MAX_DURATION_S, magnitude * HITSTOP_DURATION_PER_MAGNITUDE_S);
       r = Math.max(r, duration);
     }
   }
@@ -35,8 +35,8 @@ describe('HitstopClock', () => {
     }
     expect(clock.isFreezing()).toBe(false);
     expect(clock.getRemainingS()).toBe(0);
-    // Capped at CAMERA_HITSTOP_MAX_DURATION_S: never a long lock-up.
-    expect(frozenTicks).toBeLessThanOrEqual(Math.ceil(CAMERA_HITSTOP_MAX_DURATION_S / FIXED_DELTA_SECONDS));
+    // Capped at HITSTOP_MAX_DURATION_S: never a long lock-up.
+    expect(frozenTicks).toBeLessThanOrEqual(Math.ceil(HITSTOP_MAX_DURATION_S / FIXED_DELTA_SECONDS));
   });
 
   it('a sub-hitstop magnitude (e.g. a clean dodge, 0.2) never freezes gameplay', () => {

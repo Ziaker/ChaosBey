@@ -12,7 +12,7 @@
 // by this routing — this module only decides the *visual* response.
 // ============================================================
 
-import type { ImpactEvent } from '../camera/ImpactEvents';
+import type { ImpactEvent } from '../app/simulation/impact/ImpactEvents';
 
 export type VfxRoute = 'spark' | 'landing' | 'none';
 

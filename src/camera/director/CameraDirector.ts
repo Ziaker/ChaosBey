@@ -166,11 +166,12 @@ export interface DirectorOptions {
    * to select (a once-per-round held angle, and the fix 5–7 over-the-
    * shoulder `ShoulderRig` that kept the eye locked to `baseYaw + PI`):
    * both existed only to keep the screen meaning of the arrows stable while
-   * Directional input read the camera's yaw. Fix 7 already made
-   * `screenToWorld` a fixed, camera-free mapping, so that reason is gone;
-   * keeping either lock after fix 7 left the in-game camera unable to do
-   * what the GDD (and the lab) always specified — see
-   * docs/ai/m11-status.md, "Owner playtest fix 8".
+   * input depended on the camera. Input no longer depends on the camera at
+   * all (docs/design-decisions/camera-gameplay-separation.md: the camera
+   * adapts to the Bey, never the reverse), so that reason is gone; keeping
+   * either lock left the in-game camera unable to do what the GDD (and the
+   * lab) always specified — see docs/ai/m11-status.md, "Owner playtest
+   * fix 8".
    */
   readonly arena?: { readonly containRadiusM: number };
 }

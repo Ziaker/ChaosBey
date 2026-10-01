@@ -2,10 +2,9 @@
 // PLAYER CONTROL SCHEME — 6 HUMAN CONTROL SCENARIOS (owner playtest
 // "Fix 6", 2026-09-30)
 // Six named scenarios the owner asked to see proven, on top of the
-// architectural boundary test (inputCameraBoundary.test.ts) and the Twin
-// Simulation Test (twinSimulationCameraIndependence.test.ts): each drives
-// MovementController directly (Classic/Bey-relative — the player default,
-// see PlayerSettings.ts) through TestBeyHarness, side by side, once with a
+// architectural boundary test (inputCameraBoundary.test.ts) and the camera/
+// gameplay separation suite (cameraGameplaySeparation.test.ts): each drives
+// MovementController directly (Classic/Bey-relative) through TestBeyHarness, side by side, once with a
 // REAL, independently-orbiting CameraRig ticked alongside every step (fed
 // the Bey's own live position, with a synthetic opponent circling it so
 // the camera genuinely sweeps a large orbit), once with no camera object
@@ -13,8 +12,8 @@
 // is a separate object graph that nothing in this pipeline reads.
 //
 // Scenario 6 (Flat + Bowl A/B/C) is covered by
-// twinSimulationCameraIndependence.test.ts, which already runs its full
-// comparison on all four arena floors; TestBeyHarness here always spawns
+// cameraGameplaySeparation.test.ts, which runs its full comparison on the
+// flat floor and several bowls; TestBeyHarness here always spawns
 // on the flat floor (createArenaColliders' default geometry), so it is not
 // duplicated in this file.
 // ============================================================
@@ -127,12 +126,12 @@ describe('Scenario 1: hold ↑ through a wide, continuous camera orbit — the B
   // far more ticks than is practical here (the camera's own orbit
   // easing/damping caps how fast it can follow even a fast-orbiting synthetic
   // opponent) — a real, continuous 360°+ sweep across a real 30 s fight is
-  // already covered by directionalCameraIndependenceIntegration.test.ts's
+  // already covered by cameraGameplaySeparation.test.ts's
   // "fundamental test" and by the Playwright smoke suite
   // (playerDirectionalControl.spec.ts). This scenario instead proves the
   // same zero-influence property tick by tick while the camera is
   // genuinely, continuously moving (tens of degrees, not a static camera's
-  // near-zero movement — see twinSimulationCameraIndependence.test.ts).
+  // near-zero movement — see cameraGameplaySeparation.test.ts).
   for (const preset of PRESET_IDS) {
     it(`preset ${preset}: identical acceleration/velocity/position whether or not a real orbiting camera runs alongside`, async () => {
       const ticks = 180;

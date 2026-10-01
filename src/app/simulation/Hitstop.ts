@@ -7,7 +7,7 @@
 //
 // The rule and the arithmetic are the ones CombatCameraController applied
 // before M9, so live play freezes on exactly the same ticks:
-// - every impact of magnitude >= CAMERA_HITSTOP_MIN_MAGNITUDE sets the
+// - every impact of magnitude >= HITSTOP_MIN_MAGNITUDE sets the
 //   remaining time to max(remaining, min(MAX, magnitude * PER_MAGNITUDE));
 // - the remaining time then decays by the fixed delta on every tick,
 //   frozen or not, so the freeze always ends;
@@ -15,7 +15,7 @@
 //   hitstop does not report a freeze on those ticks.
 // ============================================================
 
-import { CAMERA_HITSTOP_DURATION_PER_MAGNITUDE_S, CAMERA_HITSTOP_MAX_DURATION_S, CAMERA_HITSTOP_MIN_MAGNITUDE } from '../../camera/CameraTuning';
+import { HITSTOP_DURATION_PER_MAGNITUDE_S, HITSTOP_MAX_DURATION_S, HITSTOP_MIN_MAGNITUDE } from './HitstopTuning';
 import type { CanonicalRecord } from '../../replay/state/CanonicalValue';
 
 export class HitstopClock {
@@ -37,8 +37,8 @@ export class HitstopClock {
    */
   advance(impactMagnitudes: readonly number[], clashActive: boolean, fixedDeltaSeconds: number): void {
     for (const magnitude of impactMagnitudes) {
-      if (magnitude >= CAMERA_HITSTOP_MIN_MAGNITUDE) {
-        const duration = Math.min(CAMERA_HITSTOP_MAX_DURATION_S, magnitude * CAMERA_HITSTOP_DURATION_PER_MAGNITUDE_S);
+      if (magnitude >= HITSTOP_MIN_MAGNITUDE) {
+        const duration = Math.min(HITSTOP_MAX_DURATION_S, magnitude * HITSTOP_DURATION_PER_MAGNITUDE_S);
         this.remainingS = Math.max(this.remainingS, duration);
       }
     }

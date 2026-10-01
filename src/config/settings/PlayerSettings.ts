@@ -13,23 +13,17 @@
 import { DEFAULT_QUALITY_PRESET, QualityPreset } from '../runtime/QualityPreset';
 
 /**
- * How the arrows / stick drive the Bey (M11, default revised 2026-10-01 —
- * "Fix 7" of the M11 playtest round, see screenDirection.ts's header for
- * the full history, including why "Fix 6"'s classic-by-default didn't
- * actually solve this).
- * - directional (default): camera-relative, read ONCE per gesture
- *   ("Fix 9") — ↑ goes away from the camera, →/← to its right/left, ↓
- *   toward it, as the camera is on the tick the player starts to move;
- *   that yaw stays frozen until every direction is released, so the
- *   automatic camera orbiting never steers the Bey ("só o jogador move o
- *   jogador"). The next press re-reads the camera, so the screen still
- *   reads right.
+ * How the arrows / stick drive the Bey. Neither scheme depends on the
+ * presentation camera: the camera is downstream of gameplay and never
+ * moves the Bey (docs/design-decisions/camera-gameplay-separation.md).
+ * - directional (default): the arrows are resolved in a gameplay-owned
+ *   control reference (input/directional/ControlReference.ts) — today the
+ *   fixed arena frame (↑ = world +Z, → = world +X). Which reference the
+ *   default uses is a PENDING OWNER DECISION; the camera is not a
+ *   candidate.
  * - classic: Bey-relative, kart-like — ←/→ steer the Bey's own heading,
  *   ↑/↓ accelerate/decelerate along it (turn rate, momentum, grip all
- *   still apply; this is not a snap-to-input). No camera dependency at
- *   all. Kept as a selectable option for a player who prefers it — proven
- *   in a real browser (2026-10-01) to still look "backwards" on screen
- *   about as often as it looks right, since this camera isn't a chase cam.
+ *   still apply; this is not a snap-to-input).
  */
 export type ControlScheme = 'directional' | 'classic';
 export const CONTROL_SCHEMES: readonly ControlScheme[] = ['directional', 'classic'];

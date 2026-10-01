@@ -12,7 +12,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import type { WorldPositionM } from '../camera/ImpactEvents';
+import type { WorldPositionM } from '../app/simulation/impact/ImpactEvents';
 import { LANDING_RING_BASE_RADIUS_M, LANDING_RING_COLOR_HEX, LANDING_RING_LIFETIME_S, LANDING_RING_MAX_EXTRA_RADIUS_M } from './VfxTuning';
 
 // A unit ring (outer radius 1) — updateLandingBurst scales it up to the

@@ -152,7 +152,7 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('Heading (physical)', snapshot ? `${f(snapshot.movement.headingRad * RAD_TO_DEG)}°` : '—'),
         ...floorRows(bey.arenaFloor, bey.body.translation()),
         row('Desired input (world)', desiredInput(session.getLastActions(side)?.moveIntent)),
-        row('Camera yaw (Directional reads this on purpose, "Fix 7"; Classic never does)', cameraYawDiagnostic(session)),
+        row('Camera yaw (presentation only — never read by input or gameplay)', cameraYawDiagnostic(session)),
         row('Turn rate', `${f(movementDebug.turnRateRadPerS * RAD_TO_DEG)}°/s`),
       ],
     },
@@ -468,12 +468,11 @@ function desiredInput(intent: { x: number; z: number } | undefined): string {
 }
 
 /**
- * Read directly from CameraDirector's own output, never through any
- * controller — the same camera-free path DirectionalController.ts and
- * MatchRunner.ts use to feed the controller its own `cameraYaw` source,
- * so this row always shows the real value, whether or not it's currently
- * expected to influence Desired input above (Directional reads it on
- * purpose, "Fix 7"; Classic never does — see screenDirection.ts's header).
+ * Display-only readout of the camera's own output. The camera is
+ * downstream presentation (docs/design-decisions/camera-gameplay-
+ * separation.md): this row observes it for diagnostics and never hands the
+ * value back to input or the simulation — it should never move with the
+ * Desired input row above.
  */
 function cameraYawDiagnostic(session: MatchSession): string {
   const camera = session.getLastCameraOutput();

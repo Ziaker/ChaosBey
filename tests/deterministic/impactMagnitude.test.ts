@@ -18,7 +18,7 @@ import {
   knockbackMagnitude,
   landingMagnitude,
   movementImpactMagnitude,
-} from '../../src/camera/ImpactMagnitude';
+} from '../../src/app/simulation/impact/ImpactMagnitude';
 
 describe('knockbackMagnitude', () => {
   it('is 0 for zero force and saturates at 1 well beyond the reference max', () => {

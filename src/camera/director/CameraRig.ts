@@ -22,6 +22,15 @@
 //
 // Presentation only: nothing here feeds the simulation, the replay or the
 // state hash (camera-approval.md 8).
+//
+//   Camera is downstream presentation. It may observe gameplay; it may
+//   never mutate or causally influence gameplay.
+//
+// Offscreen rescue, knockback follow, look-ahead, side switching, pullback
+// and every other framing aid move THE CAMERA to keep the Beys in frame;
+// none of them may move, steer, brake, push or reposition a Bey, nor
+// change any gameplay input or value
+// (docs/design-decisions/camera-gameplay-separation.md).
 // ============================================================
 
 import { CameraDirector, type CameraMode, type DirectorOptions, type DirectorOutput } from './CameraDirector';
@@ -125,6 +134,15 @@ export interface CameraRigOutput {
   /** The player's director output (for the debug readouts). */
   readonly player: DirectorOutput;
 }
+
+/**
+ * The part of a camera MatchSession talks to: it OBSERVES a frame of the
+ * fight (gameplay → camera) and returns where to put the eye. Nothing it
+ * returns is ever read back by the simulation. MatchSession accepts any
+ * implementation (or none) so tests can swap in a frozen, hostile or absent
+ * camera and prove gameplay is identical regardless.
+ */
+export type CameraObserver = Pick<CameraRig, 'tick' | 'setPreset' | 'getPreset' | 'setAspect'>;
 
 export class CameraRig {
   private readonly directors: Record<PresetId, CameraDirector>;

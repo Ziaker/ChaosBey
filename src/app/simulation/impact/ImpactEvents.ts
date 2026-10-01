@@ -11,8 +11,8 @@
 // module, so it stays trivially unit-testable with hand-built fixtures.
 // ============================================================
 
-import type { CombatEvent } from '../app/simulation/tickMatch';
-import type { HitEvent } from '../combat/hit-detection/HitDetection';
+import type { CombatEvent } from '../tickMatch';
+import type { HitEvent } from '../../../combat/hit-detection/HitDetection';
 import {
   DODGED_MAGNITUDE,
   KO_MAGNITUDE,

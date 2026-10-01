@@ -7,7 +7,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import type { WorldPositionM } from '../camera/ImpactEvents';
+import type { WorldPositionM } from '../app/simulation/impact/ImpactEvents';
 import { TRAIL_FULL_OPACITY_SPEED_MPS, TRAIL_MAX_OPACITY, TRAIL_MAX_POINTS, TRAIL_SPEED_THRESHOLD_MPS } from './VfxTuning';
 
 export class SpeedTrail {

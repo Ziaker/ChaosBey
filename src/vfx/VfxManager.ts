@@ -14,7 +14,7 @@
 
 import * as THREE from 'three';
 import { DEFAULT_PARTICLE_PROFILE, type BeyParticleProfile } from '../bey/archetype/BeyParticleProfile';
-import type { ImpactEvent, WorldPositionM } from '../camera/ImpactEvents';
+import type { ImpactEvent, WorldPositionM } from '../app/simulation/impact/ImpactEvents';
 import { createLandingBurst, disposeLandingBurst, updateLandingBurst, type ActiveLandingBurst } from './LandingBurstVfx';
 import { createSparkBurst, disposeSparkBurst, updateSparkBurst, type ActiveSparkBurst } from './SparkBurstVfx';
 import { SpeedLines } from './SpeedLinesVfx';

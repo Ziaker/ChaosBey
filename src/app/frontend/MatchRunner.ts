@@ -24,7 +24,8 @@ import type { AttackProfileSettingsPanel } from '../../debug/settings/AttackProf
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { KeyboardController } from '../../input/devices/KeyboardController';
 import { CombinedController, GamepadController } from '../../input/devices/GamepadController';
-import { DirectionalController, type DirectionalDebug } from '../../input/directional/DirectionalController';
+import { createPlayerControl } from '../../input/directional/createPlayerControl';
+import type { DirectionalController, DirectionalDebug } from '../../input/directional/DirectionalController';
 import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ControlScheme } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
@@ -133,24 +134,22 @@ export class MatchRunner {
   private static async create(deps: MatchRunnerDeps, start: MatchRunnerStart, events: MatchRunnerEvents): Promise<MatchRunner> {
     // `session` doesn't exist yet (built below): both closures below read it
     // through this forward reference once it's assigned further down.
-    let sessionForCameraYaw: MatchSession | null = null;
+    let sessionForJumpBuffer: MatchSession | null = null;
     // Attached only while the match runs, so a key still down from a menu
     // (Enter/Z to confirm) never reaches the match as a held input. The
     // player drives with the keyboard and/or the first gamepad. Blur/focus
     // loss cancels a pending jump-input-buffer press the same moment
     // currentlyDown/the hold buffer are cleared (GDD 131).
-    const keyboard = new KeyboardController(() => sessionForCameraYaw?.cancelBufferedJumps());
+    const keyboard = new KeyboardController(() => sessionForJumpBuffer?.cancelBufferedJumps());
     const gamepad = new GamepadController();
-    // Camera-relative directional control: the player default
-    // (PlayerSettings.ts, "Fix 7" — see DirectionalController.ts's and
-    // screenDirection.ts's headers). The camera reaches it only as a
-    // number (radians), read from the session's own camera output once
-    // `session` exists below — never a camera type/import.
-    const directional = new DirectionalController(new CombinedController([keyboard, gamepad]), {
-      cameraYaw: () => ((sessionForCameraYaw?.getLastCameraOutput()?.yawDeg ?? 0) * Math.PI) / 180,
+    // The player's control chain, built by the same factory the Debug Lab
+    // and the camera/gameplay separation tests use. Its frame of reference
+    // is gameplay-owned (input/directional/ControlReference.ts): the
+    // camera is downstream presentation and never reaches it.
+    const directional = createPlayerControl(new CombinedController([keyboard, gamepad]), {
+      directional: (start.controlScheme ?? DEFAULT_PLAYER_SETTINGS.controlScheme) === 'directional',
       stick: () => gamepad.getStick(),
     });
-    directional.setEnabled((start.controlScheme ?? DEFAULT_PLAYER_SETTINGS.controlScheme) === 'directional');
     const session = await MatchSession.create({
       scene: deps.appRenderer.scene,
       camera: deps.appRenderer.camera,
@@ -165,7 +164,7 @@ export class MatchRunner {
       arenaTheme: start.arenaTheme,
       cameraPreset: start.presentation?.cameraPreset,
     });
-    sessionForCameraYaw = session;
+    sessionForJumpBuffer = session;
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
     deps.stateMachine.transitionTo(GameState.Combat);
     const runner = new MatchRunner(session, keyboard, gamepad, directional, deps, events);

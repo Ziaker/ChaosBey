@@ -96,6 +96,17 @@ Direções do Motion Lab preservadas:
 
 ---
 
+## 3.1 OWNER OVERRIDE (2026-10-01) — a câmera nunca move o Bey
+
+**Camera is downstream presentation. It may observe gameplay; it may never mutate or causally influence gameplay.**
+
+- Escopo: toda a cadeia input → movimento → física → combate. Vale direta e indiretamente (um `number` vindo da câmera continua sendo dado da câmera).
+- Efeito sobre decisões anteriores: **supersede** qualquer texto/fix ("Fix 5/6/7/9", `CameraYawLatch`, `gestureYaw`, "camera-relative como padrão da indústria") que fizesse o controle ler a câmera.
+- Detalhes, auditoria e guards: `camera-gameplay-separation.md`.
+- **Pendente** (decisão de design, não da invariante): qual referencial de gameplay o Directional usa — arena fixa (interino) ou relativo ao Bey. Ver §13.7.
+
+---
+
 # 4. Beys — FECHADO NO QUE JÁ FOI APROVADO
 
 ## 4.1 Roster
@@ -425,6 +436,7 @@ Isto é uma pendência estreita de UI/legibilidade, não uma licença para repro
 
 ## 13.7 Outros
 
+- **referencial das setas no modo Directional** (arena fixa — interino — vs. relativo ao Bey; nunca a câmera): ver `camera-gameplay-separation.md`;
 - identidade individual de partículas/trails por Bey;
 - pacote específico de pulo / ataque aéreo / air recovery onde o VFX aprovado não cobrir o comportamento pretendido;
 - bloom/chromatic aberration e Post-FX final, se o owner decidir usar;
