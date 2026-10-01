@@ -16,7 +16,7 @@ async function openDebugLab(page: Page, search: string, errors: string[]): Promi
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession()?.getTickIndex() ?? 0), { timeout: 20_000 }).toBeGreaterThan(120);
 }
 
-test('?pfx=all, no flags and a mistyped flag all start the same match with the placeholder visuals and no console errors', async ({ browser }) => {
+test('?pfx=all, no flags and a mistyped flag all start the same match; only newBeyVisuals swaps the picture; no console errors', async ({ browser }) => {
   const seen: { stats: unknown; ids: string[]; features: Record<string, boolean>; errors: string[] }[] = [];
   for (const search of ['', '&pfx=all', '&pfx=notAFeature']) {
     const context = await browser.newContext();
@@ -38,7 +38,7 @@ test('?pfx=all, no flags and a mistyped flag all start the same match with the p
   for (const run of seen) {
     expect(run.errors).toEqual([]);
     expect(run.stats).toMatchObject({ systems: 0, systemErrors: 0 });
-    expect(run.ids).toEqual(['placeholder:attack-prototype', 'placeholder:defense-prototype']);
+    expect(run.ids).toEqual(run.features.newBeyVisuals ? ['concept:attack-a', 'concept:defense-a'] : ['placeholder:attack-prototype', 'placeholder:defense-prototype']);
   }
   expect(Object.values(seen[0]!.features).some(Boolean)).toBe(false);
   expect(Object.values(seen[1]!.features).every(Boolean)).toBe(true);

@@ -1,0 +1,125 @@
+// ============================================================
+// BEY VISUALS (batch 1): the ported four-piece concepts in the game
+// The lab's own checks (prototypes/bey-visual-concepts) keep passing in
+// beyVisualConcepts.test.ts. These prove the port: the nine concepts build in
+// the game's scale and placement, stand on THIS Bey's collider, answer VFX
+// anchors exactly, register as visuals without touching a gameplay definition,
+// and the three archetypes get their provisional concept only when
+// newBeyVisuals is on.
+// ============================================================
+
+import * as THREE from 'three';
+import { describe, expect, it } from 'vitest';
+import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
+import type { BeyDefinition } from '../../src/bey/archetype/BeyDefinition';
+import { CONCEPT_BEY_SCALE, createConceptBeyVisual } from '../../src/bey/visual/conceptBeyVisual';
+import { PROVISIONAL_ARCHETYPE_VISUALS, conceptVisualId, ensureApprovedBeyVisualsRegistered } from '../../src/bey/visual/approvedBeyVisuals';
+import { CONCEPTS } from '../../src/bey/visual/concepts/conceptDefinitions';
+import {
+  BeyVisualAnchors,
+  BeyVisualRegistry,
+  PRESENTATION_FEATURES_OFF,
+  resolveBeyVisualDefinition,
+  resolvePresentationFeatures,
+  collectSceneStats,
+} from '../../src/presentation';
+
+const ARCHETYPES: readonly BeyDefinition[] = [ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE];
+const gameplayJson = (d: BeyDefinition): string => JSON.stringify({ id: d.id, physical: d.physical, ratings: d.ratings, handling: d.handling, attack: d.attack, particle: d.particle, audio: d.audio });
+
+describe('the nine approved concepts as game visuals', () => {
+  it.each(CONCEPTS.map((c) => c.id))('%s builds at game scale with its tip at the bottom of each archetype collider', (id) => {
+    const concept = CONCEPTS.find((c) => c.id === id)!;
+    for (const gameplay of ARCHETYPES) {
+      const visual = createConceptBeyVisual(concept, gameplay);
+      visual.group.updateWorldMatrix(true, true);
+      const box = new THREE.Box3().setFromObject(visual.group);
+      expect(Number.isFinite(box.min.y + box.max.y + box.min.x + box.max.x)).toBe(true);
+      // Tip contact point = bottom of this Bey's own collider (the rule the placeholder mesh follows).
+      expect(box.min.y).toBeCloseTo(-gameplay.physical.colliderHalfHeightM, 1);
+      expect(box.min.y).toBeGreaterThan(-gameplay.physical.colliderHalfHeightM - 0.05);
+      // About 1.3 m wide, like the labs' Beys (a 3.5–7 unit ring at 0.24 m per unit).
+      const width = Math.max(box.max.x - box.min.x, box.max.z - box.min.z);
+      expect(width).toBeGreaterThan(3.5 * CONCEPT_BEY_SCALE);
+      expect(width).toBeLessThan(8 * CONCEPT_BEY_SCALE);
+      // The four pieces survive the wrapping, under the spin group.
+      expect(visual.spinGroup.parent).toBe(visual.group);
+      const names: string[] = [];
+      visual.group.traverse((o) => { if (['driver', 'disc', 'ring', 'topLayer'].includes(o.name)) names.push(o.name); });
+      expect(names.sort()).toEqual(['disc', 'driver', 'ring', 'topLayer']);
+    }
+  });
+
+  it('gives exact anchors from the named pieces: tip under the body, top layer above the ring, rim at the ring radius', () => {
+    for (const concept of CONCEPTS) {
+      const gameplay = ATTACK_ARCHETYPE;
+      const visual = createConceptBeyVisual(concept, gameplay);
+      const anchors = new BeyVisualAnchors(visual);
+      const tip = anchors.getLocal('tip')!;
+      const top = anchors.getLocal('topLayer')!;
+      const rim = anchors.getLocal('ringRim')!;
+      expect(tip.y).toBeCloseTo(-gameplay.physical.colliderHalfHeightM, 1);
+      expect(top.y).toBeGreaterThan(rim.y);
+      expect(rim.y).toBeGreaterThan(tip.y);
+      expect(rim.x).toBeGreaterThan(0.25); // a real ring radius in metres
+      const ring = visual.group.getObjectByName('ring')!;
+      const ringBox = new THREE.Box3().setFromObject(ring);
+      expect(rim.y).toBeCloseTo((ringBox.min.y + ringBox.max.y) / 2, 5);
+    }
+  });
+
+  it('is the same model whichever archetype wears it, only re-seated on its own collider', () => {
+    const concept = CONCEPTS[0]!;
+    const widths = ARCHETYPES.map((gameplay) => {
+      const box = new THREE.Box3().setFromObject(createConceptBeyVisual(concept, gameplay).group);
+      return +(box.max.x - box.min.x).toFixed(6);
+    });
+    expect(new Set(widths).size).toBe(1);
+  });
+});
+
+describe('registration and the provisional mapping', () => {
+  it('registers all nine, idempotently, and assigns only the three real archetypes', () => {
+    const registry = new BeyVisualRegistry();
+    ensureApprovedBeyVisualsRegistered(registry);
+    ensureApprovedBeyVisualsRegistered(registry);
+    expect(registry.list().map((v) => v.id).sort()).toEqual(CONCEPTS.map(conceptVisualId).sort());
+    expect(registry.list().every((v) => v.status === 'concept')).toBe(true);
+    for (const definition of ARCHETYPES) expect(registry.assignedVisualId(definition.id)).toBe(PROVISIONAL_ARCHETYPE_VISUALS[definition.id]);
+    expect(PROVISIONAL_ARCHETYPE_VISUALS).toEqual({ 'attack-prototype': 'concept:attack-a', 'defense-prototype': 'concept:defense-a', 'stamina-prototype': 'concept:stamina-a' });
+    // The other six stay visual-only: no gameplay definition is assigned to them.
+    const assigned = new Set(Object.values(PROVISIONAL_ARCHETYPE_VISUALS));
+    expect(CONCEPTS.map(conceptVisualId).filter((id) => !assigned.has(id))).toHaveLength(6);
+  });
+
+  it('describes each concept with the four approved pieces', () => {
+    const registry = new BeyVisualRegistry();
+    ensureApprovedBeyVisualsRegistered(registry);
+    for (const visual of registry.list()) {
+      expect(Object.keys(visual.pieces ?? {}).sort()).toEqual(['disc', 'driver', 'ring', 'topLayer']);
+    }
+  });
+
+  it('is used only with newBeyVisuals on; flag off keeps the legacy placeholder even when registered', () => {
+    const registry = new BeyVisualRegistry();
+    ensureApprovedBeyVisualsRegistered(registry);
+    const on = resolvePresentationFeatures({ newBeyVisuals: true });
+    for (const definition of ARCHETYPES) {
+      expect(resolveBeyVisualDefinition(definition, PRESENTATION_FEATURES_OFF, registry).id).toBe(`placeholder:${definition.id}`);
+      expect(resolveBeyVisualDefinition(definition, resolvePresentationFeatures({ hybridVfx: true }), registry).status).toBe('placeholder');
+      expect(resolveBeyVisualDefinition(definition, on, registry).id).toBe(PROVISIONAL_ARCHETYPE_VISUALS[definition.id]);
+    }
+  });
+
+  it('never changes a gameplay definition: registering, resolving and building leave it byte-identical', () => {
+    const before = ARCHETYPES.map(gameplayJson);
+    const registry = new BeyVisualRegistry();
+    ensureApprovedBeyVisualsRegistered(registry);
+    const on = resolvePresentationFeatures({ newBeyVisuals: true });
+    for (const definition of ARCHETYPES) {
+      const visual = resolveBeyVisualDefinition(definition, on, registry).create(definition);
+      expect(collectSceneStats(visual.group).meshes).toBeGreaterThanOrEqual(10);
+    }
+    expect(ARCHETYPES.map(gameplayJson)).toEqual(before);
+  });
+});

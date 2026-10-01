@@ -117,8 +117,8 @@ export function resolveBeyVisualDefinition(gameplay: BeyDefinition, features: Pr
  * local space (so they follow position, tilt and wobble, not the spin about the
  * vertical axis). Declared anchors are used as given; the rest come from the
  * built mesh's bounds, which is exact for tip and topLayer and an approximation
- * for ringRim (the widest radius, three quarters of the way up). A final Bey
- * visual declares its own exact anchors.
+ * for ringRim (the widest radius, three quarters of the way up); a visual built
+ * from the approved named pieces (`ring`, `topLayer`) gets them exactly.
  */
 export class BeyVisualAnchors {
   private readonly offsets: Readonly<Record<VfxAnchorName, LocalOffset>>;
@@ -161,11 +161,18 @@ function deriveAnchorOffsets(visual: BeyVisual): Record<VfxAnchorName, LocalOffs
     const origin = { x: 0, y: 0, z: 0 };
     return { center: origin, tip: origin, topLayer: origin, ringRim: origin };
   }
-  const radius = Math.max(Math.abs(box.min.x), Math.abs(box.max.x), Math.abs(box.min.z), Math.abs(box.max.z));
+  const radiusOf = (b: THREE.Box3): number => Math.max(Math.abs(b.min.x), Math.abs(b.max.x), Math.abs(b.min.z), Math.abs(b.max.z));
+  const boxOf = (name: string): THREE.Box3 | null => {
+    const piece = visual.group.getObjectByName(name);
+    return piece ? new THREE.Box3().setFromObject(piece).applyMatrix4(inverse) : null;
+  };
+  // A visual built from the approved pieces names them (`ring`, `topLayer`): use them, exact.
+  const ring = boxOf('ring');
+  const top = boxOf('topLayer');
   return {
     center: { x: 0, y: 0, z: 0 },
     tip: { x: 0, y: box.min.y, z: 0 },
-    topLayer: { x: 0, y: box.max.y, z: 0 },
-    ringRim: { x: radius, y: box.min.y + 0.75 * (box.max.y - box.min.y), z: 0 },
+    topLayer: { x: 0, y: top && !top.isEmpty() ? top.max.y : box.max.y, z: 0 },
+    ringRim: ring && !ring.isEmpty() ? { x: radiusOf(ring), y: (ring.min.y + ring.max.y) / 2, z: 0 } : { x: radiusOf(box), y: box.min.y + 0.75 * (box.max.y - box.min.y), z: 0 },
   };
 }
