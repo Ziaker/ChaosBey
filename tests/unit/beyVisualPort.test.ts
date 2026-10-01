@@ -38,10 +38,11 @@ describe('the nine approved concepts as game visuals', () => {
       // Tip contact point = bottom of this Bey's own collider (the rule the placeholder mesh follows).
       expect(box.min.y).toBeCloseTo(-gameplay.physical.colliderHalfHeightM, 1);
       expect(box.min.y).toBeGreaterThan(-gameplay.physical.colliderHalfHeightM - 0.05);
-      // About 1.3 m wide, like the labs' Beys (a 3.5–7 unit ring at 0.24 m per unit).
+      // About 1.3-1.4 m wide, like the labs' Beys (absolute metres, so a wrong scale fails).
+      expect(CONCEPT_BEY_SCALE).toBe(0.24);
       const width = Math.max(box.max.x - box.min.x, box.max.z - box.min.z);
-      expect(width).toBeGreaterThan(3.5 * CONCEPT_BEY_SCALE);
-      expect(width).toBeLessThan(8 * CONCEPT_BEY_SCALE);
+      expect(width).toBeGreaterThan(0.9);
+      expect(width).toBeLessThan(1.8);
       // The four pieces survive the wrapping, under the spin group.
       expect(visual.spinGroup.parent).toBe(visual.group);
       const names: string[] = [];
