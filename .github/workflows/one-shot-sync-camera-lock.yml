@@ -1,16 +1,15 @@
 name: One-shot camera lock sync
 
 on:
-  push:
-    branches:
-      - chatgpt/inertial-duel-camera
+  pull_request:
+    types: [synchronize]
 
 permissions:
   contents: write
 
 jobs:
   sync-lock:
-    if: github.event.head_commit.message == 'ops: one-shot sync v0.13.0 lockfile'
+    if: github.event.pull_request.number == 89 && github.head_ref == 'chatgpt/inertial-duel-camera'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
