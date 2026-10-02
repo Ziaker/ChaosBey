@@ -4,7 +4,7 @@ A browser-based 3D spinning-top arena combat simulator, built with Three.js, Rap
 
 **Play it:** https://ziaker.github.io/ChaosBey/ — every merge to `main` is built, tested and deployed there automatically.
 
-**Version:** 0.12.0 (`package.json`). The game shows its version and the commit it was built from in the bottom-right corner of every screen (e.g. `v0.12.0 · 8d51f79`); if it doesn't match the latest `main`, reload with Ctrl+Shift+R (GitHub Pages caches the page for a few minutes).
+**Version:** 0.12.1 (`package.json`). The game shows its version and the commit it was built from in the bottom-right corner of every screen (e.g. `v0.12.1 · 8d51f79`); if it doesn't match the latest `main`, reload with Ctrl+Shift+R (GitHub Pages caches the page for a few minutes).
 
 **Standing rule (every change, no exceptions):** each PR that changes the game, its rules, its content or its tooling must (1) bump the version in `package.json` (and `package-lock.json`) — patch for fixes, minor for features/gameplay/content changes — so the number in the corner of the game moves, and (2) update this README (the **Version** line above and the **Status** / **Latest changes** notes below). A unit test (`tests/unit/versionSync.test.ts`) fails if `package.json`, `package-lock.json` and this README disagree. The rule is also written in `CLAUDE.md` (§4), `docs/design-decisions/README.md` and the PR template.
 
@@ -20,6 +20,7 @@ Those documents distinguish **prototyped**, **approved** and **integrated** work
 
 ## Latest changes
 
+- **0.12.1 — Camera/gameplay causal separation:** the automatic camera is downstream presentation instead of part of the normal movement-input chain. Settings now expose four control references: **Opponent** (default, ↑ toward the opponent), **Classic** (Bey-relative), **Arena** (fixed world axes) and the explicit opt-in **Screen** mode (camera-relative, latched once per gesture). Legacy saved `directional` preferences migrate to Screen so existing users keep the old control feel. Impact-event/hitstop vocabulary also moved out of `src/camera/` into the simulation layer, with AST guards and deterministic runtime tests protecting the boundary. Details: [`docs/design-decisions/camera-gameplay-separation.md`](docs/design-decisions/camera-gameplay-separation.md).
 - **0.12.0 — Arena scale pass:** the stage is 3x wider (floor radius 12 m -> 36 m) and no longer flat: the default floor is a smooth bowl whose centre is 2.5 m below the rim. Ring-out radius 36.9 m, 96 wall segments. Known follow-ups (owner decisions): the in-game camera is still tuned for 12 m, and rounds are longer on the bigger stage. Details: [`docs/ai/arena-scale-pass.md`](docs/ai/arena-scale-pass.md).
 
 ## Status
@@ -29,8 +30,8 @@ Milestones 0–11 are merged and playable end to end, plus several rounds of own
 - **Movement & physics:** force/response-based movement on real Rapier 3D rigid bodies (no position/velocity snapping) — steering inertia, lateral/longitudinal grip and slip, wall/floor bounce with restitution, Bey-vs-Bey collision, a hop → drift → recover cycle (tap `X` for a small hop, hold + steer to drift), a variable-height jump (tap vs. hold shapes short/medium/full height), and a visual spin/tilt/wobble layer decoupled from the physics body's own (locked) rotation.
 - **Combat:** Attack (`Z`, with a Dash Attack charge), Dodge (`C`, including Perfect Dodge), Knockback (impulse-based, reacts to Attack/Defense/Stability/approach angle), Stamina and Stability (with a Stability Break state), ring-out and KO win conditions, and a Clash (simultaneous-attack) mini-mechanic with its own mash-based resolution.
 - **AI:** a full opponent AI (`src/ai/`) with per-archetype personalities and selectable difficulty tiers, used both in the Pregame Simulator and the headless Self Test batches.
-- **Camera:** a single, data-driven `CameraDirector` (`src/camera/director/`) with three owner-approved presets (A/B/C, picked in Settings) — dynamic, opponent-focused framing, automatic orbit and side switching, context modes for high speed/close combat/knockback/Clash/ring-out/finisher. See `docs/design-decisions/camera-approval.md`.
-- **Presentation:** a player flow (Main Menu → Character Select → Pregame Simulator → rounds → Results), a combat HUD (Stamina/Stability/Clash bars), VFX (impact bursts, speed lines, drift skid marks/sparks), gamepad support, Settings (quality, camera preset, shake, pause-on-focus-loss), and three selectable arena floors (flat + bowls A/B/C, both visually and physically — see `docs/design-decisions/visual-prototypes-approval.md`).
+- **Camera:** a single, data-driven `CameraDirector` (`src/camera/director/`) with three owner-approved presets (A/B/C, picked in Settings) — dynamic, opponent-focused framing, automatic orbit and side switching, context modes for high speed/close combat/knockback/Clash/ring-out/finisher. Its output is presentation-only for the normal Opponent/Classic/Arena control schemes; only the explicit Screen control option reads camera yaw, once when a movement gesture starts. See `docs/design-decisions/camera-approval.md` and `docs/design-decisions/camera-gameplay-separation.md`.
+- **Presentation:** a player flow (Main Menu → Character Select → Pregame Simulator → rounds → Results), a combat HUD (Stamina/Stability/Clash bars), VFX (impact bursts, speed lines, drift skid marks/sparks), gamepad support, Settings (quality, camera preset, shake, control reference, pause-on-focus-loss), and three selectable arena floors (flat + bowls A/B/C, both visually and physically — see `docs/design-decisions/visual-prototypes-approval.md`).
 - **Tooling:** a Debug Lab (raw-state inspector, pause/step/speed, live controller switching, scenario presets, replay recording/playback), a browser Self Test (headless AI-vs-AI batches with an anomaly detector), deterministic replays (GDD/M9: a full match replays bit-for-bit from recorded inputs), and portable desktop test builds for Windows and macOS (see below).
 
 Not yet done / still genuinely open: a final Combat HUD visual design, final per-Bey particle/trail identity (only per-archetype exists today), the full 4-piece Bey mesh (a 3-piece engineering placeholder ships today), Intro/Launch presentation, and the other items tracked in `docs/design-decisions/OWNER_DECISIONS_MASTER.md` §13. That file (read via `docs/design-decisions/README.md` first) is the up-to-date source for "what's still pending" — this README summarizes, it doesn't replace it.
@@ -65,7 +66,7 @@ Windows produces a portable folder at `release/win-unpacked/` — copy the whole
 The game URL (`/ChaosBey/`) opens the Main Menu (GDD 56).
 
 - **PLAY** opens the player flow: Character Select (the Bey spins in 3D next to its ratings), the Pregame Simulator (opponent Bey, AI level Rookie / Rival / Ace and style, arena, match length, and advanced rules: wall height and bounce, Clash impact, fixed seed, with a "What to expect" explanation of the opponent), then rounds with the combat HUD until someone wins the match, then Results (Rematch / Change setup / Change Bey / Main Menu). `Esc` (or Start on a pad) pauses; losing window focus pauses too.
-- **SETTINGS** (`?mode=settings`): quality Low / Medium / High, camera shake, fullscreen, pause on focus loss, HUD hints, developer overlay, and the controls.
+- **SETTINGS** (`?mode=settings`): quality Low / Medium / High, camera shake, fullscreen, pause on focus loss, HUD hints, developer overlay, camera preset, and control reference (Opponent / Classic / Arena / Screen).
 - A standard gamepad works everywhere: stick / D-pad to move, A attack, X or LB hop / jump / drift, B or RB dodge, Start pause; in menus A confirms and B goes back.
 - `?mode=play&quick` skips the screens and starts the default match with the debug overlay up (`&seed=…` fixes the seed). The developer tools are kept apart from the player flow, in a separate **Developer / Debug** section with **DEBUG LAB** and **SELF TEST** (Back or `Esc` returns). Each entry loads the same URL a direct link uses — `?mode=play`, `?mode=debug-lab`, `?mode=self-test` — so the browser Back button returns to the menu. The menu's look is provisional until its visual approval.
 
@@ -88,7 +89,7 @@ Milestone 8's own history is in [`docs/ai/m8-status.md`](docs/ai/m8-status.md) a
 
 ## Keyboard bindings
 
-- Arrow keys — move (camera-relative "Directional" by default — ↑ is always away from the camera; Classic/Bey-relative tank steering is a Settings option)
+- Arrow keys — move using the selected control reference. Default **Opponent**: ↑ toward the opponent, ↓ away, ←/→ circle. Settings also offer **Classic** (Bey-relative kart steering), **Arena** (fixed world directions) and opt-in **Screen** (relative to the camera orientation captured at the start of the gesture).
 - `X` — hop / drift (tap for a small hop, hold + steer to drift, hold alone for a variable-height jump)
 - `Z` — attack (hold to charge a Dash Attack)
 - `C` — dodge (tight timing window for a Perfect Dodge)
