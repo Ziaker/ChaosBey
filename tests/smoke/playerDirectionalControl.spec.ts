@@ -234,6 +234,14 @@ test('Directional (default): the camera never moves the Bey — a held key keeps
   await page.evaluate(() => window.__chaosBeyDebugLab!.setController('second', { kind: 'ai', personality: 'archetype' }));
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.evaluate(() => window.__chaosBeyDebugLab!.setPaused(true));
+  // The gesture reads the camera once, when the key goes down, and the test compares
+  // it with the camera yaw on tick 1. Let the camera exist and settle first (30
+  // ticks, then a rendered frame) so both are the same camera state. It failed in CI
+  // once (move intent 'away' for yaw 0 vs a tick-1 camera yaw of 200 degrees) and
+  // never locally; a slow software-rendered runner reaching key-down before the camera
+  // had settled is the likely cause (not proven), and settling it first removes it.
+  await page.evaluate(() => window.__chaosBeyDebugLab!.step(30));
+  await nextFrame(page);
 
   await page.keyboard.down('ArrowUp');
   const result = await page.evaluate(() => {
