@@ -63,7 +63,16 @@ export interface FlatOpts {
   rotation?: number;
   /** Fraction of life before fading starts (decals stay, then fade). */
   hold?: number;
+  /**
+   * GAME: lay the quad ON the real floor instead of flat at the centre's height: every vertex sits `lift` m above
+   * `floorHeightAt(r)`. On the bowl the floor rises outward, so a flat ring 4 cm above its centre had its outer half
+   * buried (owner, 2026-10-02: "ground waves saindo pela metade"). The lab's floor never cut the ring; this keeps it whole.
+   */
+  conform?: { readonly floorHeightAt: (r: number) => number; readonly lift: number };
 }
+
+/** Segments per side of a conformed floor quad: enough for the bowl's curvature at ring sizes up to ~8 m. */
+const CONFORM_SEGMENTS = 24;
 
 /** Horizontal textured quad lying on the floor (shockwave rings, decals). */
 export function flatFx(o: FlatOpts): FxItem {
@@ -71,17 +80,37 @@ export function flatFx(o: FlatOpts): FxItem {
     map: o.tex, color: o.color, transparent: true, depthWrite: false, opacity: o.opacity ?? 1, side: THREE.DoubleSide,
     blending: o.additive ? THREE.AdditiveBlending : THREE.NormalBlending, polygonOffset: true, polygonOffsetFactor: -2,
   });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat);
+  const conform = o.conform;
+  const geometry = conform ? new THREE.PlaneGeometry(1, 1, CONFORM_SEGMENTS, CONFORM_SEGMENTS).rotateX(-Math.PI / 2) : new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const mesh = new THREE.Mesh(geometry, mat);
   mesh.position.copy(o.pos);
   mesh.rotation.y = o.rotation ?? 0;
   const base = o.opacity ?? 1;
   const hold = o.hold ?? 0;
+  const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const local = conform ? Float32Array.from(position.array as ArrayLike<number>) : null;
+  if (conform) mesh.frustumCulled = false; // the vertices move every frame; the unit-quad bounds no longer describe it
+  const cos = Math.cos(mesh.rotation.y);
+  const sin = Math.sin(mesh.rotation.y);
+  const drape = (s: number): void => {
+    if (!conform || !local) return;
+    for (let i = 0; i < position.count; i++) {
+      const lx = local[i * 3]! * s;
+      const lz = local[i * 3 + 2]! * s;
+      // Local -> world on the floor plane (rotation about Y, then the centre's position).
+      const wx = o.pos.x + lx * cos + lz * sin;
+      const wz = o.pos.z - lx * sin + lz * cos;
+      position.setY(i, conform.floorHeightAt(Math.hypot(wx, wz)) + conform.lift - o.pos.y);
+    }
+    position.needsUpdate = true;
+  };
   return {
     object: mesh,
     life: o.life,
     update(k) {
       const s = THREE.MathUtils.lerp(o.size[0], o.size[1], ease(Math.min(1, k * (hold > 0 ? 6 : 1))));
       mesh.scale.set(s, 1, s);
+      drape(s);
       mat.opacity = base * (k < hold ? 1 : 1 - (k - hold) / (1 - hold));
     },
   };

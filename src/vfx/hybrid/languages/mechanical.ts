@@ -79,7 +79,7 @@ export const MECHANICAL: VfxLanguage = {
     const scuff = (at: THREE.Vector3, size: number, baseOpacity = 0.55): void => {
       const opacity = baseOpacity * TUNING.scuffs;
       if (opacity <= 0.01) return;
-      ctx.layer.add(flatFx({ tex: scuffMark(), color: 0x000000, pos: new THREE.Vector3(at.x, floorY(at) + 0.02, at.z), size: [size, size], life: DECAL_LIFE, opacity, hold: 0.7, rotation: Math.random() * 6 }));
+      ctx.layer.add(flatFx({ tex: scuffMark(), color: 0x000000, pos: new THREE.Vector3(at.x, floorY(at) + 0.02, at.z), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.02 }, size: [size, size], life: DECAL_LIFE, opacity, hold: 0.7, rotation: Math.random() * 6 }));
     };
     const tipPos = (p: THREE.Vector3): THREE.Vector3 => new THREE.Vector3(p.x, floorY(p) + 0.03, p.z);
 
@@ -123,7 +123,7 @@ export const MECHANICAL: VfxLanguage = {
         const speed = e.vel.length();
         if (skidTimer <= 0) {
           skidTimer = 0.035;
-          if (TUNING.skidMarks > 0) ctx.layer.add(flatFx({ tex: softDot(), color: 0x000000, pos: new THREE.Vector3(e.pos.x, floorY(e.pos) + 0.015, e.pos.z), size: [0.28, 0.28], life: 2.5, opacity: Math.min(1, 0.35 * TUNING.skidMarks), hold: 0.6 }));
+          if (TUNING.skidMarks > 0) ctx.layer.add(flatFx({ tex: softDot(), color: 0x000000, pos: new THREE.Vector3(e.pos.x, floorY(e.pos) + 0.015, e.pos.z), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.015 }, size: [0.28, 0.28], life: 2.5, opacity: Math.min(1, 0.35 * TUNING.skidMarks), hold: 0.6 }));
         }
         if (Math.random() < Math.min(0.95, (speed / 25) * TUNING.speedSparks)) {
           emit(tipPos(e.pos), { count: 1, speed: 2, dir: e.vel.clone().normalize().negate(), spread: 0.8, life: [0.08, 0.2], hot, cool, upBias: 0.2 });
@@ -138,7 +138,7 @@ export const MECHANICAL: VfxLanguage = {
         }
         if (t < 0.08) {
           for (let i = 0; i < 10; i++) dust(tip, 1, 2.5 + 2 * e.m, 0.7 + 0.6 * e.m, 0.9);
-          ctx.layer.add(flatFx({ tex: scuffMark(), color: 0x000000, pos: tip.clone().setY(tip.y + 0.005), size: [2.2, 2.2], life: DECAL_LIFE, opacity: 0.4, hold: 0.7 }));
+          ctx.layer.add(flatFx({ tex: scuffMark(), color: 0x000000, pos: new THREE.Vector3(tip.x, floorY(tip) + 0.02, tip.z), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.02 }, size: [2.2, 2.2], life: DECAL_LIFE, opacity: 0.4, hold: 0.7 }));
           ctx.shake(0.02 + 0.04 * e.m, 0.2);
         }
       },
