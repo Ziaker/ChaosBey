@@ -9,7 +9,7 @@ import { DEFAULT_AI_DIFFICULTY_TIER, type AiDifficultyTierId } from '../../ai/di
 import { DEFAULT_ARENA_PRESET, arenaPreset, type ArenaGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
 import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
-import { resolveMatchConfig, type MatchConfig } from '../../config/match/MatchConfig';
+import { createDefaultMatchConfig, type MatchConfig, resolveMatchConfig } from '../../config/match/MatchConfig';
 import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
 import type { AiPersonalityChoice, SideControllerSpec } from '../session/SideControllers';
@@ -29,6 +29,8 @@ export interface MatchSetup {
   readonly motion: MotionDirectionId;
   /** Fixed match seed text, or null for a fresh random seed every match. */
   readonly seedText: string | null;
+  /** Advanced gameplay rules the Pregame exposes as sliders (owner, 2026-10-02), passed straight into MatchConfig. */
+  readonly rules: MatchRules;
 }
 
 /** Range the Pregame slider offers for the Clash impact multiplier. */
@@ -55,7 +57,16 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
     clashImpactMultiplier: CLASH_IMPACT_MULTIPLIER_DEFAULT,
     motion: DEFAULT_MOTION_DIRECTION,
     seedText: null,
+    rules: defaultMatchRules(),
   };
+}
+
+/** The Pregame-adjustable gameplay rules: a slice of MatchConfig, so each one reaches the match (and its replay) through the one config path. */
+export type MatchRules = Pick<MatchConfig, 'ringOutDelayS'>;
+
+export function defaultMatchRules(): MatchRules {
+  const config = createDefaultMatchConfig();
+  return { ringOutDelayS: config.ringOutDelayS };
 }
 
 /** The setup with a new player Bey; the opponent follows unless the player had picked one different from the default. */
@@ -78,6 +89,7 @@ export function matchConfigFor(setup: MatchSetup): MatchConfig {
     arenaWallRestitution: setup.arena.geometry.wallRestitution,
     arenaFloor: setup.arena.geometry.floor ?? DEFAULT_ARENA_FLOOR,
     motion: setup.motion ?? DEFAULT_MOTION_DIRECTION,
+    ...(setup.rules ?? defaultMatchRules()),
   });
 }
 

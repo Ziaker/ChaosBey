@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { ARENA_FLOOR_RADIUS, ARENA_WALL_THICKNESS } from '../../src/arena/colliders/ArenaTuning';
-import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
+import { RING_OUT_DELAY_DEFAULT_S, RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { AttackState } from '../../src/combat/attacks/AttackController';
 import { ClashState } from '../../src/combat/clash/ClashController';
 import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
@@ -19,6 +19,9 @@ import { ScriptedController, type ScriptedFrame } from '../../src/automation/scr
 import { Action, type ControllerActions } from '../../src/input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { CombatHarness } from './combatHarness';
+
+/** The RoundEnd freeze tests end a round on a chosen tick: the old instant ring-out (delay 0), so the freeze, not the delay, is what they test. */
+const INSTANT_RING_OUT = { ringOutDelayS: 0 };
 
 const NO_ACTIONS: ControllerActions = {
   held: new Set(),
@@ -227,11 +230,12 @@ describe('wall collision after knockback', () => {
 });
 
 describe('ring-out', () => {
-  it('ends the round the moment a Bey is beyond the ring-out boundary', async () => {
+  it('ends the round once a Bey has stayed beyond the ring-out boundary for the ring-out delay (owner, 2026-10-02)', async () => {
     const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(harness);
 
     expect(harness.roundState.isOver).toBe(false);
+    const delayTicks = Math.round(RING_OUT_DELAY_DEFAULT_S / FIXED_DELTA_SECONDS);
 
     // Directly place the second Bey beyond the ring-out radius, exactly
     // like a strong knockback launch would end up (GDD section 130:
@@ -240,6 +244,13 @@ describe('ring-out', () => {
     // this expectation must not move if the physical arena's size ever
     // does).
     harness.second.body.setTranslation({ x: RINGOUT_RADIUS_M + 1, y: 1, z: 0 }, true);
+
+    // Still outside but short of the delay: no ring-out yet.
+    for (let i = 0; i < delayTicks - 1; i++) {
+      const early = harness.tick(NO_ACTIONS, NO_ACTIONS);
+      expect(early.ringOutSecond).toBe(false);
+    }
+    expect(harness.roundState.isOver).toBe(false);
 
     const result = harness.tick(NO_ACTIONS, NO_ACTIONS);
 
@@ -255,6 +266,10 @@ describe('ring-out', () => {
     harness.first.body.setTranslation({ x: RINGOUT_RADIUS_M + 1, y: 1, z: 0 }, true);
     harness.second.body.setTranslation({ x: -(RINGOUT_RADIUS_M + 1), y: 1, z: 0 }, true);
 
+    // Both clocks started on the same tick, so both reach the delay on the same tick.
+    const delayTicks = Math.round(RING_OUT_DELAY_DEFAULT_S / FIXED_DELTA_SECONDS);
+    for (let i = 0; i < delayTicks - 1; i++) harness.tick(NO_ACTIONS, NO_ACTIONS);
+    expect(harness.roundState.isOver).toBe(false);
     const result = harness.tick(NO_ACTIONS, NO_ACTIONS);
 
     expect(result.ringOutFirst).toBe(true);
@@ -314,7 +329,7 @@ describe('simultaneous double-KO', () => {
 
 describe('RoundEnd freezes the simulation', () => {
   it('stops advancing movement, attacks and resources once the round is over (Combat and RoundEnd are separate states)', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN, INSTANT_RING_OUT);
     settle(harness);
 
     // End the round via ring-out, then keep feeding aggressive input.
@@ -479,7 +494,7 @@ describe('RoundEnd freeze is genuinely read-only', () => {
     // playtest, after M11) an idle Bey no longer slides off when pushed, and
     // the first one plowed it all the way to the wall without a detectable
     // impact of its own.
-    const harness = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, { x: -6, y: BEY_SPAWN_HEIGHT_M, z: -6 });
+    const harness = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, { x: -6, y: BEY_SPAWN_HEIGHT_M, z: -6 }, INSTANT_RING_OUT);
     settle(harness);
 
     const driver = new ScriptedController([{ fromTick: 0, held: [Action.MoveForward] }]);
@@ -506,7 +521,7 @@ describe('RoundEnd freeze is genuinely read-only', () => {
   });
 
   it('keeps every frozen tick byte-for-byte identical across many repeats (no observable internal drift)', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN, INSTANT_RING_OUT);
     settle(harness);
 
     harness.second.body.setTranslation({ x: RINGOUT_RADIUS_M + 1, y: 1, z: 0 }, true);

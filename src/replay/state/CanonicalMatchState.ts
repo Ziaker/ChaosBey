@@ -119,6 +119,6 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     aiMashSource: 'stateless (NullAiMashSource live and headless)',
     controller: 'included separately as clash.controller',
   },
-  RoundState: {},
+  RoundState: { ringOutDelayS: 'build-time config: MatchConfig.ringOutDelayS (replay config snapshot)' },
   HitstopClock: {},
 };

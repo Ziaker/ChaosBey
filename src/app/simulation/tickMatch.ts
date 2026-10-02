@@ -441,8 +441,10 @@ export function tickMatch(
     );
   }
 
-  const ringOutFirst = isRingOut(firstPos);
-  const ringOutSecond = isRingOut(secondPos);
+  // Outside the ring-out radius only counts after the match's ring-out delay (owner, 2026-10-02).
+  const ringedOut = roundState.trackRingOut(isRingOut(firstPos), isRingOut(secondPos), fixedDeltaSeconds);
+  const ringOutFirst = ringedOut.first;
+  const ringOutSecond = ringedOut.second;
   if (ringOutFirst) combatEvents.push({ kind: 'ringOut', targetIsFirst: true });
   if (ringOutSecond) combatEvents.push({ kind: 'ringOut', targetIsFirst: false });
   roundState.resolveTick({ firstKoed, secondKoed, firstRingOut: ringOutFirst, secondRingOut: ringOutSecond });

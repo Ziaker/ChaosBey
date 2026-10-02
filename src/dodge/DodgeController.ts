@@ -273,6 +273,7 @@ export class DodgeController {
       launchPending: this.launchPending,
       launchPendingRemainingS: this.launchPendingRemainingS,
       latchedDirection: vec2(this.latchedDirection),
+      evadedThisDodge: [...this.evadedThisDodge].sort((a, b) => a - b),
     };
   }
 }

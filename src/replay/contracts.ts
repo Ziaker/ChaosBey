@@ -35,7 +35,7 @@ export const REPLAY_FORMAT_V1 = 'ChaosBeyReplayV1';
 export type ReplayFormat = typeof REPLAY_FORMAT | typeof REPLAY_FORMAT_V1;
 
 /** Version of CanonicalMatchState (lane A). Bump when a field is added, removed or reordered. */
-export const STATE_SCHEMA_VERSION = 1;
+export const STATE_SCHEMA_VERSION = 2; // 2: RoundState carries the ring-out delay clocks (owner, 2026-10-02).
 
 /**
  * How RNG streams are derived from the root seed.

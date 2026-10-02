@@ -75,7 +75,7 @@ export class SelfTestMatchWorld {
     const first = createBey(physics, options.firstSpawn ?? spawns.first, options.firstDefinition, floor, motion);
     const second = createBey(physics, options.secondSpawn ?? spawns.second, options.secondDefinition, floor, motion);
     const clash = options.aiMashSource !== undefined ? new ClashOrchestration(config, options.aiMashSource) : new ClashOrchestration(config);
-    return { physics, first, second, roundState: new RoundState(), clash };
+    return { physics, first, second, roundState: new RoundState({ ringOutDelayS: config.ringOutDelayS }), clash };
   }
 
   /** Hitstop + controller sampling + tickMatch: the same per-tick step the live MatchSession runs (M9: one simulation). */

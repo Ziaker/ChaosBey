@@ -9,6 +9,7 @@
 // Esc back.
 // ============================================================
 
+import { RING_OUT_DELAY_RANGE } from '../../arena/ringout/RingOutTuning';
 import { AI_DIFFICULTY_TIERS, aiDifficultyTier, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { isEditableEventTarget } from '../../input/devices/EditableTarget';
 import { AI_PERSONALITY_CHOICES, resolveAiPersonality, type AiPersonalityChoice } from '../session/SideControllers';
@@ -240,6 +241,15 @@ export class PregameScreen {
         write: (s, v) => ({ ...s, clashImpactMultiplier: v }),
         format: (v) => `×${v.toFixed(2)}`,
         note: 'How hard the loser of a Clash is knocked back and how much Stability it loses.',
+      }),
+      this.slider({
+        id: 'ring-out-delay',
+        label: 'Ring-out delay',
+        range: RING_OUT_DELAY_RANGE,
+        read: (s) => s.rules.ringOutDelayS,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, ringOutDelayS: v } }),
+        format: (v) => `${v.toFixed(2)} s`,
+        note: 'How long a Bey must stay outside the arena before the ring-out counts (back inside resets it). 0 = instant. Provisional default 1.5 s.',
       }),
     );
 

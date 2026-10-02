@@ -27,7 +27,7 @@ describe('flat floor effects conform to the floor', () => {
       const centre = new THREE.Vector3(r * 0.6, h(r) + LIFT, r * 0.8);
       const fx = flatFx({ tex: new THREE.Texture(), color: 0xffffff, pos: centre, size: [0.4, 7], life: 0.5, rotation: 0.7, conform: { floorHeightAt: h, lift: LIFT } });
       for (const k of [0.2, 0.6, 1]) {
-        fx.update(k, 1 / 60);
+        fx.update(k, 1 / 60, fx as never);
         for (const v of worldVertices(fx.object)) expect(v.y - h(Math.hypot(v.x, v.z))).toBeCloseTo(LIFT, 4);
       }
     });
@@ -37,7 +37,7 @@ describe('flat floor effects conform to the floor', () => {
     const h = ARENA_FLOORS['bowl-a'].heightAtRadius;
     const r = 30;
     const fx = flatFx({ tex: new THREE.Texture(), color: 0xffffff, pos: new THREE.Vector3(r, h(r) + LIFT, 0), size: [0.4, 7], life: 0.5 });
-    fx.update(1, 1 / 60);
+    fx.update(1, 1 / 60, fx as never);
     const buried = worldVertices(fx.object).filter((v) => v.y < h(Math.hypot(v.x, v.z)));
     expect(buried.length).toBeGreaterThan(0);
   });

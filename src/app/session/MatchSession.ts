@@ -152,7 +152,7 @@ export class MatchSession {
   readonly rngStreams: RngStreams;
   readonly physics: PhysicsWorld;
   readonly match: MatchScene;
-  readonly roundState = new RoundState();
+  readonly roundState: RoundState;
   readonly clash: ClashOrchestration;
   readonly matchConfig: MatchConfig;
   readonly telemetry: TelemetryRecorder;
@@ -284,6 +284,8 @@ export class MatchSession {
     this.rngStreams = createRngStreams(options.seedText);
     this.physics = physics;
     this.matchConfig = options.matchConfig;
+    // A config without a ring-out delay predates it (instant ring-out).
+    this.roundState = new RoundState({ ringOutDelayS: options.matchConfig.ringOutDelayS ?? 0 });
     this.attackProfileSettings = options.attackProfileSettings;
     this.telemetry = options.telemetry;
     this.stateMachine = options.stateMachine;

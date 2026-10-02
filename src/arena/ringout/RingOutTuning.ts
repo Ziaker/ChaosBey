@@ -21,3 +21,12 @@
 // 3x (38.7): the ring-out rule is "got over the wall", and a 2.7 m
 // no-man's-land past the wall would change that rule, not just the scale.
 export const RINGOUT_RADIUS_M = 36.9;
+
+// Owner, 2026-10-02: a ring-out is not decided the instant a Bey crosses the
+// ring-out radius ("acontecem no segundo que o bey fica fora"). The Bey has
+// to stay outside continuously for this long; coming back inside resets the
+// count. PROVISIONAL default (no number from the owner); a Pregame slider
+// (MatchConfig.ringOutDelayS) sets it per match, 0 = the old instant rule.
+export const RING_OUT_DELAY_DEFAULT_S = 1.5;
+export const RING_OUT_DELAY_RANGE = { min: 0, max: 3, step: 0.25 } as const;
+

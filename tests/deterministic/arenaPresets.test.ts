@@ -64,7 +64,7 @@ describe('arena values in real matches', () => {
             seed: `arena-${i}`,
             firstDefinition: first,
             secondDefinition: second,
-            matchConfigOverrides: { arenaWallHeightM: geometry.wallHeightM, arenaWallRestitution: geometry.wallRestitution },
+            matchConfigOverrides: { arenaWallHeightM: geometry.wallHeightM, arenaWallRestitution: geometry.wallRestitution, ringOutDelayS: 0 },
           });
           if (String(record.stats.outcome).includes('RingOut')) ringOuts++;
           ticks += record.stats.ticks;
@@ -86,6 +86,11 @@ describe('arena values in real matches', () => {
     // (Rift 1300 vs Tournament 1370 ticks per match), so ring-outs are compared with
     // >= and the round-length comparison stays strict. See the arena scale pass
     // report: whether ring-outs should stay this rare is an owner call.
+    //
+    // Ring-out delay (owner, 2026-10-02, default 1.5 s): this compares the walls alone, so it runs
+    // with the old instant ring-out (delay 0): Rift 1/15 ring-outs in 21889 ticks, Tournament 0/15
+    // in 21901. With the 1.5 s default the Rift's one ring-out lands 99 ticks later (21988 ticks),
+    // so the low rim no longer shortens AI rounds overall — reported to the owner.
     expect(rift.ringOuts).toBeGreaterThanOrEqual(tournament.ringOuts);
     expect(rift.ticks).toBeLessThan(tournament.ticks);
   }, 300_000);

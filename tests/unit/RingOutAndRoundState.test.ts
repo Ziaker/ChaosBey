@@ -1,3 +1,4 @@
+import { createDefaultMatchConfig } from '../../src/config/match/MatchConfig';
 import { describe, expect, it } from 'vitest';
 import { isRingOut } from '../../src/arena/ringout/RingOut';
 import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
@@ -79,5 +80,45 @@ describe('RoundState', () => {
     round.resolveTick({ ...NONE, secondKoed: true });
     round.resolveTick({ ...NONE, firstKoed: true });
     expect(round.result).toBe(RoundOutcome.FirstWinsByKo);
+  });
+});
+
+describe('ring-out delay (owner, 2026-10-02: not the instant a Bey is outside)', () => {
+  const DT = 1 / 60;
+  const ticksFor = (s: number): number => Math.round(s / DT);
+
+  it('outside for 1.4 s and back inside: no ring-out, and the clock resets', () => {
+    const round = new RoundState({ ringOutDelayS: 1.5 });
+    for (let i = 0; i < ticksFor(1.4); i++) expect(round.trackRingOut(false, true, DT).second).toBe(false);
+    expect(round.ringOutClock.second).toBeCloseTo(1.4, 6);
+    expect(round.trackRingOut(false, false, DT).second).toBe(false);
+    expect(round.ringOutClock.second).toBe(0);
+    // A fresh 1.4 s outside again is still not enough: the earlier time does not carry over.
+    for (let i = 0; i < ticksFor(1.4); i++) expect(round.trackRingOut(false, true, DT).second).toBe(false);
+  });
+
+  it('outside for 1.5 s: ring-out on exactly that tick', () => {
+    const round = new RoundState({ ringOutDelayS: 1.5 });
+    const results: boolean[] = [];
+    for (let i = 0; i < ticksFor(1.5); i++) results.push(round.trackRingOut(true, false, DT).first);
+    expect(results.slice(0, -1).every((r) => !r)).toBe(true);
+    expect(results.at(-1)).toBe(true);
+  });
+
+  it('delay 0 is the old rule: outside = ringed out on the first tick', () => {
+    const round = new RoundState({ ringOutDelayS: 0 });
+    expect(round.trackRingOut(true, false, DT)).toEqual({ first: true, second: false });
+  });
+
+  it('the match default is the provisional 1.5 s (MatchConfig); a bare RoundState keeps the old instant rule', () => {
+    expect(createDefaultMatchConfig().ringOutDelayS).toBe(1.5);
+    expect(new RoundState().trackRingOut(true, false, DT).first).toBe(true);
+  });
+
+  it('with the match default, its clocks are part of the deterministic state', () => {
+    const round = new RoundState({ ringOutDelayS: createDefaultMatchConfig().ringOutDelayS });
+    for (let i = 0; i < ticksFor(1.5) - 1; i++) round.trackRingOut(true, false, DT);
+    expect(round.trackRingOut(true, false, DT).first).toBe(true);
+    expect(round.getDeterministicState()).toMatchObject({ outsideS: { first: expect.any(Number), second: 0 } });
   });
 });

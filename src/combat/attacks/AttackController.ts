@@ -240,6 +240,7 @@ export class AttackController {
       chargeTimerS: this.chargeTimerS,
       activeTimerS: this.activeTimerS,
       recoveryTimerS: this.recoveryTimerS,
+      activationCount: this.activationCount,
     };
   }
 }

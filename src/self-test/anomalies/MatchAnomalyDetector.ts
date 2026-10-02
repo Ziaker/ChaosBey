@@ -256,10 +256,13 @@ export class MatchAnomalyDetector {
 
       const p = bey.body.translation();
       const radius = Math.hypot(p.x, p.z);
-      if (this.latch(key('left'), roundRunning && radius > t.leftWorldRadiusM)) {
+      // Ring-out delay (owner, 2026-10-02): a Bey whose ring-out clock is running may legitimately be past the radius
+      // (or falling off the rim) until the delay elapses; only one the ring-out rule never saw outside left the world.
+      const ringOutPending = input.roundState.ringOutClock[side] > 0;
+      if (this.latch(key('left'), roundRunning && radius > t.leftWorldRadiusM && !ringOutPending)) {
         emit('left-world', side, `centre ${radius.toFixed(2)} m from the arena centre (limit ${t.leftWorldRadiusM.toFixed(2)} m) with no ring-out declared`);
       }
-      if (this.latch(key('floor'), p.y < t.belowFloorYM)) {
+      if (this.latch(key('floor'), p.y < t.belowFloorYM && !(ringOutPending && radius > ARENA_FLOOR_RADIUS))) {
         // Past the floor's edge (outside the wall) it fell off the rim (what
         // the fixed ext-32 wall gaps used to cause); inside it, it went
         // through the floor.

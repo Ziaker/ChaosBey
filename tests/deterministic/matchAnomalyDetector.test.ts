@@ -6,6 +6,7 @@ import { ARENA_FLOOR_RADIUS } from '../../src/arena/colliders/ArenaTuning';
 import { describe, expect, it } from 'vitest';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { ClashState, type ClashController } from '../../src/combat/clash/ClashController';
+import type { RoundState } from '../../src/combat/round-rules/RoundState';
 import { DodgeState } from '../../src/dodge/DodgeController';
 import type { ControllerActions } from '../../src/input/actions/Action';
 import { IdleController } from '../../src/automation/scripted-scenarios/IdleController';
@@ -78,6 +79,15 @@ describe('MatchAnomalyDetector — each GDD 67 condition is caught, once per epi
       if (tick >= 10) w.second.body.setTranslation({ x: DEFAULT_ANOMALY_THRESHOLDS.leftWorldRadiusM + 1, y: 0.6, z: 0 }, false);
     });
     expect(found.filter((d) => d.kind === 'left-world')).toHaveLength(1);
+  });
+
+  it('a Bey past the radius, or falling off the rim, while its ring-out delay runs is not flagged (owner, 2026-10-02)', async () => {
+    const pending = { isOver: false, ringOutClock: { first: 0, second: 0.5 } } as unknown as RoundState;
+    const found = await run(20, (w, tick) => {
+      if (tick >= 10) w.second.body.setTranslation({ x: DEFAULT_ANOMALY_THRESHOLDS.leftWorldRadiusM + 1, y: -3, z: 0 }, false);
+      return { roundState: pending };
+    });
+    expect(found.filter((d) => d.kind === 'left-world' || d.kind === 'below-floor')).toEqual([]);
   });
 
   it('through the floor (inside the arena) — not attributed to a known issue', async () => {
