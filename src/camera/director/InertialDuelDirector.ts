@@ -22,12 +22,13 @@
 import { CameraDirector, type DirectorOptions, type DirectorOutput } from './CameraDirector';
 import type { CameraParams, PresetId } from './CameraParams';
 import type { FightFrame, FighterFrame, Vec3 } from './FightFrame';
-import { angleDelta, clamp, yawOf } from './frameMath';
+import { clamp, yawOf } from './frameMath';
 
 const DEG = Math.PI / 180;
 const MAX_FOV_DEG = 120;
 const YAW_SAMPLE_DEG = 6;
 const BEHIND_SCORE = 4;
+const CINEMATIC_TAKEOVER_THRESHOLD = 0.05;
 
 export interface InertialCompositionTuning {
   /** Horizontal normalized-device-coordinate boundary where non-yaw rescue begins. 1 = screen edge. */
@@ -145,7 +146,7 @@ export class InertialDuelDirector {
 
   constructor(
     readonly preset: PresetId,
-    params: CameraParams,
+    private readonly params: CameraParams,
     aspect = 16 / 9,
     private readonly options: DirectorOptions = {},
     private readonly ringOutWatchRadiusM?: number,
@@ -188,28 +189,26 @@ export class InertialDuelDirector {
     let focus = copy(raw.focus);
     let distance = baseDistance;
     let fov = raw.fov;
-    let eye = eyeAt(focus, this.azimuth, distance, baseHeight);
-    eye = this.contain(eye, focus);
-
+    let eye = this.guardEye(eyeAt(focus, this.azimuth, distance, baseHeight), focus, frame);
     let measure = compositionMeasure(frame, eye, focus, fov, this.aspect, tuning);
 
-    // First-line rescue: shift the focal point toward the subject that is
-    // most endangered, without rotating the camera around the fight.
+    // First line of rescue: shift the focal point toward the subject that is
+    // most endangered without changing the camera hemisphere.
     if (measure.softViolation > 0) {
       const offender = measure.offenderIsFirst ? frame.first.position : frame.second.position;
       const gain = Math.min(tuning.maxFocusRescue, tuning.maxFocusRescue * clamp(measure.softViolation, 0, 1.5));
       focus = lerpVec(focus, offender, gain);
-      eye = this.contain(eyeAt(focus, this.azimuth, distance, baseHeight), focus);
+      eye = this.guardEye(eyeAt(focus, this.azimuth, distance, baseHeight), focus, frame);
       measure = compositionMeasure(frame, eye, focus, fov, this.aspect, tuning);
     }
 
-    // Second line: use room before rotation. This preserves world orientation
-    // through fast pass-throughs as long as both Beys can still fit on screen.
+    // Second line: use optical room before rotation. Fast pass-throughs can
+    // therefore swap sides on screen without making the world follow them.
     if (measure.softViolation > 0) {
       const pressure = clamp(measure.softViolation, 0, 1);
       distance += tuning.maxDistanceRescueM * pressure;
       fov = Math.min(MAX_FOV_DEG, fov + tuning.maxFovRescueDeg * pressure);
-      eye = this.contain(eyeAt(focus, this.azimuth, distance, baseHeight + pressure * 0.35), focus);
+      eye = this.guardEye(eyeAt(focus, this.azimuth, distance, baseHeight + pressure * 0.35), focus, frame);
       measure = compositionMeasure(frame, eye, focus, fov, this.aspect, tuning);
     }
 
@@ -217,44 +216,58 @@ export class InertialDuelDirector {
     else this.softViolationFor = 0;
 
     const cinematicBlend = clamp(Math.max(raw.weights.Clash, raw.weights.RingOut, raw.weights.Finisher), 0, 1);
-    const yawEligible = cinematicBlend < 0.05 && (measure.hardViolation > 0 || this.softViolationFor >= tuning.yawTriggerHoldS);
+    const cinematicOwnsShot = cinematicBlend >= CINEMATIC_TAKEOVER_THRESHOLD;
+    const yawEligible = !cinematicOwnsShot && (measure.hardViolation > 0 || this.softViolationFor >= tuning.yawTriggerHoldS);
 
-    let desiredYawVelocity = 0;
-    if (yawEligible) {
-      const sample = YAW_SAMPLE_DEG * DEG;
-      const leftScore = this.scoreAt(frame, focus, distance, baseHeight, fov, this.azimuth - sample);
-      const rightScore = this.scoreAt(frame, focus, distance, baseHeight, fov, this.azimuth + sample);
-      const direction = leftScore <= rightScore ? -1 : 1;
-      const urgency = clamp(0.18 + measure.softViolation + measure.hardViolation * 1.5, 0, 1);
-      desiredYawVelocity = direction * tuning.maxYawRateDegS * DEG * urgency;
+    let yawAcceleration = 0;
+    if (cinematicOwnsShot) {
+      // The special shot owns presentation. Freeze the remembered combat
+      // hemisphere underneath it instead of silently rotating while hidden.
+      this.yawVelocity = 0;
+      this.previousYawVelocity = 0;
+      this.softViolationFor = 0;
+    } else {
+      let desiredYawVelocity = 0;
+      if (yawEligible) {
+        const sample = YAW_SAMPLE_DEG * DEG;
+        const leftScore = this.scoreAt(frame, focus, distance, baseHeight, fov, this.azimuth - sample);
+        const rightScore = this.scoreAt(frame, focus, distance, baseHeight, fov, this.azimuth + sample);
+        const direction = leftScore <= rightScore ? -1 : 1;
+        const urgency = clamp(0.18 + measure.softViolation + measure.hardViolation * 1.5, 0, 1);
+        desiredYawVelocity = direction * tuning.maxYawRateDegS * DEG * urgency;
+      }
+
+      const previousVelocity = this.yawVelocity;
+      const maxVelocityDelta = tuning.maxYawAccelDegS2 * DEG * dt;
+      this.yawVelocity += clamp(desiredYawVelocity - this.yawVelocity, -maxVelocityDelta, maxVelocityDelta);
+      if (!yawEligible && Math.abs(this.yawVelocity) < 0.03 * DEG) this.yawVelocity = 0;
+      yawAcceleration = dt > 0 ? (this.yawVelocity - previousVelocity) / dt : 0;
+
+      if (
+        Math.abs(this.previousYawVelocity) > 2 * DEG &&
+        Math.abs(this.yawVelocity) > 2 * DEG &&
+        Math.sign(this.previousYawVelocity) !== Math.sign(this.yawVelocity)
+      ) {
+        this.yawReversals++;
+      }
+      this.previousYawVelocity = this.yawVelocity;
+
+      const yawStep = this.yawVelocity * dt;
+      this.azimuth += yawStep;
+      this.totalYawTravel += Math.abs(yawStep);
     }
 
-    const previousVelocity = this.yawVelocity;
-    const maxVelocityDelta = tuning.maxYawAccelDegS2 * DEG * dt;
-    this.yawVelocity += clamp(desiredYawVelocity - this.yawVelocity, -maxVelocityDelta, maxVelocityDelta);
-    if (!yawEligible && Math.abs(this.yawVelocity) < 0.03 * DEG) this.yawVelocity = 0;
-
-    const yawAcceleration = dt > 0 ? (this.yawVelocity - previousVelocity) / dt : 0;
-    if (Math.abs(this.previousYawVelocity) > 2 * DEG && Math.abs(this.yawVelocity) > 2 * DEG && Math.sign(this.previousYawVelocity) !== Math.sign(this.yawVelocity)) {
-      this.yawReversals++;
-    }
-    this.previousYawVelocity = this.yawVelocity;
-
-    const yawStep = this.yawVelocity * dt;
-    this.azimuth += yawStep;
-    this.totalYawTravel += Math.abs(yawStep);
-
-    eye = this.contain(eyeAt(focus, this.azimuth, distance, baseHeight), focus);
+    eye = this.guardEye(eyeAt(focus, this.azimuth, distance, baseHeight), focus, frame);
     measure = compositionMeasure(frame, eye, focus, fov, this.aspect, tuning);
 
     const modifiers = [...raw.debug.modifiers];
     if (measure.softViolation > 0) modifiers.push(`composição: resgate ${(measure.softViolation * 100).toFixed(0)}%`);
-    if (yawEligible) modifiers.push(`composição: yaw ${(this.yawVelocity / DEG).toFixed(1)}°/s`);
+    if (cinematicOwnsShot) modifiers.push('composição: azimute congelado sob câmera cinematográfica');
+    else if (yawEligible) modifiers.push(`composição: yaw ${(this.yawVelocity / DEG).toFixed(1)}°/s`);
     else modifiers.push('composição: azimute estável');
 
-    // Clash/Ring-Out/Finisher are explicit cinematic states. They are allowed
-    // to take the shot; the persistent combat azimuth remains frozen underneath
-    // and is recovered by the context weight rather than recomputed from axisYaw.
+    // Clash/Ring-Out/Finisher may take the shot. The combat azimuth is
+    // preserved underneath and returns by blend, never re-derived from axisYaw.
     const shownEye = lerpVec(eye, raw.eye, cinematicBlend);
     const shownFocus = lerpVec(focus, raw.focus, cinematicBlend);
     const shownFov = lerp(fov, raw.fov, cinematicBlend);
@@ -287,11 +300,40 @@ export class InertialDuelDirector {
   }
 
   private scoreAt(frame: FightFrame, focus: Vec3, distance: number, height: number, fov: number, azimuth: number): number {
-    const eye = this.contain(eyeAt(focus, azimuth, distance, height), focus);
+    const eye = this.guardEye(eyeAt(focus, azimuth, distance, height), focus, frame);
     return compositionMeasure(frame, eye, focus, fov, this.aspect, this.tuning).score;
   }
 
-  /** Keep the final, post-composition eye inside the arena too. */
+  /**
+   * Reapply all final eye guards after composition has moved/rebuilt the shot.
+   * The base director already protects its own output, but the wrapper must
+   * not bypass floor/Bey clearance when it creates a different final eye.
+   */
+  private guardEye(eyeInput: Vec3, focus: Vec3, frame: FightFrame): Vec3 {
+    let eye = this.contain(copy(eyeInput), focus);
+
+    const floorY = this.options.floorHeightAt ? this.options.floorHeightAt(eye.x, eye.z) : 0;
+    if (eye.y < floorY + this.params.floorClearance) eye.y = floorY + this.params.floorClearance;
+
+    for (const fighter of [frame.first, frame.second]) {
+      const dx = eye.x - fighter.position.x;
+      const dz = eye.z - fighter.position.z;
+      const horizontal = Math.hypot(dx, dz);
+      if (horizontal >= this.params.beyClearance || eye.y - fighter.position.y >= this.params.beyClearance) continue;
+      const len = horizontal || 1;
+      const ux = horizontal > 1e-6 ? dx / len : Math.sin(this.azimuth);
+      const uz = horizontal > 1e-6 ? dz / len : Math.cos(this.azimuth);
+      eye.x = fighter.position.x + ux * this.params.beyClearance;
+      eye.z = fighter.position.z + uz * this.params.beyClearance;
+    }
+
+    eye = this.contain(eye, focus);
+    const finalFloorY = this.options.floorHeightAt ? this.options.floorHeightAt(eye.x, eye.z) : 0;
+    if (eye.y < finalFloorY + this.params.floorClearance) eye.y = finalFloorY + this.params.floorClearance;
+    return eye;
+  }
+
+  /** Keep the final, post-composition eye inside the arena. */
   private contain(eyeInput: Vec3, focus: Vec3): Vec3 {
     const radius = this.options.arena?.containRadiusM;
     if (!radius) return eyeInput;
