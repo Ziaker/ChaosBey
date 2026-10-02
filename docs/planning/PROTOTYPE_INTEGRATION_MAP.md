@@ -21,7 +21,7 @@ The visual integration pass of section 4 has landed, batch by batch, each behind
 | 3 — Hybrid VFX + Cel Cyclone | #85 | `hybridVfx` | **INTEGRATED behind flag**; shake ×1.35 still pending metadata (no bridge), no time scaling |
 | 4 — Clash Overdrive | #86 (v0.13.0) | `clashPresentation` | **INTEGRATED behind flag**; tie style (ASK FIRST), entry slow motion, per-mash hitstop, Clash shake and the "overdrive" bar style still frozen/open |
 | 5 — Arena art (Foundry, Rift, Tournament) | #87 (v0.14.0) | `arenaVisuals` | **INTEGRATED behind flag**, fitted to the 36 m stage (horizontal footprint ×3, real-size parts, light rigs/sky/haze scaled as a whole); default arena still **OWNER CHOICE REQUIRED** |
-| HUD | #64 | `newHud` | **OWNER CHOICE REQUIRED** (A/B/C not chosen) |
+| HUD | ~~#64~~ closed | `newHud` (unused) | **NO LAB, NO A/B/C CHOICE** — owner 2026-10-02: the Combat HUD Lab is not needed; the HUD is the existing `CombatHud` |
 
 Since this map was written the stage also became **3× / 36 m** (#83, v0.12.0) and the camera follows it (#88, v0.14.1: eye limit 34.5 m, ring-out watch 33 m). The camera freeze of section 6 applied to the visual batches, which touched no camera file; #88 was a separate, owner-requested camera fix, and the owner-approved Inertial Duel Camera (#89) is camera work outside this pass. PR #24 (Clash lab) and PR #67 (old plan) are now fully superseded by #86 and this map.
 
