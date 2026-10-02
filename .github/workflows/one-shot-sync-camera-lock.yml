@@ -1,0 +1,43 @@
+name: One-shot camera lock sync
+
+on:
+  push:
+    branches:
+      - chatgpt/inertial-duel-camera
+
+permissions:
+  contents: write
+
+jobs:
+  sync-lock:
+    if: github.event.head_commit.message == 'ops: one-shot sync v0.13.0 lockfile'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/inertial-duel-camera
+          fetch-depth: 0
+      - name: Patch only the two root version fields
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(path, 'utf8'));
+          if (lock.name !== 'chaosbey' || !lock.packages || !lock.packages['']) {
+            throw new Error('Unexpected package-lock structure; refusing to rewrite it.');
+          }
+          lock.version = '0.13.0';
+          lock.packages[''].version = '0.13.0';
+          fs.writeFileSync(path, JSON.stringify(lock, null, 2) + '\n');
+          NODE
+          node -e "const x=require('./package-lock.json'); if(x.version!=='0.13.0'||x.packages[''].version!=='0.13.0') process.exit(1)"
+          git diff -- package-lock.json
+      - name: Commit lock sync and remove this one-shot workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/one-shot-sync-camera-lock.yml
+          git add package-lock.json
+          git diff --cached --check
+          git commit -m 'chore(release): sync complete lockfile to v0.13.0'
+          git push origin HEAD:chatgpt/inertial-duel-camera
