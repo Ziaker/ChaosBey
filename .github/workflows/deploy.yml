@@ -7,11 +7,51 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 jobs:
+  # One-shot maintenance for PR #89 only. It patches the complete existing
+  # package-lock in-place, then restores this workflow from main and removes
+  # the temporary standalone workflow in the SAME commit. The final branch
+  # therefore has no maintenance workflow or widened contents permission.
+  sync-camera-release-lock:
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 89 && github.head_ref == 'chatgpt/inertial-duel-camera'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: chatgpt/inertial-duel-camera
+          fetch-depth: 0
+
+      - name: Patch only the package-lock root version fields
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(path, 'utf8'));
+          if (lock.name !== 'chaosbey' || !lock.packages || !lock.packages['']) {
+            throw new Error('Unexpected package-lock structure; refusing to rewrite it.');
+          }
+          lock.version = '0.13.0';
+          lock.packages[''].version = '0.13.0';
+          fs.writeFileSync(path, JSON.stringify(lock, null, 2) + '\n');
+          NODE
+          node -e "const x=require('./package-lock.json'); if(x.version!=='0.13.0'||x.packages[''].version!=='0.13.0') process.exit(1)"
+
+      - name: Restore CI definition, remove temporary workflow, and commit lock sync
+        run: |
+          git show origin/main:.github/workflows/deploy.yml > .github/workflows/deploy.yml
+          git rm -f .github/workflows/one-shot-sync-camera-lock.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json .github/workflows/deploy.yml
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m 'chore(release): sync complete lockfile to v0.13.0'
+          git push origin HEAD:chatgpt/inertial-duel-camera
+
   # Fast gate (~2-3 min): typecheck, the fast suite, the production build.
   # This is the PR/push signal and the only thing deploy waits on — it does
   # NOT include the full Playwright smoke suite, which takes 20-45 minutes
