@@ -351,7 +351,15 @@ Componentes que **não devem ser confundidos com o HUD geral**:
 - barra do Clash é específica do Clash e já está aprovada;
 - minimapas, sliders, timelines e readouts dos Labs são debug/instrumentação.
 
-## Diretiva de escopo para qualquer trabalho futuro de HUD
+## Decisão do owner — 2026-10-02: NÃO existe Combat HUD Lab
+
+O Combat HUD Lab **não precisa existir** (owner, repetido várias vezes). A PR #64 foi fechada.
+
+- não criar, reabrir, atualizar nem propor um Combat HUD Lab;
+- não pedir ao owner uma escolha "HUD A/B/C" — essa escolha **não está pendente**;
+- o HUD do jogo é o `CombatHud` existente; mudanças nele seguem pedidos diretos do owner, não um Lab.
+
+## Diretiva de escopo para qualquer trabalho futuro de HUD (histórica; ver decisão acima)
 
 Um Combat HUD Lab, caso ainda seja necessário, deve testar **somente** a lacuna de layout/estética/legibilidade do HUD de tela.
 
@@ -414,7 +422,7 @@ Somente estes tipos de itens continuam legitimamente abertos quando não houver 
 
 ## 13.1 HUD
 
-- **tratamento visual/layout final do HUD geral de combate**, enquanto não houver registro explícito de uma escolha final específica.
+- ~~tratamento visual/layout final do HUD geral de combate via Lab A/B/C~~ **SUPERSEDED (owner, 2026-10-02):** não existe Combat HUD Lab nem escolha A/B/C pendente; o HUD é o `CombatHud` existente (seção 10).
 
 Isto é uma pendência estreita de UI/legibilidade, não uma licença para reprototipar os sistemas da luta.
 
