@@ -24,6 +24,8 @@
 // state hash (camera-approval.md 8).
 // ============================================================
 
+import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
+import { RINGOUT_RADIUS_M } from '../../arena/ringout/RingOutTuning';
 import { CameraDirector, type CameraMode, type DirectorOptions, type DirectorOutput } from './CameraDirector';
 import { cloneParams, PRESETS, PRESET_IDS, type CameraParams, type PresetId } from './CameraParams';
 import type { FightFrame, Vec3 } from './FightFrame';
@@ -37,9 +39,20 @@ import { clamp, smoothstep } from './frameMath';
  * side switching, offscreen rescue, FOV, shake, contexts — is the
  * unmodified Camera Lab director.
  */
+/**
+ * How far inside the floor edge the in-game eye is kept (the wall stands on
+ * the edge): 1.5 m, as when the arena was 12 m wide and the limit 10.5 m.
+ */
+export const CAMERA_EDGE_MARGIN_M = 1.5;
+/** The eye never goes farther than this from the arena centre: it follows the arena size (arena scale pass: 10.5 m -> 34.5 m with the 36 m floor). */
+export const CAMERA_CONTAIN_RADIUS_M = ARENA_FLOOR_RADIUS - CAMERA_EDGE_MARGIN_M;
+/** A Bey airborne and flying outward past this radius is a ring-out candidate for the camera: 3.9 m inside the ring-out radius (9 m when it was 12.9 m; now 33 m). */
+export const CAMERA_RINGOUT_WATCH_RADIUS_M = RINGOUT_RADIUS_M - 3.9;
+
 export const RIG_DIRECTOR_OPTIONS = {
   clashOrbit: false,
-  arena: { containRadiusM: 10.5 },
+  arena: { containRadiusM: CAMERA_CONTAIN_RADIUS_M },
+  ringOutWatchRadiusM: CAMERA_RINGOUT_WATCH_RADIUS_M,
 } as const;
 
 /**
@@ -55,7 +68,7 @@ export const RIG_DIRECTOR_OPTIONS = {
  * 1.9 m, C 4.3 m / 1.5 m. `maxDistance` is kept generous (unlike the old
  * fixed `maxExtraDistanceM` caps) so the director's own separation response
  * can pull back as far as it needs to keep the opponent framed; the arena's
- * `containRadiusM` (10.5 m) and `HEIGHT_PER_DISTANCE` already stop that
+ * `containRadiusM` (CAMERA_CONTAIN_RADIUS_M) and `HEIGHT_PER_DISTANCE` already stop that
  * from reading as an aerial shot (see the "far separation" test scenario).
  */
 export interface ArenaCameraRig {

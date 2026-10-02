@@ -15,7 +15,9 @@ import { scenarioById } from '../../prototypes/camera-concepts/src/fight/scenari
 import type { FightFrame } from '../../prototypes/camera-concepts/src/fight/FightFrame';
 import { CameraDirector } from '../../src/camera/director/CameraDirector';
 import { PRESETS, PRESET_IDS, type PresetId } from '../../src/camera/director/CameraParams';
-import { ARENA_CAMERA_RIGS, arenaParamsFor, CameraRig, CLASH_FORCED_PRESET, PRESET_SWITCH_BLEND_S, RIG_DIRECTOR_OPTIONS, rigDirectorOptions, type CameraRigOutput } from '../../src/camera/director/CameraRig';
+import { ARENA_FLOOR_RADIUS } from '../../src/arena/colliders/ArenaTuning';
+import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
+import { ARENA_CAMERA_RIGS, arenaParamsFor, CameraRig, CLASH_FORCED_PRESET, PRESET_SWITCH_BLEND_S, CAMERA_CONTAIN_RADIUS_M, RIG_DIRECTOR_OPTIONS, rigDirectorOptions, type CameraRigOutput } from '../../src/camera/director/CameraRig';
 import { inFrame } from '../../src/camera/director/frameMath';
 import { floorHeightAt } from '../../src/arena/floor/ArenaFloorProfile';
 import { GameStateMachine } from '../../src/app/lifecycle/GameState';
@@ -256,11 +258,11 @@ describe('in-game arena camera (owner playtest, M11 fix 8 — dynamic two-fighte
 
   it('never leaves the arena and the wall never hides a Bey, even with the player against the wall', () => {
     for (const preset of PRESET_IDS) {
-      for (const [px, pz, ox, oz] of [[10.5, 0, 0, 0], [0, -10.5, 3, 5], [-8, 7, -9, 6], [7.4, 7.4, -7.4, -7.4]] as const) {
+      for (const [px, pz, ox, oz] of [[CAMERA_CONTAIN_RADIUS_M, 0, 0, 0], [0, -CAMERA_CONTAIN_RADIUS_M, 3, 5], [-26, 23, -27, 20], [24.4, 24.4, -24.4, -24.4]] as const) {
         const d = new CameraDirector(arenaParamsFor(preset), 16 / 9, rigDirectorOptions(preset));
         for (let t = 0; t < 240; t++) {
           const o = d.tick(frame(t, fighter(px, pz), fighter(ox, oz)) as never, DT);
-          expect(Math.hypot(o.eye.x, o.eye.z), `${preset} (${px},${pz})`).toBeLessThanOrEqual(10.5 + 1e-9);
+          expect(Math.hypot(o.eye.x, o.eye.z), `${preset} (${px},${pz})`).toBeLessThanOrEqual(CAMERA_CONTAIN_RADIUS_M + 1e-9);
         }
       }
     }
@@ -272,10 +274,43 @@ describe('in-game arena camera (owner playtest, M11 fix 8 — dynamic two-fighte
       for (const preset of PRESET_IDS) {
         const out = runRig(frames, preset);
         const worst = Math.max(...out.map((o) => Math.hypot(o.eye.x, o.eye.z)));
-        expect(worst, `${scenario} ${preset}`).toBeLessThanOrEqual(10.5 + 1e-9);
+        expect(worst, `${scenario} ${preset}`).toBeLessThanOrEqual(CAMERA_CONTAIN_RADIUS_M + 1e-9);
       }
     }
   }, 120_000);
+
+  it('follows the arena size: the eye limit and the ring-out watch radius derive from the floor and ring-out radii', () => {
+    expect(CAMERA_CONTAIN_RADIUS_M).toBeCloseTo(ARENA_FLOOR_RADIUS - 1.5, 12);
+    expect(RIG_DIRECTOR_OPTIONS.arena.containRadiusM).toBe(CAMERA_CONTAIN_RADIUS_M);
+    expect(RIG_DIRECTOR_OPTIONS.ringOutWatchRadiusM).toBeCloseTo(RINGOUT_RADIUS_M - 3.9, 12);
+  });
+
+  it('a fight near the rim is followed from close behind, not from the middle of the arena (regression: the 10.5 m eye limit on the 36 m stage)', () => {
+    for (const preset of PRESET_IDS) {
+      const d = new CameraDirector(arenaParamsFor(preset), 16 / 9, rigDirectorOptions(preset));
+      // Player at r = 30 on -Z, opponent 5 m further along the fight axis toward the centre.
+      const out = (() => {
+        let o = d.tick(frame(0, fighter(0, -30), fighter(0, -25)) as never, DT);
+        for (let t = 1; t < 240; t++) o = d.tick(frame(t, fighter(0, -30), fighter(0, -25)) as never, DT);
+        return o;
+      })();
+      const toPlayer = Math.hypot(out.eye.x - 0, out.eye.z + 30);
+      expect(toPlayer, `${preset}: eye distance to the player`).toBeLessThan(ARENA_CAMERA_RIGS[preset].maxDistance + 1);
+      expect(Math.hypot(out.eye.x, out.eye.z), `${preset}: inside the arena`).toBeLessThanOrEqual(CAMERA_CONTAIN_RADIUS_M + 1e-9);
+    }
+  });
+
+  it('the ring-out camera anticipates the real edge: an airborne Bey flying outward at r = 20 m is not a ring-out candidate, at r = 34 m it is', () => {
+    const flyer = (r: number) => ({ ...fighter(0, -r, 0, -8), airborne: true });
+    const d = new CameraDirector(arenaParamsFor('B'), 16 / 9, rigDirectorOptions('B'));
+    const modeAt = (r: number) => {
+      let o = d.tick(frame(0, flyer(r), fighter(0, 0)) as never, DT);
+      for (let t = 1; t < 30; t++) o = d.tick(frame(t, flyer(r), fighter(0, 0)) as never, DT);
+      return o.weights.RingOut;
+    };
+    expect(modeAt(20)).toBeLessThan(0.05);
+    expect(modeAt(34)).toBeGreaterThan(0.2);
+  });
 
   const settle = (d: CameraDirector, p: ReturnType<typeof fighter>, o: ReturnType<typeof fighter>) => {
     let out = d.tick(frame(0, p, o) as never, DT);
@@ -358,12 +393,12 @@ describe('in-game arena camera (owner playtest, M11 fix 8 — dynamic two-fighte
       for (const preset of PRESET_IDS) {
         const floorAt = (x: number, z: number) => floorHeightAt(floor, x, z);
         const d = new CameraDirector(arenaParamsFor(preset), 16 / 9, rigDirectorOptions(preset, floorAt));
-        for (const [px, pz, ox, oz] of [[0, -10, 0, 2], [7, 7, -2, -2], [0, 2, 0, 9]] as const) {
+        for (const [px, pz, ox, oz] of [[0, -33, 0, -20], [24, 24, 17, 17], [0, 20, 0, 31]] as const) {
           const p = { ...fighter(px, pz), position: { x: px, y: floorAt(px, pz) + 0.2, z: pz } };
           const o = { ...fighter(ox, oz), position: { x: ox, y: floorAt(ox, oz) + 0.2, z: oz } };
           const out = settle(d, p as never, o as never);
           expect(out.eye.y, `${floor} ${preset} (${px},${pz})`).toBeGreaterThanOrEqual(floorAt(out.eye.x, out.eye.z) + PRESETS[preset].floorClearance - 1e-6);
-          expect(Math.hypot(out.eye.x, out.eye.z), `${floor} ${preset} (${px},${pz})`).toBeLessThanOrEqual(10.5 + 1e-6);
+          expect(Math.hypot(out.eye.x, out.eye.z), `${floor} ${preset} (${px},${pz})`).toBeLessThanOrEqual(CAMERA_CONTAIN_RADIUS_M + 1e-6);
         }
       }
     }
