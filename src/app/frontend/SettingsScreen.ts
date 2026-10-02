@@ -150,9 +150,11 @@ export class SettingsScreen {
       this.toggleRow('debug-overlay', 'Developer overlay (F3) on start', 'debugOverlayOnStart'),
     );
 
-    // Condition languages (A / B / C): shown only while the conditionVisuals presentation flag is on, so the flag-off Settings screen is unchanged.
+    // Condition languages (A / B / C): shown while the conditionVisuals presentation flag is on, which it is in the normal game;
+    // an explicit ?pfx allowlist without it hides the section (the pre-0.16 Settings screen).
+    let condition: HTMLElement | null = null;
     if (presentationFeaturesFromLocation().conditionVisuals) {
-      const condition = this.section('Condition (Stamina, Stability, Broken)');
+      condition = this.section('Condition (Stamina, Stability, Broken)');
       for (const [id, label] of CONDITION_LAYER_LABELS) {
         condition.append(
           this.choiceRow<boolean>(
@@ -203,7 +205,8 @@ export class SettingsScreen {
     );
 
     const body = el('div', 'cb-settings__body');
-    body.append(graphics, play, controls);
+    // The condition section sits between Play and Controls, in the same order as its rows in the keyboard navigation.
+    body.append(...(condition ? [graphics, play, condition, controls] : [graphics, play, controls]));
     panel.append(eyebrow, title, body, footer);
     this.root.append(panel);
     mount.append(this.root);

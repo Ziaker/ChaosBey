@@ -26,6 +26,7 @@ import { FOUNDRY_PIT, RIFT_CRATER, TOURNAMENT_STADIUM } from '../../src/arena/pr
 import { PhysicsWorld } from '../../src/physics/world/PhysicsWorld';
 import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecorder';
 import {
+  PRESENTATION_FEATURES_DEFAULT,
   PRESENTATION_FEATURES_OFF,
   VfxDirector,
   collectSceneStats,
@@ -172,6 +173,15 @@ describe('presentation foundation is behaviour-neutral on a real session', () =>
       expect(other.camera).toBe(off.camera);
     }
   }, 120_000);
+
+  it('the normal-game defaults (the five approved packages on) give the identical simulation, replay and camera as all-off', async () => {
+    const off = await run(PRESENTATION_FEATURES_OFF, false);
+    const normal = await run(PRESENTATION_FEATURES_DEFAULT, false);
+    expect(normal.hashes).toEqual(off.hashes);
+    expect(normal.replayIntegrity).toBe(off.replayIntegrity);
+    expect(normal.camera).toBe(off.camera);
+    expect(normal.systemErrors).toBe(0);
+  }, 300_000);
 
   it('hybridVfx leaves the simulation, replay and the camera object untouched, and hides only the legacy impact bursts', async () => {
     const off = await run(undefined, false);

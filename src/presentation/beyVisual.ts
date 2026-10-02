@@ -12,8 +12,11 @@
 //
 // The structure follows the approved anatomy (visual-prototypes-approval.md
 // section 1): Top Layer, Ring, Disc, Driver. This module ships NO concept and
-// NO model: with every presentation flag off, and while nothing is registered,
-// resolution returns the current placeholder mesh untouched.
+// NO model itself: the nine approved concepts are registered by
+// src/bey/visual/approvedBeyVisuals.ts (beyVisualDefinitionFor, used by the
+// match scene and Character Select). With `newBeyVisuals` off, or for a
+// definition with nothing assigned, resolution returns the legacy placeholder
+// mesh untouched.
 // ============================================================
 
 import * as THREE from 'three';
@@ -90,7 +93,7 @@ export class BeyVisualRegistry {
   }
 }
 
-/** The process-wide registry future integrations register their visuals in. Empty today. */
+/** The process-wide registry. The approved concepts are registered in it on first use (approvedBeyVisuals.ts). */
 export const BEY_VISUAL_REGISTRY = new BeyVisualRegistry();
 
 /** The visual every gameplay definition has today: whatever its own `appearance` builds (the procedural placeholder). */

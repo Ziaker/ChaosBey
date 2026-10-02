@@ -1,15 +1,20 @@
 // ============================================================
 // BEY PREVIEW STAGE — THE ROTATING 3D BEY ON CHARACTER SELECT (M10)
-// Draws the focused Bey's own appearance (the same createVisual() the
-// match uses) spinning on a small lit pedestal, on the game's canvas,
-// behind the select screen's panels. Render-only: no physics world, no
-// simulation. Owns its render loop while shown.
+// Draws the focused Bey spinning on a small lit pedestal, on the game's
+// canvas, behind the select screen's panels. The model comes from the same
+// resolution the match scene uses (beyVisualDefinitionFor, with the page's
+// presentation flags), so the Bey on the pedestal is the Bey that fights:
+// the approved concept in the normal game, the legacy placeholder with
+// `newBeyVisuals` off. Render-only: no physics world, no simulation, no
+// gameplay definition touched. Owns its render loop while shown.
 // ============================================================
 
 import * as THREE from 'three';
 import type { AppRenderer } from '../bootstrap/createRenderer';
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
+import { beyVisualDefinitionFor } from '../../bey/visual/approvedBeyVisuals';
+import { presentationFeaturesFromLocation, type PresentationFeatures } from '../../presentation/features';
 
 /** Visual spin of the preview (rad/s): readable, not a blur. */
 const PREVIEW_SPIN_RAD_S = 9;
@@ -22,12 +27,17 @@ export class BeyPreviewStage {
   private readonly turntable = new THREE.Group();
   private readonly rimLight = new THREE.PointLight(0xffffff, 12, 6);
   private visual: BeyVisual | null = null;
+  private visualId: string | null = null;
   private rafHandle: number | null = null;
   private lastFrameMs: number | null = null;
   private elapsedS = 0;
   private readonly savedCamera: { position: THREE.Vector3; quaternion: THREE.Quaternion; fov: number };
 
-  constructor(private readonly appRenderer: AppRenderer) {
+  constructor(
+    private readonly appRenderer: AppRenderer,
+    /** The flags the match will be created with (the page's, as MatchSession reads them). */
+    private readonly features: PresentationFeatures = presentationFeaturesFromLocation(),
+  ) {
     const { camera } = appRenderer;
     this.savedCamera = { position: camera.position.clone(), quaternion: camera.quaternion.clone(), fov: camera.fov };
 
@@ -61,11 +71,18 @@ export class BeyPreviewStage {
       this.turntable.remove(this.visual.group);
       disposeObject(this.visual.group);
     }
-    this.visual = definition.appearance.createVisual();
+    const visualDefinition = beyVisualDefinitionFor(definition, this.features);
+    this.visual = visualDefinition.create(definition);
+    this.visualId = visualDefinition.id;
     // The mesh is anchored at the body's centre (tip at the collider's bottom), so lift it onto the pedestal.
     this.visual.group.position.y = definition.physical.colliderHalfHeightM;
     this.turntable.add(this.visual.group);
     this.rimLight.color.setHex(accentHex);
+  }
+
+  /** Id of the visual on the pedestal (e.g. `concept:attack-a`), or null before the first show. */
+  get shownVisualId(): string | null {
+    return this.visualId;
   }
 
   start(): void {
@@ -85,6 +102,7 @@ export class BeyPreviewStage {
     this.appRenderer.scene.remove(this.root);
     disposeObject(this.root);
     this.visual = null;
+    this.visualId = null;
     const { camera } = this.appRenderer;
     camera.position.copy(this.savedCamera.position);
     camera.quaternion.copy(this.savedCamera.quaternion);

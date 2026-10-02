@@ -9,11 +9,14 @@
 // archetype wears the "A" concept of its own family. Final names and palettes
 // are still open (VISUAL_APPROVALS_MASTER.md 3.3).
 //
-// Nothing here is consulted unless the `newBeyVisuals` flag is on.
+// Nothing here is consulted unless the `newBeyVisuals` flag is on (on in the
+// normal game since 0.16.0; see src/presentation/features.ts).
 // ============================================================
 
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../archetype/BeyArchetypes';
-import { BEY_VISUAL_REGISTRY, type BeyVisualDefinition, type BeyVisualPieceSpec, type BeyVisualRegistry } from '../../presentation/beyVisual';
+import { BEY_VISUAL_REGISTRY, resolveBeyVisualDefinition, type BeyVisualDefinition, type BeyVisualPieceSpec, type BeyVisualRegistry } from '../../presentation/beyVisual';
+import type { PresentationFeatures } from '../../presentation/features';
+import type { BeyDefinition } from '../archetype/BeyDefinition';
 import { createConceptBeyVisual } from './conceptBeyVisual';
 import { CONCEPTS } from './concepts/conceptDefinitions';
 import type { ConceptDefinition } from './model/types';
@@ -56,4 +59,17 @@ export function ensureApprovedBeyVisualsRegistered(registry: BeyVisualRegistry =
   for (const [gameplayId, visualId] of Object.entries(PROVISIONAL_ARCHETYPE_VISUALS)) {
     if (registry.assignedVisualId(gameplayId) !== visualId) registry.assign(gameplayId, visualId);
   }
+}
+
+/**
+ * The visual a gameplay definition wears in the game. The one resolution used
+ * by both the match scene and the Character Select preview, so the Bey shown
+ * on the pedestal is the Bey that fights. With `newBeyVisuals` on it registers
+ * the approved concepts first (idempotent, no physics, no match needed), so it
+ * works before any match has ever been created; off, it is the legacy
+ * placeholder, exactly as before.
+ */
+export function beyVisualDefinitionFor(gameplay: BeyDefinition, features: PresentationFeatures, registry: BeyVisualRegistry = BEY_VISUAL_REGISTRY): BeyVisualDefinition {
+  if (features.newBeyVisuals) ensureApprovedBeyVisualsRegistered(registry);
+  return resolveBeyVisualDefinition(gameplay, features, registry);
 }

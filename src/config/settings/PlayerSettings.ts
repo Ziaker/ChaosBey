@@ -42,11 +42,15 @@ export const CAMERA_PRESET_SETTINGS: readonly CameraPresetSetting[] = ['A', 'B',
 /**
  * Stamina / Stability / Broken languages (condition-visual-approval.md): A Desgaste Mecânico, B Aura de Espírito,
  * C Instrumento no Chão. The player may show any combination of 1, 2 or 3 (never none); the shared physical layer is always on.
- * Only used while the `conditionVisuals` presentation flag is on; with it off the Settings screen does not show it either.
+ * Used while the `conditionVisuals` presentation flag is on, which it is in the normal game (src/presentation/features.ts);
+ * with it off (an explicit `?pfx` allowlist without it) the Settings screen does not show the section.
  */
 export type ConditionLayerSetting = 'A' | 'B' | 'C';
 export const CONDITION_LAYER_SETTINGS: readonly ConditionLayerSetting[] = ['A', 'B', 'C'];
-/** OPEN DECISION (ASK FIRST): the first-time default for new players is the owner's to pick. A alone is a neutral placeholder. */
+/**
+ * PROVISIONAL implementation default, not an owner choice between A/B/C (ASK FIRST): the first-time default for new players
+ * is the owner's to pick. A alone is a neutral placeholder; Reset to defaults returns here.
+ */
 export const DEFAULT_CONDITION_LAYERS: readonly ConditionLayerSetting[] = ['A'];
 
 /** Turns one condition layer on or off. The last layer on cannot be turned off: at least one always shows. */

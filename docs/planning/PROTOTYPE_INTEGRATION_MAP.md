@@ -11,16 +11,18 @@ Precedence stays: `OWNER_DECISIONS_MASTER.md` → `VISUAL_APPROVALS_MASTER.md` �
 
 ## 0. Status update — 2026-10-02 (supersedes the "In `src/` today" and "State" columns below where they differ)
 
-The visual integration pass of section 4 has landed, batch by batch, each behind its own flag and **off by default** (turn on with `?pfx=<flag>` or `?pfx=all`):
+The visual integration pass of section 4 has landed, batch by batch, each behind its own flag. **Since 0.16.0 the five approved packages are ON in the normal game** (`PRESENTATION_FEATURES_DEFAULT` in `src/presentation/features.ts`; `newHud` stays off). An explicit `?pfx=` is an allowlist for isolation: it starts from all-off and turns on only what it names (`?pfx=hybridVfx`, `?pfx=all`; `?pfx=` alone is the all-off baseline, `PRESENTATION_FEATURES_OFF`). Character Select's preview resolves the Bey through the same function as the match (`beyVisualDefinitionFor`).
+
+Provisional, not owner choices: each gameplay archetype wears concept A of its family (`concept:attack-a`, `concept:defense-a`, `concept:stamina-a`; B/C stay registered, visual-only); the Condition default is A alone.
 
 | Batch | PR | Flag | Now |
 |---|---|---|---|
 | Foundation (hub, events, flags) | #72 | — | **INTEGRATED** |
-| 1 — Bey 4-piece concepts (3 archetypes) | #82 | `newBeyVisuals` | **INTEGRATED behind flag**; gameplay for the other 6 concepts still **OWNER CHOICE REQUIRED** |
-| 2 — Condition languages A/B/C | #84 | `conditionVisuals` | **INTEGRATED behind flag**; default combination still open |
-| 3 — Hybrid VFX + Cel Cyclone | #85 | `hybridVfx` | **INTEGRATED behind flag**; shake ×1.35 still pending metadata (no bridge), no time scaling |
-| 4 — Clash Overdrive | #86 (v0.13.0) | `clashPresentation` | **INTEGRATED behind flag**; tie style (ASK FIRST), entry slow motion, per-mash hitstop, Clash shake and the "overdrive" bar style still frozen/open |
-| 5 — Arena art (Foundry, Rift, Tournament) | #87 (v0.14.0) | `arenaVisuals` | **INTEGRATED behind flag**, fitted to the 36 m stage (horizontal footprint ×3, real-size parts, light rigs/sky/haze scaled as a whole); default arena still **OWNER CHOICE REQUIRED** |
+| 1 — Bey 4-piece concepts (3 archetypes) | #82 | `newBeyVisuals` | **ON in normal play** (0.16.0), also on Character Select; gameplay for the other 6 concepts still **OWNER CHOICE REQUIRED** |
+| 2 — Condition languages A/B/C | #84 | `conditionVisuals` | **ON in normal play** (0.16.0); Settings shows A/B/C (1–3, never none); default A is provisional, the owner's default combination still open |
+| 3 — Hybrid VFX + Cel Cyclone | #85 | `hybridVfx` | **ON in normal play** (0.16.0); shake ×1.35 still pending metadata (no bridge), no time scaling |
+| 4 — Clash Overdrive | #86 (v0.13.0) | `clashPresentation` | **ON in normal play** (0.16.0); tie style (ASK FIRST), entry slow motion, per-mash hitstop, Clash shake and the "overdrive" bar style still frozen/open |
+| 5 — Arena art (Foundry, Rift, Tournament) | #87 (v0.14.0) | `arenaVisuals` | **ON in normal play** (0.16.0), fitted to the 36 m stage (horizontal footprint ×3, real-size parts, light rigs/sky/haze scaled as a whole); default arena still **OWNER CHOICE REQUIRED** |
 | HUD | ~~#64~~ closed | `newHud` (unused) | **NO LAB, NO A/B/C CHOICE** — owner 2026-10-02: the Combat HUD Lab is not needed; the HUD is the existing `CombatHud` |
 
 Since this map was written the stage also became **3× / 36 m** (#83, v0.12.0) and the camera follows it (#88, v0.14.1: eye limit 34.5 m, ring-out watch 33 m). The camera freeze of section 6 applied to the visual batches, which touched no camera file; #88 was a separate, owner-requested camera fix, and the owner-approved Inertial Duel Camera (#89) is camera work outside this pass. PR #24 (Clash lab) and PR #67 (old plan) are now fully superseded by #86 and this map.
@@ -45,7 +47,7 @@ Gameplay produces facts; the session hands each finished tick to a hub; visual s
 
 | Piece | File | Notes |
 |---|---|---|
-| Flags (all **off**) | `features.ts` | `newBeyVisuals`, `conditionVisuals`, `hybridVfx`, `clashPresentation`, `newHud`, `arenaVisuals`. Dev switch: `?pfx=hybridVfx,newHud` or `?pfx=all`. Nothing sits behind a flag yet |
+| Flags | `features.ts` | `newBeyVisuals`, `conditionVisuals`, `hybridVfx`, `clashPresentation`, `newHud`, `arenaVisuals`. Normal game: `PRESENTATION_FEATURES_DEFAULT` (all but `newHud` on, since 0.16.0). All-off baseline: `PRESENTATION_FEATURES_OFF`. Isolation: `?pfx=hybridVfx,arenaVisuals`, `?pfx=all`, `?pfx=` (all off). (Historical: when this map was written nothing sat behind a flag yet.) |
 | Events | `events.ts` | Derived after the tick from the `MatchTickResult`, the existing `ImpactEvent` list and the Clash tracker. Only events with a real source |
 | State selectors (pure) | `state.ts` | Normalized per-Bey state, read-only camera snapshot, recent-impact memory. No visual thresholds |
 | Clash adapter | `clash.ts` | Snapshot of the real `ClashController`; no rule copied |
