@@ -13,10 +13,17 @@ async function openDebugLab(page: Page, search: string, errors: string[]): Promi
   });
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
   await page.goto(`/ChaosBey/?mode=debug-lab${search}`);
-  await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession()?.getTickIndex() ?? 0), { timeout: 20_000 }).toBeGreaterThan(120);
+  // A running session is all these checks need (they read flags, systems and visuals, or restart and step the Lab
+  // themselves). The normal game and ?pfx=all deliberately run the full presentation here, which software WebGL in CI
+  // draws at ~2 fps, so the Lab's real-time ticks come slowly: waiting for a few ticks proves the session runs
+  // without making this a wall-clock test.
+  await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession()?.getTickIndex() ?? 0), { timeout: 20_000 }).toBeGreaterThan(5);
 }
 
 test('no ?pfx is the normal game, ?pfx= is an allowlist (all, one, empty, a typo); only newBeyVisuals swaps the picture; no console errors', async ({ browser }) => {
+  // Five fresh browser contexts in a row, two of them (no ?pfx, ?pfx=all) with every package on: the default 30 s
+  // budget is for one page, not five.
+  test.setTimeout(120_000);
   const seen: { stats: unknown; ids: string[]; features: Record<string, boolean>; errors: string[] }[] = [];
   for (const search of ['', '&pfx=all', '&pfx=notAFeature', '&pfx=hybridVfx', '&pfx=']) {
     const context = await browser.newContext();
