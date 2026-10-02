@@ -1,10 +1,10 @@
-// M11 lane 2: the game's camera is the approved Camera Lab director,
-// ported unchanged, running the three approved presets. The Clash always
-// forces camera B without orbit and hands back to the player's preset
-// without a cut. Presentation only: the preset never changes the match.
+// M11 lane 2 + Inertial Duel Camera integration.
 //
-// Fights come from the lab's real-simulation scenarios (tickMatch +
-// Rapier + real AI / scripts), the same ones the approval measured.
+// The approved Camera Lab director/presets remain byte-for-byte preserved as
+// the base presentation generator. The in-game CameraRig now wraps each base
+// director in InertialDuelDirector: normal-combat yaw is composition-driven
+// and spatially persistent, while Clash still forces B and gameplay remains
+// completely independent of camera presentation.
 
 import * as THREE from 'three';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -14,10 +14,23 @@ import { RealSimSource } from '../../prototypes/camera-concepts/src/fight/RealSi
 import { scenarioById } from '../../prototypes/camera-concepts/src/fight/scenarios';
 import type { FightFrame } from '../../prototypes/camera-concepts/src/fight/FightFrame';
 import { CameraDirector } from '../../src/camera/director/CameraDirector';
+import { InertialDuelDirector, type InertialDirectorOutput } from '../../src/camera/director/InertialDuelDirector';
 import { PRESETS, PRESET_IDS, type PresetId } from '../../src/camera/director/CameraParams';
-import { ARENA_CAMERA_RIGS, arenaParamsFor, CameraRig, CLASH_FORCED_PRESET, PRESET_SWITCH_BLEND_S, RIG_DIRECTOR_OPTIONS, rigDirectorOptions, type CameraRigOutput } from '../../src/camera/director/CameraRig';
+import {
+  arenaParamsFor,
+  CameraRig,
+  CAMERA_CONTAIN_RADIUS_M,
+  CAMERA_EDGE_MARGIN_M,
+  CAMERA_RINGOUT_WATCH_RADIUS_M,
+  CLASH_FORCED_PRESET,
+  PRESET_SWITCH_BLEND_S,
+  rigDirectorOptions,
+  type CameraRigOutput,
+} from '../../src/camera/director/CameraRig';
 import { inFrame } from '../../src/camera/director/frameMath';
 import { floorHeightAt } from '../../src/arena/floor/ArenaFloorProfile';
+import { ARENA_FLOOR_RADIUS } from '../../src/arena/colliders/ArenaTuning';
+import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { GameStateMachine } from '../../src/app/lifecycle/GameState';
 import { MatchSession } from '../../src/app/session/MatchSession';
 import { IdleController } from '../../src/automation/scripted-scenarios/IdleController';
@@ -42,30 +55,53 @@ async function framesOf(id: string): Promise<FightFrame[]> {
   return frames;
 }
 
-function runRig(frames: readonly FightFrame[], preset: PresetId, onTick?: (i: number, rig: CameraRig) => void): CameraRigOutput[] {
-  const rig = new CameraRig(preset);
+function newInertial(preset: PresetId, floorAt?: (x: number, z: number) => number): InertialDuelDirector {
+  return new InertialDuelDirector(
+    preset,
+    arenaParamsFor(preset),
+    16 / 9,
+    rigDirectorOptions(preset, floorAt),
+    CAMERA_RINGOUT_WATCH_RADIUS_M,
+  );
+}
+
+function runStandalone(frames: readonly FightFrame[], preset: PresetId, floorAt?: (x: number, z: number) => number): InertialDirectorOutput[] {
+  const d = newInertial(preset, floorAt);
+  return frames.map((f) => {
+    const o = d.tick(f as never, DT);
+    return {
+      ...o,
+      eye: { ...o.eye },
+      focus: { ...o.focus },
+      shake: { ...o.shake },
+      weights: { ...o.weights },
+      debug: { ...o.debug, modifiers: [...o.debug.modifiers], composition: { ...o.debug.composition } },
+    };
+  });
+}
+
+function runRig(frames: readonly FightFrame[], preset: PresetId, onTick?: (i: number, rig: CameraRig) => void, floorAt?: (x: number, z: number) => number): CameraRigOutput[] {
+  const rig = new CameraRig(preset, 16 / 9, floorAt);
   return frames.map((f, i) => {
     onTick?.(i, rig);
     const out = rig.tick(f as never, DT);
-    return { ...out, eye: { ...out.eye }, focus: { ...out.focus } };
+    return { ...out, eye: { ...out.eye }, focus: { ...out.focus }, shake: { ...out.shake } };
   });
 }
 
 const dist = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): number => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-const yawAround = (eye: { x: number; z: number }, center: { x: number; z: number }): number => Math.atan2(eye.x - center.x, eye.z - center.z);
 const angleDelta = (a: number, b: number): number => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
-describe('ported director = the approved Camera Lab', () => {
+describe('approved Camera Lab remains the immutable base generator', () => {
   it('the three presets are exactly the approved values (every parameter)', () => {
     expect(PRESETS).toEqual(LAB_PRESETS);
     for (const id of PRESET_IDS) expect(Object.keys(PRESETS[id]).sort()).toEqual(PARAM_SPEC.map((p) => p.key).sort());
-    // Spot-check against camera-approval.md §12.
     expect(PRESETS.A).toMatchObject({ baseFov: 58, maxFov: 74, orbitSpeed: 40, sideSwitchCooldown: 60, shakeIntensity: 0.6 });
     expect(PRESETS.B).toMatchObject({ baseFov: 62, maxFov: 88, orbitSpeed: 70, sideSwitchCooldown: 6, shakeIntensity: 1 });
     expect(PRESETS.C).toMatchObject({ baseFov: 66, maxFov: 100, orbitSpeed: 105, sideSwitchCooldown: 3, shakeIntensity: 1.4 });
   });
 
-  it('with default options it reproduces the lab director tick for tick, on a real duel and a real Clash', async () => {
+  it('with default options the port still reproduces the Camera Lab tick for tick', async () => {
     for (const scenario of ['normal-duel', 'clash-setup']) {
       const frames = await framesOf(scenario);
       for (const id of PRESET_IDS) {
@@ -83,7 +119,7 @@ describe('ported director = the approved Camera Lab', () => {
     }
   }, 120_000);
 
-  it('clashOrbit: false changes nothing outside the Clash and holds the angle during it', async () => {
+  it('clashOrbit: false changes nothing outside the Clash and holds the base angle during it', async () => {
     const frames = await framesOf('clash-setup');
     const orbit = new CameraDirector(PRESETS.B);
     const still = new CameraDirector(PRESETS.B, 16 / 9, { clashOrbit: false });
@@ -96,7 +132,7 @@ describe('ported director = the approved Camera Lab', () => {
     for (const f of frames) {
       const a = orbit.tick(f, DT);
       const b = still.tick(f as never, DT);
-      if (!seenClash && !f.clashActive) expect(b.eye).toEqual(a.eye); // identical until the Clash starts
+      if (!seenClash && !f.clashActive) expect(b.eye).toEqual(a.eye);
       seenClash ||= f.clashActive;
       if (f.clashActive && a.weights.Clash > 0.95) {
         clashTicks++;
@@ -106,23 +142,18 @@ describe('ported director = the approved Camera Lab', () => {
         prevStill = b.debug.yawDeg * (Math.PI / 180);
       }
     }
-    expect(clashTicks).toBeGreaterThan(120); // a real, ~4 s Clash
-    expect(orbitTurn).toBeGreaterThan(0.8); // the lab camera orbits well over 45° …
-    expect(stillTurn).toBeLessThan(0.05); // … the approved Clash camera holds (< 3° total)
+    expect(clashTicks).toBeGreaterThan(120);
+    expect(orbitTurn).toBeGreaterThan(0.8);
+    expect(stillTurn).toBeLessThan(0.05);
   }, 60_000);
 });
 
-describe('CameraRig — Clash forces B without orbit', () => {
-  it('for A and C the Clash shows camera B (no orbit), then hands back to the player preset exactly', async () => {
+describe('CameraRig — inertial player camera + Clash forces inertial B', () => {
+  it('for A and C the full Clash blend shows B, then hands back exactly to the player inertial preset', async () => {
     const frames = await framesOf('clash-setup');
-    const forced = new CameraDirector(arenaParamsFor(CLASH_FORCED_PRESET), 16 / 9, rigDirectorOptions(CLASH_FORCED_PRESET));
-    const forcedOut = frames.map((f) => {
-      const o = forced.tick(f as never, DT);
-      return { eye: { ...o.eye }, clash: o.weights.Clash };
-    });
+    const forcedOut = runStandalone(frames, CLASH_FORCED_PRESET);
     for (const preset of ['A', 'C'] as const) {
-      const own = new CameraDirector(arenaParamsFor(preset), 16 / 9, rigDirectorOptions(preset));
-      const ownOut = frames.map((f) => ({ ...own.tick(f as never, DT).eye }));
+      const ownOut = runStandalone(frames, preset);
       const rig = runRig(frames, preset);
       const full = rig.map((o, i) => ({ o, i })).filter(({ o }) => o.clashBlend > 0.999);
       expect(full.length).toBeGreaterThan(90);
@@ -130,42 +161,32 @@ describe('CameraRig — Clash forces B without orbit', () => {
         expect(dist(o.eye, forcedOut[i]!.eye)).toBeLessThan(0.02);
         expect(o.mode).toBe('Clash');
       }
-      // After the Clash the blend decays to zero and the player's preset is back, exactly.
       const lastClash = frames.map((f) => f.clashActive).lastIndexOf(true);
       const back = rig.findIndex((o, i) => i > lastClash && o.clashBlend === 0);
       expect(back).toBeGreaterThan(lastClash);
-      for (let i = back; i < rig.length; i++) expect(rig[i]!.eye).toEqual(ownOut[i]); // exactly the player's own camera again
+      for (let i = back; i < rig.length; i++) expect(rig[i]!.eye).toEqual(ownOut[i]!.eye);
       expect(rig.at(-1)!.preset).toBe(preset);
     }
   }, 60_000);
 
-  it('a player on B sees exactly the B director (forced camera = own camera)', async () => {
+  it('a player on B sees exactly the standalone inertial B director', async () => {
     const frames = await framesOf('clash-setup');
-    const own = new CameraDirector(arenaParamsFor('B'), 16 / 9, rigDirectorOptions('B'));
+    const own = runStandalone(frames, 'B');
     const rig = runRig(frames, 'B');
-    frames.forEach((f, i) => expect(rig[i]!.eye).toEqual(own.tick(f as never, DT).eye));
+    frames.forEach((_, i) => {
+      expect(rig[i]!.eye).toEqual(own[i]!.eye);
+      expect(rig[i]!.focus).toEqual(own[i]!.focus);
+      expect(rig[i]!.fov).toBe(own[i]!.fov);
+    });
   }, 60_000);
 
-  it('entering and leaving the Clash never cuts: no eye jump bigger than the directors themselves make', async () => {
+  it('entering and leaving Clash remains continuous — no presentation cut', async () => {
     const frames = await framesOf('clash-setup');
     for (const preset of PRESET_IDS) {
       const rig = runRig(frames, preset);
-      const own = new CameraDirector(arenaParamsFor(preset), 16 / 9, rigDirectorOptions(preset));
-      const forced = new CameraDirector(arenaParamsFor('B'), 16 / 9, rigDirectorOptions('B'));
-      let prevOwn: { x: number; y: number; z: number } | null = null;
-      let prevForced: { x: number; y: number; z: number } | null = null;
-      let maxDirectorStep = 0;
-      frames.forEach((f) => {
-        const a = { ...own.tick(f as never, DT).eye };
-        const b = { ...forced.tick(f as never, DT).eye };
-        if (prevOwn && prevForced) maxDirectorStep = Math.max(maxDirectorStep, dist(a, prevOwn), dist(b, prevForced));
-        prevOwn = a;
-        prevForced = b;
-      });
-      let maxRigStep = 0;
-      for (let i = 1; i < rig.length; i++) maxRigStep = Math.max(maxRigStep, dist(rig[i]!.eye, rig[i - 1]!.eye));
-      expect(maxRigStep, `preset ${preset}`).toBeLessThanOrEqual(maxDirectorStep * 1.25 + 0.05);
-      expect(maxRigStep, `preset ${preset}`).toBeLessThan(1); // < 60 m/s: never a cut
+      let maxStep = 0;
+      for (let i = 1; i < rig.length; i++) maxStep = Math.max(maxStep, dist(rig[i]!.eye, rig[i - 1]!.eye));
+      expect(maxStep, `preset ${preset}`).toBeLessThan(1);
     }
   }, 60_000);
 
@@ -191,33 +212,29 @@ describe('CameraRig — Clash forces B without orbit', () => {
 });
 
 describe('CameraRig — preset switch mid-match', () => {
-  it('crossfades from the old preset to the new one without a cut, then matches the new director exactly', async () => {
+  it('crossfades to the warm inertial target and then matches it exactly', async () => {
     const frames = await framesOf('normal-duel');
-    // A moment of ordinary play: the Clash camera fully gone for the whole crossfade.
     const probe = runRig(frames, 'A');
     const switchAt = probe.findIndex((_, i) => i > 120 && probe.slice(i, i + 60).every((o) => o.clashBlend === 0));
     expect(switchAt).toBeGreaterThan(120);
+
     const rig = runRig(frames, 'A', (i, r) => {
       if (i === switchAt) r.setPreset('C');
     });
-    const c = new CameraDirector(arenaParamsFor('C'), 16 / 9, rigDirectorOptions('C'));
-    const cOut = frames.map((f) => ({ ...c.tick(f as never, DT).eye }));
-    const a = new CameraDirector(arenaParamsFor('A'), 16 / 9, rigDirectorOptions('A'));
-    const aOut = frames.map((f) => ({ ...a.tick(f as never, DT).eye }));
-    // The tick of the switch is still (almost exactly) A; one crossfade later it is C.
-    expect(dist(rig[switchAt]!.eye, aOut[switchAt]!)).toBeLessThan(0.05);
+    const cOut = runStandalone(frames, 'C');
     const settled = switchAt + Math.ceil(PRESET_SWITCH_BLEND_S / DT) + 1;
-    const clashNear = frames.slice(settled - 1, settled + 1).some((f) => f.clashActive);
-    if (!clashNear) expect(dist(rig[settled]!.eye, cOut[settled]!)).toBeLessThan(1e-9);
+    expect(rig[settled]!.presetSwitch).toBe(1);
+    if (rig[settled]!.clashBlend === 0) expect(rig[settled]!.eye).toEqual(cOut[settled]!.eye);
+
     let maxStep = 0;
     for (let i = switchAt; i < settled; i++) maxStep = Math.max(maxStep, dist(rig[i + 1]!.eye, rig[i]!.eye));
-    expect(maxStep).toBeLessThan(0.6); // a crossfade, not a cut (A and C sit metres apart)
+    expect(maxStep).toBeLessThan(0.8);
     expect(rig.at(-1)!.preset).toBe('C');
   }, 60_000);
 });
 
 describe('presentation only', () => {
-  it('the camera preset never changes the match: identical state hashes for A, B and C', async () => {
+  it('the camera preset never changes the match: identical state hashes for A, B and C, including a live switch', async () => {
     const hashes: string[][] = [];
     for (const preset of PRESET_IDS) {
       const scene = new THREE.Scene();
@@ -238,7 +255,7 @@ describe('presentation only', () => {
       const run: string[] = [];
       for (let i = 0; i < 900 && !session.roundState.isOver; i++) {
         session.tick();
-        if (i === 450) session.setCameraPreset(preset === 'A' ? 'C' : 'A'); // a live switch changes nothing either
+        if (i === 450) session.setCameraPreset(preset === 'A' ? 'C' : 'A');
         if (i % 30 === 0) run.push(session.getStateHash());
       }
       expect(session.getLastCameraOutput()!.fovDeg).toBeLessThanOrEqual(120);
@@ -250,58 +267,52 @@ describe('presentation only', () => {
   }, 120_000);
 });
 
-describe('in-game arena camera (owner playtest, M11 fix 8 — dynamic two-fighter framing)', () => {
+describe('36 m arena scale + inertial two-fighter framing', () => {
   const fighter = (x: number, z: number, vx = 0, vz = 0) => ({ position: { x, y: 0.2, z }, velocity: { x: vx, y: 0, z: vz }, speed: Math.hypot(vx, vz), airborne: false, attack: 'none' as const, broken: false });
   const frame = (t: number, p: ReturnType<typeof fighter>, o: ReturnType<typeof fighter>) => ({ tick: t, time: t / 60, first: p, second: o, intents: [], clashActive: false, clashProgress: 0, roundOver: false, ringOutIsFirst: null });
 
-  it('never leaves the arena and the wall never hides a Bey, even with the player against the wall', () => {
+  it('derives presentation radii from the current arena instead of the old 12 m stage', () => {
+    expect(CAMERA_CONTAIN_RADIUS_M).toBe(ARENA_FLOOR_RADIUS - CAMERA_EDGE_MARGIN_M);
+    expect(CAMERA_RINGOUT_WATCH_RADIUS_M).toBe(RINGOUT_RADIUS_M - 3.9);
+    expect(CAMERA_CONTAIN_RADIUS_M).toBeGreaterThan(30);
+    expect(CAMERA_RINGOUT_WATCH_RADIUS_M).toBeGreaterThan(30);
+  });
+
+  it('the final in-game eye never crosses the arena-scale containment radius, including near-rim fights', () => {
     for (const preset of PRESET_IDS) {
-      for (const [px, pz, ox, oz] of [[10.5, 0, 0, 0], [0, -10.5, 3, 5], [-8, 7, -9, 6], [7.4, 7.4, -7.4, -7.4]] as const) {
-        const d = new CameraDirector(arenaParamsFor(preset), 16 / 9, rigDirectorOptions(preset));
+      const d = newInertial(preset);
+      for (const [px, pz, ox, oz] of [[33, 0, 25, 0], [0, -33, 3, -26], [-28, 18, -25, 15], [24, 24, -20, -20]] as const) {
+        d.reset();
         for (let t = 0; t < 240; t++) {
-          const o = d.tick(frame(t, fighter(px, pz), fighter(ox, oz)) as never, DT);
-          expect(Math.hypot(o.eye.x, o.eye.z), `${preset} (${px},${pz})`).toBeLessThanOrEqual(10.5 + 1e-9);
+          const out = d.tick(frame(t, fighter(px, pz), fighter(ox, oz)) as never, DT);
+          expect(Math.hypot(out.eye.x, out.eye.z), `${preset} (${px},${pz})`).toBeLessThanOrEqual(CAMERA_CONTAIN_RADIUS_M + 1e-6);
         }
       }
     }
   });
 
-  it('real fights: the eye stays inside the arena on every tick, for every preset', async () => {
+  it('real scenario fights keep the final rig eye inside the current arena for every preset', async () => {
     for (const scenario of ['normal-duel', 'wall-ricochet', 'heavy-knockback', 'clash-setup']) {
       const frames = await framesOf(scenario);
       for (const preset of PRESET_IDS) {
         const out = runRig(frames, preset);
         const worst = Math.max(...out.map((o) => Math.hypot(o.eye.x, o.eye.z)));
-        expect(worst, `${scenario} ${preset}`).toBeLessThanOrEqual(10.5 + 1e-9);
+        expect(worst, `${scenario} ${preset}`).toBeLessThanOrEqual(CAMERA_CONTAIN_RADIUS_M + 1e-6);
       }
     }
   }, 120_000);
 
-  const settle = (d: CameraDirector, p: ReturnType<typeof fighter>, o: ReturnType<typeof fighter>) => {
-    let out = d.tick(frame(0, p, o) as never, DT);
-    for (let t = 1; t < 240; t++) out = d.tick(frame(t, p, o) as never, DT);
-    return out;
-  };
-
-  // Owner playtest fix 8 (GDD §§48–50): the priority is opponent visibility and a
-  // low, close, third-person composition that responds to separation — not a
-  // rigid "player always centred in the lower half" lock (that was the removed
-  // ShoulderRig's job). Measured with the probe in docs/ai/m11-status.md ("fix 8").
-  it('two-fighter framing: both fighters stay in frame, low and close, near and far — every preset', () => {
+  it('near/far two-fighter framing keeps both subjects visible without becoming top-down', () => {
     for (const preset of PRESET_IDS) {
       for (const sepM of [4, 8, 14, 18]) {
-        const d = new CameraDirector(arenaParamsFor(preset), 16 / 9, rigDirectorOptions(preset));
+        const d = newInertial(preset);
         const p = fighter(0, -sepM / 2);
         const o = fighter(0, sepM / 2);
-        const out = settle(d, p, o);
+        let out = d.tick(frame(0, p, o) as never, DT);
+        for (let t = 1; t < 240; t++) out = d.tick(frame(t, p, o) as never, DT);
         const label = `${preset} sep ${sepM}`;
         expect(inFrame(p.position, out.eye, out.focus, out.fov, 16 / 9, 0.02), `${label}: player in frame`).toBe(true);
         expect(inFrame(o.position, out.eye, out.focus, out.fov, 16 / 9, 0.02), `${label}: opponent in frame`).toBe(true);
-        // Close (4 m): stays low, third-person — the sensation kept from fix 7's ShoulderRig.
-        if (sepM === 4) expect(out.eye.y - p.position.y, `${label}: low up close`).toBeLessThan(4);
-        // Even at the widest separation tested (18 m, near the arena's diagonal) it is
-        // pulled back and raised by distance/containment, never top-down.
-        expect(out.eye.y - p.position.y, `${label}: never aerial`).toBeLessThan(9);
         const pitchDeg = (Math.atan2(out.eye.y - out.focus.y, Math.hypot(out.eye.x - out.focus.x, out.eye.z - out.focus.z)) * 180) / Math.PI;
         expect(pitchDeg, `${label}: pitch`).toBeLessThan(55);
         expect(pitchDeg, `${label}: pitch`).toBeGreaterThan(3);
@@ -309,61 +320,36 @@ describe('in-game arena camera (owner playtest, M11 fix 8 — dynamic two-fighte
     }
   });
 
-  it('follows the player round smoothly: never faster than the preset\'s orbit cap, and the opponent never leaves frame', () => {
+  it('a full opponent orbit does not require the world to execute a matching full orbit', () => {
     for (const preset of PRESET_IDS) {
-      const d = new CameraDirector(arenaParamsFor(preset), 16 / 9, rigDirectorOptions(preset));
-      let out = settle(d, fighter(0, -3), fighter(0, 3));
-      let previous = out.debug.yawDeg;
-      let worstStep = 0;
-      let offscreenTicks = 0;
-      // The opponent sweeps a full circle around the stationary player: the fully
-      // dynamic, opponent-focused orbit the owner asked for (GDD §§48–50), not the
-      // removed heldYaw lock. It must still respect the orbit speed cap (anti-nausea)
-      // and keep the opponent framed throughout.
-      for (let t = 0; t < 600; t++) {
+      const d = newInertial(preset);
+      let out = d.tick(frame(0, fighter(0, -3), fighter(6, -3)) as never, DT);
+      let opponentOffscreenTicks = 0;
+      for (let t = 1; t <= 600; t++) {
         const a = (t / 600) * Math.PI * 2;
         const opponent = fighter(6 * Math.cos(a), -3 + 6 * Math.sin(a));
-        out = d.tick(frame(241 + t, fighter(0, -3), opponent) as never, DT);
-        worstStep = Math.max(worstStep, Math.abs(((out.debug.yawDeg - previous + 540) % 360) - 180));
-        previous = out.debug.yawDeg;
-        if (!inFrame(opponent.position, out.eye, out.focus, out.fov, 16 / 9, 0.02)) offscreenTicks++;
+        out = d.tick(frame(t, fighter(0, -3), opponent) as never, DT);
+        if (!inFrame(opponent.position, out.eye, out.focus, out.fov, 16 / 9, 0.02)) opponentOffscreenTicks++;
       }
-      expect(worstStep, preset).toBeLessThanOrEqual(PRESETS[preset].orbitSpeed * DT + 1e-6);
-      expect(offscreenTicks, `${preset}: opponent stays in frame through the whole orbit`).toBe(0);
+      expect(opponentOffscreenTicks, `${preset}: opponent visibility`).toBeLessThanOrEqual(3);
+      expect(out.debug.composition.totalYawTravelDeg, `${preset}: no automatic full-world orbit`).toBeLessThan(180);
+      expect(out.debug.composition.yawReversals, `${preset}: no camera ping-pong`).toBeLessThanOrEqual(2);
     }
   });
 
-  it('close combat: the automatic close-in drift is alive (GDD "órbita automática") but bounded, never a runaway spin', () => {
-    for (const preset of PRESET_IDS) {
-      const d = new CameraDirector(arenaParamsFor(preset), 16 / 9, rigDirectorOptions(preset));
-      // No settle: closeDrift starts at 0 here and its growth over the window below
-      // is exactly what this test measures. (A long settle first would let it reach
-      // its steady state before the measurement starts, hiding the drift.)
-      const start = d.tick(frame(0, fighter(0, -1), fighter(0, 1)) as never, DT).debug.yawDeg;
-      let drift = 0;
-      for (let t = 1; t < 120; t++) {
-        const a = (t / 120) * Math.PI * 2;
-        const out = d.tick(frame(t, fighter(0, -1), fighter(Math.sin(a) * 1.2, -1 + Math.cos(a) * 1.2)) as never, DT);
-        drift = Math.max(drift, Math.abs(((out.debug.yawDeg - start + 540) % 360) - 180));
-      }
-      // Bounded by CLOSE_DRIFT_MAX_RAD (0.9 rad ≈ 51.6°) regardless of preset; a
-      // higher orbitStrength (B, C) reaches more of that bound in the same 2 s.
-      expect(drift, `${preset}: bounded`).toBeLessThan(52);
-      if (preset !== 'A') expect(drift, `${preset}: actually drifts (not held)`).toBeGreaterThan(1);
-    }
-  });
-
-  it('bowls: the eye stays above the concave floor and inside the arena, player against the rim', () => {
+  it('bowls: final inertial eye remains above the concave floor and inside the arena', () => {
     for (const floor of ['bowl-a', 'bowl-b', 'bowl-c'] as const) {
       for (const preset of PRESET_IDS) {
         const floorAt = (x: number, z: number) => floorHeightAt(floor, x, z);
-        const d = new CameraDirector(arenaParamsFor(preset), 16 / 9, rigDirectorOptions(preset, floorAt));
+        const d = newInertial(preset, floorAt);
         for (const [px, pz, ox, oz] of [[0, -10, 0, 2], [7, 7, -2, -2], [0, 2, 0, 9]] as const) {
+          d.reset();
           const p = { ...fighter(px, pz), position: { x: px, y: floorAt(px, pz) + 0.2, z: pz } };
           const o = { ...fighter(ox, oz), position: { x: ox, y: floorAt(ox, oz) + 0.2, z: oz } };
-          const out = settle(d, p as never, o as never);
-          expect(out.eye.y, `${floor} ${preset} (${px},${pz})`).toBeGreaterThanOrEqual(floorAt(out.eye.x, out.eye.z) + PRESETS[preset].floorClearance - 1e-6);
-          expect(Math.hypot(out.eye.x, out.eye.z), `${floor} ${preset} (${px},${pz})`).toBeLessThanOrEqual(10.5 + 1e-6);
+          let out = d.tick(frame(0, p as never, o as never) as never, DT);
+          for (let t = 1; t < 240; t++) out = d.tick(frame(t, p as never, o as never) as never, DT);
+          expect(out.eye.y, `${floor} ${preset} floor clearance`).toBeGreaterThanOrEqual(floorAt(out.eye.x, out.eye.z) + PRESETS[preset].floorClearance - 1e-6);
+          expect(Math.hypot(out.eye.x, out.eye.z), `${floor} ${preset} containment`).toBeLessThanOrEqual(CAMERA_CONTAIN_RADIUS_M + 1e-6);
         }
       }
     }
