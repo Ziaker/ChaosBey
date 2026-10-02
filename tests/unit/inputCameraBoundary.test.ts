@@ -23,18 +23,19 @@
 //     MovementController, so it has nothing to mutate.
 //  3. Camera OUTPUT (MatchSession.getLastCameraOutput / SessionCameraOutput)
 //     may be read only by presentation/debug code: MatchSession's own
-//     renderFrame() and the debug overlay/inspector. Not by MatchRunner,
-//     not by DebugLabMode, not by any controller.
+//     renderFrame()/cameraSnapshot() and the debug overlay/inspector. Not by
+//     MatchRunner, not by DebugLabMode, not by any controller.
 //     ONE owner-approved exception: app/frontend/controlReferences.ts, which
 //     implements the opt-in 'screen' control scheme (read once per gesture;
 //     never the default). It is allowlisted by name and by this comment so
 //     the exception is visible and cannot spread.
 //  4. Inside MatchSession, the camera rig and its output are touched only
-//     by the camera/render members, and the camera tick writes nothing but
-//     `lastCameraOutput`.
+//     by camera/render/presentation-projection members, and the camera tick
+//     writes nothing but `lastCameraOutput`.
 //
-// Debug/telemetry may READ the camera for display; they may never hand the
-// value back to the simulation (rule 3's allowlist is exactly those files).
+// Debug/telemetry may READ the camera for display; presentation may project
+// it into read-only presentation state; neither may hand the value back to
+// the simulation (rule 3's allowlist is exactly those files).
 // The runtime proof that this holds is
 // tests/deterministic/cameraGameplaySeparation.test.ts.
 // ============================================================
@@ -238,9 +239,9 @@ describe('guard 3: camera OUTPUT is read only by presentation/debug code', () =>
   });
 });
 
-describe('guard 4: inside MatchSession the camera rig/output are touched only by camera/render members', () => {
+describe('guard 4: inside MatchSession the camera rig/output are touched only by camera/render/presentation-projection members', () => {
   const source = parse(resolve(SRC, 'app/session/MatchSession.ts'));
-  const ALLOWED_MEMBERS = new Set(['constructor', 'setCameraPreset', 'getCameraPreset', 'getLastCameraOutput', 'tickCameraAndVfx', 'renderFrame']);
+  const ALLOWED_MEMBERS = new Set(['constructor', 'setCameraPreset', 'getCameraPreset', 'getLastCameraOutput', 'tickCameraAndVfx', 'renderFrame', 'cameraSnapshot']);
   const GUARDED = new Set(['cameraRig', 'lastCameraOutput', 'initialCameraPreset']);
 
   function memberName(node: AstNode): string | null {
@@ -257,7 +258,7 @@ describe('guard 4: inside MatchSession the camera rig/output are touched only by
     return '<module>';
   }
 
-  it('cameraRig / lastCameraOutput appear only in the camera/render members (and their own field declarations)', () => {
+  it('cameraRig / lastCameraOutput appear only in the camera/render/presentation-projection members (and their own field declarations)', () => {
     const offenders: string[] = [];
     for (const { node, ancestors } of nodesOf(source)) {
       if (node.type !== 'Identifier' || typeof node.name !== 'string' || !GUARDED.has(node.name)) continue;
