@@ -51,6 +51,10 @@ export interface InertialCompositionTuning {
   readonly maxFovRescueDeg: number;
   /** Maximum interpolation toward the endangered fighter for focus rescue. */
   readonly maxFocusRescue: number;
+  /** Time constant for optical rescue to build instead of popping on at the soft boundary. */
+  readonly rescueAttackS: number;
+  /** Slower release gives focus/distance/FOV hysteresis and prevents boundary pumping. */
+  readonly rescueReleaseS: number;
 }
 
 // ============================================================
@@ -71,6 +75,8 @@ export const INERTIAL_DUEL_TUNING: Readonly<Record<PresetId, InertialComposition
     maxDistanceRescueM: 5.5,
     maxFovRescueDeg: 10,
     maxFocusRescue: 0.16,
+    rescueAttackS: 0.10,
+    rescueReleaseS: 0.28,
   },
   B: {
     softFrameX: 0.72,
@@ -83,6 +89,8 @@ export const INERTIAL_DUEL_TUNING: Readonly<Record<PresetId, InertialComposition
     maxDistanceRescueM: 5,
     maxFovRescueDeg: 11,
     maxFocusRescue: 0.18,
+    rescueAttackS: 0.08,
+    rescueReleaseS: 0.24,
   },
   C: {
     softFrameX: 0.74,
@@ -95,6 +103,8 @@ export const INERTIAL_DUEL_TUNING: Readonly<Record<PresetId, InertialComposition
     maxDistanceRescueM: 4.5,
     maxFovRescueDeg: 12,
     maxFocusRescue: 0.20,
+    rescueAttackS: 0.06,
+    rescueReleaseS: 0.20,
   },
 };
 
@@ -108,6 +118,7 @@ export interface InertialCompositionDebug {
   readonly inertialAzimuthDeg: number;
   readonly yawVelocityDegS: number;
   readonly yawAccelerationDegS2: number;
+  readonly rescuePressure: number;
   readonly softViolation: number;
   readonly hardViolation: number;
   readonly softViolationForS: number;
@@ -139,6 +150,7 @@ export class InertialDuelDirector {
   private azimuth = 0;
   private yawVelocity = 0;
   private previousYawVelocity = 0;
+  private rescuePressure = 0;
   private softViolationFor = 0;
   private totalYawTravel = 0;
   private yawReversals = 0;
@@ -168,6 +180,7 @@ export class InertialDuelDirector {
     this.azimuth = 0;
     this.yawVelocity = 0;
     this.previousYawVelocity = 0;
+    this.rescuePressure = 0;
     this.softViolationFor = 0;
     this.totalYawTravel = 0;
     this.yawReversals = 0;
@@ -192,11 +205,19 @@ export class InertialDuelDirector {
     let eye = this.guardEye(eyeAt(focus, this.azimuth, distance, baseHeight), focus, frame);
     let measure = compositionMeasure(frame, eye, focus, fov, this.aspect, tuning);
 
+    // Hysteresis: crossing the soft frame builds optical rescue over a short
+    // attack time, while returning inside releases more slowly. The result is
+    // stable focus/distance/FOV near the boundary instead of per-tick pumping.
+    const rescueTarget = clamp(measure.softViolation, 0, 1);
+    const rescueTime = rescueTarget > this.rescuePressure ? tuning.rescueAttackS : tuning.rescueReleaseS;
+    this.rescuePressure = smoothTowards(this.rescuePressure, rescueTarget, rescueTime, dt);
+    const rescuePressure = this.rescuePressure;
+
     // First line of rescue: shift the focal point toward the subject that is
     // most endangered without changing the camera hemisphere.
-    if (measure.softViolation > 0) {
+    if (rescuePressure > 1e-4) {
       const offender = measure.offenderIsFirst ? frame.first.position : frame.second.position;
-      const gain = Math.min(tuning.maxFocusRescue, tuning.maxFocusRescue * clamp(measure.softViolation, 0, 1.5));
+      const gain = tuning.maxFocusRescue * rescuePressure;
       focus = lerpVec(focus, offender, gain);
       eye = this.guardEye(eyeAt(focus, this.azimuth, distance, baseHeight), focus, frame);
       measure = compositionMeasure(frame, eye, focus, fov, this.aspect, tuning);
@@ -204,11 +225,10 @@ export class InertialDuelDirector {
 
     // Second line: use optical room before rotation. Fast pass-throughs can
     // therefore swap sides on screen without making the world follow them.
-    if (measure.softViolation > 0) {
-      const pressure = clamp(measure.softViolation, 0, 1);
-      distance += tuning.maxDistanceRescueM * pressure;
-      fov = Math.min(MAX_FOV_DEG, fov + tuning.maxFovRescueDeg * pressure);
-      eye = this.guardEye(eyeAt(focus, this.azimuth, distance, baseHeight + pressure * 0.35), focus, frame);
+    if (rescuePressure > 1e-4) {
+      distance += tuning.maxDistanceRescueM * rescuePressure;
+      fov = Math.min(MAX_FOV_DEG, fov + tuning.maxFovRescueDeg * rescuePressure);
+      eye = this.guardEye(eyeAt(focus, this.azimuth, distance, baseHeight + rescuePressure * 0.35), focus, frame);
       measure = compositionMeasure(frame, eye, focus, fov, this.aspect, tuning);
     }
 
@@ -261,7 +281,7 @@ export class InertialDuelDirector {
     measure = compositionMeasure(frame, eye, focus, fov, this.aspect, tuning);
 
     const modifiers = [...raw.debug.modifiers];
-    if (measure.softViolation > 0) modifiers.push(`composição: resgate ${(measure.softViolation * 100).toFixed(0)}%`);
+    if (rescuePressure > 0.01) modifiers.push(`composição: resgate óptico ${(rescuePressure * 100).toFixed(0)}%`);
     if (cinematicOwnsShot) modifiers.push('composição: azimute congelado sob câmera cinematográfica');
     else if (yawEligible) modifiers.push(`composição: yaw ${(this.yawVelocity / DEG).toFixed(1)}°/s`);
     else modifiers.push('composição: azimute estável');
@@ -285,6 +305,7 @@ export class InertialDuelDirector {
           inertialAzimuthDeg: normalizeDeg(this.azimuth / DEG),
           yawVelocityDegS: this.yawVelocity / DEG,
           yawAccelerationDegS2: yawAcceleration / DEG,
+          rescuePressure,
           softViolation: measure.softViolation,
           hardViolation: measure.hardViolation,
           softViolationForS: this.softViolationFor,
@@ -470,6 +491,12 @@ function lerp(a: number, b: number, t: number): number {
 
 function lerpVec(a: Vec3, b: Vec3, t: number): Vec3 {
   return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), z: lerp(a.z, b.z, t) };
+}
+
+function smoothTowards(current: number, target: number, timeConstantS: number, dt: number): number {
+  if (dt <= 0 || timeConstantS <= 1e-6) return target;
+  const alpha = 1 - Math.exp(-dt / timeConstantS);
+  return lerp(current, target, alpha);
 }
 
 function normalizeDeg(deg: number): number {
