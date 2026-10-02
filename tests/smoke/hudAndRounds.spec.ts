@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 import { ROUND_WALL_TIMEOUT_MS, describeRun, playRoundToEnd } from './support/playRoundToEnd';
 
 // ============================================================
@@ -22,7 +23,7 @@ const widthPercent = async (page: Page, testId: string): Promise<number> => Numb
 test('the HUD reads the live match, a round ends with its banner, and round 2 carries the score', async ({ page }) => {
   test.setTimeout(ROUND_WALL_TIMEOUT_MS + 90_000);
   const errors = watchErrors(page);
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await page.getByTestId('character-select-confirm').click({ timeout: 15_000 });
   await expect(page.getByTestId('pregame-rounds-2')).toHaveAttribute('aria-checked', 'true'); // default: first to 2
   await page.getByTestId('pregame-start').click();
@@ -77,7 +78,7 @@ test('the HUD reads the live match, a round ends with its banner, and round 2 ca
 test('control hints follow the setting', async ({ page }) => {
   const errors = watchErrors(page);
   await page.addInitScript(() => localStorage.setItem('chaosbey.settings.player.v1', JSON.stringify({ controlHints: false })));
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await page.getByTestId('character-select-confirm').click({ timeout: 15_000 });
   await page.getByTestId('pregame-start').click();
   await expect(page.getByTestId('combat-hud')).toBeVisible({ timeout: 15_000 });

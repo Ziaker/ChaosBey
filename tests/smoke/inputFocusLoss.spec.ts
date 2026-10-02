@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 
 // ============================================================
 // INPUT FOCUS LOSS — STUCK-KEY REGRESSION (M7 ALPHA-READINESS HARDENING)
@@ -20,7 +21,7 @@ test('losing window focus while a movement key is held does not leave the Bey ac
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-  await page.goto('/ChaosBey/?mode=play&quick');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play&quick'));
   const overlay = page.locator('#debug-overlay-root pre');
   await expect(overlay).toContainText('Combat', { timeout: 15_000 });
 

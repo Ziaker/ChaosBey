@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 import type { Action } from '../../src/input/actions/Action';
 
 // JUMP INPUT BUFFER — REAL-BROWSER REGRESSION (item H of the hotfix's
@@ -38,7 +39,7 @@ interface TraceRow {
 }
 
 async function waitForLabReady(page: Page): Promise<void> {
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   await expect(page.getByTestId('debug-lab-status')).toContainText('RUNNING', { timeout: 15_000 });
 }
 

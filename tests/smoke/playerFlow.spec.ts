@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { BASELINE_MENU_URL, baselineUrl } from './presentationBaseline';
 import { ROUND_WALL_TIMEOUT_MS, describeRun, playRoundToEnd } from './support/playRoundToEnd';
 
 // ============================================================
@@ -15,7 +16,7 @@ test('Character Select and Pregame set up the match that really runs, and Result
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   const select = page.getByTestId('character-select');
   await expect(select).toBeVisible({ timeout: 15_000 });
 
@@ -103,10 +104,10 @@ test('Character Select and Pregame set up the match that really runs, and Result
   expect(rematch).toEqual({ first: 'stamina-prototype', seed: 'flow-seed' });
 
   // Esc on Character Select goes back to the Main Menu.
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await expect(select).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press('Escape');
-  await expect(page).toHaveURL(/\/ChaosBey\/$/);
+  await expect(page).toHaveURL(BASELINE_MENU_URL);
   await expect(page.getByTestId('main-menu')).toBeVisible();
 
   expect(consoleErrors).toEqual([]);

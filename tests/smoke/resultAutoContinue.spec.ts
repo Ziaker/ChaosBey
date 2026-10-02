@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 
 // Owner playtest (after M11): after WIN / LOSE / DRAW the result's own
 // continue action (Next round, or Rematch at the end of the match) runs by
@@ -34,7 +35,7 @@ test('WIN, LOSE and DRAW auto-continue after 4 s; Continue is immediate; Stop ke
   test.setTimeout(120_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await page.getByTestId('character-select').waitFor({ timeout: 20_000 });
   await page.keyboard.press('Enter');
   await page.getByTestId('pregame-start').click();
