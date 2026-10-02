@@ -27,6 +27,7 @@ import {
   BeyVisualAnchors,
   BeyVisualRegistry,
   IDLE_CLASH_SNAPSHOT,
+  PRESENTATION_FEATURES_DEFAULT,
   PRESENTATION_FEATURES_OFF,
   PRESENTATION_FEATURE_IDS,
   PresentationEventDeriver,
@@ -87,11 +88,37 @@ const dashHit = (attackerIsFirst: boolean): HitEvent => ({ attackerIsFirst, hitb
 const kinds = (events: readonly PresentationEvent[]): string[] => events.map((event) => event.kind);
 
 describe('presentation feature flags', () => {
-  it('are all off by default and the default is frozen', () => {
+  it('the explicit baseline is all off and frozen', () => {
     for (const id of PRESENTATION_FEATURE_IDS) expect(PRESENTATION_FEATURES_OFF[id]).toBe(false);
     expect(Object.isFrozen(PRESENTATION_FEATURES_OFF)).toBe(true);
-    expect(parsePresentationFeatures('').features).toEqual(PRESENTATION_FEATURES_OFF);
-    expect(parsePresentationFeatures('?mode=play').features).toEqual(PRESENTATION_FEATURES_OFF);
+  });
+
+  it('the normal game turns on the five approved packages and leaves newHud off', () => {
+    expect(PRESENTATION_FEATURES_DEFAULT).toEqual({
+      newBeyVisuals: true,
+      conditionVisuals: true,
+      hybridVfx: true,
+      clashPresentation: true,
+      newHud: false,
+      arenaVisuals: true,
+    });
+    expect(Object.isFrozen(PRESENTATION_FEATURES_DEFAULT)).toBe(true);
+    // No `pfx` in the URL: the normal defaults.
+    expect(parsePresentationFeatures('').features).toEqual(PRESENTATION_FEATURES_DEFAULT);
+    expect(parsePresentationFeatures('?mode=play').features).toEqual(PRESENTATION_FEATURES_DEFAULT);
+    expect(parsePresentationFeatures('?mode=play&quick&seed=abc').features).toEqual(PRESENTATION_FEATURES_DEFAULT);
+  });
+
+  it('an explicit ?pfx is an allowlist from all-off: it isolates packages', () => {
+    const only = parsePresentationFeatures('?mode=play&pfx=hybridVfx').features;
+    expect(only).toEqual(resolvePresentationFeatures({ hybridVfx: true }));
+    for (const id of PRESENTATION_FEATURE_IDS) if (id !== 'hybridVfx') expect(only[id], id).toBe(false);
+    expect(parsePresentationFeatures('?pfx=hybridVfx,arenaVisuals').features).toEqual(resolvePresentationFeatures({ hybridVfx: true, arenaVisuals: true }));
+    // `?pfx=` with nothing after it, or only unknown names: the all-off baseline.
+    expect(parsePresentationFeatures('?mode=play&pfx=').features).toEqual(PRESENTATION_FEATURES_OFF);
+    expect(parsePresentationFeatures('?pfx=typo').features).toEqual(PRESENTATION_FEATURES_OFF);
+    // Same query, same flags.
+    expect(parsePresentationFeatures('?pfx=conditionVisuals').features).toEqual(parsePresentationFeatures('?pfx=conditionVisuals').features);
   });
 
   it('turn on exactly what ?pfx names, report unknown names, and support all', () => {
@@ -108,7 +135,7 @@ describe('presentation feature flags', () => {
 });
 
 describe('presentation flags from the page location', () => {
-  it('are all off without a page (tests, headless) and follow ?pfx in a browser page', () => {
+  it('are all off without a page (tests, headless), the normal defaults in a page without ?pfx, and the allowlist with it', () => {
     expect(presentationFeaturesFromLocation()).toEqual(PRESENTATION_FEATURES_OFF);
     vi.stubGlobal('location', { search: '?mode=play&pfx=newHud' });
     try {
@@ -118,7 +145,13 @@ describe('presentation flags from the page location', () => {
     }
     vi.stubGlobal('location', { search: '?mode=play' });
     try {
-      expect(presentationFeaturesFromLocation()).toEqual(PRESENTATION_FEATURES_OFF);
+      expect(presentationFeaturesFromLocation()).toEqual(PRESENTATION_FEATURES_DEFAULT);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    vi.stubGlobal('location', { search: '' });
+    try {
+      expect(presentationFeaturesFromLocation()).toEqual(PRESENTATION_FEATURES_DEFAULT);
     } finally {
       vi.unstubAllGlobals();
     }

@@ -1,15 +1,22 @@
 // ============================================================
 // PRESENTATION FEATURE FLAGS
-// Switches for presentation systems that are integrated one at a time
-// (docs/planning/PROTOTYPE_INTEGRATION_MAP.md). Every flag is OFF by default:
-// with all of them off the game behaves exactly as before this module
-// existed. Flags gate presentation only (what is drawn); none of them reaches
-// the simulation, the replay or the state hash.
+// Switches for the approved presentation packages
+// (docs/planning/PROTOTYPE_INTEGRATION_MAP.md). Flags gate presentation only
+// (what is drawn); none of them reaches the simulation, the replay or the
+// state hash.
 //
-// This is a development switch for comparing old and new and for fast
-// rollback, not a settings screen and not a mod system. A flag only means
-// something once a system that reads it exists; today nothing is registered
-// behind any of them, so turning one on changes nothing.
+// Three sets, three meanings:
+// - PRESENTATION_FEATURES_DEFAULT: the normal game. The five approved
+//   packages are on (4-piece Bey models, condition visuals, Hybrid VFX +
+//   Cel Cyclone, Clash Overdrive, arena art); `newHud` stays off.
+// - PRESENTATION_FEATURES_OFF: the explicit all-off baseline (the game as it
+//   was before these packages), for tests, comparisons and debugging.
+// - `?pfx=` in the URL: an explicit allowlist for isolating packages. It
+//   starts from all-off and turns on only what it names (`?pfx=hybridVfx`,
+//   `?pfx=hybridVfx,arenaVisuals`, `?pfx=all`); `?pfx=` with nothing after it
+//   is all-off. Without `pfx` the page gets the normal defaults.
+//
+// This is not a settings screen and not a mod system.
 // ============================================================
 
 export const PRESENTATION_FEATURE_IDS = ['newBeyVisuals', 'conditionVisuals', 'hybridVfx', 'clashPresentation', 'newHud', 'arenaVisuals'] as const;
@@ -18,7 +25,7 @@ export type PresentationFeatureId = (typeof PRESENTATION_FEATURE_IDS)[number];
 
 export type PresentationFeatures = Readonly<Record<PresentationFeatureId, boolean>>;
 
-/** Every presentation feature off: the game as it was. */
+/** Every presentation feature off: the baseline before the approved packages (tests, comparison, debugging). */
 export const PRESENTATION_FEATURES_OFF: PresentationFeatures = Object.freeze({
   newBeyVisuals: false,
   conditionVisuals: false,
@@ -28,7 +35,17 @@ export const PRESENTATION_FEATURES_OFF: PresentationFeatures = Object.freeze({
   arenaVisuals: false,
 });
 
-/** URL query parameter that turns features on for a development session: `?pfx=hybridVfx,newHud` or `?pfx=all`. */
+/** The normal game: the five approved presentation packages on, `newHud` off. Used when the page URL has no `pfx`. */
+export const PRESENTATION_FEATURES_DEFAULT: PresentationFeatures = Object.freeze({
+  newBeyVisuals: true,
+  conditionVisuals: true,
+  hybridVfx: true,
+  clashPresentation: true,
+  newHud: false,
+  arenaVisuals: true,
+});
+
+/** URL query parameter for an explicit allowlist (debug isolation): `?pfx=hybridVfx,arenaVisuals`, `?pfx=all`, or `?pfx=` for all-off. */
 export const PRESENTATION_FEATURES_PARAM = 'pfx';
 
 export interface ParsedPresentationFeatures {
@@ -37,10 +54,14 @@ export interface ParsedPresentationFeatures {
   readonly unknown: readonly string[];
 }
 
-/** Reads the `pfx` parameter from a query string (with or without the leading `?`). Absent or empty: everything off. */
+/**
+ * Reads the `pfx` parameter from a query string (with or without the leading `?`).
+ * Absent: the normal defaults. Present: an allowlist starting from all-off (empty value: all-off).
+ */
 export function parsePresentationFeatures(search: string): ParsedPresentationFeatures {
-  const raw = new URLSearchParams(search).get(PRESENTATION_FEATURES_PARAM);
-  if (!raw) return { features: PRESENTATION_FEATURES_OFF, unknown: [] };
+  const params = new URLSearchParams(search);
+  if (!params.has(PRESENTATION_FEATURES_PARAM)) return { features: PRESENTATION_FEATURES_DEFAULT, unknown: [] };
+  const raw = params.get(PRESENTATION_FEATURES_PARAM) ?? '';
   const names = raw
     .split(',')
     .map((name) => name.trim())
@@ -69,11 +90,14 @@ export function isAnyPresentationFeatureOn(features: PresentationFeatures): bool
 }
 
 /**
- * The flags a browser session starts with: the `pfx` parameter of the page URL,
- * or everything off when there is no page (tests, headless runs). Read once
- * when a session is created; a session given explicit flags never looks.
+ * The flags a browser session starts with: the page URL's `pfx` allowlist, or
+ * the normal defaults when the URL has none. Without a page at all (Node
+ * tests, headless runs) everything is off, so headless code stays on the
+ * baseline unless it passes flags explicitly. Read once when a session is
+ * created; a session given explicit flags never looks.
  */
 export function presentationFeaturesFromLocation(): PresentationFeatures {
-  const search = (globalThis as { location?: { search?: string } }).location?.search;
-  return search ? parsePresentationFeatures(search).features : PRESENTATION_FEATURES_OFF;
+  const location = (globalThis as { location?: { search?: string } }).location;
+  if (!location) return PRESENTATION_FEATURES_OFF;
+  return parsePresentationFeatures(location.search ?? '').features;
 }

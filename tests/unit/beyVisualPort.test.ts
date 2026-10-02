@@ -13,7 +13,12 @@ import { describe, expect, it } from 'vitest';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import type { BeyDefinition } from '../../src/bey/archetype/BeyDefinition';
 import { CONCEPT_BEY_SCALE, createConceptBeyVisual } from '../../src/bey/visual/conceptBeyVisual';
-import { PROVISIONAL_ARCHETYPE_VISUALS, conceptVisualId, ensureApprovedBeyVisualsRegistered } from '../../src/bey/visual/approvedBeyVisuals';
+import { PROVISIONAL_ARCHETYPE_VISUALS, beyVisualDefinitionFor, conceptVisualId, ensureApprovedBeyVisualsRegistered } from '../../src/bey/visual/approvedBeyVisuals';
+import { BeyPreviewStage } from '../../src/app/frontend/BeyPreviewStage';
+import type { AppRenderer } from '../../src/app/bootstrap/createRenderer';
+import { createMatchScene } from '../../src/app/bootstrap/createMatchScene';
+import { PhysicsWorld } from '../../src/physics/world/PhysicsWorld';
+import { PRESENTATION_FEATURES_DEFAULT } from '../../src/presentation/features';
 import { CONCEPTS } from '../../src/bey/visual/concepts/conceptDefinitions';
 import {
   BeyVisualAnchors,
@@ -122,5 +127,59 @@ describe('registration and the provisional mapping', () => {
       expect(collectSceneStats(visual.group).meshes).toBeGreaterThanOrEqual(10);
     }
     expect(ARCHETYPES.map(gameplayJson)).toEqual(before);
+  });
+});
+
+describe('one resolution for Character Select and the match', () => {
+  it('registers the nine concepts on first use, before any match exists, idempotently, and resolves each archetype to its provisional concept A', () => {
+    const registry = new BeyVisualRegistry();
+    expect(registry.list()).toHaveLength(0);
+    const expected: Record<string, string> = { 'attack-prototype': 'concept:attack-a', 'defense-prototype': 'concept:defense-a', 'stamina-prototype': 'concept:stamina-a' };
+    for (let pass = 0; pass < 3; pass++) {
+      for (const definition of ARCHETYPES) expect(beyVisualDefinitionFor(definition, PRESENTATION_FEATURES_DEFAULT, registry).id).toBe(expected[definition.id]);
+    }
+    expect(registry.list()).toHaveLength(9);
+    expect(registry.list().map((v) => v.id).sort()).toEqual(CONCEPTS.map(conceptVisualId).sort());
+  });
+
+  it('with newBeyVisuals off it is the legacy placeholder and registers nothing', () => {
+    const registry = new BeyVisualRegistry();
+    for (const definition of ARCHETYPES) expect(beyVisualDefinitionFor(definition, PRESENTATION_FEATURES_OFF, registry).id).toBe(`placeholder:${definition.id}`);
+    expect(registry.list()).toHaveLength(0);
+  });
+
+  const fakeRenderer = (): AppRenderer => ({ scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 500), render: () => undefined }) as unknown as AppRenderer;
+
+  it('the Character Select preview shows the concept the match will use, without a match ever having been created', () => {
+    const stage = new BeyPreviewStage(fakeRenderer(), PRESENTATION_FEATURES_DEFAULT);
+    const shown: Record<string, string | null> = {};
+    for (const definition of ARCHETYPES) {
+      const before = gameplayJson(definition);
+      stage.show(definition, 0xffffff);
+      shown[definition.id] = stage.shownVisualId;
+      expect(gameplayJson(definition)).toBe(before);
+    }
+    expect(shown).toEqual({ 'attack-prototype': 'concept:attack-a', 'defense-prototype': 'concept:defense-a', 'stamina-prototype': 'concept:stamina-a' });
+    stage.dispose();
+    expect(stage.shownVisualId).toBeNull();
+    // Flag off (an explicit ?pfx without newBeyVisuals): the legacy placeholder, as the match would use.
+    const legacy = new BeyPreviewStage(fakeRenderer(), PRESENTATION_FEATURES_OFF);
+    legacy.show(ATTACK_ARCHETYPE, 0xffffff);
+    expect(legacy.shownVisualId).toBe(`placeholder:${ATTACK_ARCHETYPE.id}`);
+    legacy.dispose();
+  });
+
+  it('the match scene resolves the same visual definition the preview showed', async () => {
+    const stage = new BeyPreviewStage(fakeRenderer(), PRESENTATION_FEATURES_DEFAULT);
+    const physics = await PhysicsWorld.create();
+    const match = createMatchScene(new THREE.Group(), physics, undefined, undefined, undefined, 'B', PRESENTATION_FEATURES_DEFAULT);
+    for (const side of ['first', 'second'] as const) {
+      const definition = match[side].definition;
+      stage.show(definition, 0xffffff);
+      expect(match.visuals[side].definition.id, side).toBe(stage.shownVisualId);
+      expect(match.visuals[side].definition.status).toBe('concept');
+    }
+    stage.dispose();
+    physics.rapierWorld.free();
   });
 });
