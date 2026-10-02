@@ -1,7 +1,7 @@
 # ChaosBey — Owner Decisions Master
 
 **Status:** CANÔNICO — ledger de decisões fechadas do owner e regra de não reabrir perguntas já respondidas  
-**Atualizado:** 2026-09-30  
+**Atualizado:** 2026-10-02  
 **Precedência:** este arquivo registra decisões/overrides mais recentes e deve ser lido antes dos masters históricos. Quando houver conflito, a decisão explícita mais recente do owner e o documento detalhado mais recente da área prevalecem.
 
 > **Diretiva do owner — 2026-09-30:** não reprototipar, rediscutir ou pedir nova aprovação para câmera, movimento, arena, VFX, condição ou Clash apenas porque outro sistema (por exemplo HUD/UI) ainda tenha uma pendência visual. Um novo lab deve testar somente a lacuna real que ainda estiver aberta e usar os sistemas já aprovados como base.
@@ -24,7 +24,9 @@ Documentos detalhados:
 
 - `visual-prototypes-approval.md` — Beys, Arena e VFX;
 - `condition-visual-approval.md` — Stamina / Stability / Quebrado;
-- `camera-approval.md` — Camera Director;
+- `camera-approval.md` — Camera Director / Camera Lab e histórico de playtests;
+- `camera-gameplay-separation.md` — regra causal: câmera nunca move o Bey; quatro referenciais de controle;
+- `inertial-duel-camera.md` — override de 2026-10-02 para yaw/composição da câmera de combate atual;
 - `motion-approval.md` — movimento e Motion Lab;
 - `clash-presentation-approval.md` — apresentação do Clash;
 - `m10-status.md` / `m11-status.md` — integração de player flow e pós-M11.
@@ -140,12 +142,14 @@ Não reduzir novamente o roster nem voltar à rodada 1 como direção final.
 
 # 5. Arena — VISUAL APROVADO
 
-Geometria visual aprovada:
+Geometria visual histórica do lab:
 
-- raio de referência: **12 m**;
+- raio de referência original: **12 m**;
 - bowl côncavo;
-- borda aproximadamente **3,2 m acima do centro**;
+- borda aproximadamente **3,2 m acima do centro** no protótipo original;
 - parede medida a partir do rim.
+
+**Owner override de escala já integrado (2026-10-02 / arena scale pass):** o stage de jogo foi ampliado para **3×**, com raio de piso **36 m**, ring-out em **36,9 m** e centro do bowl default aproximadamente **2,5 m abaixo do rim**. Valores antigos de 12 m continuam úteis para o histórico/proporções do lab, mas não são o limite espacial do jogo atual nem da câmera.
 
 Três direções visuais aprovadas:
 
@@ -233,17 +237,17 @@ Decisões específicas fechadas:
 
 ---
 
-# 8. Câmera — APROVADA
+# 8. Câmera — APROVADA, COM OVERRIDE DE COMPOSIÇÃO EM 2026-10-02
 
-Presets aprovados:
+Presets aprovados e preservados:
 
 - **A — Arena Fighter**;
 - **B — Cinematic Hybrid**;
 - **C — Hyper Dynamic**.
 
-O jogador usa uma câmera por vez. São presets do mesmo Camera Director.
+O jogador usa uma câmera por vez. São presets do mesmo sistema de câmera.
 
-Modos já prototipados/aprovados:
+Modos já prototipados/aprovados e preservados:
 
 - CombatFollow;
 - HighSpeed;
@@ -253,15 +257,40 @@ Modos já prototipados/aprovados:
 - RingOut;
 - Finisher.
 
-Cada preset possui **43 valores aprovados** no Camera Lab.
+Cada preset mantém os **43 valores aprovados** no Camera Lab como base de FOV, shake, framing/contextos e transições.
 
-Regra do Clash:
+Regra do Clash permanece:
 
 - durante Clash, a câmera é **sempre B — Cinematic Hybrid**;
-- sem órbita durante Clash;
+- o shot especial do Clash toma a apresentação;
 - isso vale mesmo que o jogador tenha A ou C selecionada fora do Clash.
 
-Não criar novas câmeras “de HUD” para reprototipar esses modos.
+### Override mais recente — Inertial Duel Camera
+
+O owner aprovou em 2026-10-02 a implementação de uma câmera de duelo inercial para corrigir o problema crônico de a câmera reorganizar o espaço quando os Beys se cruzam.
+
+**Regra final de yaw normal de combate:**
+
+- o eixo instantâneo jogador→oponente **não** é mais autoridade direta do yaw final;
+- o rig mantém um **azimute de combate persistente**;
+- enquanto ambos os Beys estiverem dentro de uma composição segura, yaw pode permanecer completamente estável;
+- os Beys podem cruzar/trocar de lado na tela sem obrigar a câmera a girar junto;
+- framing pressure é resolvido primeiro por foco, pull-back, FOV e pequena compensação vertical;
+- yaw é último recurso, pela menor direção útil, com limite de velocidade **e aceleração angular**;
+- Clash/Ring-Out/Finisher podem tomar o shot, mas o azimute normal fica congelado por baixo e retorna por blend;
+- containment e antecipação de ring-out usam a escala real da arena 36 m.
+
+**Precedência:** qualquer texto histórico que descreva “automatic orbit”, “side switching” ou o eixo jogador→oponente como autoridade contínua/final do yaw do rig de jogo está **SUPERSEDED** nessa parte. `camera-approval.md` continua sendo a referência do Camera Lab e dos presets/contextos; `inertial-duel-camera.md` é a referência do comportamento final de composição/yaw no jogo.
+
+### Regra causal — câmera nunca move o Bey
+
+Também permanece fechada a decisão de separação câmera×gameplay:
+
+- `opponent`, `classic` e `arena` são independentes da câmera;
+- `screen` é a única opção explicitamente camera-relative e captura a orientação no início do gesto;
+- câmera observa gameplay; não escreve input, `moveIntent`, física, IA, drift ou simulação.
+
+Não criar novas câmeras “de HUD” para reprototipar esses modos e não reintroduzir axis-follow contínuo sob outro nome.
 
 ---
 
@@ -373,7 +402,9 @@ As seguintes formulações antigas não devem ser lidas literalmente quando entr
 - “Motion não integrado” → usar o estado posterior do `motion-approval.md` / M11;
 - “VFX detalhado de ataques é totalmente aberto” → o pacote Híbrido aprovado cobre os momentos listados na seção 6;
 - “Condition C é o HUD final” → falso: é elemento diegético;
-- “uma pendência de HUD autoriza reprototipar todo o combate” → falso.
+- “uma pendência de HUD autoriza reprototipar todo o combate” → falso;
+- “12 m é a escala espacial atual da arena” → **SUPERSEDED para implementação atual: o stage de jogo é 3× / 36 m**;
+- “o rig final deve perseguir continuamente o eixo jogador→oponente / fazer automatic orbit para provar que está ativo” → **SUPERSEDED pela Inertial Duel Camera de 2026-10-02**.
 
 ---
 
@@ -397,6 +428,8 @@ Isto é uma pendência estreita de UI/legibilidade, não uma licença para repro
 - mecânica final do minigame de launch continua separada.
 
 ## 13.4 Câmera — integrações específicas ainda registradas como abertas
+
+A arquitetura de yaw/composição inercial **não está aberta**. Permanecem apenas integrações independentes onde não houver override posterior:
 
 - preset default para jogador novo, se não houver override posterior;
 - interação entre FOV configurável e preset;

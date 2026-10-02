@@ -18,8 +18,9 @@ Este diretório contém decisões de design que agentes **não devem reabrir** s
 | Estado consolidado dos protótipos visuais | `VISUAL_APPROVALS_MASTER.md` |
 | Beys, Arena e VFX | `visual-prototypes-approval.md` |
 | Stamina / Stability / Quebrado | `condition-visual-approval.md` |
-| Camera Director e presets | `camera-approval.md` |
+| Camera Director e presets / histórico do Camera Lab | `camera-approval.md` |
 | Câmera × Gameplay (a câmera nunca move o Bey; quatro esquemas de controle; única exceção opt-in `screen`) | `camera-gameplay-separation.md` |
+| Câmera de combate atual — azimute inercial, composição screen-space e escala da arena 36 m | `inertial-duel-camera.md` |
 | Movimento / Motion Lab | `motion-approval.md` |
 | Apresentação do Clash | `clash-presentation-approval.md` |
 | Inventário/histórico de labs | `visual-prototype-inventory.md` |
@@ -30,6 +31,7 @@ Este diretório contém decisões de design que agentes **não devem reabrir** s
 - `OWNER_DECISIONS_MASTER.md` registra as decisões/overrides mais recentes que precisam impedir reabertura de perguntas já respondidas.
 - Quando `VISUAL_APPROVALS_MASTER.md` ou o ledger marcar `OWNER OVERRIDE` ou `SUPERSEDED`, aquela correção prevalece sobre inventários/documentos históricos conflitantes.
 - Para valores numéricos exatos, use o documento detalhado da área, salvo supersessão explícita.
+- Para o comportamento de yaw da câmera de combate no jogo, `inertial-duel-camera.md` supersede o axis-follow/automatic-orbit normal descrito no estado pós-fix-8 de `camera-approval.md`; os presets A/B/C e os contextos aprovados continuam válidos.
 - `PROTOTIPADO`, `APROVADO` e `INTEGRADO` são estados diferentes.
 - UI/debug de um lab não é automaticamente UI final do jogo.
 - Uma lacuna em HUD/UI **não** autoriza reprototipar Arena, VFX, Camera, Motion, Condition ou Clash já aprovados.
@@ -64,4 +66,3 @@ Ao registrar uma nova decisão:
 ## Regra de processo (versão e README)
 
 Toda mudança (jogo, regras, conteúdo ou ferramentas) **sempre** atualiza o número de versão (`package.json` + `package-lock.json`, o mesmo que aparece no canto do jogo) e o `README.md` (linha **Version** e **Latest changes**). Isso vale sem pedir autorização. Detalhes em `CLAUDE.md` §4; um teste (`tests/unit/versionSync.test.ts`) quebra se os números divergirem.
-
