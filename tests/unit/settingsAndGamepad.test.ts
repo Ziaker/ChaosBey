@@ -28,18 +28,22 @@ function fakePad(state: { pressed: number[]; axes?: number[] }): () => (Gamepad 
 }
 
 describe('player settings', () => {
-  it('default to Medium quality with every comfort option on and the developer overlay off', () => {
-    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ quality: QualityPreset.Medium, cameraPreset: 'B', controlScheme: 'directional', cameraEffects: true, pauseOnFocusLoss: true, controlHints: true, debugOverlayOnStart: false, conditionLayers: ['A'] });
+  it('defaults to Medium quality, camera-independent opponent controls and the presentation defaults', () => {
+    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ quality: QualityPreset.Medium, cameraPreset: 'B', controlScheme: 'opponent', cameraEffects: true, pauseOnFocusLoss: true, controlHints: true, debugOverlayOnStart: false, conditionLayers: ['A'] });
   });
 
-  it('fall back field by field on missing, old or corrupted values', () => {
+  it('falls back field by field on missing or corrupted values', () => {
     expect(sanitizePlayerSettings(null)).toEqual(DEFAULT_PLAYER_SETTINGS);
     expect(sanitizePlayerSettings('garbage')).toEqual(DEFAULT_PLAYER_SETTINGS);
     expect(sanitizePlayerSettings({ quality: 'Ultra', cameraEffects: 'no', pauseOnFocusLoss: false })).toEqual({ ...DEFAULT_PLAYER_SETTINGS, pauseOnFocusLoss: false });
     expect(sanitizePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, quality: 'Low' }).quality).toBe(QualityPreset.Low);
   });
 
-  it('scale only render cost with quality, cheaper from High to Low', () => {
+  it('migrates the legacy directional save to the equivalent screen-relative scheme', () => {
+    expect(sanitizePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, controlScheme: 'directional' }).controlScheme).toBe('screen');
+  });
+
+  it('scales only render cost with quality, cheaper from High to Low', () => {
     expect(QUALITY_PROFILES.Low.maxPixelRatio).toBeLessThan(QUALITY_PROFILES.Medium.maxPixelRatio);
     expect(QUALITY_PROFILES.Medium.maxPixelRatio).toBeLessThan(QUALITY_PROFILES.High.maxPixelRatio);
     expect(QUALITY_PROFILES.Low.trails).toBe(false);
