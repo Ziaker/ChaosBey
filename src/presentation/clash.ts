@@ -1,9 +1,9 @@
 // ============================================================
 // CLASH PRESENTATION ADAPTER
-// The one interface between the real Clash state machine and any future Clash
-// presentation (the approved Overdrive direction lives in the unmerged
-// Clash Presentation Lab, PR #24, and is ported from there when its turn
-// comes). The snapshot is read-only data derived from ClashController; no
+// The one interface between the real Clash state machine and the Clash
+// presentation (the approved Overdrive direction, ported from the Clash
+// Presentation Lab in #86 as src/vfx/clash/, on in the normal game since
+// 0.16.0). The snapshot is read-only data derived from ClashController; no
 // Clash rule is duplicated here, and the presentation never decides an
 // outcome (GDD 158: VFX observes, never decides).
 //
