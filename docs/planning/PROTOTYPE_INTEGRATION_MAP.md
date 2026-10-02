@@ -1,6 +1,6 @@
 # ChaosBey — Prototype Integration Map
 
-**Date:** 2026-10-01 · **Against:** `main@73c04ab` (through #80) and the open PRs #24, #64, #67, #72, #75, #76.
+**Date:** 2026-10-01 (status update 2026-10-02, section 0) · **Against:** `main@73c04ab` (through #80) and the open PRs #24, #64, #67, #72, #75, #76.
 **Scope:** where every visual prototype stands and where it plugs in. This document ports nothing and decides nothing. It replaces the conclusions of the older plan in PR #67 where they went stale (section 3).
 
 **The camera is frozen for the whole visual integration pass (owner order, 2026-10-01): see section 6.** Nothing below changes a camera file, parameter, preset, event or behaviour; where a prototype and the current camera disagree, the prototype adapts or waits.
@@ -8,6 +8,22 @@
 Precedence stays: `OWNER_DECISIONS_MASTER.md` → `VISUAL_APPROVALS_MASTER.md` → the area's approval doc. "Prototype exists" never means "decision closed".
 
 **States:** `ALREADY INTEGRATED` · `PARTIALLY INTEGRATED` · `READY TO PORT` · `OWNER CHOICE REQUIRED` · `DEFERRED`.
+
+## 0. Status update — 2026-10-02 (supersedes the "In `src/` today" and "State" columns below where they differ)
+
+The visual integration pass of section 4 has landed, batch by batch, each behind its own flag and **off by default** (turn on with `?pfx=<flag>` or `?pfx=all`):
+
+| Batch | PR | Flag | Now |
+|---|---|---|---|
+| Foundation (hub, events, flags) | #72 | — | **INTEGRATED** |
+| 1 — Bey 4-piece concepts (3 archetypes) | #82 | `newBeyVisuals` | **INTEGRATED behind flag**; gameplay for the other 6 concepts still **OWNER CHOICE REQUIRED** |
+| 2 — Condition languages A/B/C | #84 | `conditionVisuals` | **INTEGRATED behind flag**; default combination still open |
+| 3 — Hybrid VFX + Cel Cyclone | #85 | `hybridVfx` | **INTEGRATED behind flag**; shake ×1.35 still pending metadata (no bridge), no time scaling |
+| 4 — Clash Overdrive | #86 (v0.13.0) | `clashPresentation` | **INTEGRATED behind flag**; tie style (ASK FIRST), entry slow motion, per-mash hitstop, Clash shake and the "overdrive" bar style still frozen/open |
+| 5 — Arena art (Foundry, Rift, Tournament) | #87 (v0.14.0) | `arenaVisuals` | **INTEGRATED behind flag**, fitted to the 36 m stage (horizontal footprint ×3, real-size parts, light rigs/sky/haze scaled as a whole); default arena still **OWNER CHOICE REQUIRED** |
+| HUD | #64 | `newHud` | **OWNER CHOICE REQUIRED** (A/B/C not chosen) |
+
+Since this map was written the stage also became **3× / 36 m** (#83, v0.12.0) and the camera follows it (#88, v0.14.1: eye limit 34.5 m, ring-out watch 33 m). The camera freeze of section 6 applied to the visual batches, which touched no camera file; #88 was a separate, owner-requested camera fix, and the owner-approved Inertial Duel Camera (#89) is camera work outside this pass. PR #24 (Clash lab) and PR #67 (old plan) are now fully superseded by #86 and this map.
 
 ## 1. The map
 

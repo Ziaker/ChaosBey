@@ -1,12 +1,14 @@
 # ChaosBey — Canonical Visual Approvals Master
 
 **Status:** CANÔNICO — fonte de entrada para qualquer auditoria de protótipos e aprovações visuais  
-**Atualizado:** 2026-09-27  
+**Atualizado:** 2026-10-02 (estado de integração; nenhuma decisão de aprovação mudou)  
 **Escopo:** Beys, Arena, VFX, condição (Stamina/Stability/Quebrado), câmera, movimento, Clash e lacunas visuais ainda não aprovadas.
 
 > **Regra obrigatória para agentes:** antes de perguntar novamente ao owner sobre uma decisão visual, leia este arquivo e depois o documento detalhado apontado na seção correspondente. Uma decisão marcada como **APROVADA** aqui não deve ser reaberta sem uma nova instrução explícita do owner.
 
 > **Regra de precedência:** quando um documento histórico contradizer este arquivo, vale a decisão mais recente registrada aqui. Para parâmetros exatos, o documento detalhado da área continua sendo a fonte de verdade, exceto quando este master marcar explicitamente um item como **SUPERSEDED / OWNER OVERRIDE**.
+
+> **Estado de integração em 2026-10-02:** os pacotes aprovados de Bey 4 peças (#82), Condição A/B/C (#84), VFX Híbrido + Cel Cyclone (#85), Clash Overdrive (#86) e arte das três arenas (#87) estão **INTEGRADOS atrás de flags de apresentação, desligadas por padrão** (`newBeyVisuals`, `conditionVisuals`, `hybridVfx`, `clashPresentation`, `arenaVisuals`; ligar com `?pfx=all`). Ligar alguma delas por padrão é decisão do owner. O stage do jogo agora tem **36 m** (owner override de escala, #83); a arte das arenas foi ajustada a essa escala sem mudar a aprovação. Detalhes por pacote: `docs/planning/PROTOTYPE_INTEGRATION_MAP.md` §0. O HUD continua sem escolha (A/B/C).
 
 ---
 
