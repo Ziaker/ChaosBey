@@ -92,6 +92,11 @@ export class CharacterSelectScreen {
     return BEY_ROSTER[this.focusIndex]!.definition.id;
   }
 
+  /** Id of the visual on the pedestal (read-only; smoke tests compare it with the match's). */
+  get previewVisualId(): string | null {
+    return this.stage.shownVisualId;
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;

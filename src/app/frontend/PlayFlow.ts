@@ -65,6 +65,8 @@ export interface PlayFlowHandle {
   getScore(): MatchScore;
   /** The current match's seed (each round derives its own from it). */
   getMatchSeed(): string | null;
+  /** Id of the Bey visual on Character Select's pedestal (e.g. `concept:attack-a`), or null off that screen. */
+  getPreviewVisualId(): string | null;
 }
 
 declare global {
@@ -104,6 +106,7 @@ export class PlayFlow {
       getSession: () => this.runner?.session ?? null,
       getScore: () => this.score,
       getMatchSeed: () => this.matchSeed,
+      getPreviewVisualId: () => this.characterSelect?.previewVisualId ?? null,
     };
   }
 

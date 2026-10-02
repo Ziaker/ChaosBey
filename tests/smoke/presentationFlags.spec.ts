@@ -1,11 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// Presentation foundation in the production build: the ?pfx= development flags
-// reach a real session, change nothing a player can see, and leave no console
-// error; and a restart gives a fresh presentation hub while the old session's
-// attached systems are disposed. Nothing is attached behind any flag yet, so
-// the hub runs empty; the point is that flags on, flags off and a typo all play
-// the same match and the legacy placeholder visuals stay in place.
+// Presentation flags in the production build. Without ?pfx the page gets the
+// normal-game defaults (the five approved packages on, newHud off); an
+// explicit ?pfx is an allowlist from all-off (`&pfx=` alone is the all-off
+// baseline). Each flagged system is checked against that explicit baseline:
+// same match, same camera, no console error; and a restart gives a fresh
+// presentation hub while the old session's attached systems are disposed.
 
 async function openDebugLab(page: Page, search: string, errors: string[]): Promise<void> {
   page.on('console', (message) => {
@@ -16,9 +16,9 @@ async function openDebugLab(page: Page, search: string, errors: string[]): Promi
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession()?.getTickIndex() ?? 0), { timeout: 20_000 }).toBeGreaterThan(120);
 }
 
-test('?pfx=all, no flags and a mistyped flag all start the same match; only newBeyVisuals swaps the picture; no console errors', async ({ browser }) => {
+test('no ?pfx is the normal game, ?pfx= is an allowlist (all, one, empty, a typo); only newBeyVisuals swaps the picture; no console errors', async ({ browser }) => {
   const seen: { stats: unknown; ids: string[]; features: Record<string, boolean>; errors: string[] }[] = [];
-  for (const search of ['', '&pfx=all', '&pfx=notAFeature']) {
+  for (const search of ['', '&pfx=all', '&pfx=notAFeature', '&pfx=hybridVfx', '&pfx=']) {
     const context = await browser.newContext();
     const page = await context.newPage();
     const errors: string[] = [];
@@ -41,9 +41,14 @@ test('?pfx=all, no flags and a mistyped flag all start the same match; only newB
     expect(run.stats).toMatchObject({ systems: (run.features.conditionVisuals ? 1 : 0) + (run.features.hybridVfx ? 1 : 0) + (run.features.clashPresentation ? 1 : 0) + (run.features.arenaVisuals ? 1 : 0), systemErrors: 0 });
     expect(run.ids).toEqual(run.features.newBeyVisuals ? ['concept:attack-a', 'concept:defense-a'] : ['placeholder:attack-prototype', 'placeholder:defense-prototype']);
   }
-  expect(Object.values(seen[0]!.features).some(Boolean)).toBe(false);
+  // No ?pfx: the normal game.
+  expect(seen[0]!.features).toEqual({ newBeyVisuals: true, conditionVisuals: true, hybridVfx: true, clashPresentation: true, newHud: false, arenaVisuals: true });
   expect(Object.values(seen[1]!.features).every(Boolean)).toBe(true);
+  // A typo, or an empty ?pfx=: the all-off baseline.
   expect(Object.values(seen[2]!.features).some(Boolean)).toBe(false);
+  expect(Object.values(seen[4]!.features).some(Boolean)).toBe(false);
+  // One name: only that package.
+  expect(Object.entries(seen[3]!.features).filter(([, on]) => on).map(([id]) => id)).toEqual(['hybridVfx']);
 });
 
 test('a restart builds a fresh presentation hub and disposes what was attached to the old session', async ({ page }) => {
@@ -110,7 +115,7 @@ test('conditionVisuals in a real browser: three languages on worn Beys, no conso
     await context.close();
     return { ...result, errors };
   };
-  const off = await cameraAfter('');
+  const off = await cameraAfter('&pfx=');
   const on = await cameraAfter('&pfx=conditionVisuals,newBeyVisuals');
   expect(off.errors).toEqual([]);
   expect(on.errors).toEqual([]);
@@ -162,7 +167,7 @@ test('hybridVfx in a real browser: real effects from real events, screen overlay
     await context.close();
     return { ...result, errors };
   };
-  const off = await run('');
+  const off = await run('&pfx=');
   const on = await run('&pfx=hybridVfx,newBeyVisuals');
   expect(off.errors).toEqual([]);
   expect(on.errors).toEqual([]);
@@ -216,7 +221,7 @@ test('clashPresentation in a real browser: locked contact, speedlines and dust o
     await context.close();
     return { ...result, errors };
   };
-  const off = await run('');
+  const off = await run('&pfx=');
   const on = await run('&pfx=clashPresentation,newBeyVisuals');
   expect(off.errors).toEqual([]);
   expect(on.errors).toEqual([]);
@@ -258,7 +263,7 @@ test('arenaVisuals in a real browser: the approved arena art draws, the temporar
     await context.close();
     return { ...result, errors };
   };
-  const off = await run('');
+  const off = await run('&pfx=');
   const on = await run('&pfx=arenaVisuals');
   expect(off.errors).toEqual([]);
   expect(on.errors).toEqual([]);
