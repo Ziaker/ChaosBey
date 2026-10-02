@@ -150,7 +150,8 @@ export class SettingsScreen {
       this.toggleRow('debug-overlay', 'Developer overlay (F3) on start', 'debugOverlayOnStart'),
     );
 
-    // Condition languages (A / B / C): shown only while the conditionVisuals presentation flag is on, so the flag-off Settings screen is unchanged.
+    // Condition languages (A / B / C): shown while the conditionVisuals presentation flag is on, which it is in the normal game;
+    // an explicit ?pfx allowlist without it hides the section (the pre-0.16 Settings screen).
     if (presentationFeaturesFromLocation().conditionVisuals) {
       const condition = this.section('Condition (Stamina, Stability, Broken)');
       for (const [id, label] of CONDITION_LAYER_LABELS) {

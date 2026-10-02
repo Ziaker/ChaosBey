@@ -149,6 +149,32 @@ describe('HybridVfxSystem', () => {
     expect(impactFor(0.9)).toBe(1);
   });
 
+  it('a dodge and a Perfect Dodge show their wind / Perfect Dodge effect but never a contact spark (the attack was avoided)', () => {
+    const fxFor = (kind: 'dodged' | 'perfectDodge'): { fx: number; sparks: number; focusLines: number; droppedSlowMotion: number } => {
+      const h = harness();
+      h.setState();
+      h.frame();
+      h.emit([{ kind, tick: 1, side: 'second', magnitude: 0.9, position: POS }]);
+      h.setState();
+      h.frame();
+      const stats = h.system.getStats();
+      h.hub.dispose();
+      return { fx: stats.fx!, sparks: stats.sparks!, focusLines: stats.focusLines!, droppedSlowMotion: stats.droppedSlowMotion! };
+    };
+    const dodged = fxFor('dodged');
+    const perfect = fxFor('perfectDodge');
+    expect(dodged.sparks).toBe(0);
+    expect(perfect.sparks).toBe(0);
+    expect(dodged.fx).toBeGreaterThan(0);
+    expect(perfect.fx).toBeGreaterThan(0);
+    // The Perfect Dodge adds its own feedback on top of the dodge's wind: focus lines on screen
+    // (and a slow-motion request, which the system drops: it never scales gameplay or camera time).
+    expect(dodged.focusLines).toBe(0);
+    expect(perfect.focusLines).toBeGreaterThan(0);
+    expect(dodged.droppedSlowMotion).toBe(0);
+    expect(perfect.droppedSlowMotion).toBeGreaterThan(0);
+  });
+
   it('asks for camera shake, hitstop and slow motion but applies none of them', () => {
     const h = harness();
     h.setState();
