@@ -12,7 +12,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import type RAPIER from '@dimforge/rapier3d-compat';
+import RAPIER from '@dimforge/rapier3d-compat';
 import { AIController } from '../../ai/controllers/AIController';
 import type { MatchSession, Side } from '../../app/session/MatchSession';
 import { RINGOUT_RADIUS_M } from '../../arena/ringout/RingOutTuning';
@@ -357,7 +357,31 @@ export class DebugVisualLayers {
   }
 }
 
+/** Every this-many-th row/column of a heightfield is drawn: a coarse grid (the 288-cell bowl floor would be unreadable at full density). */
+const HEIGHTFIELD_DRAW_STRIDE = 12;
+
+/**
+ * A heightfield (the bowl floor, the default since the arena scale pass) as a
+ * coarse grid of lines on its real heights. The default floor is radially
+ * symmetric, so the grid's row/column order does not matter here.
+ */
+function heightfieldWireframe(shape: { heights: ArrayLike<number>; scale: { x: number; y: number; z: number }; nrows: number; ncols: number }, color: number): THREE.Object3D {
+  const { heights, scale, nrows, ncols } = shape;
+  const at = (i: number, j: number): THREE.Vector3 => new THREE.Vector3((i / nrows - 0.5) * scale.x, heights[i * (ncols + 1) + j]! * scale.y, (j / ncols - 0.5) * scale.z);
+  const points: THREE.Vector3[] = [];
+  for (let i = 0; i <= nrows; i += HEIGHTFIELD_DRAW_STRIDE) {
+    for (let j = 0; j < ncols; j++) points.push(at(i, j), at(i, j + 1));
+  }
+  for (let j = 0; j <= ncols; j += HEIGHTFIELD_DRAW_STRIDE) {
+    for (let i = 0; i < nrows; i++) points.push(at(i, j), at(i + 1, j));
+  }
+  return new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color }));
+}
+
 function wireframeForCollider(collider: RAPIER.Collider, color: number): THREE.Object3D | null {
+  if (collider.shape.type === RAPIER.ShapeType.HeightField) {
+    return heightfieldWireframe(collider.shape as unknown as Parameters<typeof heightfieldWireframe>[0], color);
+  }
   const shape = collider.shape as unknown as { halfExtents?: { x: number; y: number; z: number }; radius?: number; halfHeight?: number };
   let geometry: THREE.BufferGeometry;
   if (shape.halfExtents) {

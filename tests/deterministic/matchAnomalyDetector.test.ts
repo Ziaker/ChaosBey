@@ -2,6 +2,7 @@
 // one report per episode — and the ext-32 wall bug's own seed, which now
 // plays clean (M11 lane 3 fixed the wall collider; see arenaWall.test.ts).
 
+import { ARENA_FLOOR_RADIUS } from '../../src/arena/colliders/ArenaTuning';
 import { describe, expect, it } from 'vitest';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { ClashState, type ClashController } from '../../src/combat/clash/ClashController';
@@ -74,7 +75,7 @@ describe('MatchAnomalyDetector — each GDD 67 condition is caught, once per epi
 
   it('left the world without a ring-out', async () => {
     const found = await run(20, (w, tick) => {
-      if (tick >= 10) w.second.body.setTranslation({ x: 30, y: 0.6, z: 0 }, false);
+      if (tick >= 10) w.second.body.setTranslation({ x: DEFAULT_ANOMALY_THRESHOLDS.leftWorldRadiusM + 1, y: 0.6, z: 0 }, false);
     });
     expect(found.filter((d) => d.kind === 'left-world')).toHaveLength(1);
   });
@@ -90,7 +91,7 @@ describe('MatchAnomalyDetector — each GDD 67 condition is caught, once per epi
 
   it('stuck inside the wall, after the threshold only', async () => {
     const found = await run(DEFAULT_ANOMALY_THRESHOLDS.stuckInWallTicks + 5, (w) => {
-      w.second.body.setTranslation({ x: 12.1, y: 0.3, z: 0 }, false);
+      w.second.body.setTranslation({ x: ARENA_FLOOR_RADIUS + 0.1, y: 0.3, z: 0 }, false);
       w.second.body.setLinvel({ x: 0, y: 0, z: 0 }, false);
     });
     const wall = found.filter((d) => d.kind === 'stuck-in-wall');

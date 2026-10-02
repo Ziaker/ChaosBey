@@ -59,3 +59,8 @@ Ao registrar uma nova decisão:
 4. marcar decisões antigas como superseded quando necessário;
 5. atualizar o inventário;
 6. preservar o histórico em vez de apagar contexto útil.
+
+## Regra de processo (versão e README)
+
+Toda mudança (jogo, regras, conteúdo ou ferramentas) **sempre** atualiza o número de versão (`package.json` + `package-lock.json`, o mesmo que aparece no canto do jogo) e o `README.md` (linha **Version** e **Latest changes**). Isso vale sem pedir autorização. Detalhes em `CLAUDE.md` §4; um teste (`tests/unit/versionSync.test.ts`) quebra se os números divergirem.
+

@@ -1,6 +1,7 @@
 // M10 lane B: AI tiers, the AI explanation, match rules and round scoring.
 
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_ARENA_FLOOR } from '../../src/arena/floor/ArenaFloorProfile';
 import { DEFAULT_AI_DIFFICULTY_PROFILE, applyDifficultyTraits } from '../../src/ai/difficulty/AiDifficultyProfile';
 import { ACE_TIER, AI_DIFFICULTY_TIERS, RIVAL_TIER, ROOKIE_TIER, aiDifficultyTier } from '../../src/ai/difficulty/AiDifficultyTiers';
 import { ATTACK_AI_PERSONALITY, DEFENSE_AI_PERSONALITY, STAMINA_AI_PERSONALITY } from '../../src/ai/personalities/AiArchetypePersonalities';
@@ -109,12 +110,12 @@ describe('match setup rules', () => {
     expect(matchConfigFor(rift)).toMatchObject({ arenaWallHeightM: 1, arenaWallRestitution: 0.4 });
     const custom = { ...rift, arena: { ...rift.arena, geometry: { wallHeightM: 0.6, wallRestitution: 0.9 } } };
     expect(matchConfigFor(custom)).toMatchObject({ arenaWallHeightM: 0.6, arenaWallRestitution: 0.9 });
-    expect(withArenaPreset(custom, 'tournament').arena).toEqual({ presetId: 'tournament', geometry: { wallHeightM: 2.6, wallRestitution: 0.7, floor: 'flat' } });
+    expect(withArenaPreset(custom, 'tournament').arena).toEqual({ presetId: 'tournament', geometry: { wallHeightM: 2.6, wallRestitution: 0.7, floor: DEFAULT_ARENA_FLOOR } });
     // M11 lane 4: the floor profile is independent of the look: a preset change keeps it.
     const bowl = withArenaFloor(rift, 'bowl-b');
     expect(matchConfigFor(bowl).arenaFloor).toBe('bowl-b');
     expect(withArenaPreset(bowl, 'foundry').arena.geometry.floor).toBe('bowl-b');
-    expect(matchConfigFor(createDefaultMatchSetup()).arenaFloor).toBe('flat');
+    expect(matchConfigFor(createDefaultMatchSetup()).arenaFloor).toBe(DEFAULT_ARENA_FLOOR);
   });
 
   it('keeps a hand-picked opponent when the player changes Bey, and follows the default otherwise', () => {

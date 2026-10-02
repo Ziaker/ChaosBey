@@ -38,7 +38,8 @@ describe('AI dodge roll granularity', () => {
       harness.clash.controller,
       neverDodges,
       DEFAULT_AI_DIFFICULTY_PROFILE,
-      SeededRng.fromSeedText('dodge-roll-granularity-seed'),
+      // Re-pinned in the arena scale pass (the default floor is now a bowl, which changed this seed's fight: no DodgeThreat decision occurred).
+      SeededRng.fromSeedText('dodge-roll-granularity-seed-2'),
     );
 
     // Same repeated-charge pattern as the "AI can dodge" combat test —

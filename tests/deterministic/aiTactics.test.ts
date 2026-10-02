@@ -6,6 +6,7 @@
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
+import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { AIController } from '../../src/ai/controllers/AIController';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../src/ai/difficulty/AiDifficultyProfile';
 import { ATTACK_AI_PERSONALITY, DEFENSE_AI_PERSONALITY } from '../../src/ai/personalities/AiArchetypePersonalities';
@@ -64,7 +65,7 @@ describe('AI tactics (M7 Part 2)', () => {
     // where attacking straight away would push it along the wall (outward
     // cosine ~0.23), not out of the ring. Without center-side positioning
     // the AI starts charging a Dash right there on tick 0.
-    const { harness, step } = await aiVersus({ x: 11.2, y: 0.5, z: 0 }, { x: 10, y: 0.5, z: 5 }, ATTACK_AI_PERSONALITY, 'edge-pressure');
+    const { harness, step } = await aiVersus({ x: RINGOUT_RADIUS_M - 1.7, y: 0.5, z: 0 }, { x: RINGOUT_RADIUS_M - 2.9, y: 0.5, z: 5 }, ATTACK_AI_PERSONALITY, 'edge-pressure');
 
     let outwardAtFirstAttack: number | null = null;
     let firstHitTick: number | null = null;
@@ -86,8 +87,8 @@ describe('AI tactics (M7 Part 2)', () => {
 
   it('backs away from the edge in reverse when it starts facing out of the ring, and keeps going until clear', async () => {
     const idle = new IdleController();
-    // AI spawned at z=11 facing +Z (heading 0) = straight at the boundary.
-    const { harness, ai, step } = await aiVersus({ x: 0, y: 0.5, z: -6 }, { x: 0, y: 0.5, z: 11 }, DEFENSE_AI_PERSONALITY, 'edge-reverse');
+    // AI spawned 1.9 m inside the ring-out radius facing +Z (heading 0) = straight at the boundary.
+    const { harness, ai, step } = await aiVersus({ x: 0, y: 0.5, z: RINGOUT_RADIUS_M - 18.9 }, { x: 0, y: 0.5, z: RINGOUT_RADIUS_M - 1.9 }, DEFENSE_AI_PERSONALITY, 'edge-reverse');
     let reversedTowardCenter = false;
     for (let i = 0; i < 150; i++) {
       step(idle);
@@ -98,7 +99,7 @@ describe('AI tactics (M7 Part 2)', () => {
     const t = harness.second.body.translation();
     expect(reversedTowardCenter).toBe(true);
     // Recovery released only once clear of the override zone (hysteresis).
-    expect(Math.hypot(t.x, t.z)).toBeLessThan(10.5);
+    expect(Math.hypot(t.x, t.z)).toBeLessThan(RINGOUT_RADIUS_M - 2.4);
     expect(ai.getDebugState().edgeRiskFraction).toBeLessThan(0.55);
   });
 });

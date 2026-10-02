@@ -19,6 +19,7 @@
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
+import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { AIController } from '../../src/ai/controllers/AIController';
 import { AiIntent } from '../../src/ai/decision/Intent';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../src/ai/difficulty/AiDifficultyProfile';
@@ -53,13 +54,13 @@ interface Tick {
 }
 
 /**
- * The AI (at z = 9.5, heading for an idle opponent 12 m away: a plain
+ * The AI (3.4 m inside the ring-out radius, heading for an idle opponent 12 m away: a plain
  * Approach) runs until it holds a late decision pending, then gets
  * `outwardKickMps` of outward (+z) velocity; returns the ticks from that
  * moment on.
  */
 async function run(outwardKickMps: number): Promise<{ pendingIntent: AiIntent; activeAtPending: AiIntent; after: Tick[] }> {
-  const harness = await CombatHarness.create({ x: 0, y: 0.5, z: -2.5 }, { x: 0, y: 0.5, z: 9.5 }, {}, new NullAiMashSource());
+  const harness = await CombatHarness.create({ x: 0, y: 0.5, z: RINGOUT_RADIUS_M - 15.4 }, { x: 0, y: 0.5, z: RINGOUT_RADIUS_M - 3.4 }, {}, new NullAiMashSource());
   const ai = new AIController(
     harness.physics,
     harness.second,
@@ -94,7 +95,7 @@ async function run(outwardKickMps: number): Promise<{ pendingIntent: AiIntent; a
   }
   expect(current.pendingIntent, 'a slow-to-react decision is pending').not.toBeNull();
   const pos = harness.second.body.translation();
-  expect(Math.hypot(pos.x, pos.z), 'made away from the edge').toBeLessThan(10.5);
+  expect(Math.hypot(pos.x, pos.z), 'made away from the edge').toBeLessThan(RINGOUT_RADIUS_M - 2.4);
 
   if (outwardKickMps > 0) {
     const v = harness.second.body.linvel();
@@ -141,8 +142,10 @@ describe('slow to react vs a new critical edge situation (real physics)', () => 
   it('C — control: a non-critical edge danger during the delay does not preempt it', async () => {
     // 5.75 m/s since the Motion Lab integration (M11): no air/overspeed drag
     // carries the kick further, so 7 now turns critical; 5.5–6 lands in the
-    // non-critical band (5 stays below 0.55, 6.5 is critical).
-    const { pendingIntent, after } = await run(5.75);
+    // non-critical band (5 stays below 0.55, 6.5 is critical). Arena scale pass:
+    // on the bowl floor (default) the downhill pull toward the centre trims the
+    // kick's reach, so 5.75 read 0.544 (< 0.55); 6 is back inside the band.
+    const { pendingIntent, after } = await run(6);
     // At the reaction read the AI is in edge danger (>= the 0.55 entry) but not critical.
     const read = after.find((t) => t.tick === reactionTicks)!;
     expect(read.edgeRisk).toBeGreaterThanOrEqual(0.55);

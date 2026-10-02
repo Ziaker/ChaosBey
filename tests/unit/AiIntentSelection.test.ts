@@ -192,16 +192,16 @@ describe('selectIntent — considered scores (M7 Part 2, GDD section 65)', () =>
 });
 
 describe('selectIntent — edge recovery hysteresis (M7 Part 2)', () => {
-  // Defense edgeCautionMultiplier 1.3: at z=10.2 raw edge risk ~0.23 -> weighted ~0.30; at z=10.9 ~0.43 -> ~0.56.
+  // Defense edgeCautionMultiplier 1.3: 2.7 m inside the ring-out radius raw edge risk ~0.23 -> weighted ~0.30; 2.0 m inside ~0.43 -> ~0.56.
   const opponentFarAway = { positionXZ: { x: 0, z: -6 } };
 
   it('keeps recovering below the entry threshold once already recovering, and releases once well clear', () => {
-    const between = { positionXZ: { x: 0, z: 10.6 } };
+    const between = { positionXZ: { x: 0, z: RINGOUT_RADIUS_M - 2.3 } };
     expect(decide(between, opponentFarAway, DEFENSE_AI_PERSONALITY).intent).not.toBe(AiIntent.RecoverFromEdge);
     expect(decide(between, opponentFarAway, DEFENSE_AI_PERSONALITY, { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true }).intent).toBe(
       AiIntent.RecoverFromEdge,
     );
-    const clear = { positionXZ: { x: 0, z: 9 } };
+    const clear = { positionXZ: { x: 0, z: RINGOUT_RADIUS_M - 3.9 } };
     expect(decide(clear, opponentFarAway, DEFENSE_AI_PERSONALITY, { ...NEUTRAL_DECISION_CONTEXT, recoveringFromEdge: true }).intent).not.toBe(
       AiIntent.RecoverFromEdge,
     );

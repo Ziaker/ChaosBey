@@ -83,9 +83,18 @@ interface Recording {
 // but it stayed well above the thresholds) and is kept as the
 // mutation-path seed. Both still read the first Bey's movement input after
 // tick 900.
+// Arena scale pass (36 m bowl arena, the new default floor): every earlier
+// seed changed again; a sweep of replay-0..99 found 7 that qualify (>1000
+// ticks, >100 frozen). replay-0 lasts 1603 ticks with 139 frozen and
+// replay-26 1544 with 128 frozen; both read the first Bey's movement input
+// after tick 900 (252 and 107 ticks).
+// Re-swept once more when the floor heightfield went 288 -> 144 cells (same
+// arena, slightly different contact physics): replay-0 no longer qualifies;
+// now only replay-58 (1103 ticks, 110 frozen) and replay-26 (1950 ticks, 104
+// frozen, 449 steering ticks after tick 900) do.
 // Most seeds end within a few hundred ticks.
-const LONG_SEED = 'replay-62';
-const MUTATION_SEED = 'replay-27';
+const LONG_SEED = 'replay-58';
+const MUTATION_SEED = 'replay-26';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {
