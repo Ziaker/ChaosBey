@@ -316,8 +316,13 @@ export function tickMatch(
     const defenderIsFirst = !hit.attackerIsFirst;
     const defenderDodge = defenderIsFirst ? firstDodge : secondDodge;
     if (defenderDodge.hasIFrames) {
-      combatEvents.push({ kind: 'dodged', targetIsFirst: defenderIsFirst });
-      if (defenderDodge.isPerfectWindow) combatEvents.push({ kind: 'perfectDodge', targetIsFirst: defenderIsFirst });
+      // Nullified on every overlapping tick; reported once per (dodge, opponent attack).
+      const defender = defenderIsFirst ? first : second;
+      const attacker = defenderIsFirst ? second : first;
+      if (defender.dodge.firstEvasionOf(attacker.attack.getActivationId())) {
+        combatEvents.push({ kind: 'dodged', targetIsFirst: defenderIsFirst });
+        if (defenderDodge.isPerfectWindow) combatEvents.push({ kind: 'perfectDodge', targetIsFirst: defenderIsFirst });
+      }
       continue;
     }
     hitEvents.push(hit);

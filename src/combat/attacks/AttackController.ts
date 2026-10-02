@@ -82,11 +82,18 @@ export class AttackController {
   private chargeTimerS = 0;
   private activeTimerS = 0;
   private recoveryTimerS = 0;
+  /** Counts every attack that became active (Circular or Dash): one id per swing, for "once per attack" bookkeeping. */
+  private activationCount = 0;
 
   constructor(private readonly profile: BeyAttackProfile = DEFAULT_ATTACK_PROFILE) {}
 
   getState(): AttackState {
     return this.state;
+  }
+
+  /** Id of the current (or last) active attack: changes each time a Circular or Dash becomes active. */
+  getActivationId(): number {
+    return this.activationCount;
   }
 
   /** Current Dash charge fraction without advancing anything — for read-only consumers (e.g. a frozen post-round snapshot). */
@@ -130,6 +137,7 @@ export class AttackController {
         if (!attackHeld) {
           this.state = AttackState.CircularActive;
           this.activeTimerS = 0;
+          this.activationCount++;
         } else if (this.bufferTimerS >= TAP_MAX_HOLD_S) {
           this.state = AttackState.ChargingDash;
           this.chargeTimerS = this.bufferTimerS;
@@ -144,6 +152,7 @@ export class AttackController {
         if (!attackHeld || attackEnergyFraction <= 0) {
           this.state = AttackState.DashActive;
           this.activeTimerS = 0;
+          this.activationCount++;
         }
         break;
 
