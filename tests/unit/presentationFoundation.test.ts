@@ -59,7 +59,7 @@ import {
   type PresentationTickResult,
   type VfxEffect,
 } from '../../src/presentation';
-import type { ImpactEvent } from '../../src/camera/ImpactEvents';
+import type { ImpactEvent } from '../../src/app/simulation/impact/ImpactEvents';
 import type { HitEvent } from '../../src/combat/hit-detection/HitDetection';
 
 const POS = { x: 1, y: 0.5, z: -2 };
@@ -690,8 +690,8 @@ describe('dependency direction', () => {
   });
 
   it('keeps the ported visual batches (Bey models, condition languages, hybrid VFX) away from the camera, Rapier, the AI, sessions and UI', () => {
-    // The camera is frozen by the owner: the only camera import allowed is the read-only ImpactEvents type.
-    const forbidden = [/rapier/i, /(^|\/)physics\//, /(^|\/)ai\//, /camera\/(?!ImpactEvents)/, /app\/session/, /app\/frontend/, /app\/lifecycle/, /(^|\/)debug\//];
+    // Impact vocabulary lives upstream in app/simulation; visual batches do not import camera code.
+    const forbidden = [/rapier/i, /(^|\/)physics\//, /(^|\/)ai\//, /camera\//, /app\/session/, /app\/frontend/, /app\/lifecycle/, /(^|\/)debug\//];
     const dirs = ['bey/visual', 'vfx/condition', 'vfx/hybrid'];
     expect(dirs.every((dir) => sourceFiles(join(SRC, dir)).length >= 8)).toBe(true);
     const offenders: string[] = [];
