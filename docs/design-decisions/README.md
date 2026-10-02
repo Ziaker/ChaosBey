@@ -19,6 +19,7 @@ Este diretório contém decisões de design que agentes **não devem reabrir** s
 | Beys, Arena e VFX | `visual-prototypes-approval.md` |
 | Stamina / Stability / Quebrado | `condition-visual-approval.md` |
 | Camera Director e presets | `camera-approval.md` |
+| Câmera × Gameplay (a câmera nunca move o Bey; quatro esquemas de controle; única exceção opt-in `screen`) | `camera-gameplay-separation.md` |
 | Movimento / Motion Lab | `motion-approval.md` |
 | Apresentação do Clash | `clash-presentation-approval.md` |
 | Inventário/histórico de labs | `visual-prototype-inventory.md` |
