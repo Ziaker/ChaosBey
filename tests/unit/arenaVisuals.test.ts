@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { ARENA_ART } from '../../src/arena/visual/ArenaArt';
+import { mergeStaticMeshes } from '../../src/arena/visual/common';
 import { ArenaVisualsSystem, type ToneMappedRenderer } from '../../src/arena/visual/ArenaVisualsSystem';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, floorRimHeight } from '../../src/arena/floor/ArenaFloorProfile';
 import { ARENA_PRESETS, type ArenaPresetId } from '../../src/arena/presets/ArenaPresets';
@@ -228,5 +229,61 @@ describe('FakeScene', () => {
   it('is only a type helper', () => {
     const scene: FakeScene = { fog: null };
     expect(scene.fog).toBeNull();
+  });
+});
+
+describe('static arena parts are baked into few meshes (same picture, fewer draw calls)', () => {
+  const triangles = (root: THREE.Object3D): number => {
+    let n = 0;
+    root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh) return;
+      const g = mesh.geometry;
+      n += (g.index ? g.index.count : g.getAttribute('position').count) / 3;
+    });
+    return n;
+  };
+  const worldBox = (root: THREE.Object3D): THREE.Box3 => {
+    root.updateMatrixWorld(true);
+    return new THREE.Box3().setFromObject(root);
+  };
+
+  it('merging keeps every triangle and the same world bounds, leaves animated parts alone, and frees what it replaced', () => {
+    const root = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial();
+    const boltMat = new THREE.MeshStandardMaterial();
+    for (let i = 0; i < 20; i++) {
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.5), mat);
+      panel.position.set(Math.cos(i) * 30, 1, Math.sin(i) * 30);
+      panel.rotation.y = i;
+      const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.08, 6), boltMat);
+      bolt.position.set(0.2, 0.5, 0.27);
+      panel.add(bolt);
+      root.add(panel);
+    }
+    const drifting = new THREE.Group();
+    drifting.userData.animated = true;
+    drifting.add(new THREE.Mesh(new THREE.OctahedronGeometry(1), mat), new THREE.Mesh(new THREE.OctahedronGeometry(1), mat));
+    root.add(drifting);
+    const before = { tris: triangles(root), box: worldBox(root).clone() };
+    mergeStaticMeshes(root);
+    mergeStaticMeshes(root);
+    let meshes = 0;
+    root.traverse((o) => void ((o as THREE.Mesh).isMesh && meshes++));
+    expect(triangles(root)).toBe(before.tris);
+    const after = worldBox(root);
+    expect(after.min.distanceTo(before.box.min)).toBeLessThan(1e-4);
+    expect(after.max.distanceTo(before.box.max)).toBeLessThan(1e-4);
+    // 20 panels with a bolt each -> 1 bolt mesh, then 1 panel mesh; the 2 drifting shards stay as they are.
+    expect(drifting.children).toHaveLength(2);
+    expect(meshes).toBe(1 + 1 + 2);
+  });
+
+  it.each(PRESET_IDS)('%s builds with a small number of meshes', (id) => {
+    const built = ARENA_ART[id].build(undefined, ARENA_FLOORS['bowl-a'].heightAtRadius);
+    let meshes = 0;
+    built.root.traverse((o) => void ((o as THREE.Mesh).isMesh && meshes++));
+    expect(meshes, id).toBeLessThan(60);
+    built.dispose();
   });
 });

@@ -8,7 +8,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
+import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, mergeStaticMeshes, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
@@ -196,6 +196,9 @@ export const TOURNAMENT_STADIUM: ArenaConcept = {
     const cA = new THREE.Color(CLASH_COLORS[0]);
     const cB = new THREE.Color(CLASH_COLORS[1]);
     const tmp = new THREE.Color();
+    // GAME: bake static parts into one mesh per material (two passes: the first frees parents of their merged children).
+    mergeStaticMeshes(root);
+    mergeStaticMeshes(root);
     return {
       root,
       depth: heightAt(ARENA_RADIUS),

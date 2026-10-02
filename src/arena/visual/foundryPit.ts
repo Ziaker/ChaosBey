@@ -8,7 +8,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, onCircle, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
+import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, mergeStaticMeshes, onCircle, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
@@ -201,6 +201,9 @@ export const FOUNDRY_PIT: ArenaConcept = {
 
     const baseColor = new THREE.Color(LAMP_COLOR);
     const clashColor = new THREE.Color(CLASH_LAMP_COLOR);
+    // GAME: bake static parts into one mesh per material (two passes: the first frees parents of their merged children).
+    mergeStaticMeshes(root);
+    mergeStaticMeshes(root);
     return {
       root,
       depth: heightAt(ARENA_RADIUS),

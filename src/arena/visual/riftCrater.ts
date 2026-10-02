@@ -8,7 +8,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
+import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, mergeStaticMeshes, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
@@ -161,6 +161,7 @@ export const RIFT_CRATER: ArenaConcept = {
     );
     root.add(stars);
     const shards = new THREE.Group();
+    shards.userData.animated = true; // GAME: they drift every frame; never baked by mergeStaticMeshes
     for (let i = 0; i < 14; i++) {
       const s = (0.8 + rnd() * 2.2) * ARENA_SCALE; // GAME: the drifting backdrop scaled as a whole
       const shard = new THREE.Mesh(new THREE.OctahedronGeometry(s, 0), rockMat);
@@ -198,6 +199,9 @@ export const RIFT_CRATER: ArenaConcept = {
     const base = new THREE.Color(FISSURE_COLOR);
     const hot = new THREE.Color(CLASH_COLOR);
     const tmp = new THREE.Color();
+    // GAME: bake static parts into one mesh per material (two passes: the first frees parents of their merged children).
+    mergeStaticMeshes(root);
+    mergeStaticMeshes(root);
     return {
       root,
       depth: heightAt(ARENA_RADIUS),

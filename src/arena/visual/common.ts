@@ -5,6 +5,7 @@
 // ============================================================
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ARENA_FLOOR_RADIUS } from '../colliders/ArenaTuning';
 
 /** The lab's arena radius (m): the approved art was authored on a 12 m floor. Floor markings are still painted in these units. */
@@ -166,4 +167,61 @@ function stubCanvas(): { width: number; height: number; getContext: () => Canvas
   const context = new Proxy({}, handler) as unknown as CanvasRenderingContext2D;
   const canvasLike = { width: 0, height: 0, getContext: () => context };
   return canvasLike;
+}
+
+/**
+ * GAME: fewer draw calls, same picture. The approved arena art is built from
+ * hundreds of small static meshes (a 36 m wall has 48 panels, ~480 bolts,
+ * 48 ribs, 100+ rim rocks...). Meshes that share a material and a geometry
+ * kind are baked into one mesh each, in the root's space; nothing moves,
+ * changes colour differently or loses a vertex. Objects marked
+ * `userData.animated` (and everything under them) are left alone, as are
+ * instanced meshes, points, lines and lights. Returns how many meshes were merged away.
+ */
+export function mergeStaticMeshes(root: THREE.Object3D): number {
+  root.updateMatrixWorld(true);
+  const toRoot = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const groups = new Map<string, THREE.Mesh[]>();
+  const animated = (o: THREE.Object3D): boolean => {
+    for (let n: THREE.Object3D | null = o; n && n !== root; n = n.parent) if (n.userData.animated) return true;
+    return false;
+  };
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || Array.isArray(mesh.material) || mesh.children.length > 0 || animated(mesh)) return;
+    const g = mesh.geometry;
+    const key = [
+      (mesh.material as THREE.Material).uuid,
+      g.type,
+      Object.keys(g.attributes).sort().join(','),
+      g.index ? 'i' : 'n',
+      mesh.renderOrder,
+      mesh.castShadow ? 'c' : '',
+      mesh.receiveShadow ? 'r' : '',
+    ].join('|');
+    const list = groups.get(key);
+    if (list) list.push(mesh);
+    else groups.set(key, [mesh]);
+  });
+  let removed = 0;
+  for (const meshes of groups.values()) {
+    if (meshes.length < 2) continue;
+    const baked = meshes.map((m) => m.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(toRoot, m.matrixWorld)));
+    const merged = mergeGeometries(baked, false);
+    for (const g of baked) g.dispose();
+    if (!merged) continue;
+    const first = meshes[0]!;
+    const out = new THREE.Mesh(merged, first.material);
+    out.name = `merged:${first.geometry.type}`;
+    out.renderOrder = first.renderOrder;
+    out.castShadow = first.castShadow;
+    out.receiveShadow = first.receiveShadow;
+    root.add(out);
+    for (const m of meshes) {
+      m.removeFromParent();
+      m.geometry.dispose();
+    }
+    removed += meshes.length - 1;
+  }
+  return removed;
 }
