@@ -11,7 +11,7 @@ import type { SideControllerSpec } from '../../src/app/session/SideControllers';
 import { createDefaultAttackProfileSettings } from '../../src/config/attack-profile/AttackProfileSettings';
 import { resolveMatchConfig } from '../../src/config/match/MatchConfig';
 import { Action, type CombatController, type ControllerActions } from '../../src/input/actions/Action';
-import { DirectionalController } from '../../src/input/directional/DirectionalController';
+import { createPlayerControl } from '../../src/input/directional/createPlayerControl';
 import { REPLAY_FORMAT, REPLAY_FORMAT_V1 } from '../../src/replay/contracts';
 import { decodeReplay, encodeReplay, sealReplay, type ChaosBeyReplayV1 } from '../../src/replay/format/ChaosBeyReplayV1';
 import { currentRuntimeFingerprint } from '../../src/replay/format/runtimeFingerprint';
@@ -56,9 +56,8 @@ function decoded(text: string): ChaosBeyReplayV1 {
 describe('Replay V2 (M11)', () => {
   it('a directional player match records `move` per frame and plays back verified on every tick', async () => {
     const fingerprint = await currentRuntimeFingerprint();
-    // A camera that keeps turning: a well-formed, reproducible `move` must still get recorded (camera-relative is the default again, "Fix 7").
-    let yaw = 0;
-    const player = new DirectionalController(new ArrowScript(), { cameraYaw: () => (yaw += 0.01) });
+    // The player's real control chain (same factory as PLAY): a well-formed, reproducible `move` is recorded every frame.
+    const player = createPlayerControl(new ArrowScript(), { directional: true });
     const live = await session({ first: { kind: 'keyboard' }, second: { kind: 'ai', personality: 'archetype' } }, player);
     live.startReplayCapture({ fingerprint, checkpointEvery: 1 });
     for (let i = 0; i < 900 && !live.roundState.isOver; i++) live.tick();
@@ -81,8 +80,7 @@ describe('Replay V2 (M11)', () => {
 
   it('a V1 file (classic player, no `move`) still decodes and verifies with the old semantics', async () => {
     const fingerprint = await currentRuntimeFingerprint();
-    const classicPlayer = new DirectionalController(new ArrowScript(), { cameraYaw: () => 0 });
-    classicPlayer.setEnabled(false);
+    const classicPlayer = createPlayerControl(new ArrowScript(), { directional: false });
     const live = await session({ first: { kind: 'keyboard' }, second: { kind: 'ai', personality: 'archetype' } }, classicPlayer);
     live.startReplayCapture({ fingerprint, checkpointEvery: 30 });
     for (let i = 0; i < 600 && !live.roundState.isOver; i++) live.tick();
@@ -117,7 +115,7 @@ describe('Replay V2 (M11)', () => {
 
   it('rejects a `move` longer than 1 or not a pair', async () => {
     const fingerprint = await currentRuntimeFingerprint();
-    const live = await session({ first: { kind: 'keyboard' }, second: { kind: 'idle' } }, new DirectionalController(new ArrowScript(), { cameraYaw: () => 0 }));
+    const live = await session({ first: { kind: 'keyboard' }, second: { kind: 'idle' } }, createPlayerControl(new ArrowScript(), { directional: true }));
     live.startReplayCapture({ fingerprint, checkpointEvery: 10 });
     for (let i = 0; i < 20; i++) live.tick();
     const { replay } = live.finishReplayCapture();

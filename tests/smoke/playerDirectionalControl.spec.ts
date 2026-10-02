@@ -1,21 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// M11 directional control, "Fix 7" (2026-10-01; "Fix 9" now freezes that
-// camera read for the length of one gesture — each key below is pressed
-// fresh, so it still reads the camera at press time, see screenDirection.ts's
-// header for the full history): ↑/↓/←/→ move the player's Bey relative to
-// the CURRENT camera — ↑ always away from it, → always to its right, and
-// so on, recomputed fresh every tick, no latching. Verified across several
-// very different real camera orientations (the game's own dynamic camera,
-// placed differently each run by moving the idle opponent to a different
-// side of the player) by measuring the Bey's actual WORLD displacement and
-// checking it against that run's own camera direction — the point being
-// verified is that a held key reads the same way ON SCREEN in every one of
-// them, which means its WORLD effect is expected to differ between them
-// (that's the whole fix). The Debug Lab's "overview" camera is a fixed
-// debug-only view that overrides rendering without being the real
-// CameraDirector output, so it's not used here — it would measure a
-// camera that was never actually driving the control.
+// M11 control schemes (owner requirement, 2026-10-01: "a câmera nunca move
+// o Bey"). Camera is downstream presentation. The default scheme ("Toward
+// opponent") resolves the arrows from where the two Beys are — ↑ toward the
+// opponent, ↓ away, ←/→ around them — so what a key does is identical
+// wherever the real camera happens to be. The in-game camera is now
+// intentionally spatially stable, so these browser tests prove the control
+// mapping from WORLD velocity/bearing rather than requiring artificial orbit.
+// The Debug Lab's "overview" camera is a fixed debug-only view, so it is not
+// used here.
 
 type Direction = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
 
@@ -34,7 +27,8 @@ async function holdAndMeasure(page: Page, key: Direction, opponentXZ: { x: numbe
       await lab.restart('m11-directional-smoke');
       lab.setPaused(true);
       lab.step(40); // land and settle
-      // The player's Bey at the centre; the idle opponent placed differently each run, which the real two-fighter camera frames differently each time.
+      // The player's Bey at the centre; move the idle opponent to a different bearing each run.
+      // The real inertial camera is free to keep the same world azimuth if both fighters remain safely framed.
       const session = lab.getSession()!;
       const first = session.getBey('first').body;
       const second = session.getBey('second').body;
@@ -42,12 +36,12 @@ async function holdAndMeasure(page: Page, key: Direction, opponentXZ: { x: numbe
       first.setLinvel({ x: 0, y: 0, z: 0 }, true);
       second.setTranslation({ x: opponentXZ.x, y: second.translation().y, z: opponentXZ.z }, true);
       second.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      lab.step(30); // give the camera real time to settle on this fight's own framing
+      lab.step(30); // give the camera real time to compose the placement
     },
     { opponentXZ },
   );
   await nextFrame(page);
-  // "Fix 9": the camera is read once when the key goes down and frozen while held, so that is the yaw the Bey's heading must be measured against — not wherever the camera has orbited to 1.25 s later.
+  // Diagnostic only: the camera may legitimately keep the same yaw under the inertial design.
   const cameraYawAtPressDeg = await page.evaluate(() => window.__chaosBeyDebugLab!.getSession()!.getLastCameraOutput()?.yawDeg ?? 0);
   await page.keyboard.down(key);
   // 1.25 s: long enough for a full turnaround (brake, pivot, go) at the Bey's turn rate — short enough that it never reaches the arena wall (a bounce there would contaminate the reading).
@@ -61,71 +55,40 @@ async function holdAndMeasure(page: Page, key: Direction, opponentXZ: { x: numbe
   return { ...result, cameraYawDeg: cameraYawAtPressDeg };
 }
 
-/** "Away from the camera" on the ground, for a CameraDirector-convention yaw in degrees. */
-function awayFromCamera(yawDeg: number): { x: number; z: number } {
-  const yawRad = (yawDeg * Math.PI) / 180;
-  return { x: -Math.sin(yawRad), z: -Math.cos(yawRad) };
-}
-
 function normalize(v: { x: number; z: number }): { x: number; z: number } {
   const len = Math.hypot(v.x, v.z);
   return len > 1e-6 ? { x: v.x / len, z: v.z / len } : { x: 0, z: 0 };
 }
 
-test('Directional (default, camera-relative): arrows move the Bey relative to the CURRENT camera, differently when the real camera is framed very differently', async ({ page }) => {
+test('Default scheme: arrows move the Bey toward / away from / around the opponent with the real inertial camera attached', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/ChaosBey/?mode=debug-lab');
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession() != null), { timeout: 20_000 }).toBe(true);
   await page.evaluate(() => window.__chaosBeyDebugLab!.setController('second', { kind: 'idle' }));
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  await page.evaluate(() => window.__chaosBeyDebugLab!.setCameraView('game')); // the real CameraDirector-driven view — never 'overview', a fixed debug-only camera that isn't what drives the control.
+  await page.evaluate(() => window.__chaosBeyDebugLab!.setCameraView('game')); // the real game camera, not the fixed debug overview
 
-  const EXPECTED_SCREEN_DIR: Record<Direction, 'away' | 'toward' | 'left' | 'right'> = {
-    ArrowUp: 'away',
-    ArrowDown: 'toward',
-    ArrowLeft: 'left',
-    ArrowRight: 'right',
-  };
-  // Two very different opponent placements, so the real two-fighter camera frames the fight from two very different angles.
+  // The player's Bey is at the origin; "up" is the bearing to the opponent, "right" is up turned clockwise seen from above: right = (-up.z, up.x).
   const OPPONENT_POSITIONS = { near: { x: 7.5, z: 7.5 }, far: { x: -8, z: 3 } };
+  const expectedFor = (key: Direction, opponent: { x: number; z: number }): { x: number; z: number } => {
+    const up = normalize(opponent);
+    const right = { x: -up.z, z: up.x };
+    return key === 'ArrowUp' ? up : key === 'ArrowDown' ? { x: -up.x, z: -up.z } : key === 'ArrowRight' ? right : { x: -right.x, z: -right.z };
+  };
 
-  const worldByPlacement: Record<string, Partial<Record<Direction, DriveResult>>> = {};
   for (const [placement, opponentXZ] of Object.entries(OPPONENT_POSITIONS)) {
-    worldByPlacement[placement] = {};
-    for (const key of Object.keys(EXPECTED_SCREEN_DIR) as Direction[]) {
+    for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'] as Direction[]) {
       const result = await holdAndMeasure(page, key, opponentXZ);
-      worldByPlacement[placement]![key] = result;
-      const away = awayFromCamera(result.cameraYawDeg);
-      const right = { x: -away.z, z: away.x }; // matches screenToWorld's own right = perpendicular(fromYaw(yaw))
-      const expected = EXPECTED_SCREEN_DIR[key];
-      const toward = { x: -away.x, z: -away.z };
-      const left = { x: -right.x, z: -right.z };
-      const expectedDir = expected === 'away' ? away : expected === 'toward' ? toward : expected === 'left' ? left : right;
+      const expected = expectedFor(key, opponentXZ);
       const dir = normalize(result.velocity);
-      const dot = dir.x * expectedDir.x + dir.z * expectedDir.z;
+      const dot = dir.x * expected.x + dir.z * expected.z;
       const label = `${placement} ${key}: velocity (${result.velocity.x.toFixed(3)}, ${result.velocity.z.toFixed(3)}), camera yaw ${result.cameraYawDeg.toFixed(1)}°, dot ${dot.toFixed(3)}`;
-      expect(dot, label).toBeGreaterThan(0.9); // reads as the expected screen direction for THIS run's own real camera
+      // ↑/↓ hold a straight bearing; ←/→ circle the opponent, so the velocity direction rotates with the bearing while it builds up (a mirrored ←/→ would read ≈ −0.8).
+      expect(dot, label).toBeGreaterThan(key === 'ArrowUp' || key === 'ArrowDown' ? 0.85 : 0.6);
+      expect(Number.isFinite(result.cameraYawDeg), `${placement} ${key}: game camera yaw must stay finite`).toBe(true);
     }
   }
-
-  // The load-bearing check for "Fix 7": the SAME key produces a DIFFERENT
-  // world velocity direction when the real camera is framing the fight
-  // from a different angle (a different opponent placement) — because
-  // it's resolved relative to the camera, not a fixed world axis. A fixed
-  // world-relative scheme (the pre-"Fix 7" Directional) would fail this
-  // by producing the SAME direction regardless of the camera.
-  let anyDiffered = false;
-  for (const key of Object.keys(EXPECTED_SCREEN_DIR) as Direction[]) {
-    const a = worldByPlacement.near![key]!;
-    const b = worldByPlacement.far![key]!;
-    const da = normalize(a.velocity);
-    const db = normalize(b.velocity);
-    if (Math.abs(a.cameraYawDeg - b.cameraYawDeg) > 20 && Math.hypot(da.x - db.x, da.z - db.z) > 0.3) {
-      anyDiffered = true;
-    }
-  }
-  expect(anyDiffered, 'both opponent placements produced the same velocity direction for every key — camera-relative mapping is not actually being exercised').toBe(true);
 
   // The inspector shows the desired input next to the physical heading.
   const desired = await page.evaluate(() => window.__chaosBeyDebugLab!.getSession()!.getLastActions('first')?.moveIntent ?? null);
@@ -136,11 +99,11 @@ test('Directional (default, camera-relative): arrows move the Bey relative to th
 test('real keyboard, real AI fight: holding a direction through jump/drift/knockback never silently zeroes input', async ({ page }) => {
   // Owner playtest requirement: never accept a tick where a held arrow
   // produces no applied movement without an observable reason. Runs a real
-  // fight (a real AI opponent, so the camera moves a lot and real
-  // knockbacks happen) with real Playwright keyboard events, and traces
-  // every tick — any violation is reported with the full context asked
-  // for (tick, state, input, desired vector, controller, lock reason,
-  // velocity, grounded, camera) rather than masked by a threshold.
+  // fight (a real AI opponent, so camera composition and real knockbacks are
+  // active) with real Playwright keyboard events, and traces every tick —
+  // any violation is reported with the full context asked for (tick, state,
+  // input, desired vector, controller, lock reason, velocity, grounded,
+  // camera) rather than masked by a threshold.
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/ChaosBey/?mode=debug-lab');
@@ -149,7 +112,7 @@ test('real keyboard, real AI fight: holding a direction through jump/drift/knock
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.evaluate(() => window.__chaosBeyDebugLab!.setPaused(true));
 
-  // Under Directional (default, "Fix 7"), a held arrow resolves to a
+  // Under a directional scheme (default), a held arrow resolves to a
   // non-zero moveIntent on every tick it's held — never raw held actions
   // (those are stripped, see DirectionalController.ts's header) — so the
   // only legitimate reason for it to go to zero is one of the approved
@@ -219,14 +182,12 @@ test('real keyboard, real AI fight: holding a direction through jump/drift/knock
   expect(errors).toEqual([]);
 });
 
-test('Directional (default): the camera never moves the Bey — a held key keeps one world direction through a real AI fight with a real orbiting camera', async ({ page }) => {
-  // "Fix 9" (owner: "a câmera move o bey sozinho — só o jogador move o
-  // jogador"): holding ArrowUp the entire time through a real fight (so the
-  // camera genuinely swings through a wide orbit), the resolved world
-  // direction must read "away from the camera" on the first tick of the
-  // gesture and then NEVER change while the key stays held, however far
-  // the camera orbits. Re-reading the camera every tick ("Fix 7") bent the
-  // Bey's path with nobody touching the controls.
+test('Default scheme: the camera never moves the Bey — a held ↑ keeps pointing at the opponent through a real AI fight with the real inertial camera', async ({ page }) => {
+  // Owner: "a câmera move o bey sozinho — só o jogador move o jogador".
+  // Holding ArrowUp the entire time through a real fight, the resolved world
+  // direction must be the bearing to the opponent — a function of the Beys'
+  // positions only. The camera may remain at one azimuth for the whole run;
+  // spatial stability is now desired behavior, not a reason to fail the test.
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/ChaosBey/?mode=debug-lab');
@@ -249,46 +210,54 @@ test('Directional (default): the camera never moves the Bey — a held key keeps
     const session = lab.getSession()!;
     const violations: unknown[] = [];
     const cameraYawsDeg: number[] = [];
-    let first: { x: number; z: number } | null = null;
+    let checked = 0;
     for (let i = 0; i < 300; i++) {
+      const a = session.getBey('first').body.translation(); // before this tick's input is sampled
+      const b = session.getBey('second').body.translation();
       lab.step(1);
-      const actions = session.getLastActions('first');
-      const move = actions?.moveIntent;
-      const camera = session.getLastCameraOutput();
-      const yawDeg = camera?.yawDeg ?? 0;
-      cameraYawsDeg.push(yawDeg);
+      const move = session.getLastActions('first')?.moveIntent;
+      cameraYawsDeg.push(session.getLastCameraOutput()?.yawDeg ?? 0);
       const len = move ? Math.hypot(move.x, move.z) : 0;
       if (!move || len < 0.01) {
         violations.push({ tick: session.getTickIndex(), reason: 'moveIntent missing or zero while ArrowUp held', moveIntent: move ?? null });
         continue;
       }
-      if (first === null) {
-        first = { x: move.x, z: move.z };
-        const yawRad = (yawDeg * Math.PI) / 180;
-        const away = { x: -Math.sin(yawRad), z: -Math.cos(yawRad) };
-        const dot = (move.x * away.x + move.z * away.z) / len;
-        if (dot < 0.9) violations.push({ tick: session.getTickIndex(), reason: 'did not read as away-from-camera at the start of the gesture', dot, moveIntent: move, cameraYawDeg: yawDeg });
-      } else if (Math.abs(move.x - first.x) > 1e-9 || Math.abs(move.z - first.z) > 1e-9) {
-        violations.push({ tick: session.getTickIndex(), reason: 'the camera moved the Bey: world intent changed while the key was held', moveIntent: move, first, cameraYawDeg: yawDeg });
-      }
+      const d = Math.hypot(b.x - a.x, b.z - a.z);
+      if (d < 0.5) continue;
+      checked++;
+      const dot = (move.x * (b.x - a.x) + move.z * (b.z - a.z)) / (len * d);
+      if (dot < 0.99) violations.push({ tick: session.getTickIndex(), reason: 'not pointing at the opponent', dot, moveIntent: move });
     }
-    return { violations, cameraYawRangeDeg: Math.max(...cameraYawsDeg) - Math.min(...cameraYawsDeg) };
+    return {
+      violations,
+      checked,
+      cameraYawFinite: cameraYawsDeg.every(Number.isFinite),
+      cameraYawRangeDeg: Math.max(...cameraYawsDeg) - Math.min(...cameraYawsDeg),
+    };
   });
   await page.keyboard.up('ArrowUp');
 
-  expect(result.violations, `violations while holding ArrowUp under Directional: ${JSON.stringify(result.violations, null, 2)}`).toEqual([]);
-  expect(result.cameraYawRangeDeg, 'the camera never moved at all — this run does not actually exercise the fix').toBeGreaterThan(10);
+  expect(result.violations, `violations while holding ArrowUp: ${JSON.stringify(result.violations.slice(0, 5), null, 2)}`).toEqual([]);
+  expect(result.checked, 'the bearing was never checked').toBeGreaterThan(150);
+  expect(result.cameraYawFinite, `camera yaw became non-finite; observed range ${result.cameraYawRangeDeg}`).toBe(true);
   expect(errors).toEqual([]);
 });
 
-test('Settings offers Directional (default, camera-relative) and Classic control', async ({ page }) => {
+test('Settings offers all four control schemes; the default is the camera-free "Toward opponent"', async ({ page }) => {
   await page.goto('/ChaosBey/?mode=settings');
   const row = page.getByTestId('settings-control-scheme');
   await expect(row).toBeVisible({ timeout: 15_000 });
-  await expect(row.getByRole('radio', { name: 'Directional' })).toHaveAttribute('aria-checked', 'true');
-  await expect(page.getByTestId('settings-control-note')).toContainText('Default');
+  const note = page.getByTestId('settings-control-note');
+  await expect(row.getByRole('radio', { name: 'Toward opponent' })).toHaveAttribute('aria-checked', 'true');
+  await expect(note).toContainText('Default');
+  await expect(note).toContainText('camera never steers');
   await row.getByRole('radio', { name: 'Classic' }).click();
   await expect(row.getByRole('radio', { name: 'Classic' })).toHaveAttribute('aria-checked', 'true');
-  await expect(page.getByTestId('settings-control-note')).toContainText('Kart-like');
+  await expect(note).toContainText('Kart-like');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('chaosbey.settings.player.v1') ?? '{}').controlScheme)).toBe('classic');
+  await row.getByRole('radio', { name: 'Arena (fixed)' }).click();
+  await expect(note).toContainText('Fixed arena directions');
+  await row.getByRole('radio', { name: 'Screen (reads camera)' }).click();
+  await expect(note).toContainText('only option that reads the camera');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('chaosbey.settings.player.v1') ?? '{}').controlScheme)).toBe('screen');
 });

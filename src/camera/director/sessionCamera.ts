@@ -7,7 +7,7 @@
 // beyond what it is handed.
 // ============================================================
 
-import type { ImpactEvent } from '../ImpactEvents';
+import type { ImpactEvent } from '../../app/simulation/impact/ImpactEvents';
 import { AttackState } from '../../combat/attacks/AttackController';
 import type { CameraMode } from './CameraDirector';
 import type { PresetId } from './CameraParams';

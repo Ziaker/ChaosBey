@@ -12,7 +12,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import type { WorldPositionM } from '../camera/ImpactEvents';
+import type { WorldPositionM } from '../app/simulation/impact/ImpactEvents';
 import {
   SPARK_BASE_LIFETIME_S,
   SPARK_BASE_PARTICLE_COUNT,

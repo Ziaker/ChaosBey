@@ -23,8 +23,8 @@ import type { CombatController, ControllerActions } from '../../input/actions/Ac
 import type { RoundState } from '../../combat/round-rules/RoundState';
 import { ClashState } from '../../combat/clash/ClashController';
 import type { ClashResult } from '../../combat/clash/ClashController';
-import { buildImpactEventsForTick } from '../../camera/ImpactEvents';
-import { CLASH_RESOLVED_MAGNITUDE } from '../../camera/ImpactMagnitude';
+import { buildImpactEventsForTick } from './impact/ImpactEvents';
+import { CLASH_RESOLVED_MAGNITUDE } from './impact/ImpactMagnitude';
 import type { ClashOrchestration } from './ClashOrchestration';
 import { HitstopClock } from './Hitstop';
 import { tickMatch, type MatchTickResult } from './tickMatch';

@@ -49,10 +49,9 @@ const KEYBOARD_BINDINGS: readonly { readonly label: string; readonly keys: strin
 
 /** The control scheme's note and its two movement rows (action, keyboard, gamepad) in the controls table. */
 const CONTROL_TEXT: Readonly<Record<ControlScheme, { readonly note: string; readonly rows: readonly (readonly [string, string, string])[] }>> = {
-  directional: {
-    note: 'Default. ↑ goes away from the camera, → to its right, and so on — as the camera is when you start to move. The camera never steers the Bey afterwards: while you hold a direction it stays put, and only releasing re-reads the camera. The Bey turns toward the direction with its own weight and grip.',
-    // One movement row: the second (throttle) is Classic only and hidden here.
-    rows: [['Move toward (screen direction)', '← → ↑ ↓', 'Left stick / D-pad']],
+  opponent: {
+    note: 'Default. ↑ moves toward your opponent, ↓ away from them, ← → circle around them. It only depends on where the Beys are — the camera never steers you.',
+    rows: [['Move (toward / around the opponent)', '← → ↑ ↓', 'Left stick / D-pad']],
   },
   classic: {
     note: 'Kart-like: ← → steer the Bey, ↑ ↓ accelerate and brake/reverse along the way it\'s facing, regardless of the camera.',
@@ -60,6 +59,14 @@ const CONTROL_TEXT: Readonly<Record<ControlScheme, { readonly note: string; read
       ['Steer', '← →', 'Left stick ← → / D-pad ← →'],
       ['Accelerate / brake', '↑ ↓', 'Left stick ↑ ↓ / D-pad ↑ ↓ / RT, LT'],
     ],
+  },
+  arena: {
+    note: 'Fixed arena directions: ↑ always goes the same way in the arena, → the same way too, whichever way the camera is facing. The camera never steers you.',
+    rows: [['Move (fixed arena directions)', '← → ↑ ↓', 'Left stick / D-pad']],
+  },
+  screen: {
+    note: 'Screen-relative: ↑ goes up the screen as the camera is when you start to move, and stays locked until you let go. This is the only option that reads the camera (an opt-in exception) — the camera can change what the next press means.',
+    rows: [['Move (up the screen)', '← → ↑ ↓', 'Left stick / D-pad']],
   },
 };
 
@@ -129,8 +136,10 @@ export class SettingsScreen {
         'control-scheme',
         'Control',
         [
-          { value: 'directional', label: 'Directional' },
+          { value: 'opponent', label: 'Toward opponent' },
           { value: 'classic', label: 'Classic' },
+          { value: 'arena', label: 'Arena (fixed)' },
+          { value: 'screen', label: 'Screen (reads camera)' },
         ],
         (s) => s.controlScheme,
         (s, v) => ({ ...s, controlScheme: v }),

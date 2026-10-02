@@ -12,7 +12,7 @@
 // designs or changes a HUD.
 // ============================================================
 
-import type { WorldPositionM } from '../camera/ImpactEvents';
+import type { WorldPositionM } from '../app/simulation/impact/ImpactEvents';
 import type { ClashPresentationSnapshot } from './clash';
 import type { PresentationSide } from './events';
 import type { BeyPresentationState, MatchPresentationState, RoundPresentationState } from './state';

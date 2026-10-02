@@ -1,16 +1,17 @@
-// M11 directional control, input layer: screen directions (arrows, stick)
-// → a camera-relative world direction that goes into
-// ControllerActions.moveIntent. "Fix 7" (2026-10-01, see screenDirection.ts's
-// header): the player default reads the camera's CURRENT yaw fresh on every
-// tick (no latching, no gesture memory) so a held key always looks like the
-// same thing on screen — away, toward, left, right of the camera — no
-// matter where the camera currently is. Classic (no camera at all) stays
-// selectable.
+// M11 directional control, input layer: arrow/stick directions → a world
+// direction in a GAMEPLAY-OWNED control reference that goes into
+// ControllerActions.moveIntent. The camera is downstream presentation and
+// has no way into this layer (owner requirement, 2026-10-01: "a câmera
+// nunca move o Bey" — see docs/design-decisions/camera-gameplay-
+// separation.md and tests/unit/inputCameraBoundary.test.ts). Classic
+// (Bey-relative) passes the device actions through untouched.
 
 import { describe, expect, it } from 'vitest';
 import { Action, type CombatController, type ControllerActions } from '../../src/input/actions/Action';
 import { DirectionalController } from '../../src/input/directional/DirectionalController';
-import { cameraYawFromRight, screenToWorld, screenVectorFromDigital, screenVectorFromStick, screenLength } from '../../src/input/directional/screenDirection';
+import { createPlayerControl } from '../../src/input/directional/createPlayerControl';
+import { WORLD_CONTROL_REFERENCE, createLatchedReference, createOpponentReference, type ControlReference } from '../../src/input/directional/ControlReference';
+import { screenToWorld, screenVectorFromDigital, screenVectorFromStick, screenLength } from '../../src/input/directional/screenDirection';
 import { sanitizePlayerSettings, DEFAULT_PLAYER_SETTINGS } from '../../src/config/settings/PlayerSettings';
 
 const CONTEXT = { fixedDeltaSeconds: 1 / 60 };
@@ -47,8 +48,28 @@ describe('screen vectors', () => {
   });
 });
 
-describe('screen → world (camera-relative, recomputed fresh every call — "Fix 7")', () => {
-  it('preserves the screen vector\'s length for every camera yaw (a pure rotation, no scaling)', () => {
+describe('screen → world (control reference, a pure function of its two arguments)', () => {
+  it('the world reference is the fixed arena frame: up = world −Z (away from the default viewpoint), right = world +X', () => {
+    const yaw = WORLD_CONTROL_REFERENCE.yawRad(true);
+    const close = (v: { x: number; z: number }, x: number, z: number) => {
+      expect(v.x).toBeCloseTo(x, 3);
+      expect(v.z).toBeCloseTo(z, 3);
+    };
+    close(screenToWorld({ x: 0, y: 1 }, yaw), 0, -1);
+    close(screenToWorld({ x: 1, y: 0 }, yaw), 1, 0);
+    close(screenToWorld({ x: 0, y: -1 }, yaw), 0, 1);
+    close(screenToWorld({ x: -1, y: 0 }, yaw), -1, 0);
+  });
+
+  it('right is ALWAYS the clockwise quarter-turn of up seen from above (never the mirror image), for every reference yaw', () => {
+    for (const yaw of [0, 0.4, 1.57, Math.PI, -2.2, 5]) {
+      const up = screenToWorld({ x: 0, y: 1 }, yaw);
+      const right = screenToWorld({ x: 1, y: 0 }, yaw);
+      expect(up.x * right.z - up.z * right.x).toBeCloseTo(1, 3);
+    }
+  });
+
+  it("preserves the direction vector's length for every reference yaw (a pure rotation, no scaling)", () => {
     for (const screen of [{ x: 0, y: 1 }, { x: 1, y: 0 }, { x: Math.SQRT1_2, y: Math.SQRT1_2 }]) {
       for (const yaw of [0, 0.7, Math.PI, -2.1, 10]) {
         const world = screenToWorld(screen, yaw);
@@ -57,36 +78,20 @@ describe('screen → world (camera-relative, recomputed fresh every call — "Fi
     }
   });
 
-  it('rotating the camera by a delta rotates the resolved world direction by the exact same delta', () => {
-    const screen = { x: 0, y: 1 }; // Up
-    const base = screenToWorld(screen, 0.3);
-    const baseAngle = Math.atan2(base.x, base.z);
-    for (const delta of [0.1, 1, -0.5, Math.PI / 2]) {
-      const rotated = screenToWorld(screen, 0.3 + delta);
-      const rotatedAngle = Math.atan2(rotated.x, rotated.z);
-      let diff = rotatedAngle - baseAngle - delta;
-      diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // wrap to [-pi, pi]
-      expect(diff).toBeCloseTo(0, 3);
-    }
-  });
-
-  it('Up and Right stay perpendicular, for every camera yaw', () => {
+  it('Up and Right stay perpendicular, for every reference yaw', () => {
     for (const yaw of [0, 1.1, -2.4, Math.PI, 5]) {
       const up = screenToWorld({ x: 0, y: 1 }, yaw);
       const right = screenToWorld({ x: 1, y: 0 }, yaw);
-      const dot = up.x * right.x + up.z * right.z;
-      expect(dot).toBeCloseTo(0, 3);
+      expect(up.x * right.x + up.z * right.z).toBeCloseTo(0, 3);
     }
   });
 
-  it('the SAME screen vector and the SAME camera yaw always produce the SAME world vector — a pure function, no hidden state', () => {
+  it('the SAME direction and the SAME reference yaw always produce the SAME world vector — no hidden state', () => {
     expect(screenToWorld.length).toBe(2);
-    const a = screenToWorld({ x: 0.6, y: 0.8 }, 1.7);
-    const b = screenToWorld({ x: 0.6, y: 0.8 }, 1.7);
-    expect(a).toEqual(b);
+    expect(screenToWorld({ x: 0.6, y: 0.8 }, 1.7)).toEqual(screenToWorld({ x: 0.6, y: 0.8 }, 1.7));
   });
 
-  it('keeps length ≤ 1 after quantization, for every direction and several camera yaws', () => {
+  it('keeps length ≤ 1 after quantization, for every direction and several reference yaws', () => {
     for (const yaw of [0, 1, 2, 3]) {
       for (let i = 0; i < 360; i++) {
         const screen = screenVectorFromDigital(i % 4 === 0, i % 4 === 1, i % 3 === 0, i % 3 === 1);
@@ -97,149 +102,146 @@ describe('screen → world (camera-relative, recomputed fresh every call — "Fi
     const stick = screenToWorld(screenVectorFromStick(0.7071, -0.7071), 0.5);
     expect(Math.hypot(stick.x, stick.z)).toBeLessThanOrEqual(1);
   });
-
-  it('cameraYawFromRight recovers the yaw used to build a right vector of that yaw', () => {
-    for (const yaw of [0, 0.5, 1.5, Math.PI, -1.2]) {
-      const right = { x: Math.cos(yaw), z: -Math.sin(yaw) };
-      expect(cameraYawFromRight(right.x, right.z)).toBeCloseTo(Math.atan2(Math.sin(yaw), Math.cos(yaw)), 6);
-    }
-  });
 });
 
-describe('DirectionalController: reads the camera once per gesture ("Fix 9") — only the player moves the Bey', () => {
-  it('Test A: holding a direction while the camera yaw sweeps does NOT change the world vector — the camera never steers the Bey', () => {
-    let yaw = 0.4;
-    const controller = new DirectionalController(held(Action.MoveForward), { cameraYaw: () => yaw });
+describe('DirectionalController: gameplay-owned reference, no camera in the chain', () => {
+  it('defaults to the world reference and is a pure function of the held keys: the same keys give the same intent on every tick', () => {
+    const controller = new DirectionalController(held(Action.MoveForward));
     const first = controller.sampleActions(CONTEXT).moveIntent!;
-    expect(first).toEqual(screenToWorld({ x: 0, y: 1 }, 0.4));
-    for (let delta = 0.5; delta < 6; delta += 0.1) {
-      yaw = delta;
-      expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(first);
-    }
+    expect(first.x).toBeCloseTo(0, 3);
+    expect(first.z).toBeCloseTo(-1, 3);
+    for (let i = 0; i < 200; i++) expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(first);
   });
 
-  it('Test B: releasing every direction re-reads the camera on the next press; changing/adding a direction mid-hold does not', () => {
+  it('has no way to receive a camera: the only external source besides the device is a ControlReference and a stick', () => {
+    const smuggled = { cameraYaw: () => 2.5 } as unknown as ConstructorParameters<typeof DirectionalController>[1];
+    const controller = new DirectionalController(held(Action.MoveForward), smuggled);
+    const intent = controller.sampleActions(CONTEXT).moveIntent!;
+    expect(intent.z).toBeCloseTo(-1, 3);
+  });
+
+  it('with no direction held the intent is the zero vector', () => {
+    const controller = new DirectionalController(held());
+    for (let i = 0; i < 40; i++) expect(controller.sampleActions(CONTEXT).moveIntent).toEqual({ x: 0, z: 0 });
+  });
+
+  it('a custom (gameplay-owned) ControlReference rotates the resolved direction; the plug point works', () => {
     let yaw = 0;
-    let keys: Action[] = [Action.MoveForward];
-    const controller = new DirectionalController(
-      { sampleActions: (): ControllerActions => ({ held: new Set(keys), pressedThisFrame: new Set(), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0 }) },
-      { cameraYaw: () => yaw },
-    );
-    controller.sampleActions(CONTEXT); // gesture starts at yaw 0
-    yaw = 1.5;
-    keys = [Action.MoveForward, Action.SteerRight]; // still holding Up, adding Right: same frame (yaw 0)
-    expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(screenToWorld(screenVectorFromDigital(true, false, false, true), 0));
-    keys = [Action.SteerLeft]; // a wholly different direction, but never fully released: still the yaw-0 frame
-    expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(screenToWorld({ x: -1, y: 0 }, 0));
-    keys = []; // everything released
-    expect(controller.sampleActions(CONTEXT).moveIntent).toEqual({ x: 0, z: 0 });
-    keys = [Action.MoveForward]; // new gesture: reads the camera at yaw 1.5
-    expect(controller.sampleActions(CONTEXT).moveIntent).toEqual(screenToWorld({ x: 0, y: 1 }, 1.5));
+    const reference: ControlReference = { kind: 'world', yawRad: () => yaw };
+    const controller = new DirectionalController(held(Action.MoveForward), { reference });
+    expect(controller.sampleActions(CONTEXT).moveIntent).toEqual({ x: 0, z: 1 });
+    yaw = Math.PI / 2;
+    const rotated = controller.sampleActions(CONTEXT).moveIntent!;
+    expect(rotated.x).toBeCloseTo(1, 3);
+    expect(rotated.z).toBeCloseTo(0, 3);
+    expect(controller.getDebug().referenceYawRad).toBe(Math.PI / 2);
   });
 
-  it('Test D: with no direction held, orbiting the camera produces no thrust/steering — moveIntent stays the zero vector', () => {
-    let yaw = 0;
-    const controller = new DirectionalController(held(), { cameraYaw: () => yaw });
-    for (let i = 0; i < 40; i++) {
-      yaw += 0.2;
-      expect(controller.sampleActions(CONTEXT).moveIntent).toEqual({ x: 0, z: 0 });
-    }
-  });
-
-  it('Test E: switching Up → Left → Down → Right every tick reflects the corresponding camera-relative direction immediately, with no stuck intent, for a fixed camera yaw', () => {
+  it('switching Up → Left → Down → Right every tick reflects the corresponding direction immediately, with no stuck intent', () => {
     const cycle: Action[] = [Action.MoveForward, Action.SteerLeft, Action.MoveBackward, Action.SteerRight];
-    const controller = new DirectionalController(
-      {
-        sampleActions: (): ControllerActions => ({
-          held: new Set([currentAction]),
-          pressedThisFrame: new Set(),
-          attackHoldDurationSeconds: 0,
-          jumpDriftHoldDurationSeconds: 0,
-        }),
-      },
-      { cameraYaw: () => 1.7 }, // fixed camera: the four directions must still be the four cardinal camera-relative directions
-    );
     let currentAction: Action = cycle[0]!;
+    const controller = new DirectionalController({
+      sampleActions: (): ControllerActions => ({ held: new Set([currentAction]), pressedThisFrame: new Set(), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0 }),
+    });
     const seen = new Map<Action, { x: number; z: number }>();
     for (let rep = 0; rep < 3; rep++) {
       for (const action of cycle) {
         currentAction = action;
         const world = controller.sampleActions(CONTEXT).moveIntent!;
         const previous = seen.get(action);
-        if (previous) expect(world).toEqual(previous); // same key, same fixed camera ⇒ same result every time
+        if (previous) expect(world).toEqual(previous);
         seen.set(action, world);
       }
     }
-    // Up/Down are opposite, Left/Right are opposite, and Up⊥Right, for this fixed camera yaw.
-    const up = seen.get(Action.MoveForward)!;
-    const down = seen.get(Action.MoveBackward)!;
-    const left = seen.get(Action.SteerLeft)!;
-    const right = seen.get(Action.SteerRight)!;
-    expect(up.x + down.x).toBeCloseTo(0, 6);
-    expect(up.z + down.z).toBeCloseTo(0, 6);
-    expect(left.x + right.x).toBeCloseTo(0, 6);
-    expect(left.z + right.z).toBeCloseTo(0, 6);
-    expect(up.x * right.x + up.z * right.z).toBeCloseTo(0, 6);
+    const near = (v: { x: number; z: number } | undefined, x: number, z: number) => {
+      expect(v!.x).toBeCloseTo(x, 3);
+      expect(v!.z).toBeCloseTo(z, 3);
+    };
+    near(seen.get(Action.MoveForward), 0, -1);
+    near(seen.get(Action.MoveBackward), 0, 1);
+    near(seen.get(Action.SteerLeft), -1, 0);
+    near(seen.get(Action.SteerRight), 1, 0);
   });
 
   it('turns arrows into moveIntent and removes the four movement actions', () => {
-    const controller = new DirectionalController(held(Action.MoveForward, Action.SteerRight, Action.Attack), { cameraYaw: () => 0 });
+    const controller = new DirectionalController(held(Action.MoveForward, Action.SteerRight, Action.Attack));
     const actions = controller.sampleActions(CONTEXT);
     expect([...actions.held]).toEqual([Action.Attack]);
     expect([...actions.pressedThisFrame]).toEqual([Action.Attack]);
     expect(Math.hypot(actions.moveIntent!.x, actions.moveIntent!.z)).toBeLessThanOrEqual(1);
-    expect(actions.moveIntent).toEqual(screenToWorld(screenVectorFromDigital(true, false, false, true), 0));
+    expect(actions.moveIntent).toEqual(screenToWorld(screenVectorFromDigital(true, false, false, true), WORLD_CONTROL_REFERENCE.yawRad(true)));
     expect(controller.getDebug().screen.x).toBeCloseTo(Math.SQRT1_2, 12);
   });
 
-  it('with no direction held it still emits a zero intent (directional frame, not classic)', () => {
-    const actions = new DirectionalController(held(), { cameraYaw: () => 0 }).sampleActions(CONTEXT);
-    expect(actions.moveIntent).toEqual({ x: 0, z: 0 });
-  });
-
   it('the stick wins over digital directions when pushed', () => {
-    const controller = new DirectionalController(held(Action.MoveForward), { cameraYaw: () => 0, stick: () => [1, 0] });
-    expect(controller.getDebug().screen).toEqual({ x: 0, y: 0 });
+    const controller = new DirectionalController(held(Action.MoveForward), { stick: () => [1, 0] });
     const actions = controller.sampleActions(CONTEXT);
-    expect(actions.moveIntent).toEqual(screenToWorld({ x: 1, y: 0 }, 0));
-  });
-
-  it('getDebug() reports the frozen gesture yaw alongside the world vector; a new gesture picks up the new camera yaw', () => {
-    let yaw = 0;
-    let keys = [Action.MoveForward];
-    const controller = new DirectionalController(
-      { sampleActions: (): ControllerActions => ({ held: new Set(keys), pressedThisFrame: new Set(), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0 }) },
-      { cameraYaw: () => yaw },
-    );
-    controller.sampleActions(CONTEXT);
-    expect(controller.getDebug().cameraYawRad).toBe(0);
-    const atYawZero = controller.getDebug().world;
-    yaw = 2.5;
-    controller.sampleActions(CONTEXT);
-    expect(controller.getDebug().cameraYawRad).toBe(0); // frozen mid-hold
-    expect(controller.getDebug().world).toEqual(atYawZero);
-    keys = [];
-    controller.sampleActions(CONTEXT);
-    keys = [Action.MoveForward];
-    controller.sampleActions(CONTEXT);
-    expect(controller.getDebug().cameraYawRad).toBe(2.5);
-    expect(controller.getDebug().world).not.toEqual(atYawZero);
+    expect(actions.moveIntent).toEqual(screenToWorld({ x: 1, y: 0 }, WORLD_CONTROL_REFERENCE.yawRad(true)));
   });
 
   it('Classic (disabled) passes the device actions through untouched', () => {
-    const controller = new DirectionalController(held(Action.MoveForward, Action.SteerLeft), { cameraYaw: () => 0 });
-    controller.setEnabled(false);
+    const controller = createPlayerControl(held(Action.MoveForward, Action.SteerLeft), { directional: false });
     const actions = controller.sampleActions(CONTEXT);
     expect(actions.moveIntent).toBeUndefined();
     expect(actions.held).toEqual(new Set([Action.MoveForward, Action.SteerLeft]));
   });
+
+  it('createPlayerControl(directional: true) is a directional controller', () => {
+    const controller = createPlayerControl(held(Action.MoveForward), { directional: true });
+    expect(controller.isEnabled()).toBe(true);
+    expect(controller.sampleActions(CONTEXT).moveIntent!.z).toBeCloseTo(-1, 3);
+  });
+});
+
+describe('opponent reference: up = toward the opponent (gameplay positions only)', () => {
+  const at = (px: number, pz: number, ox: number, oz: number) => createOpponentReference(() => ({ from: { x: px, z: pz }, to: { x: ox, z: oz } }));
+  it('↑ heads toward the opponent wherever they are, ↓ away, → to the right of that heading', () => {
+    for (const [ox, oz] of [[0, -5], [4, 0], [0, 7], [-3, 3], [2, -2]] as const) {
+      const ref = at(0, 0, ox, oz);
+      const toward = Math.hypot(ox, oz);
+      const up = screenToWorld({ x: 0, y: 1 }, ref.yawRad(true));
+      const right = screenToWorld({ x: 1, y: 0 }, ref.yawRad(true));
+      expect(up.x).toBeCloseTo(ox / toward, 3);
+      expect(up.z).toBeCloseTo(oz / toward, 3);
+      expect(up.x * right.z - up.z * right.x).toBeCloseTo(1, 3);
+    }
+  });
+  it('with the opponent due −Z (camera behind the player looking at them) → is +X, the screen right', () => {
+    const right = screenToWorld({ x: 1, y: 0 }, at(0, 0, 0, -6).yawRad(true));
+    expect(right.x).toBeCloseTo(1, 3);
+    expect(right.z).toBeCloseTo(0, 3);
+  });
+  it('when the Beys overlap there is no bearing: the last one is kept (the controls never snap)', () => {
+    let ox = 3;
+    const ref = createOpponentReference(() => ({ from: { x: 0, z: 0 }, to: { x: ox, z: 0 } }));
+    const before = ref.yawRad(true);
+    ox = 0;
+    expect(ref.yawRad(true)).toBe(before);
+  });
+  it('returns the last bearing when the source is unavailable (no session yet)', () => {
+    const ref = createOpponentReference(() => null);
+    expect(Number.isFinite(ref.yawRad(true))).toBe(true);
+  });
+});
+
+describe('latched reference (the opt-in screen scheme): read once per gesture', () => {
+  it('reads its source when a direction is first held and keeps that value until everything is released', () => {
+    let source = 1;
+    const ref = createLatchedReference(() => source);
+    expect(ref.yawRad(true)).toBe(1);
+    source = 2;
+    expect(ref.yawRad(true)).toBe(1);
+    ref.yawRad(false);
+    expect(ref.yawRad(true)).toBe(2);
+  });
 });
 
 describe('control scheme setting', () => {
-  it('defaults to directional (camera-relative), keeps classic, falls back to directional on garbage', () => {
-    expect(DEFAULT_PLAYER_SETTINGS.controlScheme).toBe('directional');
-    expect(sanitizePlayerSettings({ controlScheme: 'classic' }).controlScheme).toBe('classic');
-    expect(sanitizePlayerSettings({ controlScheme: 'tank' }).controlScheme).toBe('directional');
-    expect(sanitizePlayerSettings({ quality: 'Low' }).controlScheme).toBe('directional'); // an M10 save has no scheme
+  it('defaults to the camera-free "opponent" scheme, keeps every valid scheme, preserves the legacy directional behaviour as screen, and falls back on garbage', () => {
+    expect(DEFAULT_PLAYER_SETTINGS.controlScheme).toBe('opponent');
+    for (const scheme of ['opponent', 'classic', 'arena', 'screen'] as const) expect(sanitizePlayerSettings({ controlScheme: scheme }).controlScheme).toBe(scheme);
+    expect(sanitizePlayerSettings({ controlScheme: 'tank' }).controlScheme).toBe('opponent');
+    expect(sanitizePlayerSettings({ controlScheme: 'directional' }).controlScheme).toBe('screen');
+    expect(sanitizePlayerSettings({ quality: 'Low' }).controlScheme).toBe('opponent');
   });
 });

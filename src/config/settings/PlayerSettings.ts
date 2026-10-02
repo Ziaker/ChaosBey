@@ -13,26 +13,23 @@
 import { DEFAULT_QUALITY_PRESET, QualityPreset } from '../runtime/QualityPreset';
 
 /**
- * How the arrows / stick drive the Bey (M11, default revised 2026-10-01 —
- * "Fix 7" of the M11 playtest round, see screenDirection.ts's header for
- * the full history, including why "Fix 6"'s classic-by-default didn't
- * actually solve this).
- * - directional (default): camera-relative, read ONCE per gesture
- *   ("Fix 9") — ↑ goes away from the camera, →/← to its right/left, ↓
- *   toward it, as the camera is on the tick the player starts to move;
- *   that yaw stays frozen until every direction is released, so the
- *   automatic camera orbiting never steers the Bey ("só o jogador move o
- *   jogador"). The next press re-reads the camera, so the screen still
- *   reads right.
+ * How the arrows / stick drive the Bey. All four are selectable; the first
+ * three never depend on the presentation camera (the camera is downstream
+ * of gameplay and never moves the Bey — docs/design-decisions/
+ * camera-gameplay-separation.md).
+ * - opponent (default): ↑ goes toward the opponent, ↓ away, ←/→ circle
+ *   around them. Derived from gameplay positions only.
  * - classic: Bey-relative, kart-like — ←/→ steer the Bey's own heading,
  *   ↑/↓ accelerate/decelerate along it (turn rate, momentum, grip all
- *   still apply; this is not a snap-to-input). No camera dependency at
- *   all. Kept as a selectable option for a player who prefers it — proven
- *   in a real browser (2026-10-01) to still look "backwards" on screen
- *   about as often as it looks right, since this camera isn't a chase cam.
+ *   still apply; this is not a snap-to-input).
+ * - arena: ↑ = fixed arena direction (−Z), → = +X, whichever way the
+ *   camera is facing.
+ * - screen: ↑ goes "up the screen" as the camera is when you start to move;
+ *   frozen until every direction is released. This is the only opt-in
+ *   scheme that reads the camera, and it is never the default.
  */
-export type ControlScheme = 'directional' | 'classic';
-export const CONTROL_SCHEMES: readonly ControlScheme[] = ['directional', 'classic'];
+export type ControlScheme = 'opponent' | 'classic' | 'arena' | 'screen';
+export const CONTROL_SCHEMES: readonly ControlScheme[] = ['opponent', 'classic', 'arena', 'screen'];
 
 /**
  * Combat camera (M11, docs/design-decisions/camera-approval.md): one of the
@@ -78,7 +75,8 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   quality: DEFAULT_QUALITY_PRESET,
   // B until the owner picks the first-time default (camera-approval.md 10.1 recommends B).
   cameraPreset: 'B',
-  controlScheme: 'directional',
+  // New installs start on a camera-independent scheme. All four remain selectable.
+  controlScheme: 'opponent',
   cameraEffects: true,
   pauseOnFocusLoss: true,
   controlHints: true,
@@ -105,7 +103,14 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
   const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const bool = (key: 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart'): boolean => (typeof input[key] === 'boolean' ? (input[key] as boolean) : (DEFAULT_PLAYER_SETTINGS[key] as boolean));
   const quality = Object.values(QualityPreset).find((q) => q === input.quality) ?? DEFAULT_PLAYER_SETTINGS.quality;
-  const controlScheme = CONTROL_SCHEMES.find((c) => c === input.controlScheme) ?? DEFAULT_PLAYER_SETTINGS.controlScheme;
+  // Before the four-scheme model, `directional` meant the screen-relative,
+  // once-per-gesture camera reference. Preserve that saved behaviour by
+  // migrating it explicitly to `screen`; new/missing settings still use
+  // the camera-independent default above.
+  const controlScheme: ControlScheme =
+    input.controlScheme === 'directional'
+      ? 'screen'
+      : (CONTROL_SCHEMES.find((c) => c === input.controlScheme) ?? DEFAULT_PLAYER_SETTINGS.controlScheme);
   const cameraPreset = CAMERA_PRESET_SETTINGS.find((c) => c === input.cameraPreset) ?? DEFAULT_PLAYER_SETTINGS.cameraPreset;
   const picked = Array.isArray(input.conditionLayers) ? CONDITION_LAYER_SETTINGS.filter((id) => (input.conditionLayers as unknown[]).includes(id)) : [];
   const conditionLayers = picked.length > 0 ? picked : DEFAULT_CONDITION_LAYERS;

@@ -24,7 +24,7 @@
 
 import type { MatchTickResult } from '../app/simulation/tickMatch';
 import type { ClashMashInputEdge } from '../app/simulation/ClashPresentationTracker';
-import type { ImpactEvent, WorldPositionM } from '../camera/ImpactEvents';
+import type { ImpactEvent, WorldPositionM } from '../app/simulation/impact/ImpactEvents';
 import type { ClashOutcome, ClashResult } from '../combat/clash/ClashController';
 import { DriftState } from '../drift/DriftController';
 

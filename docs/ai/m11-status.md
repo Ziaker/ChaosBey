@@ -12,13 +12,15 @@ Owner order for M11:
 ### What changed
 
 **Input semantics (default: Directional).**
+> **SUPERSEDED (2026-10-01).** The control reference is no longer the camera, in any form (no yaw read, no latch, no per-tick tracking). The arrows are resolved in a `ControlReference` — four owner-selectable schemes (toward-opponent default, Classic, fixed arena, and the opt-in screen-relative exception) — see `docs/design-decisions/camera-gameplay-separation.md`. The camera/latch paragraphs below, and fixes 5–9 in this log, are history only.
+
 - ↑ means "go up the screen", ↓ means down, ←/→ mean the sides. Diagonals are normalized to length 1.
 - The analog stick gives continuous direction and strength: a 0.2 radial deadzone, then a magnitude from 0 to 1.
 - `src/input/directional/screenDirection.ts` holds the pure mapping from screen to world.
 - `DirectionalController` wraps the player's keyboard + gamepad and resolves the screen direction to a world X/Z direction. That resolved direction is the only thing that enters `ControllerActions.moveIntent` and the replay.
 - In directional frames, the four Steer/Move actions are never held.
 
-**Camera never inside the simulation.**
+**Camera never inside the simulation. (Historical — the latch below was removed; the camera now has no input path at all.)**
 - The input layer reads the camera yaw from the camera's right axis. That axis never degenerates, whether the camera looks straight down or at the horizon.
 - The yaw is latched for the duration of a gesture (`CameraYawLatch`). Holding a direction keeps its world direction even while the automatic camera turns, so the camera can't feed back into the command.
 - Releasing the direction, or turning it by more than 30°, re-reads the camera.

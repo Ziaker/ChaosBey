@@ -24,7 +24,9 @@ import type { AttackProfileSettingsPanel } from '../../debug/settings/AttackProf
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { KeyboardController } from '../../input/devices/KeyboardController';
 import { CombinedController, GamepadController } from '../../input/devices/GamepadController';
-import { DirectionalController, type DirectionalDebug } from '../../input/directional/DirectionalController';
+import { createPlayerControl } from '../../input/directional/createPlayerControl';
+import { controlSetupFor } from './controlReferences';
+import type { DirectionalController, DirectionalDebug } from '../../input/directional/DirectionalController';
 import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ConditionLayerSetting, type ControlScheme } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
@@ -48,7 +50,7 @@ export interface MatchRunnerStart {
   readonly arenaTheme?: ArenaTheme;
   /** Render-only presentation settings; omit for everything on. */
   readonly presentation?: MatchPresentation;
-  /** How the player's arrows / stick drive the Bey; default directional. */
+  /** How the player's arrows / stick drive the Bey. */
   readonly controlScheme?: ControlScheme;
 }
 
@@ -60,7 +62,7 @@ export interface MatchPresentation {
   readonly trails: boolean;
   /** M11: the player's camera preset (A/B/C); the Clash forces B regardless. Default B. */
   readonly cameraPreset?: CameraPresetSetting;
-  /** Condition languages to show (A, B, C; at least one) when the `conditionVisuals` flag is on. */
+  /** Condition languages to show when the conditionVisuals presentation flag is enabled. */
   readonly conditionLayers?: readonly ConditionLayerSetting[];
 }
 
@@ -135,24 +137,24 @@ export class MatchRunner {
   private static async create(deps: MatchRunnerDeps, start: MatchRunnerStart, events: MatchRunnerEvents): Promise<MatchRunner> {
     // `session` doesn't exist yet (built below): both closures below read it
     // through this forward reference once it's assigned further down.
-    let sessionForCameraYaw: MatchSession | null = null;
+    let sessionForJumpBuffer: MatchSession | null = null;
     // Attached only while the match runs, so a key still down from a menu
     // (Enter/Z to confirm) never reaches the match as a held input. The
     // player drives with the keyboard and/or the first gamepad. Blur/focus
     // loss cancels a pending jump-input-buffer press the same moment
     // currentlyDown/the hold buffer are cleared (GDD 131).
-    const keyboard = new KeyboardController(() => sessionForCameraYaw?.cancelBufferedJumps());
+    const keyboard = new KeyboardController(() => sessionForJumpBuffer?.cancelBufferedJumps());
     const gamepad = new GamepadController();
-    // Camera-relative directional control: the player default
-    // (PlayerSettings.ts, "Fix 7" — see DirectionalController.ts's and
-    // screenDirection.ts's headers). The camera reaches it only as a
-    // number (radians), read from the session's own camera output once
-    // `session` exists below — never a camera type/import.
-    const directional = new DirectionalController(new CombinedController([keyboard, gamepad]), {
-      cameraYaw: () => ((sessionForCameraYaw?.getLastCameraOutput()?.yawDeg ?? 0) * Math.PI) / 180,
+    // The player's control chain, built by the same factory the Debug Lab
+    // and the camera/gameplay separation tests use. The three camera-free
+    // schemes resolve from gameplay-owned references; the opt-in `screen`
+    // scheme reads presentation only in controlReferences.ts.
+    const setup = controlSetupFor(start.controlScheme ?? DEFAULT_PLAYER_SETTINGS.controlScheme, { session: () => sessionForJumpBuffer });
+    const directional = createPlayerControl(new CombinedController([keyboard, gamepad]), {
+      directional: setup.directional,
+      reference: setup.reference,
       stick: () => gamepad.getStick(),
     });
-    directional.setEnabled((start.controlScheme ?? DEFAULT_PLAYER_SETTINGS.controlScheme) === 'directional');
     const session = await MatchSession.create({
       scene: deps.appRenderer.scene,
       camera: deps.appRenderer.camera,
@@ -169,7 +171,7 @@ export class MatchRunner {
       conditionLayers: start.presentation?.conditionLayers,
       renderer: deps.appRenderer.renderer,
     });
-    sessionForCameraYaw = session;
+    sessionForJumpBuffer = session;
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
     deps.stateMachine.transitionTo(GameState.Combat);
     const runner = new MatchRunner(session, keyboard, gamepad, directional, deps, events);
@@ -212,9 +214,11 @@ export class MatchRunner {
     if (presentation.conditionLayers) this.session.setConditionLayers(presentation.conditionLayers);
   }
 
-  /** Switches Directional / Classic control live (from the Pause menu's settings). */
+  /** Switches the control scheme live (from the Pause menu's settings). */
   setControlScheme(scheme: ControlScheme): void {
-    this.directional.setEnabled(scheme === 'directional');
+    const setup = controlSetupFor(scheme, { session: () => this.session });
+    this.directional.setReference(setup.reference);
+    this.directional.setEnabled(setup.directional);
   }
 
   /** The player's directional input (screen + world), null under Classic control. Debug overlay only. */

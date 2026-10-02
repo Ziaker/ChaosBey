@@ -132,10 +132,11 @@ test('a standard gamepad drives the menus, the Bey and the pause', async ({ page
   await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getScreen()), { timeout: 15_000 }).toBe('match');
   expect(await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getBey('first').definition.id)).toBe('stamina-prototype');
 
-  // The stick drives the Bey (M11 Directional default, camera-relative —
-  // "Fix 7", see PlayerSettings.ts's header): full tilt up-right is a
-  // full-strength camera-relative world direction, and no turn/throttle
-  // actions are held (that's Classic, now a selectable, non-default option).
+  // The stick drives the Bey (M11 Directional default, resolved in the
+  // gameplay-owned control reference — never the camera, see
+  // PlayerSettings.ts's header): full tilt up-right is a full-strength world
+  // direction, and no turn/throttle actions are held (that's Classic, a
+  // selectable, non-default option).
   await page.evaluate(() => ((window as unknown as { __pad: { axes: number[] } }).__pad.axes = [1, -1, 0, 0]));
   await expect
     .poll(() =>
