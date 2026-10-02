@@ -15,7 +15,7 @@ Branch `claude/dazzling-sagan-14fgu0`. Separate from any jump/gameplay fix; came
 | Default floor | flat | **bowl A, parabolic dish** (`DEFAULT_ARENA_FLOOR`) |
 | Bowl depth (`BOWL_DEPTH_M`, rim above centre) | 3.2 m (at R = 12) | **2.5 m** (at R = 36) |
 | Bowl C plateau radius | 2.6 m | 7.8 m (3x) |
-| Heightfield cells | 96 (~0.26 m) | 288 (~0.25 m) |
+| Heightfield cells | 96 (~0.26 m) | 144 (~0.5 m; 288 made each tick 3-4x costlier, see below) |
 
 Files: `src/arena/colliders/ArenaTuning.ts`, `src/arena/colliders/createArenaColliders.ts`, `src/arena/floor/ArenaFloorProfile.ts`, `src/arena/ringout/RingOutTuning.ts`; plus consumers: `src/self-test/arenaFloorComparison.ts`, `src/self-test/scenarios/ScenarioPresets.ts`, `src/debug/visualization/DebugVisualLayers.ts`, `src/replay/playback/replayPlayback.ts`, `src/config/match/MatchConfig.ts`, `prototypes/camera-concepts/src/fight/scenarios.ts`.
 
@@ -55,3 +55,9 @@ All fixtures near the old 12 m wall were re-expressed relative to `RINGOUT_RADIU
 Typecheck, `npm test` (fast suite), `npm run build` green; smoke `boot`, `bowlFloors`, `matchFlow` green locally. The full Playwright suite is left to CI.
 
 Screenshots: `docs/ai/arena-scale-pass/` (`01` centre basin, `02` near the wall).
+
+## CI / performance notes (found after the first push)
+
+- Simulation cost per tick: 0.14 ms (old 12 m flat) -> 0.46 ms with a 288-cell floor -> 0.30 ms with 144 cells; the CI accelerated Self Test (needs > 4x real time) failed at 288.
+- Rendering: the software-rendered CI browser runs the larger stage at roughly half the frame rate of `main` (about 6-8 fps vs 12 fps on 2 cores), mostly the floor now covering more of the screen. The floor visual mesh was lowered to 72 x 192 segments. On a real GPU this should not matter, but it is a real cost to keep in mind.
+- `driftFeedback` (Play) failed in CI. It also fails on `main` with one CPU core: it depended on wall-clock timing and on two key events landing in the same frame. It now waits 42 simulation ticks instead of 700 ms, presses X before the turn (the drift latches its reference direction at X-down) and reads the DRIFT/GRIP tag state and text in one evaluation. Stable 4/4 locally on 2 cores.
