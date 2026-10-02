@@ -4,7 +4,7 @@ A browser-based 3D spinning-top arena combat simulator, built with Three.js, Rap
 
 **Play it:** https://ziaker.github.io/ChaosBey/ — every merge to `main` is built, tested and deployed there automatically.
 
-**Version:** 0.12.1 (`package.json`). The game shows its version and the commit it was built from in the bottom-right corner of every screen (e.g. `v0.12.1 · 8d51f79`); if it doesn't match the latest `main`, reload with Ctrl+Shift+R (GitHub Pages caches the page for a few minutes).
+**Version:** 0.14.1 (`package.json`). The game shows its version and the commit it was built from in the bottom-right corner of every screen (e.g. `v0.14.1 · 8d51f79`); if it doesn't match the latest `main`, reload with Ctrl+Shift+R (GitHub Pages caches the page for a few minutes).
 
 **Standing rule (every change, no exceptions):** each PR that changes the game, its rules, its content or its tooling must (1) bump the version in `package.json` (and `package-lock.json`) — patch for fixes, minor for features/gameplay/content changes — so the number in the corner of the game moves, and (2) update this README (the **Version** line above and the **Status** / **Latest changes** notes below). A unit test (`tests/unit/versionSync.test.ts`) fails if `package.json`, `package-lock.json` and this README disagree. The rule is also written in `CLAUDE.md` (§4), `docs/design-decisions/README.md` and the PR template.
 
@@ -20,7 +20,9 @@ Those documents distinguish **prototyped**, **approved** and **integrated** work
 
 ## Latest changes
 
-- **0.12.1 — Camera follows the bigger arena:** the in-game camera's eye limit (was 10.5 m from the centre) and its ring-out watch radius (was 9 m) were tuned for the 12 m arena and kept the view stuck near the middle of the 36 m one. They now derive from the floor and ring-out radii (eye limit 34.5 m, watch radius 33 m), so fights near the rim are followed from behind as before. Camera presets, framing behaviour and controls are otherwise unchanged. Details: [`docs/ai/camera-arena-scale.md`](docs/ai/camera-arena-scale.md).
+- **0.14.1 — Camera follows the bigger arena:** the in-game camera's eye limit (was 10.5 m from the centre) and its ring-out watch radius (was 9 m) were tuned for the 12 m arena and kept the view stuck near the middle of the 36 m one. They now derive from the floor and ring-out radii (eye limit 34.5 m, watch radius 33 m), so fights near the rim are followed from behind as before. Camera presets, framing behaviour and controls are otherwise unchanged. Details: [`docs/ai/camera-arena-scale.md`](docs/ai/camera-arena-scale.md).
+- **0.14.0 — Approved arena art (visual batch 5):** Foundry Pit, Rift Crater and Tournament Stadium art behind the `arenaVisuals` presentation flag, **off by default**, built on the real floor profile and fitted to the 36 m stage (horizontal footprint x3, real-size walls/posts/seats, more copies at the same spacing, light rigs and sky scaled as a whole so the whole floor is lit). Colliders, camera and gameplay untouched. Still open (owner): default arena, final names/palettes. Screenshots: `docs/ai/arena-visuals-36m/`.
+- **0.13.0 — Clash Overdrive presentation (visual batch 4):** the approved Overdrive Clash look (contact pose, speedlines, contact dust/sparks, mash pulses, resolution flash, arena contact light) ships behind the `clashPresentation` presentation flag, **off by default**; gameplay and camera untouched. Still open (owner): tie style, entry slow motion / per-mash hitstop, Clash shake, the "overdrive" bar style.
 - **0.12.0 — Arena scale pass:** the stage is 3x wider (floor radius 12 m -> 36 m) and no longer flat: the default floor is a smooth bowl whose centre is 2.5 m below the rim. Ring-out radius 36.9 m, 96 wall segments. Known follow-ups (owner decisions): the in-game camera is still tuned for 12 m, and rounds are longer on the bigger stage. Details: [`docs/ai/arena-scale-pass.md`](docs/ai/arena-scale-pass.md).
 
 ## Status

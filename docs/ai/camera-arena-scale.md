@@ -1,4 +1,4 @@
-# Camera follows the bigger arena (0.12.1)
+# Camera follows the bigger arena (0.14.1)
 
 Follow-up to the arena scale pass (0.12.0, [`arena-scale-pass.md`](arena-scale-pass.md)), which left the in-game camera untouched and reported it as tuned for 12 m.
 
