@@ -37,8 +37,8 @@ test('?pfx=all, no flags and a mistyped flag all start the same match; only newB
 
   for (const run of seen) {
     expect(run.errors).toEqual([]);
-    // conditionVisuals, hybridVfx and clashPresentation are the only flags that attach a system so far.
-    expect(run.stats).toMatchObject({ systems: (run.features.conditionVisuals ? 1 : 0) + (run.features.hybridVfx ? 1 : 0) + (run.features.clashPresentation ? 1 : 0), systemErrors: 0 });
+    // conditionVisuals, hybridVfx, clashPresentation and arenaVisuals are the only flags that attach a system so far.
+    expect(run.stats).toMatchObject({ systems: (run.features.conditionVisuals ? 1 : 0) + (run.features.hybridVfx ? 1 : 0) + (run.features.clashPresentation ? 1 : 0) + (run.features.arenaVisuals ? 1 : 0), systemErrors: 0 });
     expect(run.ids).toEqual(run.features.newBeyVisuals ? ['concept:attack-a', 'concept:defense-a'] : ['placeholder:attack-prototype', 'placeholder:defense-prototype']);
   }
   expect(Object.values(seen[0]!.features).some(Boolean)).toBe(false);
@@ -74,7 +74,7 @@ test('a restart builds a fresh presentation hub and disposes what was attached t
   expect(after.probe.creates).toBe(1);
   expect(after.probe.disposes).toBe(1);
   // The restarted session builds its own flag systems again; the probe is gone.
-  expect(after.systemIds).toEqual(['condition-visuals', 'hybrid-vfx', 'clash-presentation']);
+  expect(after.systemIds).toEqual(['condition-visuals', 'hybrid-vfx', 'clash-presentation', 'arena-visuals']);
   // The restarted session reads the same page flags again.
   expect(Object.values(after.features).every(Boolean)).toBe(true);
   expect(errors).toEqual([]);
@@ -227,5 +227,44 @@ test('clashPresentation in a real browser: locked contact, speedlines and dust o
   expect(on.stats!.speedlinesDrawn).toBeGreaterThan(20);
   expect(on.stats!.dust! + on.stats!.grit!).toBeGreaterThan(5);
   expect(on.stats!.poseTiltFirstDeg).toBeGreaterThan(5);
+  expect(on.camera).toBe(off.camera);
+});
+
+test('arenaVisuals in a real browser: the approved arena art draws, the temporary arena visuals are hidden, camera as with the flag off', async ({ browser }) => {
+  const run = async (search: string): Promise<{ camera: string; art: string[]; hiddenHolder: boolean | null; errors: string[] }> => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const errors: string[] = [];
+    await openDebugLab(page, search, errors);
+    await page.evaluate(async () => {
+      const lab = window.__chaosBeyDebugLab!;
+      lab.setPaused(true);
+      await lab.restart('arena-camera-proof');
+      lab.step(60);
+    });
+    await page.waitForTimeout(500);
+    const result = await page.evaluate(() => {
+      const lab = window.__chaosBeyDebugLab!;
+      const camera = lab.getCamera();
+      const session = lab.getSession()!;
+      const root = session.getSceneRoot();
+      const holder = root.children.find((c) => c.name === 'discarded-temporary-arena-visuals');
+      return {
+        camera: JSON.stringify([camera.position.toArray().map((v) => +v.toFixed(5)), camera.fov, camera.children.length]),
+        art: root.children.filter((c) => c.name.startsWith('arena-art-')).map((c) => c.name),
+        hiddenHolder: holder ? !holder.visible : null,
+      };
+    });
+    await context.close();
+    return { ...result, errors };
+  };
+  const off = await run('');
+  const on = await run('&pfx=arenaVisuals');
+  expect(off.errors).toEqual([]);
+  expect(on.errors).toEqual([]);
+  expect(off.art).toEqual([]);
+  expect(off.hiddenHolder).toBeNull();
+  expect(on.art).toEqual(['arena-art-foundry']);
+  expect(on.hiddenHolder).toBe(true);
   expect(on.camera).toBe(off.camera);
 });

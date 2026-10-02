@@ -87,6 +87,8 @@ export interface ClashPresentationOptions {
   /** Arena floor dust tint. */
   readonly dustHex: number;
   readonly config?: OverdriveConfig;
+  /** The stand-in contact light for the arena reaction. Off when the approved arena art reacts to the Clash itself. Default on. */
+  readonly contactLight?: boolean;
   /** Where the overlay canvas is mounted. Default: the page body. `null`: no DOM. */
   readonly overlayParent?: HTMLElement | null;
 }
@@ -140,7 +142,8 @@ export class ClashPresentationSystem implements PresentationSystem {
     this.dustColor = new THREE.Color(options.dustHex);
     this.sparkColor = new THREE.Color(options.sparkHex);
     this.sides = { first: this.buildSide('first'), second: this.buildSide('second') };
-    options.scene.add(this.fx.group, this.light);
+    options.scene.add(this.fx.group);
+    if (options.contactLight !== false) options.scene.add(this.light);
     const parent = options.overlayParent === undefined ? (typeof document === 'undefined' ? null : document.body) : options.overlayParent;
     if (parent && typeof document !== 'undefined') {
       const host = document.createElement('div');
@@ -400,6 +403,11 @@ export class ClashPresentationSystem implements PresentationSystem {
     this.sides.first.surge = this.sides.second.surge = 0;
     this.speedlines?.clear();
     if (this.flashLayer) this.flashLayer.style.opacity = '0';
+  }
+
+  /** 0..1: how strongly the arena should react to the Clash right now (the approved arena art reads this). */
+  getArenaReaction(): number {
+    return this.reaction;
   }
 
   getStats(): Readonly<Record<string, number>> {
