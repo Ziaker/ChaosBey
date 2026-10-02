@@ -100,6 +100,35 @@ describe('Inertial Duel Camera — pass-through stability', () => {
       expect(maxAccel, `${preset}: angular acceleration cap`).toBeLessThanOrEqual(INERTIAL_DUEL_TUNING[preset].maxYawAccelDegS2 + 1e-5);
     }
   });
+
+  it('holds optical rescue briefly after the soft-frame pressure clears instead of pumping on/off', () => {
+    const d = director('B');
+
+    // Establish a calm world azimuth first.
+    for (let t = 0; t < 30; t++) d.tick(frame(t, fighter(0, -3), fighter(0, 3)), DT);
+
+    // Force a very wide lateral composition on the 36 m stage. This remains
+    // physically valid but should build focus/distance/FOV rescue pressure.
+    let out = d.tick(frame(30, fighter(-30, 0), fighter(30, 0)), DT);
+    let peak = out.debug.composition.rescuePressure;
+    for (let t = 31; t < 90; t++) {
+      out = d.tick(frame(t, fighter(-30, 0), fighter(30, 0)), DT);
+      peak = Math.max(peak, out.debug.composition.rescuePressure);
+    }
+    expect(peak, 'wide composition should engage optical rescue').toBeGreaterThan(0.05);
+
+    // Return to a safe composition. Release is intentionally slower than
+    // attack, so pressure must not snap directly to zero on the next frame.
+    const firstSafe = d.tick(frame(90, fighter(0, -3), fighter(0, 3)), DT);
+    expect(firstSafe.debug.composition.rescuePressure, 'rescue should have release memory').toBeGreaterThan(0);
+
+    let settling = firstSafe;
+    for (let t = 91; t < 121; t++) settling = d.tick(frame(t, fighter(0, -3), fighter(0, 3)), DT);
+    expect(settling.debug.composition.rescuePressure, 'rescue should decay after returning inside the safe frame').toBeLessThan(peak);
+
+    for (let t = 121; t < 361; t++) settling = d.tick(frame(t, fighter(0, -3), fighter(0, 3)), DT);
+    expect(settling.debug.composition.rescuePressure, 'rescue should eventually settle back to neutral').toBeLessThan(0.01);
+  });
 });
 
 describe('Inertial Duel Camera — 36 m arena integration', () => {
