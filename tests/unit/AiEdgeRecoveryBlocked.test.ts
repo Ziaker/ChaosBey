@@ -10,6 +10,7 @@
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
+import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { edgeRecoveryDirection } from '../../src/ai/decision/ActionSelection';
 import { buildWorldState, type WorldState } from '../../src/ai/decision/WorldState';
 import { perceiveCombatant, type CombatantRawState } from '../../src/ai/perception/AiPerception';
@@ -46,9 +47,10 @@ function world(own: Vec2, opponent: Vec2): WorldState {
   });
 }
 
-/** AI 11 m out (edge danger) at `angleRad` around the arena; `alongM` toward the center and `sideM` sideways (perpendicular(center)) place the opponent. */
+/** AI 1.9 m inside the ring-out radius (edge danger) at `angleRad` around the arena; `alongM` toward the center and `sideM` sideways (perpendicular(center)) place the opponent. */
 function scenario(angleRad: number, alongM: number, sideM: number) {
-  const own = { x: 11 * Math.sin(angleRad), z: 11 * Math.cos(angleRad) };
+  const ownRadiusM = RINGOUT_RADIUS_M - 1.9;
+  const own = { x: ownRadiusM * Math.sin(angleRad), z: ownRadiusM * Math.cos(angleRad) };
   const center = { x: -Math.sin(angleRad), z: -Math.cos(angleRad) };
   const side = perpendicular(center);
   const opponent = add(own, add(scale(center, alongM), scale(side, sideM)));
@@ -118,7 +120,7 @@ describe('edgeRecoveryDirection — opponent blocking the way to the center (M7 
   });
 
   it('degenerate inputs stay finite: opponent on top of the AI, AI at the exact center', () => {
-    const own = { x: 0, z: 11 };
+    const own = { x: 0, z: RINGOUT_RADIUS_M - 1.9 };
     const onTop = edgeRecoveryDirection(world(own, own));
     expect(Number.isFinite(onTop.x) && Number.isFinite(onTop.z)).toBe(true);
     const atCenter = edgeRecoveryDirection(world({ x: 0, z: 0 }, { x: 0, z: 1 }));

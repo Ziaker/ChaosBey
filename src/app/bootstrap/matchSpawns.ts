@@ -15,7 +15,8 @@ export interface SpawnPositionM {
 }
 
 // Opposite starting positions, facing each other — arbitrary, generous
-// distance for a readable opening (arena radius is 12m).
+// distance for a readable opening. Left at +-4 m through the arena scale pass
+// (radius 12 m -> 36 m): they start in the basin at the centre, as before.
 export const FIRST_SPAWN: SpawnPositionM = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: -4 };
 export const SECOND_SPAWN: SpawnPositionM = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 4 };
 

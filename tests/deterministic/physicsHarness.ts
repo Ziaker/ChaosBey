@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
+import type { ArenaGeometry } from '../../src/arena/presets/ArenaPresets';
 import { createArenaColliders } from '../../src/arena/colliders/createArenaColliders';
 import { createBeyRigidBody } from '../../src/bey/core/BeyRigidBody';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
@@ -46,10 +47,10 @@ export class TestBeyHarness {
   stamina = 100_000;
 
   /** `motion`: the motion direction (M11 Motion Lab A/B/C); B, the game's default, when omitted. */
-  static async create(spawn: { x: number; y: number; z: number } = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, motion: MotionParams = motionParams()): Promise<TestBeyHarness> {
+  static async create(spawn: { x: number; y: number; z: number } = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, motion: MotionParams = motionParams(), geometry?: ArenaGeometry): Promise<TestBeyHarness> {
     const physics = await PhysicsWorld.create();
     const scene = new THREE.Scene(); // no renderer involved — safe in a headless test environment.
-    createArenaColliders(scene, physics, undefined, undefined, motion);
+    createArenaColliders(scene, physics, geometry, undefined, motion);
     const { body, collider } = createBeyRigidBody(physics, spawn, undefined, motion);
     const movement = new MovementController(undefined, motion);
     return new TestBeyHarness(physics, body, collider, movement, new SpinController(motion), new DriftController(movement.getLateralGripPerS()), new DodgeController());

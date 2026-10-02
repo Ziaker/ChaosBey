@@ -76,7 +76,7 @@ export function createArenaColliders(
 
   if (floor === 'flat') {
     const floorMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(ARENA_FLOOR_RADIUS, ARENA_FLOOR_RADIUS, ARENA_FLOOR_THICKNESS, 48),
+      new THREE.CylinderGeometry(ARENA_FLOOR_RADIUS, ARENA_FLOOR_RADIUS, ARENA_FLOOR_THICKNESS, ARENA_VISUAL_SEGMENTS),
       new THREE.MeshStandardMaterial({ color: theme.floorHex, roughness: theme.floorRoughness, metalness: theme.floorMetalness }),
     );
     floorMesh.position.y = -ARENA_FLOOR_THICKNESS / 2;
@@ -91,7 +91,7 @@ export function createArenaColliders(
       points.push(new THREE.Vector2(r, profile.heightAtRadius(r)));
     }
     const bowlMesh = new THREE.Mesh(
-      new THREE.LatheGeometry(points, 96),
+      new THREE.LatheGeometry(points, ARENA_VISUAL_SEGMENTS),
       new THREE.MeshStandardMaterial({ color: theme.floorHex, roughness: theme.floorRoughness, metalness: theme.floorMetalness, side: THREE.DoubleSide }),
     );
     bowlMesh.name = `arena-floor-${floor}`;
@@ -102,30 +102,24 @@ export function createArenaColliders(
   // (on a bowl a ring of constant r is level, at h(r)).
   const lineMaterial = new THREE.MeshBasicMaterial({ color: theme.floorLineHex, transparent: true, opacity: theme.floorLineOpacity, depthWrite: false });
   for (const radius of [ARENA_FLOOR_RADIUS * 0.33, ARENA_FLOOR_RADIUS * 0.66, ARENA_FLOOR_RADIUS - 0.35]) {
-    const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.04, radius + 0.04, 96), lineMaterial);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.04, radius + 0.04, ARENA_VISUAL_SEGMENTS), lineMaterial);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = profile.heightAtRadius(radius) + 0.005;
     group.add(ring);
   }
 
-  if (floor === 'flat') {
-    // Match the visual mesh exactly: its top surface is at y=0 (mesh center
-    // at -THICKNESS/2, half-height THICKNESS/2). The collider must be
-    // positioned the same way, not left at the body's default origin — the
-    // Bey should never appear to float or sink relative to what's rendered.
-    const floorBody = physics.rapierWorld.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(0, -ARENA_FLOOR_THICKNESS / 2, 0),
-    );
-    physics.rapierWorld.createCollider(
-      floorMaterial(RAPIER.ColliderDesc.cylinder(ARENA_FLOOR_THICKNESS / 2, ARENA_FLOOR_RADIUS)),
-      floorBody,
-    );
-  } else {
-    physics.rapierWorld.createCollider(
-      floorMaterial(bowlHeightfield(profile.heightAtRadius)),
-      physics.rapierWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed()),
-    );
-  }
+  // Every floor, flat included, is a heightfield sampled from the same h(r) as
+  // the visuals. The flat floor used to be one cylinder collider (radius =
+  // ARENA_FLOOR_RADIUS, a thin slab centred at -THICKNESS/2 so its top is
+  // y = 0); at the 3x arena (radius 36 m, 0.5 m thick) Rapier's
+  // cylinder-vs-cylinder contact produced ghost obstacles for a rolling Bey
+  // 1-2 m inside the wall (a full stop at r = 33.5-34.4 m, measured), which
+  // the heightfield does not (arena scale pass). A flat heightfield is the
+  // same plane (top y = 0) and, like the bowls, has no floor outside the wall.
+  physics.rapierWorld.createCollider(
+    floorMaterial(bowlHeightfield(profile.heightAtRadius)),
+    physics.rapierWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed()),
+  );
 
   const wallMesh = new THREE.Mesh(
     new THREE.CylinderGeometry(
@@ -151,7 +145,7 @@ export function createArenaColliders(
 
   // Emissive trim along the top of the wall: shows where the rim is at a glance.
   const rim = new THREE.Mesh(
-    new THREE.TorusGeometry(ARENA_FLOOR_RADIUS + ARENA_WALL_THICKNESS / 2, 0.05, 6, 96),
+    new THREE.TorusGeometry(ARENA_FLOOR_RADIUS + ARENA_WALL_THICKNESS / 2, 0.05, 6, ARENA_VISUAL_SEGMENTS),
     new THREE.MeshBasicMaterial({ color: theme.rimHex }),
   );
   rim.rotation.x = Math.PI / 2;
@@ -194,10 +188,26 @@ export function createArenaColliders(
   return { group };
 }
 
-/** Heightfield resolution for a bowl floor (cells per side). ~0.26 m cells for a 0.6 m-radius Bey. */
-export const BOWL_HEIGHTFIELD_CELLS = 96;
-/** Visual lathe resolution along the radius. */
-const BOWL_VISUAL_RADIAL_STEPS = 48;
+/**
+ * Heightfield resolution for the floor (cells per side): 144 = ~0.5 m cells
+ * over the 72 m square. The arena scale pass first used 288 (~0.25 m, the old
+ * 96-cell density at 3x the radius), but simulation cost grows with the cell
+ * count: measured per AI-vs-AI tick 0.24 ms (72 cells), 0.30 (144), 0.36
+ * (192), 0.46 (288) against 0.14 ms for the old 12 m flat arena, and CI's
+ * accelerated Self Test fell under its 4x-real-time check at 288. The floor
+ * is a smooth parabola (curvature 0.004 /m), so 0.5 m cells deviate from
+ * h(r) by well under a millimetre.
+ */
+export const BOWL_HEIGHTFIELD_CELLS = 144;
+/**
+ * Visual lathe resolution along the radius. 72 steps (0.5 m) is plenty for the smooth
+ * profile; the first scale pass used 144 x 288 segments (~83k triangles, 18x the old
+ * floor), which slowed the software-rendered CI browser enough to make a timing-based
+ * smoke test fail.
+ */
+const BOWL_VISUAL_RADIAL_STEPS = 72;
+/** Segments around the bowl / rings / rim: 1.2 m each at r = 36 m, ~0.01 m sagitta. */
+const ARENA_VISUAL_SEGMENTS = 192;
 /**
  * Past the floor edge the heightfield drops this far below the rim: there
  * is no floor outside the arena (as with the flat floor, which ends at

@@ -25,6 +25,9 @@ async function arena(): Promise<PhysicsWorld> {
   return physics;
 }
 
+/** Thrown from 3 m inside the wall (9 m on the old 12 m arena). */
+const START_RADIUS_M = ARENA_FLOOR_RADIUS - 3;
+
 const isWall = (c: RAPIER.Collider): boolean => c.shape.type === RAPIER.ShapeType.Cuboid;
 
 describe('arena wall collider (ext-32 regression)', () => {
@@ -34,7 +37,7 @@ describe('arena wall collider (ext-32 regression)', () => {
       const a = (deg * Math.PI) / 180;
       for (const y of [0.2, 1, 1.8]) {
         const ray = new RAPIER.Ray({ x: 0, y, z: 0 }, { x: Math.cos(a), y: 0, z: Math.sin(a) });
-        const hit = physics.rapierWorld.castRay(ray, 20, true, undefined, undefined, undefined, undefined, isWall);
+        const hit = physics.rapierWorld.castRay(ray, ARENA_FLOOR_RADIUS + 2, true, undefined, undefined, undefined, undefined, isWall);
         expect(hit, `no wall at ${deg}°, y ${y}`).not.toBeNull();
         expect(hit!.timeOfImpact, `${deg}°`).toBeGreaterThanOrEqual(INNER_FACE_M - 1e-3);
         expect(hit!.timeOfImpact, `${deg}°`).toBeLessThanOrEqual(MAX_INNER_M + 1e-3);
@@ -70,7 +73,7 @@ describe('arena wall collider (ext-32 regression)', () => {
       ] as const) {
         const physics = await arena();
         const a = (deg * Math.PI) / 180;
-        const { body } = createBeyRigidBody(physics, { x: Math.cos(a) * 9, y: startY, z: Math.sin(a) * 9 }, DEFAULT_PHYSICAL_PROFILE);
+        const { body } = createBeyRigidBody(physics, { x: Math.cos(a) * START_RADIUS_M, y: startY, z: Math.sin(a) * START_RADIUS_M }, DEFAULT_PHYSICAL_PROFILE);
         body.setLinvel({ x: Math.cos(a) * speed, y: vy, z: Math.sin(a) * speed }, true);
         let maxR = 0;
         let minY = Infinity;

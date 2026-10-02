@@ -30,7 +30,15 @@ import { SeededRng } from '../../src/rng/SeededRng';
 import { CombatHarness } from './combatHarness';
 import { PlayerStandInController } from './playerStandInController';
 
-const MAX_TICKS = 6000; // ~100s, same generous ceiling aiMatchRunner uses.
+// Arena scale pass: 6000 ticks (~100 s, the ceiling aiMatchRunner uses) was
+// generous on the 12 m arena (Defense vs this stand-in: 771-1503 ticks) but
+// not on the 36 m bowl, where three Defense seeds were still going at 100 s
+// and finished at 6767 / 8073 / 18421 ticks (that last one after 63 hits).
+// Fights are much longer because the walls no longer bring the Beys back
+// together; this ceiling is raised so the test still checks that rounds
+// resolve, and the pacing change is reported as a gameplay consequence of the
+// larger arena (no AI value was changed to hide it).
+const MAX_TICKS = 24000; // ~400s.
 const SEEDS = ['pv-0', 'pv-1', 'pv-2', 'pv-3', 'pv-4', 'pv-5', 'pv-6', 'pv-7'];
 const TICKS_PER_SECOND = Math.round(1 / FIXED_DELTA_SECONDS);
 const MAX_STALLED_ATTACK_TICKS = Math.round(0.5 * TICKS_PER_SECOND);
@@ -193,6 +201,6 @@ describe('AI vs a fixed, non-adaptive player stand-in (M7 alpha-readiness)', () 
       expect(passiveShare(stamina), 'Stamina should play more patiently than Attack even against a fixed opponent').toBeGreaterThan(passiveShare(attack) + 0.05);
       expect(passiveShare(defense), 'Defense should sit between Attack and Stamina on patience even against a fixed opponent').toBeGreaterThan(passiveShare(attack));
     },
-    120000,
+    300000,
   );
 });

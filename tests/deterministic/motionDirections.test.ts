@@ -8,6 +8,8 @@
 // that the choice is gameplay: deterministic and recorded in replays.
 // ============================================================
 
+import { SLIP_GRIP_FLOOR_MULTIPLIER } from '../../src/bey/movement/MovementTuning';
+import { ARENA_FLOOR_RADIUS } from '../../src/arena/colliders/ArenaTuning';
 import { describe, expect, it } from 'vitest';
 import { PRESETS as LAB_PRESETS } from '../../prototypes/bey-motion-concepts/src/physics/params';
 import { MOTION_DIRECTIONS, MOTION_DIRECTION_IDS, DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../src/bey/motion/MotionPresets';
@@ -82,8 +84,13 @@ describe('motion directions — the Lab\'s behaviours in the real simulation', (
     }
     expect(minGrip.A).toBeGreaterThan(minGrip.B!);
     expect(minGrip.B).toBeGreaterThan(minGrip.C!);
-    expect(minGrip.B).toBeCloseTo(params('B').slipGrip, 2);
-    expect(minGrip.C).toBeCloseTo(params('C').slipGrip, 2);
+    // How low the grip multiplier falls once slipping is the direction's slipGrip
+    // x SLIP_GRIP_FLOOR_MULTIPLIER (MovementTuning.ts). These used to read
+    // plain slipGrip, but only because the old 12 m arena's wall was hit during
+    // the run (an impact drops grip to slipGrip itself); on the 36 m arena the
+    // run no longer reaches a wall, so the slip model's own floor shows.
+    expect(minGrip.B).toBeCloseTo(Math.min(1, params('B').slipGrip * SLIP_GRIP_FLOOR_MULTIPLIER), 2);
+    expect(minGrip.C).toBeCloseTo(Math.min(1, params('C').slipGrip * SLIP_GRIP_FLOOR_MULTIPLIER), 2);
     expect(slipTicks.B).toBeGreaterThan(0);
     expect(slipTicks.C).toBeGreaterThan(slipTicks.A!);
   });
@@ -91,7 +98,7 @@ describe('motion directions — the Lab\'s behaviours in the real simulation', (
   it('wall bounce: a head-on hit at 9+ m/s rebounds A < B < C, and never comes back faster than it went in', async () => {
     const rebound: Record<string, number> = {};
     for (const id of MOTION_DIRECTION_IDS) {
-      const h = await harness(id, { x: 0, y: 1, z: 8 });
+      const h = await harness(id, { x: 0, y: 1, z: ARENA_FLOOR_RADIUS - 4 }); // 4 m from the wall, as the 8 m spawn was on the 12 m arena
       h.beyBody.setLinvel({ x: 0, y: 0, z: 9 }, true);
       let fastestBack = 0;
       // Driven into the wall (forward held): with no input the idle damping

@@ -16,6 +16,7 @@
 import type { MatchConfig } from '../../config/match/MatchConfig';
 import type { Bey } from '../../bey/core/Bey';
 import { BEY_SPAWN_HEIGHT_M } from '../../bey/core/BeyTuning';
+import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
 import { floorHeightAt } from '../../arena/floor/ArenaFloorProfile';
 import { DASH_MAX_CHARGE_S, TAP_MAX_HOLD_S } from '../../combat/attacks/AttackTuning';
 import { JUMP_RELEASE_WINDOW_S } from '../../drift/DriftTuning';
@@ -78,6 +79,15 @@ export interface ScenarioPreset {
 
 // ---- building blocks ----
 
+/**
+ * Arena scale pass (floor radius 12 m -> 36 m): the scenarios about the wall /
+ * the ring-out were laid out for a wall 12 m from the centre. Their starting
+ * spots are moved this much outward (toward +Z, or radially for the ricochet)
+ * so each starts the same distance from the wall as before; the speeds,
+ * angles and checks are unchanged (the radius checks use ARENA_FLOOR_RADIUS).
+ */
+const WALL_SHIFT_M = ARENA_FLOOR_RADIUS - 12;
+
 /** Places a Bey at (x, z), upright, stopped, facing `headingRad` (yaw 0 = +Z). */
 export function placeBey(bey: Bey, x: number, z: number, headingRad: number): void {
   // Spawn height above the floor under (x, z): on a bowl the floor isn't at y = 0 (M11).
@@ -122,6 +132,17 @@ function faceOff(d: number): (a: ScenarioActors) => void {
 const COOLDOWN_DASH_TIMES_S = [6.5, 9.5, 12.5];
 /** ...and second holds its charge this many ticks longer, releasing later. */
 const COOLDOWN_SECOND_EXTRA_HOLD_TICKS = 24;
+/**
+ * Arena scale pass: on the old 12 m arena the wall brought the two thrown-apart,
+ * turned Beys back toward each other; 36 m away it no longer does, and every
+ * release-time / hold sweep missed (0 hits). So first turns right for this
+ * many ticks starting at COOLDOWN_STEER_AT_S (just after the Clash throws
+ * them apart, before the 6.5 s Dash), which re-aims its Dash at second.
+ * Swept: 30 and 40 ticks both give 2-3 hits for second's extra hold of 8, 24
+ * and 40 ticks.
+ */
+const COOLDOWN_FIRST_STEER_TICKS = 40;
+const COOLDOWN_STEER_AT_S = 6;
 
 // ---- the presets ----
 
@@ -190,7 +211,7 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     id: 'ring-out',
     label: 'Test Ring-Out',
     description:
-      'Second releases a full Dash outward at a low-Stability, exhausted first (z = 5), who jumps just before it arrives; the Dash catches the airborne Bey and its own knockback lift adds to the jump\'s residual vy, sending it over the wall. The round ends by ring-out through the physics, not by rule.',
+      'Second releases a full Dash outward at a low-Stability, exhausted first (5 m from the centre on the old 12 m arena, now 29 m: the same 7 m from the wall), who jumps just before it arrives; the Dash catches the airborne Bey and its own knockback lift adds to the jump\'s residual vy, sending it over the wall. The round ends by ring-out through the physics, not by rule.',
     // Jump/air-control hotfix follow-up (owner review, PR #73 then this
     // follow-up): the old setup had first jump a FULL, uncut jump (its own
     // apex alone used to clear the 2 m wall at ~2.33 m, pre-hotfix) and
@@ -215,8 +236,8 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     supported: true,
     durationTicks: 8 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
-      placeBey(first, 0, 5, Math.PI);
-      placeBey(second, 0, -1, 0);
+      placeBey(first, 0, 5 + WALL_SHIFT_M, Math.PI);
+      placeBey(second, 0, -1 + WALL_SHIFT_M, 0);
       // Maximally vulnerable to knockback (GDD section 27/30's own
       // formula, not a new rule): zero Stamina (max staminaVulnerability),
       // low-but-not-zero Stability (close to the knockback formula's own
@@ -245,16 +266,16 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     supported: true,
     durationTicks: 2 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
-      placeBey(first, 0, 8, 0);
+      placeBey(first, 0, 8 + WALL_SHIFT_M, 0);
       first.body.setLinvel({ x: 0, y: 0, z: 12 }, true);
-      placeBey(second, 0, -8, 0);
+      placeBey(second, 0, -8 + WALL_SHIFT_M, 0);
     },
     // Driven for the first half second: with no input the idle damping
     // (owner playtest, after M11) settles a Bey on a bowl's slope before it
     // reaches the wall.
     first: script(hold(Action.MoveForward, 0, 30)),
     second: idle,
-    check: (t) => ok(t.firstMaxImpactMps > 0 && t.firstMaxRadiusM < 12 && t.firstMinRadialVelocityAfterImpact < 0, `impact Δv ${t.firstMaxImpactMps.toFixed(2)} m/s, max radius ${t.firstMaxRadiusM.toFixed(2)} m, rebound radial speed ${t.firstMinRadialVelocityAfterImpact.toFixed(2)} m/s`),
+    check: (t) => ok(t.firstMaxImpactMps > 0 && t.firstMaxRadiusM < ARENA_FLOOR_RADIUS && t.firstMinRadialVelocityAfterImpact < 0, `impact Δv ${t.firstMaxImpactMps.toFixed(2)} m/s, max radius ${t.firstMaxRadiusM.toFixed(2)} m, rebound radial speed ${t.firstMinRadialVelocityAfterImpact.toFixed(2)} m/s`),
   },
   {
     id: 'wall-ricochet',
@@ -263,10 +284,12 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     supported: true,
     durationTicks: 2 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
-      // At (-6, 8) (r = 10): 30° off the wall's tangent, mostly along it.
-      placeBey(first, -6, 8, 0);
+      // At (-6, 8) (r = 10) on the old arena, moved radially out to r = 34 (same
+      // 2 m from the wall): 30° off the wall's tangent, mostly along it.
+      const k = (ARENA_FLOOR_RADIUS - 2) / 10;
+      placeBey(first, -6 * k, 8 * k, 0);
       first.body.setLinvel({ x: 4.75, y: 0, z: 11.06 }, true);
-      placeBey(second, 0, -8, 0);
+      placeBey(second, 0, -8 + WALL_SHIFT_M, 0);
     },
     // Driven for the first half second, as in wall-hit (idle damping).
     first: script(hold(Action.MoveForward, 0, 30)),
@@ -451,8 +474,9 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     // Both Dash at 6.5, 9.5 and 12.5 s (all inside the cooldown), second
     // releasing 24 ticks after first — the middle of the 8–40 tick range
     // that lands hits (measured: 1–3 hits during the cooldown; 0 for any
-    // same-tick release, or a 7/9/11/13 s schedule).
-    first: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...COOLDOWN_DASH_TIMES_S.flatMap((s) => hold(Action.Attack, Math.round(s * FIXED_TICKS_PER_SECOND), FULL_DASH_HOLD_TICKS))]),
+    // same-tick release, or a 7/9/11/13 s schedule). First's steering pulse
+    // (COOLDOWN_FIRST_STEER_TICKS) is the arena scale pass's addition.
+    first: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...hold(Action.SteerRight, Math.round(COOLDOWN_STEER_AT_S * FIXED_TICKS_PER_SECOND), COOLDOWN_FIRST_STEER_TICKS), ...COOLDOWN_DASH_TIMES_S.flatMap((s) => hold(Action.Attack, Math.round(s * FIXED_TICKS_PER_SECOND), FULL_DASH_HOLD_TICKS))]),
     second: script([...hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS), ...COOLDOWN_DASH_TIMES_S.flatMap((s) => hold(Action.Attack, Math.round(s * FIXED_TICKS_PER_SECOND), FULL_DASH_HOLD_TICKS + COOLDOWN_SECOND_EXTRA_HOLD_TICKS))]),
     check: (t) => ok(t.clashStarts === 1 && t.hitsDuringClashCooldown > 0, `Clash starts ${t.clashStarts}; hits during cooldown ${t.hitsDuringClashCooldown}`),
   },
