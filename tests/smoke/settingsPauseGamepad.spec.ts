@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 
 // ============================================================
 // SETTINGS, PAUSE, FOCUS LOSS, GAMEPAD (M10 lane D), production build.
@@ -18,7 +19,7 @@ function watchErrors(page: Page): string[] {
 }
 
 async function startDefaultMatch(page: Page): Promise<void> {
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await page.getByTestId('character-select-confirm').click({ timeout: 15_000 });
   await page.getByTestId('pregame-start').click();
   await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getScreen()), { timeout: 15_000 }).toBe('match');
@@ -121,7 +122,7 @@ test('a standard gamepad drives the menus, the Bey and the pause', async ({ page
   const DOWN = 13;
   const START = 9;
 
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await expect(page.getByTestId('character-select')).toBeVisible({ timeout: 15_000 });
   await tap(DOWN);
   await tap(DOWN);

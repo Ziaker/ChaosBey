@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 
 // M11: the approved Motion Lab movement directions A/B/C in the real app.
 // - Pregame offers Movement A / B (default) / C; the match is built with it.
@@ -16,7 +17,7 @@ function watchErrors(page: import('@playwright/test').Page): string[] {
 
 test('Pregame: movement B by default, C can be chosen and the match plays with it', async ({ page }) => {
   const errors = watchErrors(page);
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await page.getByTestId('character-select-confirm').click({ timeout: 15_000 });
   await expect(page.getByTestId('pregame-motion-B')).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByTestId('pregame-rules')).toContainText('Movement B — Physical Hybrid');
@@ -32,7 +33,7 @@ test('Pregame: movement B by default, C can be chosen and the match plays with i
 
 test('Debug Lab: &motion= picks the direction, the panel switches it, the inspector shows it', async ({ page }) => {
   const errors = watchErrors(page);
-  await page.goto('/ChaosBey/?mode=debug-lab&motion=A');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab&motion=A'));
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession()?.matchConfig.motion ?? null), { timeout: 20_000 }).toBe('A');
   await expect(page.getByTestId('debug-lab-motion')).toHaveValue('A');
   await page.getByTestId('debug-lab-motion').selectOption('C');

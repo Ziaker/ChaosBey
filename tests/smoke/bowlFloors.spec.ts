@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 
 // M11 lane 4: the approved bowls A/B/C as playtest floors, in the real app.
 // - Pregame offers Flat (baseline) / Bowl A (default) / B / C; the match is built on
@@ -16,7 +17,7 @@ function watchErrors(page: import('@playwright/test').Page): string[] {
 
 test('Pregame: Bowl A by default (the stage is not flat), another floor can be chosen and the match plays on it', async ({ page }) => {
   const errors = watchErrors(page);
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await page.getByTestId('character-select-confirm').click({ timeout: 15_000 });
   await expect(page.getByTestId('pregame-arena-floor-bowl-a')).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByTestId('pregame-rules')).toContainText('Bowl A — Parabolic dish');
@@ -43,7 +44,7 @@ test('Pregame: Bowl A by default (the stage is not flat), another floor can be c
 
 test('Debug Lab: &floor= picks the floor, the panel switches it, the inspector shows the floor under the Bey', async ({ page }) => {
   const errors = watchErrors(page);
-  await page.goto('/ChaosBey/?mode=debug-lab&floor=bowl-c');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab&floor=bowl-c'));
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession()?.matchConfig.arenaFloor ?? null), { timeout: 20_000 }).toBe('bowl-c');
   await expect(page.getByTestId('debug-lab-arena-floor')).toHaveValue('bowl-c');
   await page.getByTestId('debug-lab-arena-floor').selectOption('bowl-b');

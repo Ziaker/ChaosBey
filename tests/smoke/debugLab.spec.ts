@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 
 // Debug Lab smoke (GDD sections 1.2, 69, 70, 144): the production build
 // opens the lab at ?mode=debug-lab, its controls drive the real match, the
@@ -29,7 +30,7 @@ test('Debug Lab: pause, step, restart, seeds, speed and controller switching on 
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   const status = page.getByTestId('debug-lab-status');
   await expect(status).toContainText('RUNNING', { timeout: 15_000 });
   await expect.poll(() => readTick(page), { timeout: 10_000 }).toBeGreaterThan(30);
@@ -166,7 +167,7 @@ test('Debug Lab: restart() with an empty/whitespace seed does not crash or stran
   // stay robust on its own. An empty/blank string reaching
   // normalizeSeedText() throws ("seed text must not be empty"), which used
   // to escape createSession() uncaught and leave `session` stuck at null.
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   await page.waitForFunction(() => window.__chaosBeyDebugLab?.getSession() !== null);
 
   for (const blank of ['', '   ']) {
@@ -193,7 +194,7 @@ test('Debug Lab: record a match, download the replay, import it and watch it ver
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   await page.waitForFunction(() => window.__chaosBeyDebugLab?.getSession() !== null);
   const status = page.getByTestId('debug-lab-status');
 

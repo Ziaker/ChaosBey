@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 import * as fs from 'fs';
 
 // Owner playtest (after M11): "hop with X, keep holding X — the drift has no
@@ -35,7 +36,7 @@ test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with 
   test.setTimeout(60_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await page.getByTestId('character-select').waitFor({ timeout: 20_000 });
   await page.keyboard.press('Enter');
   await page.getByTestId('pregame-start').click();
@@ -86,7 +87,7 @@ test('Debug Lab: the drift cycle on the flat floor and on bowls A/B/C', async ({
   test.setTimeout(120_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession() != null), { timeout: 20_000 }).toBe(true);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 
 // M11 lane 2: the approved camera presets in the real app.
 // - Settings offers Arena Fighter / Cinematic Hybrid / Hyper Dynamic, B by
@@ -30,9 +31,9 @@ test('a match runs on each camera preset, the preset reaching the game camera', 
     if (message.type() === 'error') errors.push(message.text());
   });
   for (const preset of ['A', 'B', 'C'] as const) {
-    await page.goto('/ChaosBey/');
+    await page.goto(baselineUrl('/ChaosBey/'));
     await page.evaluate((p) => localStorage.setItem('chaosbey.settings.player.v1', JSON.stringify({ cameraPreset: p })), preset);
-    await page.goto('/ChaosBey/?mode=play');
+    await page.goto(baselineUrl('/ChaosBey/?mode=play'));
     await page.getByTestId('character-select-confirm').click({ timeout: 15_000 });
     await page.getByTestId('pregame-start').click();
     await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getScreen()), { timeout: 20_000 }).toBe('match');
@@ -47,7 +48,7 @@ test('a match runs on each camera preset, the preset reaching the game camera', 
 
 test('Debug Lab Clash: a player on A sees camera B without orbit during the Clash, then A again', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession() != null), { timeout: 20_000 }).toBe(true);
   await page.evaluate(async () => {
     const lab = window.__chaosBeyDebugLab!;

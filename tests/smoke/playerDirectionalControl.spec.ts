@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 
 // M11 control schemes (owner requirement, 2026-10-01: "a câmera nunca move
 // o Bey"). Camera is downstream presentation. The default scheme ("Toward
@@ -63,7 +64,7 @@ function normalize(v: { x: number; z: number }): { x: number; z: number } {
 test('Default scheme: arrows move the Bey toward / away from / around the opponent with the real inertial camera attached', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession() != null), { timeout: 20_000 }).toBe(true);
   await page.evaluate(() => window.__chaosBeyDebugLab!.setController('second', { kind: 'idle' }));
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
@@ -106,7 +107,7 @@ test('real keyboard, real AI fight: holding a direction through jump/drift/knock
   // camera) rather than masked by a threshold.
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession() != null), { timeout: 20_000 }).toBe(true);
   await page.evaluate(() => window.__chaosBeyDebugLab!.setController('second', { kind: 'ai', personality: 'archetype' }));
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
@@ -190,7 +191,7 @@ test('Default scheme: the camera never moves the Bey — a held ↑ keeps pointi
   // spatial stability is now desired behavior, not a reason to fail the test.
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession() != null), { timeout: 20_000 }).toBe(true);
   await page.evaluate(() => window.__chaosBeyDebugLab!.setController('second', { kind: 'ai', personality: 'archetype' }));
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());

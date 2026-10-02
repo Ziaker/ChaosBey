@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { BASELINE_MENU_URL, baselineUrl } from './presentationBaseline';
 
 // Main Menu (GDD 1.2, 56) with the owner's Developer / Debug section
 // (option C): DEBUG LAB and SELF TEST sit only inside that section, open
@@ -14,7 +15,7 @@ test('Main Menu: Developer / Debug section opens the Debug Lab and the Self Test
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-  await page.goto('/ChaosBey/');
+  await page.goto(baselineUrl('/ChaosBey/'));
   const menu = page.getByTestId('main-menu');
   await expect(menu).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('#app-canvas')).toBeHidden();
@@ -56,19 +57,19 @@ test('Main Menu: Developer / Debug section opens the Debug Lab and the Self Test
   // DEBUG LAB opens the existing Debug Lab through ?mode=debug-lab.
   await developerToggle.click();
   await debugLab.click();
-  await expect(page).toHaveURL(/\/ChaosBey\/\?mode=debug-lab$/);
+  await expect(page).toHaveURL(/\/ChaosBey\/\?pfx=&mode=debug-lab$/);
   await expect(page.getByTestId('debug-lab-status')).toContainText('RUNNING', { timeout: 15_000 });
   await expect(menu).toHaveCount(0);
 
   // The browser Back button returns to the menu.
   await page.goBack();
-  await expect(page).toHaveURL(/\/ChaosBey\/$/);
+  await expect(page).toHaveURL(BASELINE_MENU_URL);
   await expect(page.getByTestId('main-menu')).toBeVisible({ timeout: 15_000 });
 
   // SELF TEST opens the existing Self Test through ?mode=self-test.
   await page.getByTestId('main-menu-developer').click();
   await page.getByTestId('main-menu-self-test').click();
-  await expect(page).toHaveURL(/\/ChaosBey\/\?mode=self-test$/);
+  await expect(page).toHaveURL(/\/ChaosBey\/\?pfx=&mode=self-test$/);
   await expect(page.getByTestId('self-test-status')).toHaveText('idle', { timeout: 15_000 });
   await expect(page.getByTestId('main-menu')).toHaveCount(0);
 
