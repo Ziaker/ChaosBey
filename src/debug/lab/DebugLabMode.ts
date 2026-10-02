@@ -27,7 +27,8 @@ import { resolveMatchConfig } from '../../config/match/MatchConfig';
 import { resolveAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import { loadAttackProfileOverrides } from '../../config/attack-profile/AttackProfileStorage';
 import { KeyboardController } from '../../input/devices/KeyboardController';
-import { DirectionalController } from '../../input/directional/DirectionalController';
+import { createPlayerControl } from '../../input/directional/createPlayerControl';
+import { controlSetupFor } from '../../app/frontend/controlReferences';
 import { loadPlayerSettings, type CameraPresetSetting } from '../../config/settings/PlayerSettings';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, isArenaFloorId, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { DEFAULT_MOTION_DIRECTION, isMotionDirectionId, MOTION_DIRECTION_IDS, MOTION_DIRECTIONS, type MotionDirectionId } from '../../bey/motion/MotionPresets';
@@ -111,17 +112,11 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
   // (declared further below) is read through this closure once it exists.
   const keyboard = new KeyboardController(() => session?.cancelBufferedJumps());
   keyboard.attach();
-  // M11: the player's control scheme from Settings (Directional/camera-
-  // relative by default, "Fix 7" — see DirectionalController.ts's and
-  // screenDirection.ts's headers; Classic/Bey-relative is a selectable
-  // option). The camera reaches this only as a number (radians), read
-  // from the Lab's current session below (declared further down, but this
-  // closure isn't called until a real tick runs, long after `session` is
-  // first assigned) — never a camera type/import.
-  const playerInput = new DirectionalController(keyboard, {
-    cameraYaw: () => ((session?.getLastCameraOutput()?.yawDeg ?? 0) * Math.PI) / 180,
-  });
-  playerInput.setEnabled(loadPlayerSettings().controlScheme === 'directional');
+  // The Debug Lab uses the same control composition as PLAY. The three
+  // camera-free schemes are gameplay-owned; only the opt-in `screen`
+  // scheme reads the camera inside controlReferences.ts.
+  const controlSetup = controlSetupFor(loadPlayerSettings().controlScheme, { session: () => session ?? null });
+  const playerInput = createPlayerControl(keyboard, { directional: controlSetup.directional, reference: controlSetup.reference });
   // M11: the game camera preset from Settings (A/B/C; the Clash forces B).
   let cameraPreset: CameraPresetSetting = loadPlayerSettings().cameraPreset;
   // M11 lane 4: the floor profile to test (`&floor=bowl-a`, the panel, or the handle); flat by default.
