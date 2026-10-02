@@ -65,7 +65,6 @@ describe('screen → world (control reference, a pure function of its two argume
     for (const yaw of [0, 0.4, 1.57, Math.PI, -2.2, 5]) {
       const up = screenToWorld({ x: 0, y: 1 }, yaw);
       const right = screenToWorld({ x: 1, y: 0 }, yaw);
-      // cross(up, right) in the XZ plane: y-axis component of up × right; clockwise from above ⇒ positive with x right / z toward the viewer.
       expect(up.x * right.z - up.z * right.x).toBeCloseTo(1, 3);
     }
   });
@@ -115,7 +114,6 @@ describe('DirectionalController: gameplay-owned reference, no camera in the chai
   });
 
   it('has no way to receive a camera: the only external source besides the device is a ControlReference and a stick', () => {
-    // The constructor takes (device, { reference?, stick? }). A source object with a camera-shaped callback is rejected at the type level (see tsc) and simply ignored at runtime.
     const smuggled = { cameraYaw: () => 2.5 } as unknown as ConstructorParameters<typeof DirectionalController>[1];
     const controller = new DirectionalController(held(Action.MoveForward), smuggled);
     const intent = controller.sampleActions(CONTEXT).moveIntent!;
@@ -205,7 +203,7 @@ describe('opponent reference: up = toward the opponent (gameplay positions only)
       const right = screenToWorld({ x: 1, y: 0 }, ref.yawRad(true));
       expect(up.x).toBeCloseTo(ox / toward, 3);
       expect(up.z).toBeCloseTo(oz / toward, 3);
-      expect(up.x * right.z - up.z * right.x).toBeCloseTo(1, 3); // right-handed: never mirrored
+      expect(up.x * right.z - up.z * right.x).toBeCloseTo(1, 3);
     }
   });
   it('with the opponent due −Z (camera behind the player looking at them) → is +X, the screen right', () => {
@@ -239,11 +237,11 @@ describe('latched reference (the opt-in screen scheme): read once per gesture', 
 });
 
 describe('control scheme setting', () => {
-  it('defaults to the camera-free "opponent" scheme (never the camera-reading "screen"), keeps every valid scheme, falls back on garbage', () => {
+  it('defaults to the camera-free "opponent" scheme, keeps every valid scheme, preserves the legacy directional behaviour as screen, and falls back on garbage', () => {
     expect(DEFAULT_PLAYER_SETTINGS.controlScheme).toBe('opponent');
     for (const scheme of ['opponent', 'classic', 'arena', 'screen'] as const) expect(sanitizePlayerSettings({ controlScheme: scheme }).controlScheme).toBe(scheme);
     expect(sanitizePlayerSettings({ controlScheme: 'tank' }).controlScheme).toBe('opponent');
-    expect(sanitizePlayerSettings({ controlScheme: 'directional' }).controlScheme).toBe('opponent'); // a save from before the four schemes
-    expect(sanitizePlayerSettings({ quality: 'Low' }).controlScheme).toBe('opponent'); // an M10 save has no scheme
+    expect(sanitizePlayerSettings({ controlScheme: 'directional' }).controlScheme).toBe('screen');
+    expect(sanitizePlayerSettings({ quality: 'Low' }).controlScheme).toBe('opponent');
   });
 });
