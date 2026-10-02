@@ -13,13 +13,18 @@ import { ARENA_ART } from '../../src/arena/visual/ArenaArt';
 import { ArenaVisualsSystem, type ToneMappedRenderer } from '../../src/arena/visual/ArenaVisualsSystem';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, floorRimHeight } from '../../src/arena/floor/ArenaFloorProfile';
 import { ARENA_PRESETS, type ArenaPresetId } from '../../src/arena/presets/ArenaPresets';
+import { ARENA_FLOOR_RADIUS } from '../../src/arena/colliders/ArenaTuning';
 import { createMatchScene } from '../../src/app/bootstrap/createMatchScene';
 import { PhysicsWorld } from '../../src/physics/world/PhysicsWorld';
 import { resolvePresentationFeatures, type PresentationEvent } from '../../src/presentation';
 
 const PRESET_IDS: readonly ArenaPresetId[] = ['foundry', 'rift', 'tournament'];
-/** The camera director keeps its eye inside this radius (CameraRig RIG_DIRECTOR_OPTIONS.arena.containRadiusM). Read, not imported: the camera is frozen. */
-const CAMERA_CONTAIN_RADIUS_M = 10.5;
+/**
+ * The camera's eye stays inside this radius. Read, not imported: the camera is frozen. Today CameraRig holds it at 10.5 m;
+ * the camera follow-up for the 36 m stage derives it from the arena (floor radius - 1.5 m, PR #88), so the stricter of the
+ * two is checked here: nothing may stand between a camera at the very edge of its range and the action.
+ */
+const CAMERA_CONTAIN_RADIUS_M = ARENA_FLOOR_RADIUS - 1.5;
 /** Well above the camera's eye height (its framings are low and close): rigging hung higher than this is never between the camera and the action. */
 const CAMERA_CEILING_M = 12;
 
@@ -29,13 +34,14 @@ describe('the approved arenas, on every real floor', () => {
       const profile = ARENA_FLOORS[floor];
       const built = ARENA_ART[id].build(undefined, profile.heightAtRadius);
       // The art stands on the surface the Beys stand on: same height at every radius, same rim.
-      for (const r of [0, 1.3, 3, 6, 9.5, 12]) expect(built.floorHeightAt(r)).toBeCloseTo(profile.heightAtRadius(r), 9);
+      for (const r of [0, 1.3, 3, 6, 9.5, 12, 20, 30, ARENA_FLOOR_RADIUS]) expect(built.floorHeightAt(r)).toBeCloseTo(profile.heightAtRadius(r), 9);
       expect(built.depth).toBeCloseTo(floorRimHeight(floor), 9);
       expect(built.root.children.length).toBeGreaterThan(5);
-      expect(built.wallRadius).toBe(12);
+      // The art's wall stands where the physical wall's inner face is (the real 36 m floor, not the lab's 12 m one).
+      expect(built.wallRadius).toBe(ARENA_FLOOR_RADIUS);
       // Everything is finite and animates through a Clash and a wall flash without throwing.
       for (let i = 0; i <= 10; i++) built.update({ time: i * 0.1, dt: 0.1, clash: i / 10 });
-      built.flash(new THREE.Vector3(11, 1, 0));
+      built.flash(new THREE.Vector3(ARENA_FLOOR_RADIUS - 1, 1, 0));
       built.root.traverse((o) => {
         expect(Number.isFinite(o.position.x + o.position.y + o.position.z)).toBe(true);
       });
@@ -51,7 +57,7 @@ describe('the approved arenas, on every real floor', () => {
       const intruders: string[] = [];
       built.root.traverse((o) => {
         const mesh = o as THREE.Mesh;
-        // (Instanced seats carry their own per-instance matrices: the crowd stands at 15 m and beyond.)
+        // (Instanced seats carry their own per-instance matrices: the crowd stands 3 m and more beyond the wall.)
         if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh) return;
         const position = mesh.geometry.getAttribute('position');
         if (!position) return;
@@ -65,8 +71,8 @@ describe('the approved arenas, on every real floor', () => {
           minY = Math.min(minY, v.y);
           maxY = Math.max(maxY, v.y);
         }
-        const isSky = minR > 100 || mesh.geometry.type === 'SphereGeometry';
-        const isFloorLevel = maxY <= ARENA_FLOORS[floor].heightAtRadius(12) + 0.02 || maxY <= rim + 0.02; // the floor itself and markings painted on it
+        const isSky = minR > 3 * 100 || mesh.geometry.type === 'SphereGeometry';
+        const isFloorLevel = maxY <= rim + 0.02; // the floor itself and markings painted on it // the floor itself and markings painted on it
         // Overhead rigging (the Foundry truss and lamps, the stadium light ring) hangs above anything the camera frames.
         const isOverhead = minY > CAMERA_CEILING_M;
         if (!isSky && !isFloorLevel && !isOverhead && minR < CAMERA_CONTAIN_RADIUS_M) intruders.push(`${mesh.geometry.type} minR=${minR.toFixed(2)} maxY=${maxY.toFixed(2)}`);
@@ -75,6 +81,32 @@ describe('the approved arenas, on every real floor', () => {
       expect(intruders, `${id}/${floor}`).toEqual([]);
       built.dispose();
     }
+  });
+
+  it.each(PRESET_IDS)('%s lights the whole real floor, not just the lab\'s 12 m of it', (id) => {
+    const built = ARENA_ART[id].build(undefined, ARENA_FLOORS['bowl-a'].heightAtRadius);
+    built.root.updateMatrixWorld(true);
+    const spots: THREE.SpotLight[] = [];
+    let directional = false;
+    built.root.traverse((o) => {
+      if ((o as THREE.SpotLight).isSpotLight) spots.push(o as THREE.SpotLight);
+      if ((o as THREE.DirectionalLight).isDirectionalLight) directional = true;
+    });
+    const unlit: string[] = [];
+    for (const r of [0, 0.5 * ARENA_FLOOR_RADIUS, 0.95 * ARENA_FLOOR_RADIUS]) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const p = new THREE.Vector3(Math.cos(a) * r, built.floorHeightAt(r), Math.sin(a) * r);
+        const inCone = spots.some((s) => {
+          const toPoint = p.clone().sub(s.position);
+          const axis = s.target.position.clone().sub(s.position);
+          return toPoint.length() <= s.distance && toPoint.angleTo(axis) <= s.angle;
+        });
+        if (!inCone && !directional) unlit.push(`r=${r.toFixed(1)} a=${a.toFixed(2)}`);
+      }
+    }
+    expect(unlit, id).toEqual([]);
+    built.dispose();
   });
 });
 
@@ -144,9 +176,12 @@ describe('ArenaVisualsSystem', () => {
     const event = (x: number): PresentationEvent => ({ kind: 'collisionResolved', tick: 1, side: 'first', magnitude: 0.8, position: { x, y: 0.4, z: 0 } });
     system.onEvents([event(1)], {} as never);
     expect(flashes).toHaveLength(0);
-    system.onEvents([event(11.3)], {} as never);
+    // Well inside the bigger stage (a fraction of its radius would have counted this as "at the wall").
+    system.onEvents([event(25)], {} as never);
+    expect(flashes).toHaveLength(0);
+    system.onEvents([event(ARENA_FLOOR_RADIUS - 0.7)], {} as never);
     expect(flashes).toHaveLength(1);
-    expect(Math.hypot(flashes[0]!.x, flashes[0]!.z)).toBeCloseTo(12 * 0.97, 6);
+    expect(Math.hypot(flashes[0]!.x, flashes[0]!.z)).toBeCloseTo(ARENA_FLOOR_RADIUS - 0.36, 6);
     system.dispose();
   });
 });

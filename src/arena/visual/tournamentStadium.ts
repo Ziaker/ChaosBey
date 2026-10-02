@@ -8,16 +8,16 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { ARENA_RADIUS, bowlFloor, canvasTexture, disposeTree, floorCanvas, seededRandom, shadowed, skyDome } from './common';
+import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
 const BOWL_DEPTH = 3.2;            // Default rim height above the center (m). Owner-approved value (all arenas).
 const FLAT_CENTER = 2.6;           // Flat center plateau radius (m).
 const WALL_HEIGHT = 1.9;           // Polycarbonate wall height (m).
-const POSTS = 24;
+const POSTS = scaledCount(24);     // Lab: 24 around 12 m; GAME: same spacing around the real wall.
 const RIG_SPOTS = 8;
-const RIG_INTENSITY = 230;
+const RIG_INTENSITY = 230;         // The lab rig's spot intensity; GAME: see rigIntensity.
 const LED_COLOR = 0xe8f2ff;
 const CLASH_COLORS = [0x3fa9ff, 0xff4f4f] as const; // LED rail alternates on Clash.
 const CROWD = 1500;
@@ -100,10 +100,10 @@ export const TOURNAMENT_STADIUM: ArenaConcept = {
     // Wall: dark kick plate, clear panels, posts, rail, LED strip.
     const metal = new THREE.MeshStandardMaterial({ color: 0xb8c0cb, metalness: 0.9, roughness: 0.3 });
     const dark = new THREE.MeshStandardMaterial({ color: 0x1b1f26, roughness: 0.6 });
-    const kick = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(R + 0.1, R + 0.1, 0.35, 128, 1, true), dark));
+    const kick = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(R + 0.1, R + 0.1, 0.35, scaledCount(128), 1, true), dark));
     kick.position.y = rim + 0.17;
     const glass = new THREE.Mesh(
-      new THREE.CylinderGeometry(R + 0.1, R + 0.1, WALL_HEIGHT - 0.35, 128, 1, true),
+      new THREE.CylinderGeometry(R + 0.1, R + 0.1, WALL_HEIGHT - 0.35, scaledCount(128), 1, true),
       new THREE.MeshPhysicalMaterial({ color: 0xdcecff, transparent: true, opacity: 0.16, roughness: 0.05, metalness: 0, clearcoat: 1, side: THREE.DoubleSide, depthWrite: false }),
     );
     glass.position.y = rim + 0.35 + (WALL_HEIGHT - 0.35) / 2;
@@ -116,26 +116,26 @@ export const TOURNAMENT_STADIUM: ArenaConcept = {
       post.lookAt(0, post.position.y, 0);
       root.add(post);
     }
-    const rail = shadowed(new THREE.Mesh(new THREE.TorusGeometry(R + 0.12, 0.08, 10, 160).rotateX(Math.PI / 2), metal));
+    const rail = shadowed(new THREE.Mesh(new THREE.TorusGeometry(R + 0.12, 0.08, 10, scaledCount(160)).rotateX(Math.PI / 2), metal));
     rail.position.y = rim + WALL_HEIGHT + 0.05;
     const ledMat = new THREE.MeshStandardMaterial({ color: LED_COLOR, emissive: LED_COLOR, emissiveIntensity: 2.2 });
-    const led = new THREE.Mesh(new THREE.TorusGeometry(R + 0.12, 0.035, 6, 160).rotateX(Math.PI / 2), ledMat);
+    const led = new THREE.Mesh(new THREE.TorusGeometry(R + 0.12, 0.035, 6, scaledCount(160)).rotateX(Math.PI / 2), ledMat);
     led.position.y = rim + WALL_HEIGHT - 0.06;
     root.add(rail, led);
 
     // Deck + tiered stands.
-    const deck = shadowed(new THREE.Mesh(new THREE.RingGeometry(R + 0.2, 15, 96).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x262b33, roughness: 0.8 })), false, true);
+    const deck = shadowed(new THREE.Mesh(new THREE.RingGeometry(R + 0.2, R + 3, scaledCount(96)).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x262b33, roughness: 0.8 })), false, true);
     deck.position.y = rim;
     root.add(deck);
     const standMat = new THREE.MeshStandardMaterial({ color: 0x2e343d, roughness: 0.85 });
     const tiers = 7;
     const seats: THREE.Vector3[] = [];
     for (let t = 0; t < tiers; t++) {
-      const r0 = 15 + t * 1.8;
+      const r0 = R + 3 + t * 1.8; // GAME: the lab's 3 m deck (stands from 15 m on its 12 m floor), from the real wall
       const y = rim + 0.6 + t * 1.1;
-      const step = new THREE.Mesh(new THREE.CylinderGeometry(r0 + 1.8, r0 + 1.8, y, 96, 1, true), standMat);
+      const step = new THREE.Mesh(new THREE.CylinderGeometry(r0 + 1.8, r0 + 1.8, y, scaledCount(96), 1, true), standMat);
       step.position.y = y / 2;
-      const tread = new THREE.Mesh(new THREE.RingGeometry(r0, r0 + 1.8, 96).rotateX(-Math.PI / 2), standMat);
+      const tread = new THREE.Mesh(new THREE.RingGeometry(r0, r0 + 1.8, scaledCount(96)).rotateX(-Math.PI / 2), standMat);
       tread.position.y = y;
       root.add(step, tread);
       const count = Math.round((CROWD / tiers) * (r0 / 20));
@@ -166,14 +166,14 @@ export const TOURNAMENT_STADIUM: ArenaConcept = {
     // Light rig.
     root.add(skyDome(0x07090e, 0x131820, 0x0a0c10));
     const rigMat = new THREE.MeshStandardMaterial({ color: 0x2a2f38, metalness: 0.8, roughness: 0.5 });
-    const rig = new THREE.Mesh(new THREE.TorusGeometry(10, 0.3, 8, 96).rotateX(Math.PI / 2), rigMat);
-    rig.position.y = 18;
+    const rig = new THREE.Mesh(new THREE.TorusGeometry(10 * ARENA_SCALE, 0.3 * ARENA_SCALE, 8, scaledCount(96)).rotateX(Math.PI / 2), rigMat);
+    rig.position.y = 18 * ARENA_SCALE; // GAME: the light rig scaled as a whole
     root.add(rig);
     const spots: THREE.SpotLight[] = [];
     for (let i = 0; i < RIG_SPOTS; i++) {
       const a = (i / RIG_SPOTS) * Math.PI * 2;
-      const pos = new THREE.Vector3(Math.cos(a) * 10, 17.6, Math.sin(a) * 10);
-      const s = new THREE.SpotLight(0xf2f5ff, RIG_INTENSITY, 45, 0.55, 0.6, 1.6);
+      const pos = new THREE.Vector3(Math.cos(a) * 10, 17.6, Math.sin(a) * 10).multiplyScalar(ARENA_SCALE);
+      const s = new THREE.SpotLight(0xf2f5ff, rigIntensity(RIG_INTENSITY, 1.6), 45 * ARENA_SCALE, 0.55, 0.6, 1.6);
       s.position.copy(pos);
       s.target.position.set(-pos.x * 0.25, 0, -pos.z * 0.25);
       if (i === 0) {
@@ -182,8 +182,8 @@ export const TOURNAMENT_STADIUM: ArenaConcept = {
         s.shadow.bias = -0.0003;
         s.shadow.normalBias = 0.03;
       }
-      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 0.6, 12), rigMat);
-      lamp.position.copy(pos).setY(17.9);
+      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.35 * ARENA_SCALE, 0.55 * ARENA_SCALE, 0.6 * ARENA_SCALE, 12), rigMat);
+      lamp.position.copy(pos).setY(17.9 * ARENA_SCALE);
       root.add(s, s.target, lamp);
       spots.push(s);
     }
@@ -213,7 +213,7 @@ export const TOURNAMENT_STADIUM: ArenaConcept = {
         ledMat.emissiveIntensity = 2.2 + clash * 3;
         spots.forEach((s) => {
           s.angle = 0.55 - clash * 0.2;
-          s.intensity = RIG_INTENSITY * (1 + clash * 0.8);
+          s.intensity = rigIntensity(RIG_INTENSITY, 1.6) * (1 + clash * 0.8);
         });
         const flashMat = flashes.material as THREE.PointsMaterial;
         flashMat.opacity = clash;

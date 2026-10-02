@@ -8,16 +8,16 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { ARENA_RADIUS, bowlFloor, canvasTexture, disposeTree, floorCanvas, onCircle, seededRandom, shadowed, skyDome } from './common';
+import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, onCircle, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
 const BOWL_DEPTH = 3.2;             // Default rim height above the center (m). Owner-approved value (all arenas).
 const WALL_HEIGHT = 1.8;            // Visible wall height above the rim (m).
-const WALL_SEGMENTS = 16;           // Heavy steel wall panels around the ring.
+const WALL_SEGMENTS = scaledCount(16); // Heavy steel wall panels around the ring (lab: 16 on 12 m; GAME: same panel width on the real floor).
 const LAMP_COUNT = 4;               // Overhead work lamps.
 const LAMP_COLOR = 0xffc38a;        // Warm sodium-ish work light.
-const LAMP_INTENSITY = 260;         // Spot light intensity (physically based units).
+const LAMP_INTENSITY = 260;         // Spot light intensity (physically based units) of the lab's rig; GAME: see rigIntensity.
 const CLASH_LAMP_COLOR = 0xffffff;  // Lamps go white-hot during a Clash.
 const HAZARD_ORANGE = '#f28a1c';
 // -----------------------------------------
@@ -97,7 +97,7 @@ function hazardTexture(): THREE.CanvasTexture {
   }
   const t = canvasTexture(canvas);
   t.wrapS = THREE.RepeatWrapping;
-  t.repeat.set(24, 1);
+  t.repeat.set(scaledCount(24), 1);
   return t;
 }
 
@@ -109,7 +109,7 @@ export const FOUNDRY_PIT: ArenaConcept = {
   answers: {
     architecture: 'Industrial machine pit: steel panels, ring truss, catwalk grating',
     floor: 'Brushed steel plates, welded seams, rivets; hazard band before the wall',
-    boundary: '16 heavy riveted steel panels, hazard-striped top rail',
+    boundary: 'Heavy riveted steel panels (16 on the lab\'s 12 m floor), hazard-striped top rail',
     lighting: '4 warm overhead work lamps (spots), dim cool fill, haze',
     background: 'Near-black hall fading into fog',
     impact: 'Orange-yellow sparks; hazard stripes glow and lamps flare white on Clash',
@@ -149,37 +149,37 @@ export const FOUNDRY_PIT: ArenaConcept = {
       root.add(onCircle(shadowed(rib), R + 0.4, a + Math.PI / WALL_SEGMENTS, rim + WALL_HEIGHT / 2 - 0.15));
     }
     const hazardMat = new THREE.MeshStandardMaterial({ map: hazardTexture(), roughness: 0.55, metalness: 0.3, emissive: 0xff7a1a, emissiveIntensity: 0 });
-    const rail = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.62, R + 0.62, 0.32, 128, 1, true), hazardMat);
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.62, R + 0.62, 0.32, scaledCount(128), 1, true), hazardMat);
     rail.position.y = rim + WALL_HEIGHT + 0.02;
     root.add(rail);
-    const railTop = new THREE.Mesh(new THREE.RingGeometry(R + 0.08, R + 0.66, 128).rotateX(-Math.PI / 2), darkMat);
+    const railTop = new THREE.Mesh(new THREE.RingGeometry(R + 0.08, R + 0.66, scaledCount(128)).rotateX(-Math.PI / 2), darkMat);
     railTop.position.y = rim + WALL_HEIGHT + 0.18;
     root.add(railTop);
 
     // Catwalk grating outside the wall.
-    const grate = shadowed(new THREE.Mesh(new THREE.RingGeometry(R + 0.6, R + 5, 96).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x202328, metalness: 0.8, roughness: 0.7, wireframe: false })), false, true);
+    const grate = shadowed(new THREE.Mesh(new THREE.RingGeometry(R + 0.6, R + 5, scaledCount(96)).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x202328, metalness: 0.8, roughness: 0.7, wireframe: false })), false, true);
     grate.position.y = rim + WALL_HEIGHT - 0.1;
     root.add(grate);
 
     // Lighting: ring truss with work lamps.
-    const truss = new THREE.Mesh(new THREE.TorusGeometry(8, 0.18, 8, 96).rotateX(Math.PI / 2), darkMat);
-    truss.position.y = 15;
+    const truss = new THREE.Mesh(new THREE.TorusGeometry(8 * ARENA_SCALE, 0.18 * ARENA_SCALE, 8, scaledCount(96)).rotateX(Math.PI / 2), darkMat);
+    truss.position.y = 15 * ARENA_SCALE;
     root.add(truss);
     const lamps: THREE.SpotLight[] = [];
     const lensMat = new THREE.MeshStandardMaterial({ color: 0xffe2bd, emissive: LAMP_COLOR, emissiveIntensity: 2 });
     for (let i = 0; i < LAMP_COUNT; i++) {
       const a = (i / LAMP_COUNT) * Math.PI * 2 + Math.PI / 4;
-      const pos = new THREE.Vector3(Math.cos(a) * 8, 14.6, Math.sin(a) * 8);
-      const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 0.8, 16), darkMat);
+      const pos = new THREE.Vector3(Math.cos(a) * 8, 14.6, Math.sin(a) * 8).multiplyScalar(ARENA_SCALE); // GAME: the rig scaled as a whole
+      const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.5 * ARENA_SCALE, 0.9 * ARENA_SCALE, 0.8 * ARENA_SCALE, 16), darkMat);
       housing.position.copy(pos);
       housing.lookAt(0, 0, 0);
       housing.rotateX(Math.PI / 2);
-      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.82, 24), lensMat);
-      lens.position.set(0, -0.41, 0);
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.82 * ARENA_SCALE, 24), lensMat);
+      lens.position.set(0, -0.41 * ARENA_SCALE, 0);
       lens.rotation.x = Math.PI / 2;
       housing.add(lens);
       root.add(housing);
-      const spot = new THREE.SpotLight(LAMP_COLOR, LAMP_INTENSITY, 40, 0.62, 0.55, 1.6);
+      const spot = new THREE.SpotLight(LAMP_COLOR, rigIntensity(LAMP_INTENSITY, 1.6), 40 * ARENA_SCALE, 0.62, 0.55, 1.6);
       spot.position.copy(pos);
       spot.target.position.set(-pos.x * 0.15, 0, -pos.z * 0.15);
       if (i === 0) {
@@ -196,7 +196,7 @@ export const FOUNDRY_PIT: ArenaConcept = {
     const flashLight = new THREE.PointLight(0xffa24a, 0, 9, 2);
     root.add(flashLight);
     root.add(skyDome(0x050608, 0x14161b, 0x050506));
-    const fog = new THREE.FogExp2(0x0b0c10, 0.018);
+    const fog = new THREE.FogExp2(0x0b0c10, 0.018 / ARENA_SCALE); // GAME: the lab's haze over the scaled distances
     let flashT = 0;
 
     const baseColor = new THREE.Color(LAMP_COLOR);
@@ -214,7 +214,7 @@ export const FOUNDRY_PIT: ArenaConcept = {
         const flicker = 1 + 0.03 * Math.sin(time * 37) * Math.sin(time * 11);
         lamps.forEach((l, i) => {
           l.color.copy(baseColor).lerp(clashColor, clash);
-          l.intensity = LAMP_INTENSITY * flicker * (1 + clash * (0.6 + 0.4 * Math.sin(time * 18 + i)));
+          l.intensity = rigIntensity(LAMP_INTENSITY, 1.6) * flicker * (1 + clash * (0.6 + 0.4 * Math.sin(time * 18 + i)));
         });
         lensMat.emissiveIntensity = 2 + clash * 4;
         hazardMat.emissiveIntensity = clash * (0.6 + 0.4 * Math.sin(time * 10));

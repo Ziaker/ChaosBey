@@ -8,7 +8,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { ARENA_RADIUS, bowlFloor, canvasTexture, disposeTree, floorCanvas, seededRandom, shadowed, skyDome } from './common';
+import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
@@ -17,7 +17,7 @@ const BARRIER_HEIGHT = 2.2;           // Energy barrier height above the rim (m)
 const FISSURE_COLOR = 0x8f6bff;       // Normal fissure glow (violet).
 const CLASH_COLOR = 0xff3fb4;         // Fissures + barrier shift to magenta on Clash.
 const FISSURE_GLOW = 1.1;             // Base emissive strength of the fissures.
-const RIM_ROCKS = 34;
+const RIM_ROCKS = scaledCount(34);      // Lab: 34 around the 12 m rim; GAME: same spacing around the real one.
 // -----------------------------------------
 
 // Funnel: the slope continues almost all the way to the center.
@@ -118,7 +118,7 @@ export const RIFT_CRATER: ArenaConcept = {
     // Crater lip: a short sloped band from the floor edge up and outward.
     const lip = shadowed(new THREE.Mesh(new THREE.LatheGeometry([
       new THREE.Vector2(R, rim), new THREE.Vector2(R + 0.6, rim + 0.5), new THREE.Vector2(R + 2.5, rim + 0.7), new THREE.Vector2(R + 9, rim + 0.2),
-    ], 128), new THREE.MeshStandardMaterial({ color: 0x19171e, roughness: 0.95, side: THREE.DoubleSide })), false, true);
+    ], scaledCount(128)), new THREE.MeshStandardMaterial({ color: 0x19171e, roughness: 0.95, side: THREE.DoubleSide })), false, true);
     root.add(lip);
 
     // Jagged rim rocks.
@@ -136,11 +136,11 @@ export const RIFT_CRATER: ArenaConcept = {
 
     // Energy barrier.
     const barrierMat = barrierMaterial();
-    const barrier = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.3, R + 0.3, BARRIER_HEIGHT, 160, 1, true), barrierMat);
+    const barrier = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.3, R + 0.3, BARRIER_HEIGHT, scaledCount(160), 1, true), barrierMat);
     barrier.position.y = rim + BARRIER_HEIGHT / 2;
     barrier.renderOrder = 2;
     root.add(barrier);
-    const barrierBase = new THREE.Mesh(new THREE.TorusGeometry(R + 0.3, 0.05, 8, 160).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: FISSURE_COLOR }));
+    const barrierBase = new THREE.Mesh(new THREE.TorusGeometry(R + 0.3, 0.05, 8, scaledCount(160)).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: FISSURE_COLOR }));
     barrierBase.position.y = rim + 0.02;
     root.add(barrierBase);
 
@@ -152,20 +152,21 @@ export const RIFT_CRATER: ArenaConcept = {
       const v = 0.05 + rnd() * 0.95;
       const theta = u * Math.PI * 2;
       const phi = Math.acos(v);
-      starPos.push(Math.sin(phi) * Math.cos(theta) * 110, Math.cos(phi) * 110, Math.sin(phi) * Math.sin(theta) * 110);
+      const d = 110 * ARENA_SCALE; // GAME: the sky scaled with the stage
+      starPos.push(Math.sin(phi) * Math.cos(theta) * d, Math.cos(phi) * d, Math.sin(phi) * Math.sin(theta) * d);
     }
     const stars = new THREE.Points(
       new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3)),
-      new THREE.PointsMaterial({ color: 0xcfd6ff, size: 0.35, sizeAttenuation: true, fog: false }),
+      new THREE.PointsMaterial({ color: 0xcfd6ff, size: 0.35 * ARENA_SCALE, sizeAttenuation: true, fog: false }),
     );
     root.add(stars);
     const shards = new THREE.Group();
     for (let i = 0; i < 14; i++) {
-      const s = 0.8 + rnd() * 2.2;
+      const s = (0.8 + rnd() * 2.2) * ARENA_SCALE; // GAME: the drifting backdrop scaled as a whole
       const shard = new THREE.Mesh(new THREE.OctahedronGeometry(s, 0), rockMat);
       const a = rnd() * Math.PI * 2;
-      const d = 24 + rnd() * 18;
-      shard.position.set(Math.cos(a) * d, 5 + rnd() * 12, Math.sin(a) * d);
+      const d = (24 + rnd() * 18) * ARENA_SCALE;
+      shard.position.set(Math.cos(a) * d, (5 + rnd() * 12) * ARENA_SCALE, Math.sin(a) * d);
       shard.scale.set(1, 1.6 + rnd(), 1);
       shard.userData.spin = (rnd() - 0.5) * 0.4;
       shards.add(shard);
@@ -174,24 +175,24 @@ export const RIFT_CRATER: ArenaConcept = {
 
     // Lights.
     const moon = new THREE.DirectionalLight(0x9fb0ff, 1.3);
-    moon.position.set(-14, 22, 10);
+    moon.position.set(-14, 22, 10).multiplyScalar(ARENA_SCALE);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
-    Object.assign(moon.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 70 });
+    Object.assign(moon.shadow.camera, { left: -16 * ARENA_SCALE, right: 16 * ARENA_SCALE, top: 16 * ARENA_SCALE, bottom: -16 * ARENA_SCALE, near: 1, far: 70 * ARENA_SCALE });
     moon.shadow.bias = -0.0004;
     moon.shadow.normalBias = 0.03;
     root.add(moon, new THREE.HemisphereLight(0x3b2f70, 0x07050c, 0.45));
     const glows: THREE.PointLight[] = [];
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2;
-      const l = new THREE.PointLight(FISSURE_COLOR, 18, 14, 1.8);
-      l.position.set(Math.cos(a) * 4, 0.8, Math.sin(a) * 4);
+      const l = new THREE.PointLight(FISSURE_COLOR, rigIntensity(18, 1.8), 14 * ARENA_SCALE, 1.8);
+      l.position.set(Math.cos(a) * 4, 0.8, Math.sin(a) * 4).multiplyScalar(ARENA_SCALE); // GAME: the glow rig scaled as a whole
       glows.push(l);
       root.add(l);
     }
     const flashLight = new THREE.PointLight(0xa98bff, 0, 9, 2);
     root.add(flashLight);
-    const fog = new THREE.FogExp2(0x0c0918, 0.012);
+    const fog = new THREE.FogExp2(0x0c0918, 0.012 / ARENA_SCALE); // GAME: the lab's haze over the scaled distances
     let flashT = 0;
 
     const base = new THREE.Color(FISSURE_COLOR);
@@ -215,7 +216,7 @@ export const RIFT_CRATER: ArenaConcept = {
         (barrierMat.uniforms.uColor!.value as THREE.Color).copy(tmp);
         barrierMat.uniforms.uBoost!.value = clash * (0.7 + 0.3 * Math.sin(time * 12));
         (barrierBase.material as THREE.MeshBasicMaterial).color.copy(tmp);
-        glows.forEach((l) => { l.color.copy(tmp); l.intensity = 18 * pulse * (1 + clash * 2); });
+        glows.forEach((l) => { l.color.copy(tmp); l.intensity = rigIntensity(18, 1.8) * pulse * (1 + clash * 2); });
         shards.children.forEach((s) => { s.rotation.y += s.userData.spin * dt; s.position.y += Math.sin(time * 0.3 + s.position.x) * 0.002; });
         flashT = Math.max(0, flashT - dt * 4);
         flashLight.intensity = flashT * 50;

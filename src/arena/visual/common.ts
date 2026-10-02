@@ -5,9 +5,32 @@
 // ============================================================
 
 import * as THREE from 'three';
+import { ARENA_FLOOR_RADIUS } from '../colliders/ArenaTuning';
 
-/** Game arena scale (src/arena/colliders/ArenaTuning.ts). Visual reference only. */
-export const ARENA_RADIUS = 12;
+/** The lab's arena radius (m): the approved art was authored on a 12 m floor. Floor markings are still painted in these units. */
+export const LAB_ARENA_RADIUS = 12;
+/**
+ * GAME: the real floor radius (src/arena/colliders/ArenaTuning.ts; 36 m since the 0.12.0 scale pass). Read, never written.
+ * The art follows the scale pass's own rule: the horizontal footprint grows by ARENA_SCALE, sizes of things (wall height,
+ * panels, posts, rocks, seats) stay in real metres and repeated elements get more copies at the same spacing; the light
+ * rigs, sky and haze are scaled as a whole so the floor is lit and fogged the way the lab lit its 12 m floor.
+ */
+export const ARENA_RADIUS = ARENA_FLOOR_RADIUS;
+/** GAME: horizontal factor from the lab's 12 m floor to the real one. */
+export const ARENA_SCALE = ARENA_RADIUS / LAB_ARENA_RADIUS;
+
+/** GAME: how many copies of a repeated element (wall panel, post, rock, polygon segment) keep the lab's spacing on the real floor. */
+export function scaledCount(labCount: number): number {
+  return Math.max(labCount, Math.round(labCount * ARENA_SCALE));
+}
+
+/**
+ * GAME: a light scaled with its rig keeps the same illuminance on the floor when its distance grows by `ARENA_SCALE`:
+ * the falloff is distance^decay, so the intensity grows by ARENA_SCALE^decay.
+ */
+export function rigIntensity(labIntensity: number, decay: number): number {
+  return labIntensity * Math.pow(ARENA_SCALE, decay);
+}
 
 /** Deterministic RNG so every arena looks the same on every load. */
 export function seededRandom(seed: number): () => number {
@@ -64,11 +87,12 @@ export function bowlFloor(radius: number, heightAt: (r: number) => number, rings
 
 /** Square canvas for painting floor art; (cx, cy) is the arena center and `px(r)` converts meters to pixels. */
 export function floorCanvas(size = 2048): { canvas: HTMLCanvasElement; g: CanvasRenderingContext2D; c: number; px: (m: number) => number } {
+  // GAME: `px` takes the lab's metres (the canvas edge is the lab's 12 m rim); the floor's planar UVs stretch the painting over the real floor.
   // GAME: without a DOM (unit tests under Node) paint on a no-op context so the arena still builds. Not in the lab.
   const canvas = typeof document === 'undefined' ? (stubCanvas() as unknown as HTMLCanvasElement) : document.createElement('canvas');
   canvas.width = canvas.height = size;
   const g = canvas.getContext('2d')!;
-  return { canvas, g, c: size / 2, px: (m: number) => (m / ARENA_RADIUS) * (size / 2) };
+  return { canvas, g, c: size / 2, px: (m: number) => (m / LAB_ARENA_RADIUS) * (size / 2) };
 }
 
 export function canvasTexture(canvas: HTMLCanvasElement, srgb = true): THREE.CanvasTexture {
@@ -79,7 +103,7 @@ export function canvasTexture(canvas: HTMLCanvasElement, srgb = true): THREE.Can
 }
 
 /** Large inward-facing sphere with a vertical color gradient. */
-export function skyDome(top: number, horizon: number, bottom: number, radius = 120): THREE.Mesh {
+export function skyDome(top: number, horizon: number, bottom: number, radius = 120 * ARENA_SCALE): THREE.Mesh {
   const geometry = new THREE.SphereGeometry(radius, 48, 24);
   const colors: number[] = [];
   const pos = geometry.getAttribute('position');

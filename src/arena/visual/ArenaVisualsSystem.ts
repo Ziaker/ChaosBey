@@ -21,7 +21,7 @@ import type { PresentationFrame, PresentationSystem } from '../../presentation/h
 import type { MatchPresentationState } from '../../presentation/state';
 import type { ArenaPresetId } from '../presets/ArenaPresets';
 import { arenaArtFor } from './ArenaArt';
-import { ARENA_RADIUS } from './common';
+import { ARENA_RADIUS, LAB_ARENA_RADIUS } from './common';
 import type { BuiltArena } from './types';
 
 export const ARENA_VISUALS_SYSTEM_ID = 'arena-visuals';
@@ -29,8 +29,13 @@ export const ARENA_VISUALS_SYSTEM_ID = 'arena-visuals';
 /** How fast the lighting follows the Clash (per second): the lab viewer's easing. */
 const CLASH_FOLLOW_PER_S = 3;
 const MAX_FRAME_DT = 1 / 20;
-/** A collision this close to the wall flashes the wall lights (fraction of the wall radius). */
-const WALL_FLASH_ZONE = 0.6;
+/**
+ * A collision this close to the wall (m) flashes the wall lights: the lab's band (0.4 of its 12 m radius), kept in
+ * metres on the real floor so a bump in the middle of the bigger stage does not light the wall.
+ */
+const WALL_FLASH_BAND_M = 0.4 * LAB_ARENA_RADIUS;
+/** The flash sits this far inside the wall (m): the lab's 3% of 12 m. */
+const WALL_FLASH_INSET_M = 0.03 * LAB_ARENA_RADIUS;
 
 /** The two renderer settings the approved art was authored against (ACES tone mapping and its per-arena exposure). */
 export interface ToneMappedRenderer {
@@ -89,8 +94,8 @@ export class ArenaVisualsSystem implements PresentationSystem {
     for (const event of events) {
       if (event.kind !== 'collisionResolved') continue;
       const r = Math.hypot(event.position.x, event.position.z);
-      if (r < this.built.wallRadius * WALL_FLASH_ZONE) continue; // a bump in the middle, not the wall
-      const k = (this.built.wallRadius * 0.97) / Math.max(r, 1e-6);
+      if (r < this.built.wallRadius - WALL_FLASH_BAND_M) continue; // a bump in the middle, not the wall
+      const k = (this.built.wallRadius - WALL_FLASH_INSET_M) / Math.max(r, 1e-6);
       this.point.set(event.position.x * k, event.position.y, event.position.z * k);
       this.built.flash(this.point);
     }
@@ -128,5 +133,5 @@ export function createArenaVisualsSystem(options: ArenaVisualsOptions): ArenaVis
   return new ArenaVisualsSystem(options);
 }
 
-/** The lab's arena radius (m): the floor's. */
+/** The art's arena radius (m): the real floor's. */
 export const ARENA_ART_RADIUS_M = ARENA_RADIUS;
