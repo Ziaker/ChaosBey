@@ -33,7 +33,8 @@
 //     the exception is visible and cannot spread.
 //  4. Inside MatchSession, the camera rig and its output are touched only
 //     by camera/render/presentation-projection members, and the camera tick
-//     writes nothing but `lastCameraOutput`.
+//     writes nothing but `lastCameraOutput`. Type-only interface property
+//     declarations describe dependency injection but are not runtime reads.
 //
 // Debug/telemetry may READ the camera for display; presentation may project
 // it into read-only presentation state; neither may hand the value back to
@@ -269,10 +270,16 @@ describe('guard 4: inside MatchSession the camera rig/output are touched only by
     return '<module>';
   }
 
-  it('cameraRig / lastCameraOutput appear only in the camera/render/presentation-projection members (and their own field declarations)', () => {
+  /** A property signature inside an interface/type is declaration-only: it cannot read or mutate runtime state. */
+  function isTypeOnlyProperty(ancestors: readonly AstNode[]): boolean {
+    return ancestors.some((n) => n.type === 'TSPropertySignature');
+  }
+
+  it('cameraRig / lastCameraOutput appear only in the camera/render/presentation-projection members (plus type-only injection declarations and their own fields)', () => {
     const offenders: string[] = [];
     for (const { node, ancestors } of nodesOf(source)) {
       if (node.type !== 'Identifier' || typeof node.name !== 'string' || !GUARDED.has(node.name)) continue;
+      if (isTypeOnlyProperty(ancestors)) continue;
       const member = enclosingMember(ancestors);
       if (member === `property:${node.name}` || ALLOWED_MEMBERS.has(member)) continue;
       offenders.push(`${node.name}@${lineOf(source, node.start)} in ${member}`);
