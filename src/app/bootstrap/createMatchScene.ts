@@ -87,6 +87,15 @@ export interface MatchArena {
   readonly theme: ArenaTheme;
 }
 
+/** A hidden group in the scene that takes the temporary arena visuals the approved art replaces. Invisible, so its lights and meshes are not drawn. */
+function discardedVisualHolder(scene: THREE.Object3D): THREE.Group {
+  const holder = new THREE.Group();
+  holder.name = 'discarded-temporary-arena-visuals';
+  holder.visible = false;
+  scene.add(holder);
+  return holder;
+}
+
 export function createMatchScene(
   scene: THREE.Object3D,
   physics: PhysicsWorld,
@@ -97,7 +106,10 @@ export function createMatchScene(
   features: PresentationFeatures = PRESENTATION_FEATURES_OFF,
 ): MatchScene {
   const motionValues = motionParams(motion);
-  createArenaColliders(scene, physics, arena.geometry, arena.theme, motionValues);
+  // arenaVisuals: createArenaColliders builds the colliders AND its temporary visuals (floor, wall, rings, two lights) in one call, and it is
+  // left exactly as it is. With the flag on, those temporary visuals go to a hidden holder (never drawn, freed with the session) and the
+  // approved arena art is built separately by the presentation system. Flag off: the same call on the same scene as always.
+  createArenaColliders(features.arenaVisuals ? discardedVisualHolder(scene) : scene, physics, arena.geometry, arena.theme, motionValues);
 
   const floor = arena.geometry.floor ?? 'flat';
   const spawns = matchSpawnsFor(floor);

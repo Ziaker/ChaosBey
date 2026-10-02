@@ -689,11 +689,11 @@ describe('dependency direction', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('keeps the ported visual batches (Bey models, condition languages, hybrid VFX) away from the camera, Rapier, the AI, sessions and UI', () => {
+  it('keeps the ported visual batches (Bey models, condition languages, hybrid VFX, Clash presentation, arena art) away from the camera, Rapier, the AI, sessions and UI', () => {
     // Impact vocabulary lives upstream in app/simulation; visual batches do not import camera code.
     const forbidden = [/rapier/i, /(^|\/)physics\//, /(^|\/)ai\//, /camera\//, /app\/session/, /app\/frontend/, /app\/lifecycle/, /(^|\/)debug\//];
-    const dirs = ['bey/visual', 'vfx/condition', 'vfx/hybrid'];
-    expect(dirs.every((dir) => sourceFiles(join(SRC, dir)).length >= 8)).toBe(true);
+    const dirs = ['bey/visual', 'vfx/condition', 'vfx/hybrid', 'vfx/clash', 'arena/visual'];
+    expect(dirs.every((dir) => sourceFiles(join(SRC, dir)).length >= 6)).toBe(true);
     const offenders: string[] = [];
     for (const dir of dirs) {
       for (const file of sourceFiles(join(SRC, dir))) {

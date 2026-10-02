@@ -37,8 +37,8 @@ test('?pfx=all, no flags and a mistyped flag all start the same match; only newB
 
   for (const run of seen) {
     expect(run.errors).toEqual([]);
-    // conditionVisuals and hybridVfx are the only flags that attach a system so far.
-    expect(run.stats).toMatchObject({ systems: (run.features.conditionVisuals ? 1 : 0) + (run.features.hybridVfx ? 1 : 0), systemErrors: 0 });
+    // conditionVisuals, hybridVfx, clashPresentation and arenaVisuals are the only flags that attach a system so far.
+    expect(run.stats).toMatchObject({ systems: (run.features.conditionVisuals ? 1 : 0) + (run.features.hybridVfx ? 1 : 0) + (run.features.clashPresentation ? 1 : 0) + (run.features.arenaVisuals ? 1 : 0), systemErrors: 0 });
     expect(run.ids).toEqual(run.features.newBeyVisuals ? ['concept:attack-a', 'concept:defense-a'] : ['placeholder:attack-prototype', 'placeholder:defense-prototype']);
   }
   expect(Object.values(seen[0]!.features).some(Boolean)).toBe(false);
@@ -74,7 +74,7 @@ test('a restart builds a fresh presentation hub and disposes what was attached t
   expect(after.probe.creates).toBe(1);
   expect(after.probe.disposes).toBe(1);
   // The restarted session builds its own flag systems again; the probe is gone.
-  expect(after.systemIds).toEqual(['condition-visuals', 'hybrid-vfx']);
+  expect(after.systemIds).toEqual(['condition-visuals', 'hybrid-vfx', 'clash-presentation', 'arena-visuals']);
   // The restarted session reads the same page flags again.
   expect(Object.values(after.features).every(Boolean)).toBe(true);
   expect(errors).toEqual([]);
@@ -173,5 +173,98 @@ test('hybridVfx in a real browser: real effects from real events, screen overlay
   expect(on.overlay).toBe('900');
   expect(on.stats!.fx! + on.stats!.sparks!).toBeGreaterThan(5);
   expect(on.stats!.droppedShake).toBeGreaterThan(0);
+  expect(on.camera).toBe(off.camera);
+});
+
+test('clashPresentation in a real browser: locked contact, speedlines and dust on a Clash, camera as with the flag off', async ({ browser }) => {
+  const run = async (search: string): Promise<{ camera: string; stats: Record<string, number> | null; overlay: string | null; errors: string[] }> => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const errors: string[] = [];
+    await openDebugLab(page, search, errors);
+    await page.evaluate(async () => {
+      const lab = window.__chaosBeyDebugLab!;
+      lab.setPaused(true);
+      await lab.restart('clash-camera-proof');
+      const system = lab.getSession()!.getClashPresentation();
+      if (system) {
+        // A Clash that is Active (the real Clash state is not forced: only what the presentation reads is staged).
+        const original = system.update.bind(system);
+        (system as { update: typeof system.update }).update = (frame) =>
+          original({ dtSeconds: frame.dtSeconds, state: frame.state ? { ...frame.state, clash: { phase: 'active', active: true, progress: 0.6, elapsedS: 2.4, firstPower: 1.6, secondPower: 1, firstMashEventCount: 4, secondMashEventCount: 3, resolution: null, cooldownRemainingS: 0 } } : null });
+        const state = { tick: 5, round: {}, camera: null } as never;
+        system.onEvents([{ kind: 'clashStarted', tick: 5 }, { kind: 'clashProgress', tick: 5, side: 'first', mashEventCount: 1, progress: 0.3 }], state);
+      }
+      lab.step(30);
+    });
+    // Software WebGL renders few frames a second: wait until the pose has settled in (the presentation clamps one frame to 50 ms).
+    if (search.includes('clashPresentation')) {
+      await page.waitForFunction(() => (window.__chaosBeyDebugLab!.getSession()!.getPresentationStats().hub.perSystem['clash-presentation']?.contactWeight ?? 0) >= 1, null, { timeout: 20_000 });
+    }
+    await page.waitForTimeout(300);
+    const result = await page.evaluate(() => {
+      const lab = window.__chaosBeyDebugLab!;
+      const camera = lab.getCamera();
+      const session = lab.getSession()!;
+      const overlay = document.querySelector('[data-testid="clash-presentation-overlay"]') as HTMLElement | null;
+      return {
+        camera: JSON.stringify([camera.position.toArray().map((v) => +v.toFixed(5)), camera.fov, camera.children.length]),
+        stats: (session.getPresentationStats().hub.perSystem['clash-presentation'] ?? null) as Record<string, number> | null,
+        overlay: overlay ? getComputedStyle(overlay).zIndex : null,
+      };
+    });
+    await context.close();
+    return { ...result, errors };
+  };
+  const off = await run('');
+  const on = await run('&pfx=clashPresentation,newBeyVisuals');
+  expect(off.errors).toEqual([]);
+  expect(on.errors).toEqual([]);
+  expect(off.stats).toBeNull();
+  expect(off.overlay).toBeNull();
+  expect(on.overlay).toBe('900');
+  expect(on.stats!.contactWeight).toBe(1);
+  expect(on.stats!.speedlinesDrawn).toBeGreaterThan(20);
+  expect(on.stats!.dust! + on.stats!.grit!).toBeGreaterThan(5);
+  expect(on.stats!.poseTiltFirstDeg).toBeGreaterThan(5);
+  expect(on.camera).toBe(off.camera);
+});
+
+test('arenaVisuals in a real browser: the approved arena art draws, the temporary arena visuals are hidden, camera as with the flag off', async ({ browser }) => {
+  const run = async (search: string): Promise<{ camera: string; art: string[]; hiddenHolder: boolean | null; errors: string[] }> => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const errors: string[] = [];
+    await openDebugLab(page, search, errors);
+    await page.evaluate(async () => {
+      const lab = window.__chaosBeyDebugLab!;
+      lab.setPaused(true);
+      await lab.restart('arena-camera-proof');
+      lab.step(60);
+    });
+    await page.waitForTimeout(500);
+    const result = await page.evaluate(() => {
+      const lab = window.__chaosBeyDebugLab!;
+      const camera = lab.getCamera();
+      const session = lab.getSession()!;
+      const root = session.getSceneRoot();
+      const holder = root.children.find((c) => c.name === 'discarded-temporary-arena-visuals');
+      return {
+        camera: JSON.stringify([camera.position.toArray().map((v) => +v.toFixed(5)), camera.fov, camera.children.length]),
+        art: root.children.filter((c) => c.name.startsWith('arena-art-')).map((c) => c.name),
+        hiddenHolder: holder ? !holder.visible : null,
+      };
+    });
+    await context.close();
+    return { ...result, errors };
+  };
+  const off = await run('');
+  const on = await run('&pfx=arenaVisuals');
+  expect(off.errors).toEqual([]);
+  expect(on.errors).toEqual([]);
+  expect(off.art).toEqual([]);
+  expect(off.hiddenHolder).toBeNull();
+  expect(on.art).toEqual(['arena-art-foundry']);
+  expect(on.hiddenHolder).toBe(true);
   expect(on.camera).toBe(off.camera);
 });

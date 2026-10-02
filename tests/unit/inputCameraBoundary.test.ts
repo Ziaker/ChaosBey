@@ -77,10 +77,18 @@ const CAMERA_OUTPUT_READERS = [
 ];
 const CAMERA_OUTPUT_IDENTIFIERS = new Set(['getLastCameraOutput', 'lastCameraOutput', 'SessionCameraOutput']);
 
+/**
+ * Presentation-only code that lives under a gameplay directory. It is not gameplay: the arena art builds meshes and lights
+ * (including Three.js light-shadow cameras, which are not the game camera) and never reaches a collider. Its own boundary
+ * (no import from src/camera/, Rapier, physics, AI or sessions) is enforced in presentationFoundation.test.ts.
+ */
+const PRESENTATION_SUBDIRS = ['arena/visual'].map((d) => resolve(SRC, d));
+
 function listTsFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
+    if (PRESENTATION_SUBDIRS.includes(full)) continue;
     if (statSync(full).isDirectory()) out.push(...listTsFiles(full));
     else if (extname(full) === '.ts') out.push(full);
   }

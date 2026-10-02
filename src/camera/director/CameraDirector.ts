@@ -75,7 +75,7 @@ const CLASH_DISTANCE_FACTOR = 0.8;       // × minDistance at the start of a Cla
 const CLASH_DISTANCE_END_FACTOR = 0.6;   // …this by the end.
 const CLASH_HEIGHT_M = 2.4;
 const CLASH_ORBIT_RAD_S = 0.45;          // Base Clash orbit, growing with progress and orbitStrength.
-const RINGOUT_WATCH_RADIUS_M = 9;        // An airborne Bey this far out, moving outward, is a ring-out candidate.
+const RINGOUT_WATCH_RADIUS_M = 9;        // An airborne Bey this far out, moving outward, is a ring-out candidate (the Lab's value; the game's rig passes its own, see DirectorOptions.ringOutWatchRadiusM).
 const RINGOUT_OUTWARD_MPS = 3;
 const RINGOUT_BACK_M = 8;
 const RINGOUT_UP_M = 3.5;
@@ -174,6 +174,13 @@ export interface DirectorOptions {
    * fix 8".
    */
   readonly arena?: { readonly containRadiusM: number };
+  /**
+   * Radius (m) past which an airborne Bey flying outward counts as a ring-out
+   * candidate. Default: the Lab's 9 m (its arena was 12 m). The game's rig
+   * passes a value derived from the ring-out radius, so the ring-out camera
+   * still anticipates the real edge when the arena is bigger.
+   */
+  readonly ringOutWatchRadiusM?: number;
 }
 
 interface PendingKnock {
@@ -624,7 +631,7 @@ export class CameraDirector {
 
   private outwardSpeed(f: FightFrame['first']): number {
     const r = Math.hypot(f.position.x, f.position.z);
-    if (!f.airborne || r < RINGOUT_WATCH_RADIUS_M) return 0;
+    if (!f.airborne || r < (this.options.ringOutWatchRadiusM ?? RINGOUT_WATCH_RADIUS_M)) return 0;
     return (f.position.x * f.velocity.x + f.position.z * f.velocity.z) / r;
   }
 

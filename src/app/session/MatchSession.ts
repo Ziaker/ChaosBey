@@ -34,7 +34,7 @@ import type { PresetId } from '../../camera/director/CameraParams';
 import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../simulation/impact/ImpactEvents';
 import { CLASH_RESOLVED_MAGNITUDE } from '../simulation/impact/ImpactMagnitude';
 import { arenaGeometryOf, type MatchConfig } from '../../config/match/MatchConfig';
-import { FOUNDRY_PIT, type ArenaTheme } from '../../arena/presets/ArenaPresets';
+import { ARENA_PRESETS, FOUNDRY_PIT, type ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { Bey } from '../../bey/core/Bey';
 import type { KnockbackComponents } from '../../combat/knockback/Knockback';
@@ -53,6 +53,8 @@ import type { PresentationSide } from '../../presentation/events';
 import { collectSceneStats, type SceneStats } from '../../presentation/sceneStats';
 import { ConditionVisualsSystem, normalizeConditionLayers } from '../../vfx/condition/ConditionVisualsSystem';
 import { HybridVfxSystem } from '../../vfx/hybrid/HybridVfxSystem';
+import { ClashPresentationSystem, clashDustHexFor } from '../../vfx/clash/ClashPresentationSystem';
+import { ArenaVisualsSystem } from '../../arena/visual/ArenaVisualsSystem';
 import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
 import type { LanguageId } from '../../vfx/condition/types';
 import { HeadingArrow } from '../../vfx/HeadingArrow';
@@ -101,6 +103,8 @@ export interface MatchSessionOptions {
   readonly presentationFeatures?: PresentationFeatures;
   /** Which condition languages (A, B, C) show when the `conditionVisuals` flag is on; at least one. Default A. Render only. */
   readonly conditionLayers?: readonly LanguageId[];
+  /** The renderer, for the approved arena art's tone mapping (only touched with the `arenaVisuals` flag, and restored). Render only. */
+  readonly renderer?: { toneMapping: THREE.ToneMapping; toneMappingExposure: number };
 }
 
 export interface SessionTickOutput {
@@ -161,6 +165,10 @@ export class MatchSession {
   private conditionVisuals: ConditionVisualsSystem | null = null;
   /** The approved Hybrid VFX (Cel Cyclone wind), attached only with the `hybridVfx` flag (render only). */
   private hybridVfx: HybridVfxSystem | null = null;
+  /** The approved Clash Overdrive presentation, attached only with the `clashPresentation` flag (render only). */
+  private clashPresentation: ClashPresentationSystem | null = null;
+  /** The approved arena art, attached only with the `arenaVisuals` flag (render only; colliders untouched). */
+  private arenaVisuals: ArenaVisualsSystem | null = null;
   /** Owner playtest (after M11): skid marks, sparks and grip-regain ring while a Bey drifts. Render only. */
   private readonly driftVfx: { readonly first: DriftVfx; readonly second: DriftVfx };
   /** M11: approved camera director. Render only; null means no camera (render disabled). */
@@ -341,6 +349,33 @@ export class MatchSession {
       this.presentation.attach(this.hybridVfx);
       // The legacy spark and landing bursts give way to the approved language (the existing layer switch; the tick code is untouched).
       this.vfxManager.setLayerVisible('impactBursts', false);
+    }
+    if (presentationFeatures.clashPresentation) {
+      this.clashPresentation = new ClashPresentationSystem({
+        scene: this.root,
+        camera: options.camera,
+        beys: {
+          first: { visual: this.match.visuals.first.visual, gameplay: this.match.first.definition },
+          second: { visual: this.match.visuals.second.visual, gameplay: this.match.second.definition },
+        },
+        floorHeightAtR: (r) => floorAt(r, 0),
+        sparkHex: theme.sparkHotHex,
+        dustHex: clashDustHexFor(ARENA_PRESETS.find((preset) => preset.theme === theme)?.id),
+        // The approved arena art reacts to the Clash itself; the stand-in contact light is only for the temporary arena.
+        contactLight: !presentationFeatures.arenaVisuals,
+      });
+      this.presentation.attach(this.clashPresentation);
+    }
+    if (presentationFeatures.arenaVisuals) {
+      this.arenaVisuals = new ArenaVisualsSystem({
+        scene: options.scene,
+        root: this.root,
+        presetId: ARENA_PRESETS.find((preset) => preset.theme === theme)?.id ?? FOUNDRY_PIT.id,
+        floorHeightAtR: (r) => floorAt(r, 0),
+        getClashIntensity: () => this.clashPresentation?.getArenaReaction() ?? 0,
+        renderer: options.renderer,
+      });
+      this.presentation.attach(this.arenaVisuals);
     }
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
@@ -731,6 +766,16 @@ export class MatchSession {
   /** Which condition languages show, live (the Settings screen). No effect unless the `conditionVisuals` flag is on. */
   setConditionLayers(layers: readonly LanguageId[]): void {
     this.conditionVisuals?.setLayers(layers);
+  }
+
+  /** The approved arena art system, or null while the `arenaVisuals` flag is off. */
+  getArenaVisuals(): ArenaVisualsSystem | null {
+    return this.arenaVisuals;
+  }
+
+  /** The Clash presentation system, or null while the `clashPresentation` flag is off. */
+  getClashPresentation(): ClashPresentationSystem | null {
+    return this.clashPresentation;
   }
 
   /** The Hybrid VFX system, or null while the `hybridVfx` flag is off (tests and visual checks drive its runtime). */

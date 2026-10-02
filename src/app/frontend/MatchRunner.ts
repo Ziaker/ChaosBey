@@ -169,6 +169,7 @@ export class MatchRunner {
       arenaTheme: start.arenaTheme,
       cameraPreset: start.presentation?.cameraPreset,
       conditionLayers: start.presentation?.conditionLayers,
+      renderer: deps.appRenderer.renderer,
     });
     sessionForJumpBuffer = session;
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).

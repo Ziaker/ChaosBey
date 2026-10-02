@@ -243,6 +243,7 @@ export async function startDebugLabMode(appRenderer: AppRenderer, mount: HTMLEle
         keyboard: playerInput,
         cameraPreset,
         conditionLayers: loadPlayerSettings().conditionLayers,
+        renderer: appRenderer.renderer,
       });
       if (myToken !== restartToken) {
         // A newer restart (Restart/New Seed/loadPreset clicked again before
