@@ -53,12 +53,12 @@ const threat = { positionXZ: { x: 0, z: 2 }, attackState: AttackState.DashActive
 
 describe('momentum-projected edge risk', () => {
   it('reads danger from where own velocity is carrying the Bey, not only where it is', () => {
-    const still = perceiveCombatant(rawState({ positionXZ: { x: 0, z: 8 } }));
-    const slidingOut = perceiveCombatant(rawState({ positionXZ: { x: 0, z: 8 }, velocityXZ: { x: 0, z: 12 } }));
+    const still = perceiveCombatant(rawState({ positionXZ: { x: 0, z: RINGOUT_RADIUS_M - 4.9 } }));
+    const slidingOut = perceiveCombatant(rawState({ positionXZ: { x: 0, z: RINGOUT_RADIUS_M - 4.9 }, velocityXZ: { x: 0, z: 12 } }));
     expect(still.projectedEdgeRiskFraction).toBe(0);
     expect(slidingOut.edgeRiskFraction).toBe(0);
     expect(slidingOut.projectedEdgeRiskFraction).toBeGreaterThan(0.9);
-    const w = world({ positionXZ: { x: 0, z: 8 }, velocityXZ: { x: 0, z: 12 } }, { positionXZ: { x: 0, z: -4 } });
+    const w = world({ positionXZ: { x: 0, z: RINGOUT_RADIUS_M - 4.9 }, velocityXZ: { x: 0, z: 12 } }, { positionXZ: { x: 0, z: -4 } });
     expect(selectIntent(w, ATTACK_AI_PERSONALITY, evaluateRisk(w, ATTACK_AI_PERSONALITY)).intent).toBe(AiIntent.RecoverFromEdge);
   });
 });

@@ -111,7 +111,8 @@ export async function buildPlaybackWorld(replay: ChaosBeyReplayV1, beys: { reado
   const world = await SelfTestMatchWorld.build({
     firstSpawn: replay.config.spawns.first,
     secondSpawn: replay.config.spawns.second,
-    matchConfigOverrides: replay.config.matchConfig,
+    // A replay without `arenaFloor` was recorded on the flat arena (before floors existed), which is no longer the default floor.
+    matchConfigOverrides: { ...replay.config.matchConfig, arenaFloor: replay.config.matchConfig.arenaFloor ?? 'flat' },
     aiMashSource: new NullAiMashSource(),
     firstDefinition: beys.first,
     secondDefinition: beys.second,

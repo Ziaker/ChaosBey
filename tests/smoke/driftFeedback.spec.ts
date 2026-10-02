@@ -10,12 +10,20 @@ import * as fs from 'fs';
 
 async function driveIntoDrift(page: Page): Promise<void> {
   await page.keyboard.down('ArrowUp');
-  await page.waitForTimeout(700); // build speed
+  // Build speed for 0.7 s of SIMULATION time (42 fixed ticks), not wall time: on a
+  // slow runner (CI's software-rendered browser, or one CPU core — it fails on
+  // main too) the frame rate drops and 700 ms of wall time is far fewer ticks.
+  const startTick = await page.evaluate(() => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex());
+  await page.waitForFunction((t0) => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex() >= t0 + 42, startTick, { timeout: 20_000 });
   // Turn as X goes down: X + a real turn is a drift (X held going straight
   // would be the variable jump — see DriftController).
   await page.keyboard.up('ArrowUp');
-  await page.keyboard.down('ArrowRight');
+  // X first, then the turn: the drift latches its reference direction when X goes
+  // down and starts on a turn AWAY from it, so a tick that sees ArrowRight already
+  // held before X (two key events can land in different frames on a slow runner)
+  // latches the turn itself as the reference and never drifts.
   await page.keyboard.down('x');
+  await page.keyboard.down('ArrowRight');
 }
 
 async function releaseDrift(page: Page): Promise<void> {
@@ -48,8 +56,22 @@ test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with 
   await page.screenshot({ path: 'test-results/drift-play.png' });
   const during = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getDriftVfxCounts('first'));
   await releaseDrift(page);
-  await expect.poll(async () => (await tag.getAttribute('data-state')) ?? '', { timeout: 2000 }).toBe('Recovering');
-  await expect(tag).toHaveText('GRIP');
+  // Read state and text together, in one evaluation: on a slow, software-rendered
+  // runner the Recovering window can pass between two separate reads (the state
+  // poll saw Recovering, then the text read found it already gone). Whatever frame
+  // we see after the release must be consistent: Recovering shows GRIP.
+  const readTag = () => page.evaluate(() => {
+    const el = document.querySelector('[data-testid="hud-drift"]');
+    return `${el?.getAttribute('data-state') ?? ''}|${el?.textContent ?? ''}`;
+  });
+  let afterRelease = '';
+  await expect
+    .poll(async () => {
+      afterRelease = await readTag(); // the first frame after the drift ended, state and text from the same read
+      return afterRelease.split('|')[0];
+    }, { timeout: 2000 })
+    .not.toBe('Drifting');
+  if (afterRelease.startsWith('Recovering')) expect(afterRelease).toBe('Recovering|GRIP');
   await expect.poll(async () => (await tag.getAttribute('data-state')) ?? '', { timeout: 3000 }).toBe('Idle');
   const after = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getDriftVfxCounts('first'));
 

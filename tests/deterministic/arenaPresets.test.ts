@@ -17,6 +17,7 @@ import {
 } from '../../src/arena/presets/ArenaPresets';
 import { ARENA_WALL_HEIGHT } from '../../src/arena/colliders/ArenaTuning';
 import { WALL_MATERIAL } from '../../src/physics/materials/PhysicsMaterials';
+import { DEFAULT_ARENA_FLOOR } from '../../src/arena/floor/ArenaFloorProfile';
 import { arenaGeometryOf, createDefaultMatchConfig } from '../../src/config/match/MatchConfig';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { simulateAiMatch } from '../../src/self-test/AiMatchSimulation';
@@ -30,8 +31,8 @@ describe('arena presets', () => {
     expect(DEFAULT_ARENA_PRESET).toBe('foundry');
     expect(STANDARD_ARENA_GEOMETRY).toEqual({ wallHeightM: ARENA_WALL_HEIGHT, wallRestitution: WALL_MATERIAL.restitution });
     expect(FOUNDRY_PIT.geometry).toEqual(STANDARD_ARENA_GEOMETRY);
-    // M11 lane 4: the default floor is flat (the bowls are playtest options).
-    expect(arenaGeometryOf(createDefaultMatchConfig())).toEqual({ ...STANDARD_ARENA_GEOMETRY, floor: 'flat' });
+    // Arena scale pass: the default floor is the bowl (the stage is not flat); flat is only a baseline option.
+    expect(arenaGeometryOf(createDefaultMatchConfig())).toEqual({ ...STANDARD_ARENA_GEOMETRY, floor: DEFAULT_ARENA_FLOOR });
     expect(arenaPreset('rift')).toBe(RIFT_CRATER);
   });
 
@@ -77,7 +78,15 @@ describe('arena values in real matches', () => {
     // 10/15 in 13190. With it (M11, direction B): Rift 3/15 in 10341, Tournament 0/15 in 12111 —
     // B launches with the Lab's knockback lift (0.18 of the push, the game used 0.35), so even a
     // 1 m rim is rarely cleared. Still more ring-outs and shorter rounds (was: < 0.7×).
-    expect(rift.ringOuts).toBeGreaterThan(tournament.ringOuts);
+    //
+    // Arena scale pass (36 m bowl, the default floor): AI-vs-AI ring-outs are now
+    // essentially gone on the bowl — Rift 0/15, Tournament 0/15 (flat 36 m: Rift 3/45
+    // matches over three presets, none for the other two); every round ends by KO
+    // (~1300-1400 ticks per match). The low rim only shows in round length now
+    // (Rift 1300 vs Tournament 1370 ticks per match), so ring-outs are compared with
+    // >= and the round-length comparison stays strict. See the arena scale pass
+    // report: whether ring-outs should stay this rare is an owner call.
+    expect(rift.ringOuts).toBeGreaterThanOrEqual(tournament.ringOuts);
     expect(rift.ticks).toBeLessThan(tournament.ticks);
   }, 300_000);
 

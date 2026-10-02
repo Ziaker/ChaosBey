@@ -17,7 +17,16 @@
 
 import { Action } from '../../../../src/input/actions/Action';
 import type { Bey } from '../../../../src/bey/core/Bey';
+import { ARENA_FLOOR_RADIUS } from '../../../../src/arena/colliders/ArenaTuning';
 import type { IntentKind } from './FightFrame';
+
+/**
+ * Arena scale pass (floor radius 12 m -> 36 m). The scenarios that are about
+ * the wall / the ring-out (Heavy Knockback, Wall Ricochet, Ring-Out Chase)
+ * were laid out for a wall 12 m from the centre; they are shifted +Z by this
+ * much so each one still starts the same distance from the wall it is aimed at.
+ */
+const WALL_SHIFT_M = ARENA_FLOOR_RADIUS - 12;
 
 export type ControlSpec =
   | { readonly kind: 'script'; readonly held: (t: number) => readonly Action[] }
@@ -63,11 +72,13 @@ export const SCENARIOS: readonly Scenario[] = [
     // motion (Clash at 2.0 s, round end at 16.6 s; was 'g'); 'r' since the movement/weight/dodge
     // playtest pass (steering/grip tightened, gravity raised, short hop shortened, dodge rewritten
     // as a flat state) changed fight timing again — 'k' no longer reaches a Clash at all within 15s
-    // (Clash at 2.0 s, no round end within 15 s).
+    // (Clash at 2.0 s, no round end within 15 s); 'b' since the arena scale pass (floor radius 12 m ->
+    // 36 m, the flat floor now a heightfield, then its resolution 288 -> 144 cells, changed every AI fight again: 'r' no longer reaches a
+    // Clash; 'b' is the first of a..z with a Clash and no round end within 15 s).
     firstSpawn: { x: -3, z: -5 },
     secondSpawn: { x: 3, z: 5 },
-    first: { kind: 'ai', seed: 'duel-p-r' },
-    second: { kind: 'ai', seed: 'duel-o-r' },
+    first: { kind: 'ai', seed: 'duel-p-b' },
+    second: { kind: 'ai', seed: 'duel-o-b' },
     expects: ['hit', 'clashActive'],
   },
   {
@@ -146,8 +157,8 @@ export const SCENARIOS: readonly Scenario[] = [
     description: 'Dash com carga máxima: o oponente é arremessado e bate na parede.',
     contexts: ['KnockbackFollow (forte)', 'wall impact'],
     durationS: 7,
-    firstSpawn: { x: 0, z: -8 },
-    secondSpawn: { x: 0, z: 1 },
+    firstSpawn: { x: 0, z: -8 + WALL_SHIFT_M },
+    secondSpawn: { x: 0, z: 1 + WALL_SHIFT_M },
     first: { kind: 'script', held: (t) => when(between(t, 0.4, 1.6), Z) },
     second: { kind: 'idle' },
     expects: ['hit', 'wallImpact'],
@@ -158,8 +169,8 @@ export const SCENARIOS: readonly Scenario[] = [
     description: 'O jogador bate em ângulo na parede em alta velocidade e ricocheteia.',
     contexts: ['wall impact', 'HighSpeed'],
     durationS: 7,
-    firstSpawn: { x: 5, z: -6 },
-    secondSpawn: { x: -4, z: -2 },
+    firstSpawn: { x: 5, z: -6 + WALL_SHIFT_M },
+    secondSpawn: { x: -4, z: -2 + WALL_SHIFT_M },
     first: { kind: 'script', held: (t) => [...when(t < 3.6, F), ...when(between(t, 3.6, 5), F, L)] },
     second: { kind: 'idle' },
     expects: ['wallImpact'],
@@ -188,8 +199,8 @@ export const SCENARIOS: readonly Scenario[] = [
     // the Dash's own approach reads differently against a grounded vs. an
     // already-airborne target), later gave the jump too little time to
     // build height before the hit added its own knockback vy.
-    firstSpawn: { x: 0, z: -1 },
-    secondSpawn: { x: 0, z: 5 },
+    firstSpawn: { x: 0, z: -1 + WALL_SHIFT_M },
+    secondSpawn: { x: 0, z: 5 + WALL_SHIFT_M },
     setup: ({ second }) => {
       second.stamina.resource.set(0);
       second.stability.debugSetValue(30);

@@ -8,6 +8,7 @@
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
+import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { AIController } from '../../src/ai/controllers/AIController';
 import { AiIntent } from '../../src/ai/decision/Intent';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../src/ai/difficulty/AiDifficultyProfile';
@@ -19,8 +20,9 @@ import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepL
 import { SeededRng } from '../../src/rng/SeededRng';
 import { CombatHarness } from './combatHarness';
 
-const AI_Z = 11;
-const BLOCKER_Z = 9;
+// Positions are relative to the ring-out radius (they were 11 m / 9 m when it was 12.9 m).
+const AI_Z = RINGOUT_RADIUS_M - 1.9;
+const BLOCKER_Z = RINGOUT_RADIUS_M - 3.9;
 const RUN_TICKS = 150;
 
 async function recover(blockerOffsetX: number) {
@@ -63,9 +65,9 @@ describe('AI edge recovery around a blocking opponent (M7 Part 2b, real physics)
       const last = run.recovery[run.recovery.length - 1]!;
       expect(last.edgeRisk, 'edge danger went down').toBeLessThan(first.edgeRisk - 0.2);
       expect(last.z, 'moved inward').toBeLessThan(first.z);
-      // Never pushed into the blocker: the gap never closes below its start by more than a small margin.
+      // Never pushed into the blocker: the gap never closes below its start by more than a small margin (0.5 m; was 0.4 m on a flat floor: the bowl's downhill pull toward the centre, where the blocker is, adds ~3 cm).
       const minGap = Math.min(...run.recovery.map((r) => r.distanceToBlocker));
-      expect(minGap).toBeGreaterThan(first.distanceToBlocker - 0.4);
+      expect(minGap).toBeGreaterThan(first.distanceToBlocker - 0.5);
     }
     // Around, on the side away from the blocker's offset.
     expect(right.recovery[right.recovery.length - 1]!.x).toBeLessThan(-0.8);

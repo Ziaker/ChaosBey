@@ -10,6 +10,7 @@
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
+import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { AIController } from '../../src/ai/controllers/AIController';
 import { AiIntent } from '../../src/ai/decision/Intent';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../src/ai/difficulty/AiDifficultyProfile';
@@ -39,7 +40,7 @@ interface Episode {
 async function runEpisode(seed: string): Promise<Episode> {
   // AI on the +Z edge facing +Z (heading 0 = out of the ring); the dasher
   // sits between it and the center and releases a short-charge Dash.
-  const harness = await CombatHarness.create({ x: 0, y: 0.5, z: 7.6 }, { x: 0, y: 0.5, z: 11.2 }, {}, new NullAiMashSource());
+  const harness = await CombatHarness.create({ x: 0, y: 0.5, z: RINGOUT_RADIUS_M - 5.3 }, { x: 0, y: 0.5, z: RINGOUT_RADIUS_M - 1.7 }, {}, new NullAiMashSource());
   const personality = { ...DEFENSE_AI_PERSONALITY, dodgeSkill: 1, errorRate: 0, counterAffinity: 0 };
   const ai = new AIController(harness.physics, harness.second, harness.first, harness.clash.controller, personality, DEFAULT_AI_DIFFICULTY_PROFILE, SeededRng.fromSeedText(seed));
   const dasher = new ScriptedController([

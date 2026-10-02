@@ -17,6 +17,7 @@
 //    wall, time in the air and GDD 67 anomalies, per floor.
 // ============================================================
 
+import { ARENA_FLOOR_RADIUS, ARENA_WALL_THICKNESS } from '../arena/colliders/ArenaTuning';
 import { floorHeightAt, type ArenaFloorId, ARENA_FLOORS } from '../arena/floor/ArenaFloorProfile';
 import { floorRimHeight } from '../arena/floor/ArenaFloorProfile';
 import { ALL_BEY_ARCHETYPES, ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../bey/archetype/BeyArchetypes';
@@ -37,9 +38,18 @@ import { isGrounded } from '../physics/collision/GroundCheck';
 
 const TICKS_PER_S = Math.round(1 / FIXED_DELTA_SECONDS);
 /** "Near the edge" for the stats: past this radius. */
-const NEAR_EDGE_RADIUS_M = 9;
-/** "At the wall": the Bey's rim within ~0.6 m of the wall's inner face (11.7 m). */
-const AT_WALL_RADIUS_M = 10.9;
+const NEAR_EDGE_RADIUS_M = ARENA_FLOOR_RADIUS * 0.75;
+/** "At the wall": the Bey's rim within ~0.6 m of the wall's inner face (ARENA_FLOOR_RADIUS − ARENA_WALL_THICKNESS / 2). */
+const AT_WALL_RADIUS_M = ARENA_FLOOR_RADIUS - ARENA_WALL_THICKNESS / 2 - 0.8;
+
+// Probe distances, as fractions of the arena radius (they were 8 / 10 / 10.5 / 5 m
+// / 9.5 m on the old 12 m arena; the arena scale pass tripled the radius, so
+// they are now derived from it instead of being fixed metres).
+const COAST_START_RADIUS_M = (ARENA_FLOOR_RADIUS * 2) / 3;
+const CLIMB_TARGET_RADIUS_M = (ARENA_FLOOR_RADIUS * 5) / 6;
+const WALL_PUSH_START_RADIUS_M = ARENA_FLOOR_RADIUS - 1.5;
+const DROP_START_RADIUS_M = (ARENA_FLOOR_RADIUS * 5) / 12;
+const PARKED_Z_M = -ARENA_FLOOR_RADIUS * 0.8;
 
 /** The scenario presets each floor replays (GDD 68). */
 export const FLOOR_SCENARIO_IDS = [
@@ -59,15 +69,15 @@ export const FLOOR_SCENARIO_IDS = [
 ] as const;
 
 export interface FloorProbeResults {
-  /** Released at rest at r = 8 m with no input: where it is after 5 s, how fast it got, how soon it reached the centre (null = never). */
+  /** Released at rest at r = COAST_START_RADIUS_M (24 m) with no input: where it is after 5 s, how fast it got, how soon it reached the centre (null = never). */
   readonly coast: { readonly finalRadiusM: number; readonly peakSpeedMps: number; readonly secondsToCentre: number | null };
   /** From the centre, holding a direction at 35% stick for 4 s. */
   readonly slowClimb: { readonly maxRadiusM: number; readonly speedAt2sMps: number };
-  /** From the centre, full stick for 4 s. */
+  /** From the centre, full stick for 4 s (secondsToR10 = time to reach CLIMB_TARGET_RADIUS_M, 30 m; the field keeps its old name). */
   readonly fastClimb: { readonly maxRadiusM: number; readonly secondsToR10: number | null; readonly topSpeedMps: number };
-  /** Parked at r = 10.5 m driving straight into the wall for 3 s. */
+  /** Parked at r = WALL_PUSH_START_RADIUS_M (34.5 m) driving straight into the wall for 3 s. */
   readonly wallPush: { readonly maxRadiusM: number; readonly finalSpeedMps: number };
-  /** Dropped 3 m above the floor at r = 5 m, moving outward at 6 m/s. */
+  /** Dropped 3 m above the floor at r = DROP_START_RADIUS_M (15 m), moving outward at 6 m/s. */
   readonly drop: { readonly secondsToLand: number | null; readonly maxRadiusM: number };
   /** GDD 67 invalid states seen during all probes (must be 0). */
   readonly invalidStates: number;
@@ -156,7 +166,7 @@ async function probe(floor: ArenaFloorId, ticks: number, setup: (first: Bey) => 
   const idle = new IdleController();
   let invalid = 0;
   for (let tick = 0; tick < ticks; tick++) {
-    place(world.second, 0, -9.5, 0); // parked: never part of the probe
+    place(world.second, 0, PARKED_Z_M, 0); // parked: never part of the probe
     const { firstActions, secondActions, result, advanced } = world.step({ first: controller, second: idle });
     each(tick, world.first, result.first.movement.isGrounded);
     invalid += detector
@@ -174,7 +184,7 @@ export async function runFloorProbes(floor: ArenaFloorId): Promise<FloorProbeRes
   let coastPeak = 0;
   let coastCentre: number | null = null;
   let coastFinal = 0;
-  invalid += await probe(floor, 5 * TICKS_PER_S, (b) => place(b, 8, 0, 0), new IdleController(), (t, b) => {
+  invalid += await probe(floor, 5 * TICKS_PER_S, (b) => place(b, COAST_START_RADIUS_M, 0, 0), new IdleController(), (t, b) => {
     coastPeak = Math.max(coastPeak, speed(b));
     if (coastCentre === null && radius(b) < 1) coastCentre = (t + 1) / TICKS_PER_S;
     coastFinal = radius(b);
@@ -193,12 +203,12 @@ export async function runFloorProbes(floor: ArenaFloorId): Promise<FloorProbeRes
   invalid += await probe(floor, 4 * TICKS_PER_S, (b) => place(b, 0, 0, Math.PI / 2), holding(1, 0, 1), (t, b) => {
     fastMax = Math.max(fastMax, radius(b));
     fastTop = Math.max(fastTop, speed(b));
-    if (fastR10 === null && radius(b) >= 10) fastR10 = (t + 1) / TICKS_PER_S;
+    if (fastR10 === null && radius(b) >= CLIMB_TARGET_RADIUS_M) fastR10 = (t + 1) / TICKS_PER_S;
   });
 
   let wallMax = 0;
   let wallFinal = 0;
-  invalid += await probe(floor, 3 * TICKS_PER_S, (b) => place(b, 10.5, 0, Math.PI / 2), holding(1, 0, 1), (_t, b) => {
+  invalid += await probe(floor, 3 * TICKS_PER_S, (b) => place(b, WALL_PUSH_START_RADIUS_M, 0, Math.PI / 2), holding(1, 0, 1), (_t, b) => {
     wallMax = Math.max(wallMax, radius(b));
     wallFinal = speed(b);
   });
@@ -209,7 +219,7 @@ export async function runFloorProbes(floor: ArenaFloorId): Promise<FloorProbeRes
     floor,
     3 * TICKS_PER_S,
     (b) => {
-      place(b, 5, 0, Math.PI / 2, 3);
+      place(b, DROP_START_RADIUS_M, 0, Math.PI / 2, 3);
       b.body.setLinvel({ x: 6, y: 0, z: 0 }, true);
     },
     new IdleController(),
@@ -332,15 +342,15 @@ export function renderFloorComparison(results: readonly FloorComparison[], seeds
   const rowOf = (label: string, cell: (r: FloorComparison) => string): string => `| ${label} | ${results.map(cell).join(' | ')} |`;
   const lines: string[] = [];
   lines.push('### Physics probes', '', head);
-  lines.push(rowOf('Coast from r = 8 m at rest: radius after 5 s', (r) => `${n(r.probes.coast.finalRadiusM)} m`));
+  lines.push(rowOf(`Coast from r = ${COAST_START_RADIUS_M} m at rest: radius after 5 s`, (r) => `${n(r.probes.coast.finalRadiusM)} m`));
   lines.push(rowOf('Coast: peak speed', (r) => `${n(r.probes.coast.peakSpeedMps)} m/s`));
   lines.push(rowOf('Coast: reaches the centre (r < 1 m)', (r) => s(r.probes.coast.secondsToCentre)));
   lines.push(rowOf('Slow climb (35% stick): speed at 2 s', (r) => `${n(r.probes.slowClimb.speedAt2sMps)} m/s`));
   lines.push(rowOf('Slow climb: farthest radius in 4 s', (r) => `${n(r.probes.slowClimb.maxRadiusM)} m`));
   lines.push(rowOf('Fast climb (full stick): top speed', (r) => `${n(r.probes.fastClimb.topSpeedMps)} m/s`));
-  lines.push(rowOf('Fast climb: reaches r = 10 m', (r) => s(r.probes.fastClimb.secondsToR10)));
-  lines.push(rowOf('Wall push at r = 10.5 m: farthest radius', (r) => `${n(r.probes.wallPush.maxRadiusM)} m`));
-  lines.push(rowOf('Drop from 3 m at r = 5 m (6 m/s out): lands after', (r) => s(r.probes.drop.secondsToLand)));
+  lines.push(rowOf(`Fast climb: reaches r = ${CLIMB_TARGET_RADIUS_M} m`, (r) => s(r.probes.fastClimb.secondsToR10)));
+  lines.push(rowOf(`Wall push at r = ${WALL_PUSH_START_RADIUS_M} m: farthest radius`, (r) => `${n(r.probes.wallPush.maxRadiusM)} m`));
+  lines.push(rowOf(`Drop from 3 m at r = ${DROP_START_RADIUS_M} m (6 m/s out): lands after`, (r) => s(r.probes.drop.secondsToLand)));
   lines.push(rowOf('Drop: farthest radius', (r) => `${n(r.probes.drop.maxRadiusM)} m`));
   lines.push(rowOf('Probe invalid states', (r) => `${r.probes.invalidStates}`));
   lines.push('', '### Scenario presets (GDD 68) — the preset\'s own check, written for the flat arena', '', head);
