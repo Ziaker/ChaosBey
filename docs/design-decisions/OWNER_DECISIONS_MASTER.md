@@ -96,17 +96,6 @@ Direções do Motion Lab preservadas:
 
 ---
 
-## 3.1 OWNER OVERRIDE (2026-10-01) — a câmera nunca move o Bey
-
-**Camera is downstream presentation. It may observe gameplay; it may never mutate or causally influence gameplay.**
-
-- Escopo: toda a cadeia input → movimento → física → combate. Vale direta e indiretamente (um `number` vindo da câmera continua sendo dado da câmera).
-- Efeito sobre decisões anteriores: **supersede** qualquer texto/fix ("Fix 5/6/7/9", `CameraYawLatch`, `gestureYaw`, "camera-relative como padrão da indústria") que fizesse o controle ler a câmera.
-- Detalhes, auditoria e guards: `camera-gameplay-separation.md`.
-- Esquemas de controle selecionáveis (owner: "adiciona TODOS como opção"): `opponent` (padrão, escolha do agente a confirmar), `classic` (relativo ao Bey), `arena` (fixo) e `screen` (relativo à tela — **única exceção opt-in** que lê a câmera, nunca o padrão). Ver §13.7.
-
----
-
 # 4. Beys — FECHADO NO QUE JÁ FOI APROVADO
 
 ## 4.1 Roster
@@ -420,11 +409,11 @@ Isto é uma pendência estreita de UI/legibilidade, não uma licença para repro
 
 ## 13.5 Arena — gameplay, não aparência
 
-- força real da inclinação/gravidade do bowl;
+- força real da inclinação/gravidade do bowl (quanto ela deve puxar o Bey para o centro, afetar drift/ring-out/IA — isso é tuning/feel, não a integração em si);
 - posição final do volume de ring-out;
 - aberturas finais de parede;
 - arena inicial/default, se não houver override posterior;
-- integração física do bowl quando ainda diferente da apresentação visual.
+- ~~integração física do bowl quando ainda diferente da apresentação visual~~ **RESOLVIDO (M11 lane 4):** o colisor físico (heightfield do Rapier) já usa o mesmo perfil `h(r)` da apresentação visual para os três bowls — ver `src/arena/colliders/createArenaColliders.ts`. Não há mais divergência física × visual a integrar.
 
 ## 13.6 Clash
 
@@ -432,11 +421,10 @@ Isto é uma pendência estreita de UI/legibilidade, não uma licença para repro
 - sobreposição dos Beys no enquadramento;
 - variante reduzida para jogadores sensíveis;
 - eventual shake próprio do pulso além do Camera Director;
-- integração física real do bowl.
+- ~~integração física real do bowl~~ **RESOLVIDO (M11 lane 4), mesmo item da seção 13.5.**
 
 ## 13.7 Outros
 
-- **qual esquema de controle é o padrão** (hoje `opponent`, escolha do agente — o owner pediu os quatro como opção): ver `camera-gameplay-separation.md`;
 - identidade individual de partículas/trails por Bey;
 - pacote específico de pulo / ataque aéreo / air recovery onde o VFX aprovado não cobrir o comportamento pretendido;
 - bloom/chromatic aberration e Post-FX final, se o owner decidir usar;

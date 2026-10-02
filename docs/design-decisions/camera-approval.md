@@ -30,7 +30,12 @@ Este documento registra **o que já foi decidido** sobre a câmera de combate, p
      - **Enquadramento:** o pitch caiu de 28–43° para 10–19°, e o jogador fica na metade de baixo da tela.
      - **O que não mudou:** FOV, tremor, contextos, Clash (B, sem órbita), ring-out e finisher.
      - Detalhes em `docs/ai/m11-status.md`.
-6. **Integração (M11, lane 2):** o diretor e os três presets estão no jogo, em `src/camera/director/`, sem alteração de valores, com a escolha A/B/C nas Configurações e o Clash forçando a B sem órbita. As escolhas provisórias para os itens em aberto da seção 10 estão em `docs/ai/m11-status.md` e aguardam confirmação do dono.
+   - **fix 6 e fix 7:** ajustes seguintes ainda dentro do mesmo modelo over-the-shoulder (travar o ângulo, depois só recuar/subir sem girar) — ver `docs/ai/m11-status.md` para o histórico completo. `SHOULDER_RIGS` e o tipo `ShoulderRig` **não existem mais no código**.
+   - **Quarto playtest (fix 8, owner playtest, 2026-09) — ESTADO ATUAL, substitui fix 5/6/7 inteiramente:** o dono reverteu o over-the-shoulder. "A câmera não pode… ficar permanentemente atrás do jogador… Directional deve ser ARENA/WORLD-RELATIVE." A câmera volta a ser o diretor dinâmico, focado no oponente, de dois lutadores — exatamente o comportamento do Camera Lab (`framingBias`/`opponentWeight`, órbita automática, troca de lado, look-ahead, previsão de encontro, resgate de Bey fora do quadro, tudo incondicional, sem os desvios `if (!arena)` que o over-the-shoulder introduzia).
+     - **O que continua específico do jogo:** só altura/distância, via `ARENA_CAMERA_RIGS` em `CameraRig.ts` (substituiu `SHOULDER_RIGS`): `minDistance`/`maxDistance`/`cameraHeight` por preset — A 5,8 m / 13 m / 2,4 m, B 5 m / 14 m / 1,9 m, C 4,3 m / 15 m / 1,5 m. Todo o resto de cada preset (FOV, velocidade de órbita, suavização, shake, contextos) é o valor aprovado do Camera Lab, sem alteração.
+     - **Contenção na arena:** a opção `arena: { containRadiusM: 10.5 }` só puxa o olho pra dentro (nunca girando o ângulo) e mantém o guarda de piso dos bowls — não é mais um "travar o ângulo uma vez por round".
+     - **Playtest de acompanhamento:** visibilidade do oponente nos cenários D/E e o pico de pitch de 51,4° (jogador contra a parede) foram medidos e corrigidos depois do fix 8 — ver "Owner playtest fix 8" em `docs/ai/m11-status.md` para a medição completa e os testes (`cameraRig.test.ts`, `cameraTwoFighterFraming.test.ts`).
+6. **Integração (M11, lane 2; estado final após o fix 8):** o diretor e os três presets estão no jogo, em `src/camera/director/`, com a escolha A/B/C nas Configurações e o Clash forçando a B sem órbita. Os 43 parâmetros de cada preset não mudaram desde a seção 6; só `minDistance`/`maxDistance`/`cameraHeight` têm overrides de jogo (`ARENA_CAMERA_RIGS`, ver item 5 acima). As escolhas provisórias para os itens em aberto da seção 10 estão em `docs/ai/m11-status.md` e aguardam confirmação do dono.
 
 ---
 
@@ -446,17 +451,17 @@ Giro máximo em °/s, medido em janelas de 0,25 s. O shake máximo está em metr
 
 ## 9. Relação com as outras decisões
 
-- **Câmera atual do jogo (M4 e M5):** `src/camera/CombatCameraController.ts`, `ClashCameraDirector.ts` e `CameraTuning.ts` contêm valores de engenharia provisórios.
+- **Câmera atual do jogo (já integrada — ver item 6 da seção 1 e a seção 11):** `CombatCameraController.ts` e `ClashCameraDirector.ts` (M4/M5, valores de engenharia provisórios) **não existem mais** — foram substituídos pelo diretor aprovado deste documento, em `src/camera/director/` (`CameraDirector.ts`, `CameraRig.ts`, `CameraParams.ts`). `src/camera/CameraTuning.ts` hoje só guarda o que ficou de fora do diretor (hitstop, `ImpactMagnitude`); seu próprio comentário de cabeçalho documenta essa substituição.
   - A **forma** aprovada em 2026-09-25 foi o perfil "C — Hybrid scalable": contato rotineiro sutil e momentos grandes cinematográficos, escalando com a magnitude.
-  - O diretor aprovado mantém essa forma, pelo limiar de microimpacto e pela escala por magnitude, e **substitui** o enquadramento dessas duas classes.
-  - `ImpactEvents.ts` e `ImpactMagnitude.ts` continuam: o lab já usa os dois.
+  - O diretor aprovado mantém essa forma, pelo limiar de microimpacto e pela escala por magnitude, e **substituiu** o enquadramento dessas duas classes (feito, não mais um passo futuro).
+  - `ImpactEvents.ts` e `ImpactMagnitude.ts` continuam em uso no jogo real, do mesmo jeito que no lab.
 - **Hitstop (GDD 26; ×1,2 aprovado no VFX Lab):** hoje o hitstop é calculado dentro do `CombatCameraController`. O lab não tinha hitstop, para as três câmeras verem a mesma luta. Na integração, o hitstop continua como está, separado do diretor (item 10.6).
 - **Shake global ×1,35 (decisões visuais, §3c):** conflita com o shake próprio de cada preset. Ver o item 10.5.
 - **Perfect Dodge (GDD 22; câmera lenta de 0,3× por 0,45 s aprovada no VFX Lab):** o GDD pede que a câmera reaja forte ao Perfect Dodge. O lab **não tem** um modo PerfectDodge dedicado (item 10.7).
 - **Modo Intro (GDD 50) e câmera lenta em momentos decisivos (GDD 49):** não foram prototipados (item 10.7).
-- **Arena côncava de 3,2 m (aprovada, ainda não integrada):** o lab usou a arena plana atual do jogo.
-  - A proteção de chão usa y = 0, a altura da câmera é relativa aos Beys, e a vigia do Ring-Out usa 9 m do centro.
-  - Com o bowl, o chão passa a ser o perfil `h(r)` e a borda fica a 3,2 m. Proteção de chão, altura e Ring-Out precisam ser revalidados, como já previsto no item 3 da seção 5.1 das decisões visuais.
+- **Arena côncava (aprovada, já integrada — M11 lane 4):** o lab usou a arena plana; hoje os bowls A/B/C existem de verdade (colisor físico côncavo, não só visual — `src/arena/colliders/createArenaColliders.ts`, perfil `h(r)` em `src/arena/floor/ArenaFloorProfile.ts`), selecionáveis no Motion Lab/Pregame. A arena padrão (`DEFAULT_ARENA_FLOOR`) continua plana.
+  - A proteção de piso do diretor já lê o perfil real do bowl: `CameraRig`/`CameraDirector` recebem um `floorHeightAt(x, z)` ("for the directors' floor guard (M11 bowls)") em vez de assumir y = 0 fixo.
+  - Isso cobre o item 3 da seção 5.1 das decisões visuais; a vigia do Ring-Out (9 m do centro) não foi revista especificamente para os bowls e pode valer a pena confirmar numa partida real num bowl.
 - **Stamina & Stability:** o medidor no chão da direção C e os sinais junto ao Bey ficam visíveis nas alturas de 4 m a 6 m. O Finisher, baixo, também mostra o Bey Quebrado. Isso deve ser verificado na integração.
 - **Bey Motion Lab:** o diretor lê só o `FightFrame`. Quando o movimento do Motion Lab for aprovado, ele entra como outra fonte no Camera Lab, sem mudar o diretor nem os presets. As medições da seção 7 devem ser repetidas. Qualquer novo ajuste de valores precisa de aprovação do dono.
 - **M8:** esta decisão não inicia o M8.
@@ -467,6 +472,7 @@ Giro máximo em °/s, medido em janelas de 0,25 s. O shake máximo está em metr
 
 1. **Padrão para um jogador novo:** qual das três vem selecionada na primeira vez. Pelo GDD 167, um padrão para o jogador não pode ser travado sem o dono.
    - *Recomendação, não decidida:* **B**, por ser o equilíbrio "dramático, mas legível" do GDD 48. A é a alternativa se a prioridade for a primeira experiência mais calma.
+   - **Nota de implementação:** `PlayerSettings.ts` já usa `cameraPreset: 'B'` como padrão, citando esta recomendação no comentário. Ou seja, o código já segue a recomendação acima, mas isso não conta como a confirmação do dono que este item pede — continua em aberto nesse sentido.
 2. **Troca no meio da partida:** se a opção pode mudar no menu de pausa durante uma luta ou só fora dela.
    - *Recomendação:* permitir, com transição suave. No lab, a troca é instantânea e não quebra nada, porque os três diretores rodam juntos.
 3. **Nomes na tela de Configurações:** o GDD pede nomes em inglês para o jogador. Os candidatos são os do lab: "Arena Fighter", "Cinematic Hybrid" e "Hyper Dynamic". Falta confirmar, e decidir se cada opção terá uma descrição curta.
@@ -492,7 +498,9 @@ Giro máximo em °/s, medido em janelas de 0,25 s. O shake máximo está em metr
 
 ## 11. Como implementar (quando o dono pedir)
 
-Ordem sugerida. Cada etapa segue o fluxo de conclusão do GDD 1.5 (typecheck, testes, build, self-test e console) e a definição de pronto visual do GDD 148.
+**Status: já feito.** Os passos 1–3, 5 e 6 abaixo foram executados na integração M11 (ver item 6 da seção 1) e depois ajustados pelo fix 8 (seção 1, item 5). Mantido como registro de como foi feito e para o passo 8 (revalidar depois de mudanças na arena/movimento), que continua relevante a cada novo bowl ou ajuste de movimento.
+
+Ordem sugerida (histórico). Cada etapa segue o fluxo de conclusão do GDD 1.5 (typecheck, testes, build, self-test e console) e a definição de pronto visual do GDD 148.
 
 1. **Portar o diretor para `src/camera/director/`.**
    - Portar `CameraDirector`, `CameraParams` (os três presets, com um comentário de origem apontando para este documento, GDD 1.3 e 101), `frameMath` e `ReadabilityMeter` (para o debug e os testes).

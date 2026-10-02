@@ -2,6 +2,7 @@
 // anomaly detector as the Self-Test, and a scenario preset loaded into a
 // live session plays out like it does headless.
 
+import { ARENA_FLOOR_RADIUS } from '../../src/arena/colliders/ArenaTuning';
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { GameStateMachine } from '../../src/app/lifecycle/GameState';
@@ -39,7 +40,7 @@ describe('live session anomaly detection (GDD 67 in the Debug Lab)', () => {
   it('flags a Bey held inside the wall (an unknown invalid state since ext-32 was fixed), and records it in telemetry and the inspector', async () => {
     const session = await createSession({ first: { kind: 'idle' }, second: { kind: 'idle' } });
     for (let i = 0; i < 60; i++) {
-      session.getBey('second').body.setTranslation({ x: 12.1, y: 0.3, z: 0 }, true);
+      session.getBey('second').body.setTranslation({ x: ARENA_FLOOR_RADIUS + 0.1, y: 0.3, z: 0 }, true);
       session.getBey('second').body.setLinvel({ x: 0, y: 0, z: 0 }, true);
       session.tick();
     }

@@ -13,24 +13,26 @@
 import { DEFAULT_QUALITY_PRESET, QualityPreset } from '../runtime/QualityPreset';
 
 /**
- * How the arrows / stick drive the Bey. All four are selectable; the first
- * three never depend on the presentation camera (the camera is downstream
- * of gameplay and never moves the Bey — docs/design-decisions/
- * camera-gameplay-separation.md).
- * - opponent (default): ↑ goes toward the opponent, ↓ away, ←/→ circle
- *   around them. Derived from gameplay positions only.
+ * How the arrows / stick drive the Bey (M11, default revised 2026-10-01 —
+ * "Fix 7" of the M11 playtest round, see screenDirection.ts's header for
+ * the full history, including why "Fix 6"'s classic-by-default didn't
+ * actually solve this).
+ * - directional (default): camera-relative, read ONCE per gesture
+ *   ("Fix 9") — ↑ goes away from the camera, →/← to its right/left, ↓
+ *   toward it, as the camera is on the tick the player starts to move;
+ *   that yaw stays frozen until every direction is released, so the
+ *   automatic camera orbiting never steers the Bey ("só o jogador move o
+ *   jogador"). The next press re-reads the camera, so the screen still
+ *   reads right.
  * - classic: Bey-relative, kart-like — ←/→ steer the Bey's own heading,
  *   ↑/↓ accelerate/decelerate along it (turn rate, momentum, grip all
- *   still apply; this is not a snap-to-input).
- * - arena: ↑ = fixed arena direction (−Z), → = +X, whichever way the
- *   camera is facing.
- * - screen: ↑ goes "up the screen" as the camera is when you start to move;
- *   frozen until every direction is released. THE ONLY SCHEME THAT READS
- *   THE CAMERA — an opt-in exception the owner explicitly asked for
- *   (2026-10-01); never the default.
+ *   still apply; this is not a snap-to-input). No camera dependency at
+ *   all. Kept as a selectable option for a player who prefers it — proven
+ *   in a real browser (2026-10-01) to still look "backwards" on screen
+ *   about as often as it looks right, since this camera isn't a chase cam.
  */
-export type ControlScheme = 'opponent' | 'classic' | 'arena' | 'screen';
-export const CONTROL_SCHEMES: readonly ControlScheme[] = ['opponent', 'classic', 'arena', 'screen'];
+export type ControlScheme = 'directional' | 'classic';
+export const CONTROL_SCHEMES: readonly ControlScheme[] = ['directional', 'classic'];
 
 /**
  * Combat camera (M11, docs/design-decisions/camera-approval.md): one of the
@@ -39,6 +41,22 @@ export const CONTROL_SCHEMES: readonly ControlScheme[] = ['opponent', 'classic',
  */
 export type CameraPresetSetting = 'A' | 'B' | 'C';
 export const CAMERA_PRESET_SETTINGS: readonly CameraPresetSetting[] = ['A', 'B', 'C'];
+
+/**
+ * Stamina / Stability / Broken languages (condition-visual-approval.md): A Desgaste Mecânico, B Aura de Espírito,
+ * C Instrumento no Chão. The player may show any combination of 1, 2 or 3 (never none); the shared physical layer is always on.
+ * Only used while the `conditionVisuals` presentation flag is on; with it off the Settings screen does not show it either.
+ */
+export type ConditionLayerSetting = 'A' | 'B' | 'C';
+export const CONDITION_LAYER_SETTINGS: readonly ConditionLayerSetting[] = ['A', 'B', 'C'];
+/** OPEN DECISION (ASK FIRST): the first-time default for new players is the owner's to pick. A alone is a neutral placeholder. */
+export const DEFAULT_CONDITION_LAYERS: readonly ConditionLayerSetting[] = ['A'];
+
+/** Turns one condition layer on or off. The last layer on cannot be turned off: at least one always shows. */
+export function toggleConditionLayer(layers: readonly ConditionLayerSetting[], id: ConditionLayerSetting, on: boolean): readonly ConditionLayerSetting[] {
+  const next = CONDITION_LAYER_SETTINGS.filter((layer) => (layer === id ? on : layers.includes(layer)));
+  return next.length > 0 ? next : layers;
+}
 
 export interface PlayerSettings {
   readonly quality: QualityPreset;
@@ -52,17 +70,20 @@ export interface PlayerSettings {
   readonly controlHints: boolean;
   /** The F3 developer overlay open when the player flow starts. */
   readonly debugOverlayOnStart: boolean;
+  /** Which condition languages show (at least one). Presentation only; needs the `conditionVisuals` flag. */
+  readonly conditionLayers: readonly ConditionLayerSetting[];
 }
 
 export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   quality: DEFAULT_QUALITY_PRESET,
   // B until the owner picks the first-time default (camera-approval.md 10.1 recommends B).
   cameraPreset: 'B',
-  controlScheme: 'opponent',
+  controlScheme: 'directional',
   cameraEffects: true,
   pauseOnFocusLoss: true,
   controlHints: true,
   debugOverlayOnStart: false,
+  conditionLayers: DEFAULT_CONDITION_LAYERS,
 };
 
 /** What each quality preset changes. Render cost only. */
@@ -84,9 +105,10 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
   const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const bool = (key: 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart'): boolean => (typeof input[key] === 'boolean' ? (input[key] as boolean) : (DEFAULT_PLAYER_SETTINGS[key] as boolean));
   const quality = Object.values(QualityPreset).find((q) => q === input.quality) ?? DEFAULT_PLAYER_SETTINGS.quality;
-  // 'directional' is what saves before the four schemes stored; it migrates to the default.
   const controlScheme = CONTROL_SCHEMES.find((c) => c === input.controlScheme) ?? DEFAULT_PLAYER_SETTINGS.controlScheme;
   const cameraPreset = CAMERA_PRESET_SETTINGS.find((c) => c === input.cameraPreset) ?? DEFAULT_PLAYER_SETTINGS.cameraPreset;
+  const picked = Array.isArray(input.conditionLayers) ? CONDITION_LAYER_SETTINGS.filter((id) => (input.conditionLayers as unknown[]).includes(id)) : [];
+  const conditionLayers = picked.length > 0 ? picked : DEFAULT_CONDITION_LAYERS;
   return {
     quality,
     cameraPreset,
@@ -95,6 +117,7 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
     pauseOnFocusLoss: bool('pauseOnFocusLoss'),
     controlHints: bool('controlHints'),
     debugOverlayOnStart: bool('debugOverlayOnStart'),
+    conditionLayers,
   };
 }
 

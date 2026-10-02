@@ -163,7 +163,7 @@ describe('evaluateRisk — punish window and edge pressure (M7 Part 2)', () => {
 
   it('edge pressure follows the opponent’s distance to the edge', () => {
     const center = evaluateRisk(worldWith({}, { positionXZ: { x: 0, z: 0 } }), DEFAULT_AI_PERSONALITY).edgePressure;
-    const edge = evaluateRisk(worldWith({}, { positionXZ: { x: 12.5, z: 0 } }), DEFAULT_AI_PERSONALITY).edgePressure;
+    const edge = evaluateRisk(worldWith({}, { positionXZ: { x: RINGOUT_RADIUS_M - 0.4, z: 0 } }), DEFAULT_AI_PERSONALITY).edgePressure;
     expect(center).toBe(0);
     expect(edge).toBeGreaterThan(0.8);
   });

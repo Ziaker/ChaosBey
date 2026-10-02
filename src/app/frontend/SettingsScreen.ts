@@ -7,7 +7,8 @@
 // Keyboard: ↑/↓ row, ←/→ change, Esc back.
 // ============================================================
 
-import { CAMERA_PRESET_SETTINGS, QUALITY_PROFILES, DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ControlScheme, type PlayerSettings } from '../../config/settings/PlayerSettings';
+import { CAMERA_PRESET_SETTINGS, QUALITY_PROFILES, DEFAULT_PLAYER_SETTINGS, toggleConditionLayer, type CameraPresetSetting, type ConditionLayerSetting, type ControlScheme, type PlayerSettings } from '../../config/settings/PlayerSettings';
+import { presentationFeaturesFromLocation } from '../../presentation/features';
 import { CAMERA_PRESET_NAMES, CAMERA_PRESET_NOTES } from '../../camera/director/CameraRig';
 import { QualityPreset } from '../../config/runtime/QualityPreset';
 import { GAMEPAD_BINDINGS, currentGamepads, readFirstGamepad } from '../../input/devices/gamepadMapping';
@@ -22,6 +23,12 @@ export interface SettingsOptions {
   /** Over a paused match (translucent) instead of a full page. */
   readonly overlay?: boolean;
 }
+
+const CONDITION_LAYER_LABELS: readonly (readonly [ConditionLayerSetting, string])[] = [
+  ['A', 'A · Mechanical wear'],
+  ['B', 'B · Spirit aura'],
+  ['C', 'C · Floor instrument'],
+];
 
 type BooleanKey = 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart';
 
@@ -42,18 +49,10 @@ const KEYBOARD_BINDINGS: readonly { readonly label: string; readonly keys: strin
 
 /** The control scheme's note and its two movement rows (action, keyboard, gamepad) in the controls table. */
 const CONTROL_TEXT: Readonly<Record<ControlScheme, { readonly note: string; readonly rows: readonly (readonly [string, string, string])[] }>> = {
-  opponent: {
-    note: 'Default. ↑ moves toward your opponent, ↓ away from them, ← → circle around them. It only depends on where the Beys are — the camera never steers you.',
+  directional: {
+    note: 'Default. ↑ goes away from the camera, → to its right, and so on — as the camera is when you start to move. The camera never steers the Bey afterwards: while you hold a direction it stays put, and only releasing re-reads the camera. The Bey turns toward the direction with its own weight and grip.',
     // One movement row: the second (throttle) is Classic only and hidden here.
-    rows: [['Move (toward / around the opponent)', '← → ↑ ↓', 'Left stick / D-pad']],
-  },
-  arena: {
-    note: 'Fixed arena directions: ↑ always goes the same way in the arena, → the same way too, whichever way the camera is facing. The camera never steers you.',
-    rows: [['Move (fixed arena directions)', '← → ↑ ↓', 'Left stick / D-pad']],
-  },
-  screen: {
-    note: 'Screen-relative: ↑ goes up the screen as the camera is when you start to move, and stays locked until you let go. This is the only option that reads the camera (an opt-in exception) — the camera can change what the next press means.',
-    rows: [['Move (up the screen)', '← → ↑ ↓', 'Left stick / D-pad']],
+    rows: [['Move toward (screen direction)', '← → ↑ ↓', 'Left stick / D-pad']],
   },
   classic: {
     note: 'Kart-like: ← → steer the Bey, ↑ ↓ accelerate and brake/reverse along the way it\'s facing, regardless of the camera.',
@@ -130,10 +129,8 @@ export class SettingsScreen {
         'control-scheme',
         'Control',
         [
-          { value: 'opponent', label: 'Toward opponent' },
+          { value: 'directional', label: 'Directional' },
           { value: 'classic', label: 'Classic' },
-          { value: 'arena', label: 'Arena (fixed)' },
-          { value: 'screen', label: 'Screen (reads camera)' },
         ],
         (s) => s.controlScheme,
         (s, v) => ({ ...s, controlScheme: v }),
@@ -143,6 +140,25 @@ export class SettingsScreen {
       this.toggleRow('control-hints', 'Control hints on the HUD', 'controlHints'),
       this.toggleRow('debug-overlay', 'Developer overlay (F3) on start', 'debugOverlayOnStart'),
     );
+
+    // Condition languages (A / B / C): shown only while the conditionVisuals presentation flag is on, so the flag-off Settings screen is unchanged.
+    if (presentationFeaturesFromLocation().conditionVisuals) {
+      const condition = this.section('Condition (Stamina, Stability, Broken)');
+      for (const [id, label] of CONDITION_LAYER_LABELS) {
+        condition.append(
+          this.choiceRow<boolean>(
+            `condition-${id.toLowerCase()}`,
+            label,
+            [{ value: true, label: 'On' }, { value: false, label: 'Off' }],
+            (s) => s.conditionLayers.includes(id),
+            (s, v) => ({ ...s, conditionLayers: toggleConditionLayer(s.conditionLayers, id, v) }),
+          ),
+        );
+      }
+      const note = el('p', 'cb-hint', 'settings-condition-note');
+      note.textContent = 'Pick any combination; at least one stays on. The spin slowing and the blur are always shown.';
+      condition.append(note);
+    }
 
     const controls = this.section('Controls');
     const table = el('table', 'cb-settings__controls', 'settings-controls');

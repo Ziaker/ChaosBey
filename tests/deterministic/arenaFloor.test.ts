@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { matchSpawnsFor, FIRST_SPAWN, SECOND_SPAWN } from '../../src/app/bootstrap/matchSpawns';
 import { createArenaColliders } from '../../src/arena/colliders/createArenaColliders';
 import { ARENA_FLOOR_RADIUS, ARENA_WALL_HEIGHT } from '../../src/arena/colliders/ArenaTuning';
-import { ARENA_FLOORS, ARENA_FLOOR_IDS, BOWL_DEPTH_M, floorHeightAt, floorNormalAt, floorRimHeight, type ArenaFloorId } from '../../src/arena/floor/ArenaFloorProfile';
+import { ARENA_FLOORS, ARENA_FLOOR_IDS, BOWL_C_PLATEAU_RADIUS_M, BOWL_DEPTH_M, DEFAULT_ARENA_FLOOR, floorHeightAt, floorNormalAt, floorRimHeight, floorSlopeDegAt, type ArenaFloorId } from '../../src/arena/floor/ArenaFloorProfile';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { createDefaultMatchConfig } from '../../src/config/match/MatchConfig';
 import { decodeReplay, encodeReplay, sealReplay } from '../../src/replay/format/ChaosBeyReplayV1';
@@ -38,21 +38,41 @@ function firstHit(physics: PhysicsWorld, from: { x: number; y: number; z: number
 }
 
 describe('floor profiles (approval §2)', () => {
-  it('are the approved formulas: 3.2 m rim at 12 m, parabola / funnel / 2.6 m plateau; flat is 0 everywhere', () => {
-    expect(BOWL_DEPTH_M).toBe(3.2);
-    for (const r of [0, 1, 2.6, 4, 7.5, 12]) {
+  it('are the approved curves at the scaled arena: 2.5 m deep at R = 36 m, parabola / funnel / 7.8 m plateau; flat is 0 everywhere', () => {
+    // Arena scale pass: R 12 -> 36 m (3x), depth 3.2 -> 2.5 m (owner request), plateau 2.6 -> 7.8 m (3x).
+    expect(ARENA_FLOOR_RADIUS).toBe(36);
+    expect(BOWL_DEPTH_M).toBe(2.5);
+    expect(BOWL_C_PLATEAU_RADIUS_M).toBeCloseTo(7.8, 12);
+    for (const r of [0, 3, 7.8, 12, 22.5, 36]) {
       expect(ARENA_FLOORS.flat.heightAtRadius(r)).toBe(0);
-      expect(ARENA_FLOORS['bowl-a'].heightAtRadius(r)).toBeCloseTo(3.2 * (r / 12) ** 2, 12);
-      expect(ARENA_FLOORS['bowl-b'].heightAtRadius(r)).toBeCloseTo(3.2 * (r / 12) ** 1.3, 12);
-      expect(ARENA_FLOORS['bowl-c'].heightAtRadius(r)).toBeCloseTo(r <= 2.6 ? 0 : 3.2 * ((r - 2.6) / (12 - 2.6)) ** 1.4, 12);
+      expect(ARENA_FLOORS['bowl-a'].heightAtRadius(r)).toBeCloseTo(2.5 * (r / 36) ** 2, 12);
+      expect(ARENA_FLOORS['bowl-b'].heightAtRadius(r)).toBeCloseTo(2.5 * (r / 36) ** 1.3, 12);
+      expect(ARENA_FLOORS['bowl-c'].heightAtRadius(r)).toBeCloseTo(r <= 7.8 ? 0 : 2.5 * ((r - 7.8) / (36 - 7.8)) ** 1.4, 12);
     }
-    for (const bowl of BOWLS) expect(floorRimHeight(bowl)).toBeCloseTo(3.2, 12);
+    for (const bowl of BOWLS) expect(floorRimHeight(bowl)).toBeCloseTo(2.5, 12);
     expect(floorRimHeight('flat')).toBe(0);
+  });
+
+  it('the stage is not flat by default: the default floor is a smooth bowl with the centre 2.5 m below the rim, no hard corner', () => {
+    expect(DEFAULT_ARENA_FLOOR).not.toBe('flat');
+    const rim = floorRimHeight(DEFAULT_ARENA_FLOOR);
+    expect(rim).toBeCloseTo(2.5, 12);
+    expect(floorHeightAt(DEFAULT_ARENA_FLOOR, 0, 0)).toBe(0);
+    // Smooth: the slope is 0 at the centre and rises continuously (no step between neighbouring samples), and the steepest part (the wall end) is a gentle ramp.
+    let previous = ARENA_FLOORS[DEFAULT_ARENA_FLOOR].slopeAtRadius(0);
+    expect(previous).toBe(0);
+    for (let r = 0.5; r <= R; r += 0.5) {
+      const slope = ARENA_FLOORS[DEFAULT_ARENA_FLOOR].slopeAtRadius(r);
+      expect(slope).toBeGreaterThanOrEqual(previous);
+      expect(slope - previous).toBeLessThan(0.01);
+      previous = slope;
+    }
+    expect(floorSlopeDegAt(DEFAULT_ARENA_FLOOR, R, 0)).toBeLessThan(10);
   });
 
   it('normals are unit, point up and toward the centre, and match the numerical slope', () => {
     for (const floor of ARENA_FLOOR_IDS) {
-      for (const [x, z] of [[3, 1], [-6, 4], [0.5, -9], [7, 7]] as const) {
+      for (const [x, z] of [[9, 3], [-18, 12], [1.5, -27], [21, 21]] as const) {
         const n = floorNormalAt(floor, x, z);
         expect(Math.hypot(n.x, n.y, n.z)).toBeCloseTo(1, 12);
         expect(n.y).toBeGreaterThan(0.8);
@@ -72,7 +92,7 @@ describe('collider (one source of truth with the visuals)', () => {
       const physics = await arena(floor);
       for (let i = 0; i < 40; i++) {
         const a = i * 2.39996;
-        const r = Math.sqrt(i / 40) * 11;
+        const r = Math.sqrt(i / 40) * (R - 1);
         const x = Math.cos(a) * r;
         const z = Math.sin(a) * r;
         const toi = firstHit(physics, { x, y: 20, z }, { x: 0, y: -1, z: 0 }, false);
@@ -93,14 +113,16 @@ describe('collider (one source of truth with the visuals)', () => {
     }
   });
 
-  it('the flat arena is exactly the old one: cylinder floor, same spawns, flat by default', async () => {
-    expect(createDefaultMatchConfig().arenaFloor).toBe('flat');
+  it('the flat floor is the baseline at y = 0 with the same spawns (a flat heightfield: the 36 m cylinder gave ghost obstacles); the default match config is the bowl, not flat', async () => {
+    expect(createDefaultMatchConfig().arenaFloor).toBe(DEFAULT_ARENA_FLOOR);
     expect(matchSpawnsFor('flat')).toEqual({ first: FIRST_SPAWN, second: SECOND_SPAWN });
     const physics = await arena('flat');
     const shapes = new Set<number>();
     physics.rapierWorld.forEachCollider((c) => shapes.add(c.shape.type));
-    expect(shapes.has(RAPIER.ShapeType.Cylinder)).toBe(true);
-    expect(shapes.has(RAPIER.ShapeType.HeightField)).toBe(false);
+    expect(shapes.has(RAPIER.ShapeType.HeightField)).toBe(true);
+    expect(shapes.has(RAPIER.ShapeType.Cylinder)).toBe(false);
+    // ...and it is the plane y = 0 all the way out to the wall.
+    for (const [x, z] of [[0, 0], [20, 5], [-30, -10], [0, 34]] as const) expect(20 - firstHit(physics, { x, y: 20, z }, { x: 0, y: -1, z: 0 }, false)!).toBeCloseTo(0, 2);
     physics.rapierWorld.free();
   });
 
@@ -123,7 +145,7 @@ describe('every bowl plays clean (no invalid state)', () => {
       // integration (M11: upright body, landing bounce) 35% stick measures 0.08 m/s there (lane 4:
       // 0.24) — the "light input can't leave bowl B's centre" playtest item, now stronger.
       expect(p.slowClimb.speedAt2sMps, `${floor}: 35% stick still moves`).toBeGreaterThan(0.05);
-      expect(p.wallPush.maxRadiusM, `${floor}: the wall holds`).toBeLessThan(11.2);
+      expect(p.wallPush.maxRadiusM, `${floor}: the wall holds`).toBeLessThan(R - 0.8);
       expect(p.drop.secondsToLand, `${floor}: lands`).not.toBeNull();
     }
   }, 120_000);
@@ -142,7 +164,8 @@ describe('every bowl plays clean (no invalid state)', () => {
 
   it('AI vs AI, every pairing: rounds resolve, no invalid state', async () => {
     for (const floor of BOWLS) {
-      const batch = await runFloorAiBatch(floor, 1);
+      // 7200 ticks (2 min, was 3600): on the 36 m stage one bowl-B pairing was still going at 60 s (arena scale pass: longer rounds).
+      const batch = await runFloorAiBatch(floor, 1, 7200);
       expect(batch.matches).toBe(9);
       expect(batch.invalidStates, floor).toBe(0);
       expect(batch.unresolved, floor).toBe(0);
@@ -169,7 +192,7 @@ describe('determinism and replays on a bowl', () => {
 
   it('a replay recorded before the floor option (no arenaFloor) is still valid and plays as flat; a bad floor is refused', async () => {
     const fingerprint = await currentRuntimeFingerprint();
-    const flat = await simulateAiMatch({ seed: 'bowl-legacy', firstDefinition: ATTACK_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE, maxTicks: 300, record: { fingerprint, checkpointEvery: 30 } });
+    const flat = await simulateAiMatch({ seed: 'bowl-legacy', firstDefinition: ATTACK_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE, maxTicks: 300, matchConfigOverrides: { arenaFloor: 'flat' }, record: { fingerprint, checkpointEvery: 30 } });
     const raw = JSON.parse(encodeReplay(flat.replay!));
     delete raw.config.matchConfig.arenaFloor;
     const { integrity: _i, ...unsealed } = raw;

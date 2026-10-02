@@ -204,7 +204,13 @@ describe('short hop vs full jump — mandatory curve (owner spec section 17)', (
   it('a jump while moving does not kill horizontal velocity on landing, and does not add extra forward boost', async () => {
     const grounded = await TestBeyHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 });
     grounded.tickMany(classic([]), 60);
-    grounded.tickMany(classic([Action.MoveForward]), 30);
+    // Same 30 + 90 forward ticks as hopArc(2, 90, true) drives. This used to be
+    // 30 ticks only, which compared a still-accelerating Bey (~4.4 m/s) with the
+    // jumped one; the jumped Bey's speed only came out lower on the old 12 m
+    // arena because it ran into the wall during those 120 ticks. On the 36 m
+    // arena it reaches top speed without touching a wall, so the reference is
+    // measured over the same window (arena scale pass; no jump behaviour changed).
+    grounded.tickMany(classic([Action.MoveForward]), 120);
     const groundedSpeed = Math.hypot(grounded.beyBody.linvel().x, grounded.beyBody.linvel().z);
 
     const jumped = await hopArc(2, 90, true);

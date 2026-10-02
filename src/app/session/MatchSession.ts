@@ -28,11 +28,11 @@ import { RoundState } from '../../combat/round-rules/RoundState';
 import { ClashOutcome, ClashState } from '../../combat/clash/ClashController';
 import { NullAiMashSource } from '../../combat/clash/ClashMash';
 import { CLASH_PROGRESSIVE_VFX_INTERVAL_TICKS, CLASH_TARGET_DURATION_S } from '../../combat/clash/ClashTuning';
-import { CameraRig, type CameraObserver } from '../../camera/director/CameraRig';
+import { CameraRig } from '../../camera/director/CameraRig';
 import { buildFightFrame, speedLinesScreenDirection, type FightFrameBey, type SessionCameraOutput } from '../../camera/director/sessionCamera';
 import type { PresetId } from '../../camera/director/CameraParams';
-import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../simulation/impact/ImpactEvents';
-import { CLASH_RESOLVED_MAGNITUDE } from '../simulation/impact/ImpactMagnitude';
+import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../../camera/ImpactEvents';
+import { CLASH_RESOLVED_MAGNITUDE } from '../../camera/ImpactMagnitude';
 import { arenaGeometryOf, type MatchConfig } from '../../config/match/MatchConfig';
 import { FOUNDRY_PIT, type ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
@@ -45,6 +45,16 @@ import { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { createRngStreams, type RngStreams } from '../../rng/SeededRng';
 import { TelemetryEventKind } from '../../telemetry/events/TelemetryEvent';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
+import { presentationFeaturesFromLocation, type PresentationFeatures } from '../../presentation/features';
+import { PresentationHub, type PresentationHubStats } from '../../presentation/hub';
+import { selectClashPresentationSnapshot } from '../../presentation/clash';
+import { selectBeyPresentationState, type CameraPresentationSnapshot, type RecentImpact } from '../../presentation/state';
+import type { PresentationSide } from '../../presentation/events';
+import { collectSceneStats, type SceneStats } from '../../presentation/sceneStats';
+import { ConditionVisualsSystem, normalizeConditionLayers } from '../../vfx/condition/ConditionVisualsSystem';
+import { HybridVfxSystem } from '../../vfx/hybrid/HybridVfxSystem';
+import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
+import type { LanguageId } from '../../vfx/condition/types';
 import { HeadingArrow } from '../../vfx/HeadingArrow';
 import { DriftVfx } from '../../vfx/DriftVfx';
 import { VfxManager } from '../../vfx/VfxManager';
@@ -80,15 +90,10 @@ export interface MatchSessionOptions {
   readonly arenaTheme?: ArenaTheme;
   /** M11: the player's camera preset (Settings). Render only; default B. */
   readonly cameraPreset?: PresetId;
-  /**
-   * The presentation camera that observes this match. Omit for the real
-   * Camera Director; pass `null` for no camera at all (render disabled).
-   * The camera is downstream of gameplay: it may observe the match and may
-   * never influence it (docs/design-decisions/camera-gameplay-
-   * separation.md) — gameplay is identical for every value of this option,
-   * which tests/deterministic/cameraGameplaySeparation.test.ts proves.
-   */
-  readonly cameraRig?: CameraObserver | null;
+  /** Presentation feature flags (src/presentation/features.ts). Omit for the page's `?pfx=` flags (all off when there are none): the game as it was. Render only. */
+  readonly presentationFeatures?: PresentationFeatures;
+  /** Which condition languages (A, B, C) show when the `conditionVisuals` flag is on; at least one. Default A. Render only. */
+  readonly conditionLayers?: readonly LanguageId[];
 }
 
 export interface SessionTickOutput {
@@ -143,11 +148,16 @@ export class MatchSession {
 
   private readonly root = new THREE.Group();
   private readonly vfxManager: VfxManager;
+  /** Presentation foundation: derives events and state after each tick and runs attached presentation systems (none by default). Render only. */
+  private readonly presentation: PresentationHub;
+  /** The approved Stamina / Stability / Broken languages, attached only with the `conditionVisuals` flag (render only). */
+  private conditionVisuals: ConditionVisualsSystem | null = null;
+  /** The approved Hybrid VFX (Cel Cyclone wind), attached only with the `hybridVfx` flag (render only). */
+  private hybridVfx: HybridVfxSystem | null = null;
   /** Owner playtest (after M11): skid marks, sparks and grip-regain ring while a Bey drifts. Render only. */
   private readonly driftVfx: { readonly first: DriftVfx; readonly second: DriftVfx };
-  /** M11: the approved camera director running the three presets; the Clash forces B without orbit. Render only; null = no camera (render disabled). */
-  private readonly cameraRig: CameraObserver | null;
-  private readonly initialCameraPreset: PresetId;
+  /** M11: the approved camera director running the three presets; the Clash forces B without orbit. Render only. */
+  private readonly cameraRig: CameraRig;
   /** The render camera, read only for its aspect ratio (the director's off-screen check). */
   private readonly camera: THREE.PerspectiveCamera;
   private readonly stepper = new MatchStepper();
@@ -269,23 +279,57 @@ export class MatchSession {
     this.clash = new ClashOrchestration(options.matchConfig, new NullAiMashSource());
 
     options.scene.add(this.root);
+    const presentationFeatures = options.presentationFeatures ?? presentationFeaturesFromLocation();
     this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys, {
       geometry: arenaGeometryOf(options.matchConfig),
       theme: options.arenaTheme ?? FOUNDRY_PIT.theme,
-    }, options.matchConfig.motion ?? 'B');
+    }, options.matchConfig.motion ?? 'B', presentationFeatures);
+    this.presentation = new PresentationHub({
+      features: presentationFeatures,
+      beys: [
+        { side: 'first', definitionId: this.match.first.definition.id },
+        { side: 'second', definitionId: this.match.second.definition.id },
+      ],
+      getVfxAnchor: (side, name, out) => this.match.visuals[side].anchors.getWorld(name, out),
+    });
     this.headingArrow = new HeadingArrow(this.root);
     this.camera = options.camera;
     const arenaFloor = options.matchConfig.arenaFloor ?? 'flat';
-    this.initialCameraPreset = options.cameraPreset ?? 'B';
-    this.cameraRig =
-      options.cameraRig === undefined
-        ? new CameraRig(this.initialCameraPreset, options.camera.aspect, arenaFloor === 'flat' ? undefined : (x, z) => floorHeightAt(arenaFloor, x, z))
-        : options.cameraRig;
+    this.cameraRig = new CameraRig(options.cameraPreset ?? 'B', options.camera.aspect, arenaFloor === 'flat' ? undefined : (x, z) => floorHeightAt(arenaFloor, x, z));
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
     const theme = options.arenaTheme ?? FOUNDRY_PIT.theme;
     const floorAt = (x: number, z: number): number => floorHeightAt(arenaFloor, x, z);
     this.driftVfx = { first: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt), second: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt) };
     this.root.add(this.driftVfx.first.object3D, this.driftVfx.second.object3D);
+    if (presentationFeatures.conditionVisuals) {
+      this.conditionVisuals = new ConditionVisualsSystem({
+        scene: this.root,
+        camera: options.camera,
+        beys: {
+          first: { visual: this.match.visuals.first.visual, gameplay: this.match.first.definition },
+          second: { visual: this.match.visuals.second.visual, gameplay: this.match.second.definition },
+        },
+        floorHeightAt: floorAt,
+        layers: normalizeConditionLayers(options.conditionLayers ?? ['A']),
+      });
+      this.presentation.attach(this.conditionVisuals);
+    }
+    if (presentationFeatures.hybridVfx) {
+      this.hybridVfx = new HybridVfxSystem({
+        scene: this.root,
+        camera: options.camera,
+        beys: {
+          first: { visual: this.match.visuals.first.visual, gameplay: this.match.first.definition },
+          second: { visual: this.match.visuals.second.visual, gameplay: this.match.second.definition },
+        },
+        floorHeightAtR: (r) => floorAt(r, 0),
+        arenaSparks: [theme.sparkHotHex, theme.sparkCoolHex],
+        arenaRadiusM: ARENA_FLOOR_RADIUS,
+      });
+      this.presentation.attach(this.hybridVfx);
+      // The legacy spark and landing bursts give way to the approved language (the existing layer switch; the tick code is untouched).
+      this.vfxManager.setLayerVisible('impactBursts', false);
+    }
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
     this.anomalyDetector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(options.matchConfig.arenaFloor ?? 'flat') + options.matchConfig.arenaWallHeightM });
@@ -316,11 +360,11 @@ export class MatchSession {
 
   /** M11: the player's camera preset (A/B/C). Render only; a change mid-match crossfades. */
   setCameraPreset(preset: PresetId): void {
-    this.cameraRig?.setPreset(preset);
+    this.cameraRig.setPreset(preset);
   }
 
   getCameraPreset(): PresetId {
-    return this.cameraRig?.getPreset() ?? this.initialCameraPreset;
+    return this.cameraRig.getPreset();
   }
 
   getLastCameraOutput(): SessionCameraOutput | null {
@@ -573,6 +617,7 @@ export class MatchSession {
     };
 
     this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents.clashStarted);
+    this.tickPresentation(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents);
 
     for (const detection of this.anomalyDetector.check({
       tick: tickIndex,
@@ -650,6 +695,7 @@ export class MatchSession {
         });
       }
     }
+    this.presentation.update(frameDeltaSeconds);
   }
 
   /** Drift effect counts per side (render only), for tests and the smoke. */
@@ -666,10 +712,41 @@ export class MatchSession {
     return this.vfxManager;
   }
 
+  /** The presentation hub: future visual systems attach here. Nothing is attached by default. */
+  getPresentation(): PresentationHub {
+    return this.presentation;
+  }
+
+  /** Which condition languages show, live (the Settings screen). No effect unless the `conditionVisuals` flag is on. */
+  setConditionLayers(layers: readonly LanguageId[]): void {
+    this.conditionVisuals?.setLayers(layers);
+  }
+
+  /** The Hybrid VFX system, or null while the `hybridVfx` flag is off (tests and visual checks drive its runtime). */
+  getHybridVfx(): HybridVfxSystem | null {
+    return this.hybridVfx;
+  }
+
+  /** The condition languages showing now, or null while the `conditionVisuals` flag is off. */
+  getConditionLayers(): readonly LanguageId[] | null {
+    return this.conditionVisuals?.getLayers() ?? null;
+  }
+
+  /** World position of a named VFX anchor on a Bey (presentation only). False if the name is not an anchor. */
+  getVfxAnchor(side: Side, name: string, out: { x: number; y: number; z: number }): boolean {
+    return this.match.visuals[side].anchors.getWorld(name, out);
+  }
+
+  /** Observability for the visual passes: what the hub runs and a census of this session's scene subtree. */
+  getPresentationStats(): { readonly hub: PresentationHubStats; readonly scene: SceneStats } {
+    return { hub: this.presentation.getStats(), scene: collectSceneStats(this.root) };
+  }
+
   /** Frees the physics world and removes/disposes everything this session drew. The session is unusable afterwards. */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.presentation.dispose();
     this.vfxManager.dispose();
     this.driftVfx.first.dispose();
     this.driftVfx.second.dispose();
@@ -788,10 +865,6 @@ export class MatchSession {
       return { position: copy3(b.body.translation()), velocity: copy3(b.body.linvel()), grounded: s ? s.grounded : null, attackState: s ? s.attackState : null, isBroken: s ? s.isBroken : false };
     };
     // The camera runs every tick, hitstop included (shake and FOV punch keep decaying in real time; camera-approval.md 10.6).
-    // It only OBSERVES: the frame below is built from gameplay state, and
-    // the output lands in lastCameraOutput, which renderFrame() and the
-    // debug readouts read — never the simulation.
-    if (!this.cameraRig) return;
     this.cameraRig.setAspect(this.camera.aspect);
     const frame = buildFightFrame({
       tick: tickIndex,
@@ -825,6 +898,72 @@ export class MatchSession {
       side: out.player.debug.side,
       modifiers: [...out.player.debug.modifiers],
     };
+  }
+
+  private cameraSnapshot(): CameraPresentationSnapshot | null {
+    const c = this.lastCameraOutput;
+    if (!c) return null;
+    return {
+      mode: c.mode,
+      preset: c.preset,
+      fovDeg: c.fovDeg,
+      distanceM: c.distanceM,
+      yawDeg: c.yawDeg,
+      clashBlend: c.clashBlend,
+      highSpeedBlend: c.highSpeedBlend,
+      hitstopActive: c.isHitstopActive,
+      hitstopRemainingS: c.hitstopRemainingS,
+    };
+  }
+
+  /**
+   * Presentation foundation: hands the finished tick to the hub, which derives
+   * PresentationEvents and the presentation state and delivers them to any
+   * attached systems. Read-only: it reads what the tick already produced and
+   * writes nothing the simulation, the replay or the state hash can see.
+   */
+  private tickPresentation(
+    tickIndex: number,
+    result: MatchTickResult,
+    isFrozenByHitstop: boolean,
+    clashResolvedThisTick: MatchTickResult['clashResolvedThisTick'],
+    currentClashState: ClashState,
+    clashEdges: ReturnType<ClashPresentationTracker['update']>,
+  ): void {
+    const snapshot = this.lastMatchResult;
+    if (!snapshot) return;
+    const clash = this.clash.controller;
+    // The same pure mapping the camera and the legacy VFX use, evaluated here so the
+    // camera/VFX block above stays untouched. A Clash tick contributes no impact
+    // events of its own: its presentation events come from the Clash edges.
+    const impactEvents: readonly ImpactEvent[] =
+      clashResolvedThisTick || currentClashState === ClashState.Active || isFrozenByHitstop
+        ? []
+        : buildImpactEventsForTick(result, this.match.first.body.translation(), this.match.second.body.translation());
+    this.presentation.onTick(
+      {
+        tick: tickIndex,
+        result: isFrozenByHitstop ? null : result,
+        impactEvents,
+        clash: {
+          started: clashEdges.clashStarted,
+          result: clashEdges.clashResult,
+          mashEdges: clashEdges.mashInputEvents,
+          progress: Math.min(1, Math.max(0, clash.getElapsedS() / CLASH_TARGET_DURATION_S)),
+        },
+        roundOver: this.roundState.isOver,
+        roundOutcome: this.roundState.result,
+      },
+      (recentImpact: Readonly<Record<PresentationSide, RecentImpact | null>>) => ({
+        tick: tickIndex,
+        round: { over: this.roundState.isOver, outcome: this.roundState.result },
+        first: selectBeyPresentationState(snapshot.first, { side: 'first', definitionId: this.match.first.definition.id, maxSpeedMps: this.match.first.definition.handling.maxSpeedMps }),
+        second: selectBeyPresentationState(snapshot.second, { side: 'second', definitionId: this.match.second.definition.id, maxSpeedMps: this.match.second.definition.handling.maxSpeedMps }),
+        clash: selectClashPresentationSnapshot(clash),
+        camera: this.cameraSnapshot(),
+        recentImpact,
+      }),
+    );
   }
 }
 

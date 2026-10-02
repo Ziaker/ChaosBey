@@ -197,8 +197,9 @@ function validateConfig(v: Validator, value: unknown): void {
   // or removed since the recording is a version problem, not something to guess.
   // `arenaFloor` (M11 lane 4) and `motion` (M11) are the fields allowed to
   // be absent: every replay recorded before them was played on the flat
-  // arena, and playback resolves a missing value to the default
-  // (resolveMatchConfig). A replay without `motion` predates the Motion Lab
+  // arena, and playback resolves a missing `arenaFloor` to 'flat' explicitly
+  // (replayPlayback.ts; the default floor is a bowl since the arena scale
+  // pass) and a missing `motion` to the default (resolveMatchConfig). A replay without `motion` predates the Motion Lab
   // integration, so playing it back runs today's direction B — the state
   // hash check reports the divergence rather than it being guessed away.
   const matchTemplate: Partial<MatchConfig> = createDefaultMatchConfig();

@@ -58,5 +58,6 @@ export function resolveMatchConfig(overrides: Partial<MatchConfig> = {}): MatchC
 
 /** The arena values of a resolved config, in the shape the arena builder takes. */
 export function arenaGeometryOf(config: MatchConfig): ArenaGeometry {
-  return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution, floor: config.arenaFloor ?? DEFAULT_ARENA_FLOOR };
+  // A config without a floor predates floors: flat (as MatchSession and replay playback read it too).
+  return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution, floor: config.arenaFloor ?? 'flat' };
 }

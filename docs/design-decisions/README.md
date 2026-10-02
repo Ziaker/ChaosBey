@@ -19,7 +19,6 @@ Este diretório contém decisões de design que agentes **não devem reabrir** s
 | Beys, Arena e VFX | `visual-prototypes-approval.md` |
 | Stamina / Stability / Quebrado | `condition-visual-approval.md` |
 | Camera Director e presets | `camera-approval.md` |
-| Câmera × Gameplay (a câmera nunca move o Bey; auditoria; decisão pendente do referencial de controle) | `camera-gameplay-separation.md` |
 | Movimento / Motion Lab | `motion-approval.md` |
 | Apresentação do Clash | `clash-presentation-approval.md` |
 | Inventário/histórico de labs | `visual-prototype-inventory.md` |
@@ -46,6 +45,10 @@ Antes de criar um novo Lab, identificar exatamente a lacuna que permanece aberta
 
 Em particular, qualquer trabalho futuro de Combat HUD deve tratar somente layout/estética/legibilidade do HUD geral enquanto isso continuar sem escolha final documentada. Ele não deve recriar câmera, arena, movimento, VFX, condição, Clash, física, recursos ou IA.
 
+## Sobre as referências "GDD §N"
+
+Todos os documentos deste diretório citam números de seção de um "GDD" (Game Design Document). Esse documento **não está neste repositório** — é fornecido por fora, diretamente para os agentes de desenvolvimento (ver `CLAUDE.md`, seção 3). Uma referência "GDD §N" não é, portanto, verificável só com o que está na `main`; trate-a como vinda de uma fonte externa que o dono/agente tem em mãos, não como um arquivo que falta encontrar aqui.
+
 ## Regra de manutenção
 
 Ao registrar uma nova decisão:
@@ -56,3 +59,8 @@ Ao registrar uma nova decisão:
 4. marcar decisões antigas como superseded quando necessário;
 5. atualizar o inventário;
 6. preservar o histórico em vez de apagar contexto útil.
+
+## Regra de processo (versão e README)
+
+Toda mudança (jogo, regras, conteúdo ou ferramentas) **sempre** atualiza o número de versão (`package.json` + `package-lock.json`, o mesmo que aparece no canto do jogo) e o `README.md` (linha **Version** e **Latest changes**). Isso vale sem pedir autorização. Detalhes em `CLAUDE.md` §4; um teste (`tests/unit/versionSync.test.ts`) quebra se os números divergirem.
+
