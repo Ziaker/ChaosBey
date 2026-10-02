@@ -33,22 +33,37 @@
 // (docs/design-decisions/camera-gameplay-separation.md).
 // ============================================================
 
+import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
+import { RINGOUT_RADIUS_M } from '../../arena/ringout/RingOutTuning';
 import { CameraDirector, type CameraMode, type DirectorOptions, type DirectorOutput } from './CameraDirector';
 import { cloneParams, PRESETS, PRESET_IDS, type CameraParams, type PresetId } from './CameraParams';
 import type { FightFrame, Vec3 } from './FightFrame';
 import { clamp, smoothstep } from './frameMath';
 
 /**
+ * How far inside the floor edge the in-game eye is kept. This preserves
+ * the 1.5 m wall margin that the old 12 m arena used, but derives the
+ * actual radius from the current arena scale.
+ */
+export const CAMERA_EDGE_MARGIN_M = 1.5;
+/** Eye containment radius for the current arena. */
+export const CAMERA_CONTAIN_RADIUS_M = ARENA_FLOOR_RADIUS - CAMERA_EDGE_MARGIN_M;
+/**
+ * Ring-out camera anticipation starts 3.9 m inside the gameplay ring-out
+ * boundary, preserving the old 9 m vs 12.9 m relationship at any arena scale.
+ */
+export const CAMERA_RINGOUT_WATCH_RADIUS_M = RINGOUT_RADIUS_M - 3.9;
+
+/**
  * Every game director: no Clash orbit (clash-presentation-approval.md 3.6)
- * and the in-game arena camera (owner, M11 playtest): stays inside the
- * arena. The rig's own height/distance overrides (ARENA_CAMERA_RIGS) keep
- * the low, close, third-person feel; everything else — focus bias, orbit,
- * side switching, offscreen rescue, FOV, shake, contexts — is the
- * unmodified Camera Lab director.
+ * and the in-game arena camera stays inside the arena. The rig's own
+ * height/distance overrides (ARENA_CAMERA_RIGS) keep the low, close,
+ * third-person feel; everything else remains presentation-only.
  */
 export const RIG_DIRECTOR_OPTIONS = {
   clashOrbit: false,
-  arena: { containRadiusM: 10.5 },
+  arena: { containRadiusM: CAMERA_CONTAIN_RADIUS_M },
+  ringOutWatchRadiusM: CAMERA_RINGOUT_WATCH_RADIUS_M,
 } as const;
 
 /**
@@ -61,11 +76,9 @@ export const RIG_DIRECTOR_OPTIONS = {
  * only `minDistance`, `maxDistance` and `cameraHeight` are overridden here,
  * to the same low, close-behind-the-player values the earlier `ShoulderRig`
  * used at rest (fix 7, before this redesign): A 5.8 m / 2.4 m up, B 5 m /
- * 1.9 m, C 4.3 m / 1.5 m. `maxDistance` is kept generous (unlike the old
- * fixed `maxExtraDistanceM` caps) so the director's own separation response
- * can pull back as far as it needs to keep the opponent framed; the arena's
- * `containRadiusM` (10.5 m) and `HEIGHT_PER_DISTANCE` already stop that
- * from reading as an aerial shot (see the "far separation" test scenario).
+ * 1.9 m, C 4.3 m / 1.5 m. `maxDistance` is kept generous so the director
+ * can pull back as needed; CAMERA_CONTAIN_RADIUS_M stops the eye crossing
+ * the arena wall while preserving the new 36 m scale.
  */
 export interface ArenaCameraRig {
   readonly minDistance: number;
@@ -190,11 +203,6 @@ export class CameraRig {
 
     const forced = outputs[CLASH_FORCED_PRESET];
     const rawClash = clamp(forced.weights.Clash, 0, 1);
-    // Follows the director's Clash weight, eased and rate-limited: that
-    // weight rises exponentially (fastest on its first tick) and the
-    // player's eye can be ~12 m from B's (both kept inside the arena), so
-    // followed raw the view swept 0.6 m in one tick. A full blend now takes
-    // at least CLASH_BLEND_MIN_S.
     const target = rawClash < CLASH_BLEND_EPSILON ? 0 : smoothstep(0, 1, rawClash);
     const maxStep = dt / CLASH_BLEND_MIN_S;
     this.clashFollow += Math.max(-maxStep, Math.min(maxStep, target - this.clashFollow));
