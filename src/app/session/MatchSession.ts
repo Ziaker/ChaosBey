@@ -28,11 +28,11 @@ import { RoundState } from '../../combat/round-rules/RoundState';
 import { ClashOutcome, ClashState } from '../../combat/clash/ClashController';
 import { NullAiMashSource } from '../../combat/clash/ClashMash';
 import { CLASH_PROGRESSIVE_VFX_INTERVAL_TICKS, CLASH_TARGET_DURATION_S } from '../../combat/clash/ClashTuning';
-import { CameraRig } from '../../camera/director/CameraRig';
+import { CameraRig, type CameraObserver } from '../../camera/director/CameraRig';
 import { buildFightFrame, speedLinesScreenDirection, type FightFrameBey, type SessionCameraOutput } from '../../camera/director/sessionCamera';
 import type { PresetId } from '../../camera/director/CameraParams';
-import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../../camera/ImpactEvents';
-import { CLASH_RESOLVED_MAGNITUDE } from '../../camera/ImpactMagnitude';
+import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../simulation/impact/ImpactEvents';
+import { CLASH_RESOLVED_MAGNITUDE } from '../simulation/impact/ImpactMagnitude';
 import { arenaGeometryOf, type MatchConfig } from '../../config/match/MatchConfig';
 import { FOUNDRY_PIT, type ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
@@ -90,6 +90,13 @@ export interface MatchSessionOptions {
   readonly arenaTheme?: ArenaTheme;
   /** M11: the player's camera preset (Settings). Render only; default B. */
   readonly cameraPreset?: PresetId;
+  /**
+   * The presentation camera that observes this match. Omit for the real
+   * Camera Director; pass `null` for no camera at all (render disabled).
+   * The camera is downstream of gameplay: it may observe the match and may
+   * never influence it. Tests prove gameplay is identical for every value.
+   */
+  readonly cameraRig?: CameraObserver | null;
   /** Presentation feature flags (src/presentation/features.ts). Omit for the page's `?pfx=` flags (all off when there are none): the game as it was. Render only. */
   readonly presentationFeatures?: PresentationFeatures;
   /** Which condition languages (A, B, C) show when the `conditionVisuals` flag is on; at least one. Default A. Render only. */
@@ -156,8 +163,9 @@ export class MatchSession {
   private hybridVfx: HybridVfxSystem | null = null;
   /** Owner playtest (after M11): skid marks, sparks and grip-regain ring while a Bey drifts. Render only. */
   private readonly driftVfx: { readonly first: DriftVfx; readonly second: DriftVfx };
-  /** M11: the approved camera director running the three presets; the Clash forces B without orbit. Render only. */
-  private readonly cameraRig: CameraRig;
+  /** M11: approved camera director. Render only; null means no camera (render disabled). */
+  private readonly cameraRig: CameraObserver | null;
+  private readonly initialCameraPreset: PresetId;
   /** The render camera, read only for its aspect ratio (the director's off-screen check). */
   private readonly camera: THREE.PerspectiveCamera;
   private readonly stepper = new MatchStepper();
@@ -295,7 +303,11 @@ export class MatchSession {
     this.headingArrow = new HeadingArrow(this.root);
     this.camera = options.camera;
     const arenaFloor = options.matchConfig.arenaFloor ?? 'flat';
-    this.cameraRig = new CameraRig(options.cameraPreset ?? 'B', options.camera.aspect, arenaFloor === 'flat' ? undefined : (x, z) => floorHeightAt(arenaFloor, x, z));
+    this.initialCameraPreset = options.cameraPreset ?? 'B';
+    this.cameraRig =
+      options.cameraRig === undefined
+        ? new CameraRig(this.initialCameraPreset, options.camera.aspect, arenaFloor === 'flat' ? undefined : (x, z) => floorHeightAt(arenaFloor, x, z))
+        : options.cameraRig;
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
     const theme = options.arenaTheme ?? FOUNDRY_PIT.theme;
     const floorAt = (x: number, z: number): number => floorHeightAt(arenaFloor, x, z);
@@ -360,11 +372,11 @@ export class MatchSession {
 
   /** M11: the player's camera preset (A/B/C). Render only; a change mid-match crossfades. */
   setCameraPreset(preset: PresetId): void {
-    this.cameraRig.setPreset(preset);
+    this.cameraRig?.setPreset(preset);
   }
 
   getCameraPreset(): PresetId {
-    return this.cameraRig.getPreset();
+    return this.cameraRig?.getPreset() ?? this.initialCameraPreset;
   }
 
   getLastCameraOutput(): SessionCameraOutput | null {
@@ -497,7 +509,6 @@ export class MatchSession {
       this.lastPhysicsStepTimeMs = performance.now() - stepStart;
       this.lastMatchResult = result;
       this.recordTickDerivedState(tickIndex, result, fixedDeltaSeconds);
-
       for (const hit of result.hitEvents) {
         telemetry.record({
           kind: TelemetryEventKind.Hit,
@@ -864,7 +875,9 @@ export class MatchSession {
       const s = snapshot ? snapshot[side] : null;
       return { position: copy3(b.body.translation()), velocity: copy3(b.body.linvel()), grounded: s ? s.grounded : null, attackState: s ? s.attackState : null, isBroken: s ? s.isBroken : false };
     };
-    // The camera runs every tick, hitstop included (shake and FOV punch keep decaying in real time; camera-approval.md 10.6).
+    // The camera runs every tick, hitstop included. It only observes state:
+    // its output is stored for render/debug and never feeds the simulation.
+    if (!this.cameraRig) return;
     this.cameraRig.setAspect(this.camera.aspect);
     const frame = buildFightFrame({
       tick: tickIndex,
