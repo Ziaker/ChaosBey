@@ -12,6 +12,7 @@ permissions:
   id-token: write
 
 # A new commit on the same PR supersedes that PR's older build/smoke run.
+# The workflow name + PR number scope cancellation to one PR in this workflow.
 # `github.run_id` keeps non-PR runs (main pushes / manual runs) unique, so
 # parallel PRs never cancel each other and main keeps its existing behavior.
 concurrency:
