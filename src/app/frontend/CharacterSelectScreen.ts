@@ -67,7 +67,7 @@ export class CharacterSelectScreen {
 
     const footer = el('div', 'cb-footer');
     const hints = el('div', 'cb-footer__hints');
-    hints.append(keyHint(['↑', '↓'], 'Browse'), keyHint(['Enter'], 'Choose'), keyHint(['Esc'], 'Back'));
+    hints.append(keyHint(['↑', '↓', '←', '→'], 'Browse'), keyHint(['Enter'], 'Choose'), keyHint(['Esc'], 'Back'));
     footer.append(
       hints,
       button('Back', '', 'character-select-back', () => this.back()),
@@ -170,11 +170,17 @@ export class CharacterSelectScreen {
     if (intent === 'confirm' && event.code !== 'KeyZ' && isFooterButton(event.target)) return;
     event.preventDefault();
     switch (intent) {
+      // Lote 8: the nine Beys are a 3×3 grid — a row per family (Attack, Defense, Stamina), a column per letter (A, B, C).
+      // Up/Down change family, Left/Right the letter.
       case 'previous':
+        this.focus(wrapIndex(this.focusIndex, -ROSTER_COLUMNS, BEY_ROSTER.length));
+        break;
+      case 'next':
+        this.focus(wrapIndex(this.focusIndex, ROSTER_COLUMNS, BEY_ROSTER.length));
+        break;
       case 'decrease':
         this.focus(wrapIndex(this.focusIndex, -1, BEY_ROSTER.length));
         break;
-      case 'next':
       case 'increase':
         this.focus(wrapIndex(this.focusIndex, 1, BEY_ROSTER.length));
         break;
@@ -224,6 +230,9 @@ function ratingRow(label: string, value: number): HTMLElement {
   return row;
 }
 
+/** Cards per row: one family per row (Lote 8). */
+const ROSTER_COLUMNS = 3;
+
 let selectStyleInjected = false;
 function injectSelectStyle(): void {
   if (selectStyleInjected) return;
@@ -234,16 +243,17 @@ function injectSelectStyle(): void {
     .cb-select__panel { pointer-events: auto; width: min(420px, 100%); display: flex; flex-direction: column; gap: 12px; max-height: 100%; box-sizing: border-box; }
     .cb-select__panel .cb-title { font-size: 24px; }
     .cb-select__body { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; flex: 1 1 auto; padding-right: 2px; }
-    .cb-select__list { display: flex; flex-direction: column; gap: 8px; }
-    .cb-select__card { display: grid; grid-template-columns: 6px 1fr auto; gap: 12px; align-items: center; text-align: left; font: inherit; color: var(--cb-text); background: #111522; border: 1px solid var(--cb-line); border-radius: 5px; padding: 10px 12px 10px 0; cursor: pointer; overflow: hidden; }
+    .cb-select__list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .cb-select__card { display: grid; grid-template-columns: 5px 1fr; gap: 8px; align-items: center; text-align: left; font: inherit; color: var(--cb-text); background: #111522; border: 1px solid var(--cb-line); border-radius: 5px; padding: 8px 8px 8px 0; cursor: pointer; overflow: hidden; min-height: 54px; }
     .cb-select__card:hover { border-color: var(--cb-line-strong); }
     .cb-select__card.is-focused { border-color: var(--bey-accent); background: linear-gradient(90deg, color-mix(in srgb, var(--bey-accent) 16%, #111522), #111522 70%); box-shadow: 0 0 18px color-mix(in srgb, var(--bey-accent) 25%, transparent); }
     .cb-select__swatch { align-self: stretch; background: var(--bey-accent); opacity: 0.35; }
     .cb-select__card.is-focused .cb-select__swatch { opacity: 1; }
     .cb-select__card-text { display: flex; flex-direction: column; }
-    .cb-select__label { font-weight: 700; letter-spacing: 0.16em; }
-    .cb-select__role { font-size: 12px; color: var(--cb-text-dim); }
-    .cb-select__mini { font: 11px/1 var(--cb-mono); color: var(--cb-text-dim); }
+    .cb-select__label { font-weight: 700; letter-spacing: 0.1em; font-size: 13px; white-space: nowrap; }
+    .cb-select__role { font-size: 11px; line-height: 1.25; color: var(--cb-text-dim); }
+    .cb-select__mini { display: none; } /* the nine-card grid shows the numbers in the detail below */
+    @media (max-width: 440px) { .cb-select__label { font-size: 11.5px; letter-spacing: 0.05em; } .cb-select__card { gap: 6px; } }
     .cb-select__detail { border-top: 1px solid var(--cb-line); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
     .cb-select__description { margin: 0; color: var(--cb-text); font-size: 14px; }
     .cb-select__ratings { display: flex; flex-direction: column; gap: 6px; }

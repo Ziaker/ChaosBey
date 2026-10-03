@@ -20,11 +20,11 @@ test('Character Select and Pregame set up the match that really runs, and Result
   const select = page.getByTestId('character-select');
   await expect(select).toBeVisible({ timeout: 15_000 });
 
-  // Three Beys; the first is focused and described.
+  // Nine Beys (owner, Lote 8: a 3×3 grid, a row per family); the first is focused and described.
   await expect(page.getByTestId('character-select-option-attack-prototype')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('character-select-detail')).toContainText('Hits hardest');
 
-  // Keyboard: two steps down focuses Stamina; Enter chooses it.
+  // Keyboard: two steps down (two families) focuses Stamina A; Enter chooses it.
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await expect(page.getByTestId('character-select-option-stamina-prototype')).toHaveAttribute('aria-selected', 'true');
@@ -35,7 +35,7 @@ test('Character Select and Pregame set up the match that really runs, and Result
   // Pregame: the explanation follows the choices, from the AI's real numbers.
   const pregame = page.getByTestId('pregame');
   await expect(pregame).toBeVisible();
-  await expect(page.getByTestId('pregame-player')).toHaveText('You play STAMINA');
+  await expect(page.getByTestId('pregame-player')).toHaveText('You play STAMINA A');
   await expect(page.getByTestId('pregame-opponent-bey-attack-prototype')).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByTestId('pregame-ai-level-rival')).toHaveAttribute('aria-checked', 'true');
   const reaction = page.getByTestId('pregame-cap-reaction');

@@ -85,17 +85,16 @@ describe('the nine approved concepts as game visuals', () => {
 });
 
 describe('registration and the provisional mapping', () => {
-  it('registers all nine, idempotently, and assigns only the three real archetypes', () => {
+  it('registers all nine, idempotently, and assigns each of the nine selectable Beys its own concept (Lote 8)', () => {
     const registry = new BeyVisualRegistry();
     ensureApprovedBeyVisualsRegistered(registry);
     ensureApprovedBeyVisualsRegistered(registry);
     expect(registry.list().map((v) => v.id).sort()).toEqual(CONCEPTS.map(conceptVisualId).sort());
     expect(registry.list().every((v) => v.status === 'concept')).toBe(true);
     for (const definition of ARCHETYPES) expect(registry.assignedVisualId(definition.id)).toBe(PROVISIONAL_ARCHETYPE_VISUALS[definition.id]);
-    expect(PROVISIONAL_ARCHETYPE_VISUALS).toEqual({ 'attack-prototype': 'concept:attack-a', 'defense-prototype': 'concept:defense-a', 'stamina-prototype': 'concept:stamina-a' });
-    // The other six stay visual-only: no gameplay definition is assigned to them.
-    const assigned = new Set(Object.values(PROVISIONAL_ARCHETYPE_VISUALS));
-    expect(CONCEPTS.map(conceptVisualId).filter((id) => !assigned.has(id))).toHaveLength(6);
+    expect(PROVISIONAL_ARCHETYPE_VISUALS).toMatchObject({ 'attack-prototype': 'concept:attack-a', 'defense-prototype': 'concept:defense-a', 'stamina-prototype': 'concept:stamina-a', 'attack-b': 'concept:attack-b', 'stamina-c': 'concept:stamina-c' });
+    // Every concept is worn by exactly one selectable Bey.
+    expect(Object.values(PROVISIONAL_ARCHETYPE_VISUALS).sort()).toEqual(CONCEPTS.map(conceptVisualId).sort());
   });
 
   it('describes each concept with the four approved pieces', () => {

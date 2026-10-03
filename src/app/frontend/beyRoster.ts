@@ -5,14 +5,17 @@
 // definition's own data. Nothing here feeds the simulation; a match is
 // built from the BeyDefinition itself.
 //
-// The roster is the three archetype definitions the game has today
-// (BeyArchetypes.ts). The owner has approved nine Bey concepts as the
-// final selectable roster (VISUAL_APPROVALS_MASTER.md 3.2); they become
-// entries here once they exist as gameplay definitions. Names stay the
-// archetype names: final Bey names are still open (3.3).
+// Owner, 2026-10-02 (Lote 8): the nine approved Bey concepts
+// (VISUAL_APPROVALS_MASTER.md 3.2) are the roster — Attack/Defense/Stamina
+// A/B/C, each its own gameplay definition (BeyConceptRoster.ts) wearing its
+// own concept visual. Labels are the family + letter with the concept's
+// headline as the role: final Bey names are still open (3.3). B and C play
+// exactly like their family for now (PROVISIONAL, said on the card).
 // ============================================================
 
-import { ALL_BEY_ARCHETYPES, ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
+import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
+import { CONCEPT_BEYS, familyArchetypeOf, type ConceptBey } from '../../bey/archetype/BeyConceptRoster';
+import { CONCEPTS } from '../../bey/visual/concepts/conceptDefinitions';
 import { DEFAULT_ATTACK_PROFILE } from '../../bey/archetype/BeyAttackProfile';
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import { DEFAULT_HANDLING_PROFILE } from '../../bey/archetype/BeyHandlingProfile';
@@ -68,13 +71,16 @@ const COPY: Readonly<Record<string, RosterCopy>> = {
   },
 };
 
-function entryFor(definition: BeyDefinition): RosterEntry {
-  const copy = COPY[definition.id];
-  if (!copy) throw new Error(`beyRoster: no roster copy for Bey definition "${definition.id}".`);
-  return { definition, ...copy };
+function entryFor(concept: ConceptBey): RosterEntry {
+  const family = familyArchetypeOf(concept.definition.id)!;
+  const copy = COPY[family.id];
+  const visual = CONCEPTS.find((c) => c.id === concept.conceptId);
+  if (!copy || !visual) throw new Error(`beyRoster: no roster copy or concept for Bey definition "${concept.definition.id}".`);
+  const description = concept.letter === 'A' ? copy.description : `${copy.description} Plays exactly like ${copy.label} A for now (provisional).`;
+  return { definition: concept.definition, label: `${copy.label} ${concept.letter}`, role: visual.headline, description, accentCss: copy.accentCss };
 }
 
-export const BEY_ROSTER: readonly RosterEntry[] = ALL_BEY_ARCHETYPES.map(entryFor);
+export const BEY_ROSTER: readonly RosterEntry[] = CONCEPT_BEYS.map(entryFor);
 
 export function findRosterEntry(definitionId: string): RosterEntry | null {
   return BEY_ROSTER.find((e) => e.definition.id === definitionId) ?? null;

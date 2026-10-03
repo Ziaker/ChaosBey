@@ -22,6 +22,7 @@
 import type { BeyAttackProfile } from '../../bey/archetype/BeyAttackProfile';
 import { ATTACK_ARCHETYPE, ATTACK_ATTACK_PROFILE, DEFENSE_ARCHETYPE, DEFENSE_ATTACK_PROFILE, STAMINA_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
+import { familyArchetypeOf } from '../../bey/archetype/BeyConceptRoster';
 
 export type AttackProfileArchetypeKey = 'attack' | 'defense' | 'stamina';
 
@@ -87,7 +88,8 @@ export function resolveAttackProfileSettings(overrides: AttackProfileSettingsOve
  * archetypes.
  */
 export function applyAttackProfileSettings(definition: BeyDefinition, settings: BeyAttackProfileSettings): BeyDefinition {
-  switch (definition.id) {
+  // Lote 8: a concept B/C takes its family's settings.
+  switch (familyArchetypeOf(definition.id)?.id ?? definition.id) {
     case ATTACK_ARCHETYPE.id:
       return { ...definition, attack: settings.attack };
     case DEFENSE_ARCHETYPE.id:

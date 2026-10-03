@@ -1,5 +1,6 @@
 // M10 player screens: the pure models behind Character Select and Results.
 
+import { ALL_CONCEPT_BEY_DEFINITIONS } from '../../src/bey/archetype/BeyConceptRoster';
 import { describe, expect, it } from 'vitest';
 import { BEY_ROSTER, findRosterEntry, formatTrait, rosterTraits } from '../../src/app/frontend/beyRoster';
 import { navigationIntent, wrapIndex } from '../../src/app/frontend/listNavigation';
@@ -12,9 +13,12 @@ import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
 import { appModeHref, isQuickPlay, resolveAppMode } from '../../src/app/modes/appMode';
 
 describe('Bey roster', () => {
-  it('lists every playable archetype once, in the archetype order, with its own copy', () => {
-    expect(BEY_ROSTER.map((e) => e.definition)).toEqual(ALL_BEY_ARCHETYPES);
-    expect(BEY_ROSTER.map((e) => e.label)).toEqual(['ATTACK', 'DEFENSE', 'STAMINA']);
+  it('lists the nine approved Beys once (owner, Lote 8), family A..C in order, with their own copy; concept A is the archetype', () => {
+    expect(BEY_ROSTER.map((e) => e.definition)).toEqual(ALL_CONCEPT_BEY_DEFINITIONS);
+    expect(BEY_ROSTER).toHaveLength(9);
+    expect(BEY_ROSTER.map((e) => e.label)).toEqual(['ATTACK A', 'ATTACK B', 'ATTACK C', 'DEFENSE A', 'DEFENSE B', 'DEFENSE C', 'STAMINA A', 'STAMINA B', 'STAMINA C']);
+    expect([BEY_ROSTER[0]!.definition, BEY_ROSTER[3]!.definition, BEY_ROSTER[6]!.definition]).toEqual(ALL_BEY_ARCHETYPES);
+    expect(new Set(BEY_ROSTER.map((e) => e.definition.id)).size).toBe(9);
     for (const entry of BEY_ROSTER) {
       expect(entry.description.length).toBeGreaterThan(40);
       expect(entry.accentCss).toMatch(/^#[0-9a-f]{6}$/);
