@@ -45,9 +45,11 @@ export interface FxContext {
   ghost(slot: Slot, material: THREE.Material): THREE.Object3D;
   /** Telemetry only: `n` toon-dust puffs were just spawned (owner, 2026-10-02: every Dash must raise visible dust). */
   countDust?(n: number): void;
-  /** Lote 9 visual options: ground-wave size and dust amount multipliers (1 = approved; omitted = 1). */
+  /** Lote 9/10 visual options (1 = approved; omitted = 1). */
   readonly groundWaveScale?: number;
   readonly dustScale?: number;
+  /** Scales only the anime fast-move trail layer; the hybrid's mechanical sparks/skids must remain independent. */
+  readonly motionTrailScale?: number;
 }
 
 export interface HitEvent { pos: THREE.Vector3; normal: THREE.Vector3; m: number; attacker: Slot }

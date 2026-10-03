@@ -61,6 +61,12 @@ export class VfxManager {
     }
   }
 
+  /** Pregame trail intensity is presentation-only and remains independent from the Quality/layer visibility gate. */
+  setTrailIntensity(scale: number): void {
+    this.firstTrail.setIntensityScale(scale);
+    this.secondTrail.setIntensityScale(scale);
+  }
+
   isLayerVisible(layer: VfxLayer): boolean {
     return this.layerVisible[layer];
   }

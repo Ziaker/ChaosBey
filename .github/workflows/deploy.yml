@@ -11,6 +11,15 @@ permissions:
   pages: write
   id-token: write
 
+# A newer commit on the same PR makes the older build/smoke result obsolete.
+# Cancel that superseded PR run so multiple 7-minute unit suites and 20-45
+# minute browser smokes do not compete for runners. Non-PR runs use run_id as
+# the group key, so main deploys and manual diagnostics are never collapsed by
+# this workflow-level optimisation; Pages keeps its own serialization below.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Fast gate (~2-3 min): typecheck, the fast suite, the production build.
   # This is the PR/push signal and the only thing deploy waits on — it does

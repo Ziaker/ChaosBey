@@ -14,6 +14,8 @@ export class SpeedTrail {
   private readonly line: THREE.Line;
   private readonly positions: Float32Array;
   private pointCount = 0;
+  /** Presentation-only multiplier from Pregame. 0 = invisible, 1 = approved look, >1 = stronger up to material opacity 1. */
+  private intensityScale = 1;
 
   constructor(colorHex: number) {
     this.positions = new Float32Array(TRAIL_MAX_POINTS * 3);
@@ -27,6 +29,11 @@ export class SpeedTrail {
 
   get object3D(): THREE.Object3D {
     return this.line;
+  }
+
+  /** Visual-only Pregame control. Quality/layer visibility remains a separate performance gate in VfxManager. */
+  setIntensityScale(scale: number): void {
+    this.intensityScale = Math.max(0, Math.min(1.5, scale));
   }
 
   update(currentPositionM: WorldPositionM, speedMps: number): void {
@@ -45,7 +52,7 @@ export class SpeedTrail {
     this.line.geometry.setDrawRange(0, this.pointCount);
 
     const speedFraction = Math.max(0, Math.min(1, (speedMps - TRAIL_SPEED_THRESHOLD_MPS) / (TRAIL_FULL_OPACITY_SPEED_MPS - TRAIL_SPEED_THRESHOLD_MPS)));
-    (this.line.material as THREE.LineBasicMaterial).opacity = speedFraction * TRAIL_MAX_OPACITY;
+    (this.line.material as THREE.LineBasicMaterial).opacity = Math.min(1, speedFraction * TRAIL_MAX_OPACITY * this.intensityScale);
   }
 
   dispose(): void {
