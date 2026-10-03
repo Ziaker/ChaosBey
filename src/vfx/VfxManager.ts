@@ -65,6 +65,12 @@ export class VfxManager {
     return this.layerVisible[layer];
   }
 
+  /** Lote 11: visual-only Pregame multiplier; Quality/layer visibility remains a separate performance gate. */
+  setTrailIntensity(scale: number): void {
+    this.firstTrail.setIntensityScale(scale);
+    this.secondTrail.setIntensityScale(scale);
+  }
+
   /** Live one-shot effect counts, for Debug Lab performance inspection (GDD section 69/79). */
   getActiveEffectCounts(): { sparkBursts: number; landingBursts: number } {
     return { sparkBursts: this.activeSparkBursts.length, landingBursts: this.activeLandingBursts.length };
