@@ -86,15 +86,17 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     id: 'close-combat',
     label: 'Close Combat',
-    description: 'Os dois girando colados, trocando Circular Attacks curtos.',
-    contexts: ['CloseCombat', 'KnockbackFollow (leve)'],
+    description: 'Enquadramento sustentado dos dois Beys em curta distância, sem transformar o Circular defensivo em ataque de spam.',
+    contexts: ['CloseCombat'],
     durationS: 6.5,
-    firstSpawn: { x: 0, z: -1.8 },
-    secondSpawn: { x: 0.2, z: 1.8 },
-    // The opponent turns to face the player, then both push into each other and trade Circulars.
-    first: { kind: 'script', held: (t) => [...when(t > 1.4 && pulse(t, 0.5, 0.3), F), ...when(pulse(t, 1.6, 0.25, 2), R), ...when(pulse(t, 0.8, 0.05, 1.7), Z)] },
-    second: { kind: 'script', held: (t) => [...when(t < 1.33, R), ...when(t > 1.4 && pulse(t, 0.5, 0.3, 0.2), F), ...when(pulse(t, 1.4, 0.25, 2.5), L), ...when(pulse(t, 0.9, 0.05, 2.1), Z)] },
-    expects: ['hit', 'closeRange'],
+    firstSpawn: { x: 0, z: -1.5 },
+    secondSpawn: { x: 0.2, z: 1.5 },
+    // Owner item 13 made Circular a defensive launch/counter. The old camera fixture alternated Circulars from both sides,
+    // which now correctly throws them apart and therefore no longer represents sustained close-range composition. Keep this
+    // camera-only fixture neutral and stable; hit/knockback coverage belongs to Normal Duel, Dash Approach and Heavy Knockback.
+    first: { kind: 'idle' },
+    second: { kind: 'idle' },
+    expects: ['closeRange'],
   },
   {
     id: 'far-separation',
