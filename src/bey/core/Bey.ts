@@ -12,6 +12,7 @@ import { AttackController } from '../../combat/attacks/AttackController';
 import { DodgeController } from '../../dodge/DodgeController';
 import { DriftController } from '../../drift/DriftController';
 import { MovementController } from '../movement/MovementController';
+import { MatchMovementController } from '../movement/MatchMovementController';
 import { SpinController } from '../spin/SpinController';
 import { StabilitySystem } from '../stability/StabilitySystem';
 import { StaminaSystem } from '../stamina/StaminaSystem';
@@ -66,7 +67,12 @@ export function createBey(
   const rules: BeyMatchRules = matchRules ?? { ...beyMatchRulesOf(createDefaultMatchConfig()), jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, defensiveCircular: false };
   const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical, motion);
   const stats = resolveBeyStats(definition.ratings);
-  const movement = new MovementController(definition.handling, motion, { acceleration: rules.accelerationScale ?? 1, topSpeed: rules.topSpeedScale ?? 1, airControl: rules.airControl ?? 1 });
+  const movement = new MatchMovementController(
+    definition.handling,
+    motion,
+    { acceleration: rules.accelerationScale ?? 1, topSpeed: rules.topSpeedScale ?? 1, airControl: rules.airControl ?? 1 },
+    rules.strictSpeedCap ?? false,
+  );
   return {
     definition,
     stats,
