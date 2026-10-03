@@ -82,10 +82,16 @@ export interface MatchConfig {
   dodgeCooldownS: number;
   /** Owner, 2026-10-02 (Lote 5): how hard an active Circular launches whoever touches it (×1 = the provisional default). Pregame slider. */
   circularLaunchForce: number;
+  /**
+   * Owner, 2026-10-02 (item 13): the Circular is defensive (its user takes nothing; whoever touches it is launched).
+   * Always on in a match; false only for bare constructions (createBey without match rules: the Camera Lab), which
+   * keep the pre-2026-10-02 Circular like their jump and ring-out. Not a Pregame option.
+   */
+  defensiveCircular: boolean;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'defensiveCircular'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -100,6 +106,7 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     movementStaminaDrain: config.movementStaminaDrain,
     dodgeCooldownS: config.dodgeCooldownS,
     circularLaunchForce: config.circularLaunchForce,
+    defensiveCircular: config.defensiveCircular ?? true,
   };
 }
 
@@ -122,6 +129,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     movementStaminaDrain: MOVEMENT_STAMINA_DRAIN_DEFAULT,
     dodgeCooldownS: DODGE_COOLDOWN_S,
     circularLaunchForce: CIRCULAR_LAUNCH_FORCE_DEFAULT,
+    defensiveCircular: true,
   };
 }
 

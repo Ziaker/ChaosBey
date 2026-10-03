@@ -24,7 +24,7 @@ import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { detectHits, type HitEvent } from '../../combat/hit-detection/HitDetection';
 import { applyKnockback, computeKnockback, computeStabilityDamage, type KnockbackComponents } from '../../combat/knockback/Knockback';
-import { CIRCULAR_BASE_KNOCKBACK_FORCE, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, CIRCULAR_LAUNCH_HORIZONTAL_MPS, CIRCULAR_STABILITY_DAMAGE } from '../../combat/attacks/AttackTuning';
+import { CIRCULAR_BASE_KNOCKBACK_FORCE, CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, CIRCULAR_LAUNCH_HORIZONTAL_MPS, CIRCULAR_STABILITY_DAMAGE } from '../../combat/attacks/AttackTuning';
 import {
   BODY_COLLISION_CONTACT_SLOP_M,
   BODY_COLLISION_COOLDOWN_S,
@@ -295,8 +295,11 @@ export function tickMatch(
   // The defensive Circular (owner, 2026-10-02, item 13): the other Bey's contact must not push its user either —
   // the solver's push is undone (horizontal velocity back to what it carried into the step) before the movement
   // controller reads it as an impact.
-  const firstCircularActive = firstAttack.state === AttackState.CircularActive;
-  const secondCircularActive = secondAttack.state === AttackState.CircularActive;
+  // MatchConfig.defensiveCircular: every real match has it; a bare construction (no match rules — the Camera Lab
+  // prototype, physics-only tests) keeps the pre-2026-10-02 Circular, like its jump and ring-out.
+  const defensiveCircular = first.rules.defensiveCircular !== false;
+  const firstCircularActive = defensiveCircular && firstAttack.state === AttackState.CircularActive;
+  const secondCircularActive = defensiveCircular && secondAttack.state === AttackState.CircularActive;
   const beysTouching = length(subtract(positionXZ(second.body), positionXZ(first.body))) <= first.definition.physical.colliderRadiusM + second.definition.physical.colliderRadiusM + BODY_COLLISION_CONTACT_SLOP_M;
   if (beysTouching && firstCircularActive) keepHorizontalVelocity(first, firstVelBefore);
   if (beysTouching && secondCircularActive) keepHorizontalVelocity(second, secondVelBefore);
@@ -442,12 +445,24 @@ export function tickMatch(
 
     // The defensive Circular: its user takes nothing from a hit while it is active; the attacker is launched. Two
     // active Circulars meeting keep the existing rules (Clash, or the cooldown alternative's "slower suffers more").
-    if (!bothCircular && (defenderIsFirst ? firstAttack.state : secondAttack.state) === AttackState.CircularActive) {
+    if (defensiveCircular && !bothCircular && (defenderIsFirst ? firstAttack.state : secondAttack.state) === AttackState.CircularActive) {
       launchAwayFromCircular(hit.attackerIsFirst);
       continue;
     }
 
-    if (hit.caughtOpponentDashing || (hit.hitbox.kind === 'circular' && !bothCircular)) {
+    if (!defensiveCircular && hit.caughtOpponentDashing) {
+      // The pre-2026-10-02 rule (bare constructions only): a Circular catching an active Dash launches the dasher
+      // upward and stops most of its run (GDD section 23/107).
+      const vel = defender.body.linvel();
+      const keep = CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP;
+      defender.body.setLinvel({ x: vel.x * keep, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z * keep }, true);
+      defender.movement.registerKnockback();
+      defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
+      applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense));
+      continue;
+    }
+
+    if (defensiveCircular && (hit.caughtOpponentDashing || (hit.hitbox.kind === 'circular' && !bothCircular))) {
       // A Circular landing on the opponent launches it (it used to only when catching a Dash, GDD section 23/107),
       // with the Circular's Stability damage. Never routed through Clash (see ClashOrchestration.processTickHits).
       launchAwayFromCircular(defenderIsFirst);
@@ -515,7 +530,7 @@ export function tickMatch(
     // The defensive Circular (item 13): touching an active Circular launches you; its user is unaffected.
     const firstCircular = firstAttack.state === AttackState.CircularActive;
     const secondCircular = secondAttack.state === AttackState.CircularActive;
-    if (firstCircular || secondCircular) {
+    if (defensiveCircular && (firstCircular || secondCircular)) {
       if (firstCircular && !secondCircular) launchAwayFromCircular(false);
       if (secondCircular && !firstCircular) launchAwayFromCircular(true);
       return;
