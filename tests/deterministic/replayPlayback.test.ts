@@ -96,9 +96,13 @@ interface Recording {
 // delay and Perfect Dodge once, Dash cooldown, momentum, jump, combat rules):
 // after Lote 5, replay-0..599 has 19 qualifying; replay-56 (2610 ticks, 161
 // frozen) and replay-51 (2304 ticks, 127 frozen, 682 steering ticks after 900).
+// Owner audit fixes, 2026-10-03 (a Dash press kept through a recovery, Dash readiness, body-collision tie/latch,
+// the Bey-Bey bumper filter really running, the jump's deferred launch, the AI's 45-Stamina dodge reserve) change
+// every AI fight from its first jump or contact on. Swept replay-0..239 with the same criteria: 16 qualify;
+// replay-198 (2668 ticks, 151 frozen) and replay-18 (2666 ticks, 119 frozen, 717 steering ticks after 900).
 // Most seeds end within a few hundred ticks.
-const LONG_SEED = 'replay-56';
-const MUTATION_SEED = 'replay-51';
+const LONG_SEED = 'replay-198';
+const MUTATION_SEED = 'replay-18';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {

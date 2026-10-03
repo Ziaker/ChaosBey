@@ -35,7 +35,7 @@ export const REPLAY_FORMAT_V1 = 'ChaosBeyReplayV1';
 export type ReplayFormat = typeof REPLAY_FORMAT | typeof REPLAY_FORMAT_V1;
 
 /** Version of CanonicalMatchState (lane A). Bump when a field is added, removed or reordered. */
-export const STATE_SCHEMA_VERSION = 5; // 2: RoundState carries the ring-out delay clocks; 3: Attack Energy gone, the Dash cooldown in AttackController; 4: each Bey's momentum; 5: the own-jump landing and the drift rule's state (owner, 2026-10-02).
+export const STATE_SCHEMA_VERSION = 6; // 2: RoundState carries the ring-out delay clocks; 3: Attack Energy gone, the Dash cooldown in AttackController; 4: each Bey's momentum; 5: the own-jump landing and the drift rule's state (owner, 2026-10-02); 6: owner audit fixes (2026-10-03) — a Dash press kept through a recovery, the body-contact latch, the jump's deferred launch.
 
 /**
  * How RNG streams are derived from the root seed.

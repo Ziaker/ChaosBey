@@ -90,6 +90,13 @@ export class AttackController {
   private dashCooldownRemainingS = 0;
   /** Attack held past the tap window while the Dash was cooling down: it charges once ready; a release is not a tap. */
   private waitingForDash = false;
+  /**
+   * Audit fix B1 (owner, 2026-10-03): seconds Attack has been held since a press made during a recovery (Dash or
+   * Circular), or null. That press used to be dropped: Attack was still held when the recovery ended, but with no new
+   * press nothing started. Now the held press carries on into the Dash rule — it waits, then charges as soon as a
+   * Dash is allowed.
+   */
+  private heldSinceRecoveryPressS: number | null = null;
 
   constructor(
     private readonly profile: BeyAttackProfile = DEFAULT_ATTACK_PROFILE,
@@ -122,8 +129,27 @@ export class AttackController {
    */
   getDashReadiness(): number {
     if (this.state === AttackState.DashActive) return 0;
-    if (this.dashCooldownS <= 0) return 1;
-    return clamp01(1 - this.dashCooldownRemainingS / this.dashCooldownS);
+    // Audit fix B2 (owner, 2026-10-03): 1 only when a new Dash can really start. A recovery (or an active Circular)
+    // blocks it too — with the 0.5 s minimum cooldown the line used to read full during the 0.6 s whiff recovery.
+    const blockedS = this.attackBlockedRemainingS();
+    const remainingS = Math.max(this.dashCooldownRemainingS, blockedS.remainingS);
+    const totalS = Math.max(this.dashCooldownS, blockedS.totalS);
+    if (totalS <= 0) return 1;
+    return clamp01(1 - remainingS / totalS);
+  }
+
+  /** How long the current attack state still blocks a new Dash from starting, and that block's full length. */
+  private attackBlockedRemainingS(): { remainingS: number; totalS: number } {
+    switch (this.state) {
+      case AttackState.DashRecovery:
+        return { remainingS: Math.max(0, DASH_WHIFF_RECOVERY_S - this.recoveryTimerS), totalS: DASH_WHIFF_RECOVERY_S };
+      case AttackState.CircularActive:
+        return { remainingS: Math.max(0, CIRCULAR_ACTIVE_DURATION_S - this.activeTimerS) + CIRCULAR_RECOVERY_S, totalS: CIRCULAR_ACTIVE_DURATION_S + CIRCULAR_RECOVERY_S };
+      case AttackState.CircularRecovery:
+        return { remainingS: Math.max(0, CIRCULAR_RECOVERY_S - this.recoveryTimerS), totalS: CIRCULAR_ACTIVE_DURATION_S + CIRCULAR_RECOVERY_S };
+      default:
+        return { remainingS: 0, totalS: 0 };
+    }
   }
 
   /** Current Dash charge fraction without advancing anything — for read-only consumers (e.g. a frozen post-round snapshot). */
@@ -151,6 +177,11 @@ export class AttackController {
   ): AttackTickResult {
     const attackHeld = actions.held.has(Action.Attack);
     let dashOverride: MovementPreStepInput['dashOverride'] = null;
+    // B1: a press during a recovery is kept while it stays held.
+    const inRecovery = this.state === AttackState.DashActive || this.state === AttackState.DashRecovery || this.state === AttackState.CircularRecovery || this.state === AttackState.CircularActive;
+    if (!attackHeld) this.heldSinceRecoveryPressS = null;
+    else if (inRecovery && actions.pressedThisFrame.has(Action.Attack)) this.heldSinceRecoveryPressS = 0;
+    else if (this.heldSinceRecoveryPressS !== null) this.heldSinceRecoveryPressS += fixedDeltaSeconds;
     if (this.state !== AttackState.DashActive) this.dashCooldownRemainingS = Math.max(0, this.dashCooldownRemainingS - fixedDeltaSeconds);
 
     switch (this.state) {
@@ -158,31 +189,16 @@ export class AttackController {
         if (actions.pressedThisFrame.has(Action.Attack)) {
           this.state = AttackState.Buffering;
           this.bufferTimerS = 0;
+          this.heldSinceRecoveryPressS = null;
+        } else if (this.heldSinceRecoveryPressS !== null) {
+          // A Dash that landed goes straight to Neutral (registerHitConfirmed): a press made during it is still kept.
+          this.endRecovery(attackHeld);
         }
         break;
 
       case AttackState.Buffering:
         this.bufferTimerS += fixedDeltaSeconds;
-        if (!attackHeld) {
-          if (this.waitingForDash) {
-            // A hold that waited for the Dash cooldown, released before it ran out: no Dash, and not a tap either.
-            this.state = AttackState.Neutral;
-            this.waitingForDash = false;
-          } else {
-            this.state = AttackState.CircularActive;
-            this.activeTimerS = 0;
-            this.activationCount++;
-          }
-        } else if (this.bufferTimerS >= TAP_MAX_HOLD_S) {
-          if (this.dashCooldownRemainingS > 0) {
-            this.waitingForDash = true;
-          } else {
-            this.state = AttackState.ChargingDash;
-            // A hold that waited starts its charge where a fresh hold would (the tap window), not with the wait.
-            this.chargeTimerS = this.waitingForDash ? TAP_MAX_HOLD_S : this.bufferTimerS;
-            this.waitingForDash = false;
-          }
-        }
+        this.stepBuffering(attackHeld);
         break;
 
       case AttackState.ChargingDash:
@@ -210,7 +226,7 @@ export class AttackController {
 
       case AttackState.DashRecovery:
         this.recoveryTimerS += fixedDeltaSeconds;
-        if (this.recoveryTimerS >= DASH_WHIFF_RECOVERY_S) this.state = AttackState.Neutral;
+        if (this.recoveryTimerS >= DASH_WHIFF_RECOVERY_S) this.endRecovery(attackHeld);
         break;
 
       case AttackState.CircularActive:
@@ -223,7 +239,7 @@ export class AttackController {
 
       case AttackState.CircularRecovery:
         this.recoveryTimerS += fixedDeltaSeconds;
-        if (this.recoveryTimerS >= CIRCULAR_RECOVERY_S) this.state = AttackState.Neutral;
+        if (this.recoveryTimerS >= CIRCULAR_RECOVERY_S) this.endRecovery(attackHeld);
         break;
     }
 
@@ -233,6 +249,45 @@ export class AttackController {
       dashOverride,
       chargeFraction: this.dashChargeFraction(),
     };
+  }
+
+  /** The Buffering rule: a release inside the tap window is a Circular; a hold past it charges a Dash once one is ready. */
+  private stepBuffering(attackHeld: boolean): void {
+    if (!attackHeld) {
+      if (this.waitingForDash) {
+        // A hold that waited for the Dash cooldown, released before it ran out: no Dash, and not a tap either.
+        this.state = AttackState.Neutral;
+        this.waitingForDash = false;
+      } else {
+        this.state = AttackState.CircularActive;
+        this.activeTimerS = 0;
+        this.activationCount++;
+      }
+    } else if (this.bufferTimerS >= TAP_MAX_HOLD_S) {
+      if (this.dashCooldownRemainingS > 0) {
+        this.waitingForDash = true;
+      } else {
+        this.state = AttackState.ChargingDash;
+        // A hold that waited starts its charge where a fresh hold would (the tap window), not with the wait.
+        this.chargeTimerS = this.waitingForDash ? TAP_MAX_HOLD_S : this.bufferTimerS;
+        this.waitingForDash = false;
+      }
+    }
+  }
+
+  /**
+   * A recovery ends. B1: an Attack press made during it and still held carries on as if it had been pressed now with
+   * that much hold behind it — past the tap window it is a held Dash press, which (same tick) charges if the cooldown
+   * is over or waits for it.
+   */
+  private endRecovery(attackHeld: boolean): void {
+    this.state = AttackState.Neutral;
+    if (this.heldSinceRecoveryPressS === null || !attackHeld) return;
+    this.state = AttackState.Buffering;
+    this.bufferTimerS = this.heldSinceRecoveryPressS;
+    this.waitingForDash = this.heldSinceRecoveryPressS >= TAP_MAX_HOLD_S;
+    this.heldSinceRecoveryPressS = null;
+    if (this.waitingForDash) this.stepBuffering(true);
   }
 
   /** Called by the hit-detection module the tick this attack lands on the opponent — ends the active window promptly instead of lingering/whiff-recovering. */
@@ -282,6 +337,7 @@ export class AttackController {
       activationCount: this.activationCount,
       dashCooldownRemainingS: this.dashCooldownRemainingS,
       waitingForDash: this.waitingForDash,
+      heldSinceRecoveryPressS: this.heldSinceRecoveryPressS,
     };
   }
 }

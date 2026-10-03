@@ -40,9 +40,19 @@ export const GRAVITY_Y = -10.5;
 /** Downward acceleration magnitude (positive), for systems (e.g. DriftController's variable-jump release-cut math) that need the actual number Rapier applies rather than re-deriving it from observed body velocity. */
 export const GRAVITY_MPS2 = -GRAVITY_Y;
 
+/**
+ * Two Bey bodies overlap in height (so they can touch): the gap between their centres is at most the sum of their
+ * body half-heights. The one rule both the bumper contact filter below and the body-collision rules use (owner audit
+ * B3, 2026-10-03: the collision rule used the horizontal reach as its vertical tolerance — ~1.3 m, a ghost contact
+ * with one Bey well above the other).
+ */
+export function beyBodiesOverlapVertically(y1: number, halfHeight1M: number, y2: number, halfHeight2M: number): boolean {
+  return Math.abs(y1 - y2) <= halfHeight1M + halfHeight2M;
+}
+
 export class PhysicsWorld {
-  /** Bey-Bey bumper colliders (see physics/collision/CollisionGroups.ts) → half-height of their Bey's own body. */
-  private readonly bumperBodyHalfHeight = new Map<number, number>();
+  /** Bey-Bey bumper colliders (see physics/collision/CollisionGroups.ts) → their Bey's body, its half-height, and its height at the start of the current step. */
+  private readonly bumpers = new Map<number, { body: RAPIER.RigidBody; halfHeightM: number; y: number }>();
 
   /**
    * Two bumpers only touch while the two Bey bodies overlap in height; a Bey
@@ -51,22 +61,31 @@ export class PhysicsWorld {
    * one Bey balanced on top of the other for the rest of a round).
    */
   private readonly hooks: RAPIER.PhysicsHooks = {
-    filterContactPair: (collider1, collider2, body1, body2) => {
-      const h1 = this.bumperBodyHalfHeight.get(collider1);
-      const h2 = this.bumperBodyHalfHeight.get(collider2);
-      if (h1 === undefined || h2 === undefined) return RAPIER.SolverFlags.COMPUTE_IMPULSE;
-      const y1 = this.rapierWorld.getRigidBody(body1).translation().y;
-      const y2 = this.rapierWorld.getRigidBody(body2).translation().y;
-      return Math.abs(y1 - y2) > h1 + h2 ? RAPIER.SolverFlags.EMPTY : RAPIER.SolverFlags.COMPUTE_IMPULSE;
+    filterContactPair: (collider1, collider2) => {
+      const b1 = this.bumpers.get(collider1);
+      const b2 = this.bumpers.get(collider2);
+      if (b1 === undefined || b2 === undefined) return RAPIER.SolverFlags.COMPUTE_IMPULSE;
+      // Heights cached at the start of step(): the world cannot be read from inside a hook (Rapier holds it).
+      return beyBodiesOverlapVertically(b1.y, b1.halfHeightM, b2.y, b2.halfHeightM) ? RAPIER.SolverFlags.COMPUTE_IMPULSE : RAPIER.SolverFlags.EMPTY;
     },
     filterIntersectionPair: () => true,
   };
+
+  /**
+   * Owner audit B3 (2026-10-03): Rapier's JS World.step() only forwards the physics hooks when an EventQueue is
+   * passed too (`stepWithEvents`); with `undefined` it silently ran `step()` without them, so the bumper contact
+   * filter above was never called (M11 onward) — two Beys touched whenever their 3 m bumpers overlapped, even with
+   * one 2 m above the other. An auto-draining queue (nothing reads its events) makes the hooks run.
+   */
+  private readonly eventQueue = new RAPIER.EventQueue(true);
 
   private constructor(readonly rapierWorld: RAPIER.World) {}
 
   /** Registers a Bey-Bey bumper collider with its Bey body's half-height (for the contact filter above). */
   registerBeyBumper(collider: RAPIER.Collider, bodyHalfHeightM: number): void {
-    this.bumperBodyHalfHeight.set(collider.handle, bodyHalfHeightM);
+    const body = collider.parent();
+    if (!body) throw new Error('registerBeyBumper: the bumper must be attached to its Bey body.');
+    this.bumpers.set(collider.handle, { body, halfHeightM: bodyHalfHeightM, y: body.translation().y });
   }
 
   /** Rapier ships as WebAssembly and must be initialized asynchronously before any RAPIER.* class can be constructed. */
@@ -85,6 +104,7 @@ export class PhysicsWorld {
 
   /** Advances the physics simulation by exactly one fixed tick. Must be called from FixedTimestepLoop's onFixedTick, never from a render callback (GDD section 80). */
   step(): void {
-    this.rapierWorld.step(undefined, this.hooks);
+    for (const bumper of this.bumpers.values()) bumper.y = bumper.body.translation().y;
+    this.rapierWorld.step(this.eventQueue, this.hooks);
   }
 }

@@ -18,6 +18,8 @@ export class MomentumSystem {
   private lastHeadingRad: number | null = null;
   /** Seconds before another body collision may resolve (the pair's cooldown, kept on both Beys). */
   private bodyCollisionCooldownS = 0;
+  /** Audit B5: a body collision happened and the Beys have not separated since (one collision per contact). */
+  private bodyContactLatched = false;
 
   constructor(private readonly rules: MomentumRules) {}
 
@@ -67,6 +69,16 @@ export class MomentumSystem {
 
   startCollisionCooldown(seconds: number): void {
     this.bodyCollisionCooldownS = seconds;
+    this.bodyContactLatched = true;
+  }
+
+  /** The Beys have really separated: the next contact can be a collision again (after the cooldown). */
+  releaseBodyContact(): void {
+    this.bodyContactLatched = false;
+  }
+
+  get isBodyContactLatched(): boolean {
+    return this.bodyContactLatched;
   }
 
   /** Debug Lab only. */
@@ -76,6 +88,6 @@ export class MomentumSystem {
 
   /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
   getDeterministicState(): CanonicalRecord {
-    return { momentum: this.momentum, lastHeadingRad: this.lastHeadingRad, bodyCollisionCooldownS: this.bodyCollisionCooldownS };
+    return { momentum: this.momentum, lastHeadingRad: this.lastHeadingRad, bodyCollisionCooldownS: this.bodyCollisionCooldownS, bodyContactLatched: this.bodyContactLatched };
   }
 }

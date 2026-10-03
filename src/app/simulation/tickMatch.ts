@@ -31,6 +31,8 @@ import {
   BODY_COLLISION_MIN_CLOSING_SPEED_MPS,
   BODY_COLLISION_MIN_DAMAGE,
   BODY_COLLISION_REFERENCE_SPEED_DIFF_MPS,
+  BODY_COLLISION_RELEASE_GAP_M,
+  BODY_COLLISION_TIE_SPEED_MPS,
 } from '../../bey/momentum/MomentumTuning';
 import { isOutOfArena } from '../../arena/ringout/RingOut';
 import { RoundState } from '../../combat/round-rules/RoundState';
@@ -42,6 +44,7 @@ import { DriftState } from '../../drift/DriftController';
 import type { DodgeState } from '../../dodge/DodgeController';
 import { isGrounded } from '../../physics/collision/GroundCheck';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
+import { beyBodiesOverlapVertically } from '../../physics/world/PhysicsWorld';
 import { dot, length, normalize, subtract, type Vec2 } from '../../physics/Vec2';
 import { ClashState, type ClashResult } from '../../combat/clash/ClashController';
 import { ClashOrchestration, type HitSnapshotInput, type ResolvedHitToApply } from './ClashOrchestration';
@@ -492,16 +495,24 @@ export function tickMatch(
   }
 
   // Body collision (owner, 2026-10-02, item 9): the Beys touch with no attack connecting this tick.
+  const bodyContactReach = first.definition.physical.colliderRadiusM + second.definition.physical.colliderRadiusM + BODY_COLLISION_CONTACT_SLOP_M;
+  const bodiesOverlapVertically = beyBodiesOverlapVertically(firstYM, first.definition.physical.colliderHalfHeightM, secondYM, second.definition.physical.colliderHalfHeightM);
+  // Audit B5: a real separation (or one Bey clear above the other) re-arms the pair's next collision.
+  if (!bodiesOverlapVertically || length(subtract(secondPos, firstPos)) > bodyContactReach + BODY_COLLISION_RELEASE_GAP_M) {
+    first.momentum.releaseBodyContact();
+    second.momentum.releaseBodyContact();
+  }
   if (hitEvents.length === 0 && rawHitEvents.length === 0 && !roundState.isOver) {
-    const contactReach = first.definition.physical.colliderRadiusM + second.definition.physical.colliderRadiusM + BODY_COLLISION_CONTACT_SLOP_M;
     const firstToSecond = subtract(secondPos, firstPos);
     const closingSpeed = dot(subtract(firstVelBefore, secondVelBefore), normalize(firstToSecond));
     // Touching after the step, or would have met during it (a fast contact can bounce them apart within the tick).
-    const touched = Math.min(length(firstToSecond), gapBefore - closingSpeed * fixedDeltaSeconds) <= contactReach;
+    const touched = Math.min(length(firstToSecond), gapBefore - closingSpeed * fixedDeltaSeconds) <= bodyContactReach;
     if (
       touched &&
-      Math.abs(firstYM - secondYM) <= contactReach &&
+      bodiesOverlapVertically && // audit B3: the bodies' real heights, as the physics contact filter
       closingSpeed >= BODY_COLLISION_MIN_CLOSING_SPEED_MPS &&
+      !first.momentum.isBodyContactLatched &&
+      !second.momentum.isBodyContactLatched &&
       first.momentum.collisionCooldownRemainingS === 0 &&
       second.momentum.collisionCooldownRemainingS === 0
     ) {
@@ -524,16 +535,24 @@ export function tickMatch(
     const firstSpeed = length(firstVelBefore);
     const secondSpeed = length(secondVelBefore);
     const diff = Math.abs(firstSpeed - secondSpeed);
+    // Dodge i-frames and a defensive Circular (item 13) make a Bey immune to the collision's damage and push.
+    const immune = (dodge: { hasIFrames: boolean }, attackState: AttackState): boolean => dodge.hasIFrames || attackState === AttackState.CircularActive;
+    const firstImmune = immune(firstDodge, firstAttack.state);
+    const secondImmune = immune(secondDodge, secondAttack.state);
+    const minDamage = BODY_COLLISION_MIN_DAMAGE * scaleDamage;
+    if (diff < BODY_COLLISION_TIE_SPEED_MPS) {
+      // Audit B4: a tie. Nobody is the faster one: the minimum damage to each, no momentum loss, no knockback.
+      if (!firstImmune && minDamage > 0) applyStabilityDamageAndTrackKo(true, first, minDamage);
+      if (!secondImmune && minDamage > 0) applyStabilityDamageAndTrackKo(false, second, minDamage);
+      combatEvents.push({ kind: 'bodyCollision', targetIsFirst: true, damage: firstImmune ? 0 : minDamage, speedDifferenceMps: diff });
+      combatEvents.push({ kind: 'bodyCollision', targetIsFirst: false, damage: secondImmune ? 0 : minDamage, speedDifferenceMps: diff });
+      return;
+    }
     const firstIsSlower = firstSpeed < secondSpeed;
     const slower = firstIsSlower ? first : second;
     const faster = firstIsSlower ? second : first;
-    // Dodge i-frames and a defensive Circular (item 13) make a Bey immune to the collision's damage and push.
-    const immune = (bey: Bey, dodge: { hasIFrames: boolean }, attackState: AttackState): boolean => dodge.hasIFrames || attackState === AttackState.CircularActive;
-    const firstImmune = immune(first, firstDodge, firstAttack.state);
-    const secondImmune = immune(second, secondDodge, secondAttack.state);
     const slowerImmune = firstIsSlower ? firstImmune : secondImmune;
     const fasterImmune = firstIsSlower ? secondImmune : firstImmune;
-    const minDamage = BODY_COLLISION_MIN_DAMAGE * scaleDamage;
     const slowerDamage = minDamage + (CIRCULAR_STABILITY_DAMAGE / BODY_COLLISION_REFERENCE_SPEED_DIFF_MPS) * diff * scaleDamage;
     faster.momentum.loseOnCollision();
     let dealt = 0;

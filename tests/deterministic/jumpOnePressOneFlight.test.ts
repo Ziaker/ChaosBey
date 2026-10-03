@@ -60,14 +60,18 @@ export async function traceJump(floor: ArenaFloorId, speedMps: number, pressTick
   for (let t = 0; t < 150 && (landedAt < 0 || t <= landedAt + AFTER_LANDING_TICKS); t++) {
     const a = pressTicks < 0 ? forward(false, false) : t === 0 ? forward(true, true) : forward(false, t < pressTicks);
     harness.tick(a, NONE);
-    const g = isGrounded(harness.physics, harness.first.collider);
+    const h = heightAboveFloor() - restHeight;
+    // A one-tick "airborne" read with the Bey still at its resting height above the floor is the ground check
+    // flickering while it drives up a bowl slope (no rise since the tick before), not a flight (owner audit 2026-10-03: seen at bowl-a, 11 m/s, 22
+    // ticks after landing, height above the floor unchanged at 0.245 m).
+    const rawGrounded = isGrounded(harness.physics, harness.first.collider);
+    const g = rawGrounded || (wasGrounded && h - prevH < 0.005);
     if (wasGrounded && !g) trace.takeoffs++;
     if (!wasGrounded && g) {
       trace.landings++;
       if (landedAt < 0) landedAt = t;
     }
     wasGrounded = g;
-    const h = heightAboveFloor() - restHeight;
     if (h > prevH + 1e-4) rising = true;
     else if (rising && h < prevH - 1e-4) {
       rising = false;

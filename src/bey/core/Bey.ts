@@ -61,8 +61,9 @@ export function createBey(
   arenaFloor: ArenaFloorId = 'flat',
   motion: MotionParams = motionParams(),
   /** The match's per-Bey rules (MatchConfig); omitted = the defaults, with the pre-2026-10-02 jump (see LEGACY_JUMP_FULL_HEIGHT_M). */
-  rules: BeyMatchRules = { ...beyMatchRulesOf(createDefaultMatchConfig()), jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M },
+  matchRules?: BeyMatchRules,
 ): Bey {
+  const rules: BeyMatchRules = matchRules ?? { ...beyMatchRulesOf(createDefaultMatchConfig()), jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M };
   const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical, motion);
   const stats = resolveBeyStats(definition.ratings);
   const movement = new MovementController(definition.handling, motion);
@@ -73,7 +74,8 @@ export function createBey(
     collider,
     movement,
     spin: new SpinController(motion),
-    drift: new DriftController(movement.getLateralGripPerS(), rules),
+    // Bare constructions (no match rules: the Camera Lab, physics-only tests) keep the old immediate full-jump launch.
+    drift: new DriftController(movement.getLateralGripPerS(), matchRules),
     dodge: new DodgeController(rules.dodgeCooldownS),
     stamina: new StaminaSystem(stats.stamina, rules.movementStaminaDrain),
     stability: new StabilitySystem(),

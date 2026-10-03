@@ -41,3 +41,13 @@ export const BODY_COLLISION_MIN_CLOSING_SPEED_MPS = 1.5;
 export const BODY_COLLISION_COOLDOWN_S = 0.35;
 /** Extra reach (m) beyond the two colliders' radii that still counts as touching (contact solver slop). */
 export const BODY_COLLISION_CONTACT_SLOP_M = 0.05;
+/**
+ * Owner audit B5 (2026-10-03): one collision per contact. After a collision the pair stays latched while it keeps
+ * touching — however long — and only a real separation, this far (m) beyond the touching reach, re-arms it. PROVISIONAL.
+ */
+export const BODY_COLLISION_RELEASE_GAP_M = 0.1;
+/**
+ * Owner audit B4 (2026-10-03): speeds this close (m/s) are a tie — neither Bey is "the faster": both take the minimum
+ * damage, nobody loses momentum, no knockback (it used to be first-vs-second order on a tie). PROVISIONAL.
+ */
+export const BODY_COLLISION_TIE_SPEED_MPS = 0.1;

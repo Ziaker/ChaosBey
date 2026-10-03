@@ -160,6 +160,8 @@ describe('AI combat behaviors', () => {
     let reactionTimerExceededDelayWhileCharging = false;
     let attackReleasedByChargeTarget = false;
     let previousAttackState: string | null = null;
+    let previousChargeFraction = 0;
+    let previousWasAttackDash = false;
 
     for (let i = 0; i < 600; i++) {
       const firstActions = idle.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
@@ -191,13 +193,17 @@ describe('AI combat behaviors', () => {
         if (debug.reactionTimerS > effectiveReactionDelayS) reactionTimerExceededDelayWhileCharging = true;
       }
 
-      if (previousAttackState === 'ChargingDash' && attackState === 'DashActive') {
-        // Charge just released this tick — must be because the real
-        // AttackController's own charge fraction crossed the AI's target
-        // (checked above throughout the charge), never because an
-        // unrelated decision clock happened to fire.
+      if (previousAttackState === 'ChargingDash' && attackState !== 'ChargingDash' && previousWasAttackDash) {
+        // Charge just released — must be because the real AttackController's own charge fraction crossed the AI's
+        // target (checked above throughout the charge), never because an unrelated decision clock happened to fire.
+        // The state after it is DashActive, or already Neutral when the Dash hit on its very first tick (owner audit
+        // 2026-10-03: with the bumper filter really running, the run's only ranged release changed; this one, at 1.2 m,
+        // was already there but went unseen).
+        expect(previousChargeFraction).toBeGreaterThanOrEqual(dashTargetChargeFraction - 0.02);
         attackReleasedByChargeTarget = true;
       }
+      previousChargeFraction = chargeFraction;
+      previousWasAttackDash = debug.activeIntent === AiIntent.AttackDash;
 
       previousAttackState = attackState;
       harness.tick(firstActions, secondActions);

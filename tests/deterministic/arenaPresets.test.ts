@@ -101,7 +101,7 @@ describe('arena values in real matches', () => {
   it('are recorded in the replay and used on playback: a different wall diverges', async () => {
     const fingerprint = await currentRuntimeFingerprint();
     const record = await simulateAiMatch({
-      seed: 'arena-6' /* re-pinned in each gameplay lote of 2026-10-02 (Dash cooldown, momentum, jump, combat rules) */,
+      seed: 'arena-18' /* re-pinned in each gameplay lote of 2026-10-02 (Dash cooldown, momentum, jump, combat rules) and with the 2026-10-03 audit fixes (bumper filter really running, deferred jump launch, AI dodge reserve). This test needs a match where the wall changes the outcome: arena-18, -31, -33 are the first of arena-0..59 that do (AI fights rarely reach the wall). */,
       firstDefinition: ATTACK_ARCHETYPE,
       secondDefinition: DEFENSE_ARCHETYPE,
       matchConfigOverrides: { arenaWallHeightM: RIFT_CRATER.geometry.wallHeightM, arenaWallRestitution: RIFT_CRATER.geometry.wallRestitution },
