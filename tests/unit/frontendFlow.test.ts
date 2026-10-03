@@ -63,7 +63,7 @@ describe('match setup', () => {
         // Lote 9: the game as it was.
         arenaBowlDepthM: 2.5, roundTimeLimitS: 0, winByKo: true, winByRingOut: true, winBySpinOut: true, accelerationScale: 1, topSpeedScale: 1, airControl: 1, jumpStaminaCost: 0, jumpCooldownS: 0,
       },
-      visual: { intensity: 1, groundWaves: 1, dust: 1 },
+      visual: { intensity: 1, groundWaves: 1, dust: 1, motionTrails: 1, impactFlash: 1 },
       seedText: null,
     });
     // The default setup is the Debug Lab / quick-play pairing.
