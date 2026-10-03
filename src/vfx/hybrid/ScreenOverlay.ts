@@ -37,6 +37,7 @@ export class ScreenOverlay {
   private readonly focus: FocusLines[] = [];
   private tintState: { css: string; remaining: number } | null = null;
   private impactRemaining = 0;
+  private impactStrength = 0;
   private readonly normal: CanvasRenderingContext2D | null = null;
   private readonly invert: CanvasRenderingContext2D | null = null;
   private readonly host: HTMLElement | null = null;
@@ -70,8 +71,15 @@ export class ScreenOverlay {
     this.tintState = { css, remaining: seconds };
   }
 
-  /** The negative flash, for `seconds`. */
-  impactFrame(seconds: number): void {
+  /**
+   * The negative flash. Lote 11 adds presentation-only strength: 0 disables it, 1 is the approved look. Values above 1
+   * are represented by the caller as a longer frame while this alpha remains physically bounded at 1.
+   */
+  impactFrame(seconds: number, strength = 1): void {
+    const safeStrength = Math.max(0, Math.min(1.5, strength));
+    if (seconds <= 0 || safeStrength <= 0) return;
+    if (seconds >= this.impactRemaining) this.impactStrength = safeStrength;
+    else this.impactStrength = Math.max(this.impactStrength, safeStrength);
     this.impactRemaining = Math.max(this.impactRemaining, seconds);
   }
 
@@ -79,11 +87,13 @@ export class ScreenOverlay {
     this.focus.length = 0;
     this.tintState = null;
     this.impactRemaining = 0;
+    this.impactStrength = 0;
     this.draw();
   }
 
   update(dt: number): void {
     this.impactRemaining = Math.max(0, this.impactRemaining - dt);
+    if (this.impactRemaining === 0) this.impactStrength = 0;
     for (let i = this.focus.length - 1; i >= 0; i--) {
       this.focus[i]!.remaining -= dt;
       if (this.focus[i]!.remaining <= 0) this.focus.splice(i, 1);
@@ -147,8 +157,10 @@ export class ScreenOverlay {
       g.globalAlpha = 1;
     }
     if (this.impactRemaining > 0) {
+      inv.globalAlpha = Math.min(1, this.impactStrength);
       inv.fillStyle = '#ffffff';
       inv.fillRect(0, 0, W, H);
+      inv.globalAlpha = 1;
     }
   }
 
@@ -156,6 +168,7 @@ export class ScreenOverlay {
     this.focus.length = 0;
     this.tintState = null;
     this.impactRemaining = 0;
+    this.impactStrength = 0;
     this.host?.remove();
   }
 }
