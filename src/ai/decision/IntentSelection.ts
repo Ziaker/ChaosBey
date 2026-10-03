@@ -64,8 +64,10 @@ const MOMENTUM_BUILD_PASSIVE_DAMPING = 0.7;
 const MOMENTUM_BUILD_PATIENCE_WEIGHT = 0.6;
 const MOMENTUM_BUILD_MIN_AFFINITY = 0.4;
 /**
- * A run-up is a short combat beat, not another patience state. Keeping this fixed prevents the Stamina personality's
- * longer anti-passivity horizon from accidentally extending the momentum-build phase into a no-attack loop.
+ * Three seconds is the absolute run-up ceiling. The same personality affinity that controls run-up strength also scales
+ * its duration: with current data Attack gets ~2.64 s, Defense ~2.01 s and Stamina ~1.56 s. This keeps speed build-up
+ * visible for every archetype without letting two patient/resource-saving Beys repeatedly spend three seconds delaying
+ * the next commitment (the Stamina-vs-Stamina matrix-9 stalemate found by the deterministic suite).
  */
 const MOMENTUM_BUILD_MAX_DURATION_S = 3;
 const EDGE_RISK_OVERRIDE_THRESHOLD = 0.55;
@@ -177,8 +179,8 @@ export function passivityTempo(secondsSinceOwnAttack: number, personality: AiPer
  * - while moving and below the target: prefer a straight Approach over routine attacks; if contact happens before the
  *   target, that becomes the speed-difference body collision the owner explicitly asked for rather than a fake retreat;
  * - a punish/opening/edge-pressure or live Clash opportunity bypasses the pacing;
- * - patient archetypes use a gentler build bias, preserving their approved behavioral identity;
- * - the build phase itself has a fixed 3 s ceiling, then normal scoring resumes regardless of personality patience.
+ * - patient archetypes use a gentler and shorter build bias, preserving their approved behavioral identity;
+ * - three seconds is only the absolute ceiling; personality affinity makes the phase end earlier for patient archetypes.
  */
 export function momentumBuildPriority(
   world: WorldState,
@@ -189,7 +191,9 @@ export function momentumBuildPriority(
   if (world.distanceToOpponentM <= AI_CIRCULAR_ATTACK_RANGE_M || world.own.momentum >= MOMENTUM_BUILD_TARGET) return 0;
   const speedGate = clamp01((world.own.speedMps - MOMENTUM_BUILD_MIN_SPEED_MPS) / (MOMENTUM_BUILD_FULL_SPEED_MPS - MOMENTUM_BUILD_MIN_SPEED_MPS));
   if (speedGate <= 0) return 0;
-  const buildWindow = 1 - clamp01(context.secondsSinceOwnAttack / MOMENTUM_BUILD_MAX_DURATION_S);
+  const personalityAffinity = MOMENTUM_BUILD_MIN_AFFINITY + MOMENTUM_BUILD_PATIENCE_WEIGHT * (1 - personality.patience);
+  const buildDurationS = MOMENTUM_BUILD_MAX_DURATION_S * personalityAffinity;
+  const buildWindow = 1 - clamp01(context.secondsSinceOwnAttack / buildDurationS);
   if (buildWindow <= 0) return 0;
   const buildNeed = clamp01((MOMENTUM_BUILD_TARGET - world.own.momentum) / MOMENTUM_BUILD_TARGET);
   const tacticalOpening = clamp01(
@@ -200,7 +204,6 @@ export function momentumBuildPriority(
       world.opponent.hasImminentHitbox ? 1 : 0,
     ),
   );
-  const personalityAffinity = MOMENTUM_BUILD_MIN_AFFINITY + MOMENTUM_BUILD_PATIENCE_WEIGHT * (1 - personality.patience);
   return buildNeed * speedGate * personalityAffinity * buildWindow * (1 - tacticalOpening);
 }
 
@@ -364,7 +367,7 @@ export function selectIntent(
   // near the ring-out edge (ActionSelection approaches the latter from the
   // center side so the hit drives them outward).
   const stabilityAdvantage = risk.opportunity * (0.5 + personality.aggression * 0.5);
-  const edgeAdvantage = risk.edgePressure * (EDGE_PRESSURE_SCORE_BASE + personality.edgePressureAffinity * EDGE_PRESSURE_SCORE_AFFINITY_WEIGHT);
+  const edgeAdvantage = risk.edgePressure * (EDGE_PRESSURE_SCORE_BASE + personality.edgePressureAffinity * EDGE_PRESSURE_AFFINITY_WEIGHT);
   scores.set(AiIntent.PressAdvantage, Math.max(stabilityAdvantage, edgeAdvantage) * willingness * (inCircularRange || inDashRange ? 1 : 0.3));
 
   // A visible recovery window (whiffed/spent attack) invites a punish —
