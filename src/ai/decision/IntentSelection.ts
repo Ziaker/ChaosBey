@@ -367,7 +367,7 @@ export function selectIntent(
   // near the ring-out edge (ActionSelection approaches the latter from the
   // center side so the hit drives them outward).
   const stabilityAdvantage = risk.opportunity * (0.5 + personality.aggression * 0.5);
-  const edgeAdvantage = risk.edgePressure * (EDGE_PRESSURE_SCORE_BASE + personality.edgePressureAffinity * EDGE_PRESSURE_AFFINITY_WEIGHT);
+  const edgeAdvantage = risk.edgePressure * (EDGE_PRESSURE_SCORE_BASE + personality.edgePressureAffinity * EDGE_PRESSURE_SCORE_AFFINITY_WEIGHT);
   scores.set(AiIntent.PressAdvantage, Math.max(stabilityAdvantage, edgeAdvantage) * willingness * (inCircularRange || inDashRange ? 1 : 0.3));
 
   // A visible recovery window (whiffed/spent attack) invites a punish —
