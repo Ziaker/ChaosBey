@@ -61,7 +61,7 @@ describe('Master §12 speed-limit behavior playtest', () => {
     expect(loadLastSetup(storage)?.rules.strictSpeedCap).toBe(true);
   });
 
-  it('Permissive keeps a physical overspeed for at least one ordinary movement tick; Strict clamps locomotion to the current cap', async () => {
+  it('Permissive keeps a physical overspeed for at least one ordinary movement tick; Strict clamps grounded locomotion to the current cap', async () => {
     const permissive = await speedAfterOrdinaryOverspeedTick(false);
     const strict = await speedAfterOrdinaryOverspeedTick(true);
     expect(permissive.speed).toBeGreaterThan(permissive.cap * 1.05);
@@ -74,6 +74,19 @@ describe('Master §12 speed-limit behavior playtest', () => {
     h.first.movement.registerKnockback();
     h.first.body.setLinvel({ x: 0, y: h.first.body.linvel().y, z: cap * 1.5 }, true);
     h.tick(FORWARD, NONE);
+    const v = h.first.body.linvel();
+    expect(Math.hypot(v.x, v.z)).toBeGreaterThan(cap * 1.05);
+    h.dispose();
+  });
+
+  it('Strict never truncates airborne overspeed: launch/jump flight stays physical even after leaving the floor', async () => {
+    const h = await settledHarness(true);
+    const cap = h.first.movement.getMaxSpeedMps();
+    const p = h.first.body.translation();
+    h.first.body.setTranslation({ x: p.x, y: p.y + 2, z: p.z }, true);
+    h.first.body.setLinvel({ x: 0, y: 0, z: cap * 1.5 }, true);
+    const result = h.tick(FORWARD, NONE);
+    expect(result.first.grounded).toBe(false);
     const v = h.first.body.linvel();
     expect(Math.hypot(v.x, v.z)).toBeGreaterThan(cap * 1.05);
     h.dispose();
