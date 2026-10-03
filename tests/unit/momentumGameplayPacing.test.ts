@@ -1,7 +1,7 @@
 // Owner item 11 follow-up (Lote 10): the AI must visibly preserve/build speed instead of
 // treating Momentum as a bonus it only notices after it already exists. These are pure
 // intent tests: hard tactical openings still win, while routine mid-range exchanges get
-// a finite run-up once the Bey is already moving. No new movement mode or hidden force.
+// a finite straight run-up once the Bey is already moving. No hidden force or fake spacing state.
 
 import { describe, expect, it } from 'vitest';
 import { AttackState } from '../../src/combat/attacks/AttackController';
@@ -50,13 +50,13 @@ function scenario(
 }
 
 describe('item 11 — speed-centered AI pacing', () => {
-  it('opens space instead of immediately throwing another routine Dash while moving with low momentum', () => {
+  it('keeps accelerating straight instead of immediately throwing another routine Dash while moving with low momentum', () => {
     const s = scenario(
       { velocityXZ: { x: 0, z: 6 }, momentum: 0 },
       { positionXZ: { x: 0, z: 5 } },
     );
     expect(momentumBuildPriority(s.world, ATTACK_AI_PERSONALITY, s.risk, s.context)).toBeGreaterThan(0.9);
-    expect(s.decision.intent).toBe(AiIntent.Retreat);
+    expect(s.decision.intent).toBe(AiIntent.Approach);
     expect(s.decision.reason).toContain('momentum build');
   });
 
@@ -86,7 +86,7 @@ describe('item 11 — speed-centered AI pacing', () => {
     expect(s.decision.intent).toBe(AiIntent.AttackDash);
   });
 
-  it('does not run away from actual close combat just to satisfy the momentum meter', () => {
+  it('does not ignore actual close combat just to satisfy the momentum meter', () => {
     const s = scenario(
       { velocityXZ: { x: 0, z: 6 }, momentum: 0 },
       { positionXZ: { x: 0, z: 1.5 } },
@@ -95,7 +95,7 @@ describe('item 11 — speed-centered AI pacing', () => {
     expect(s.decision.intent).toBe(AiIntent.AttackCircular);
   });
 
-  it('fades the run-up away under the existing anti-passivity clock so it cannot become a retreat stalemate', () => {
+  it('fades the run-up away under the existing anti-passivity clock so it cannot become a no-attack stalemate', () => {
     const early = scenario(
       { velocityXZ: { x: 0, z: 6 }, momentum: 0 },
       { positionXZ: { x: 0, z: 5 } },
