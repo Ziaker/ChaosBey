@@ -7,9 +7,17 @@
 
 import { DEFAULT_VFX_OPTIONS, sanitizeVfxOptions, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import { CONCEPT_BEYS, conceptBeyFor } from '../../bey/archetype/BeyConceptRoster';
-import { DEFAULT_AI_DIFFICULTY_TIER, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
-import { DEFAULT_ARENA_PRESET, arenaPreset, type ArenaGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
-import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import { AI_DIFFICULTY_TIERS, DEFAULT_AI_DIFFICULTY_TIER, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
+import {
+  ARENA_PRESETS,
+  ARENA_WALL_BOUNCE_RANGE,
+  ARENA_WALL_HEIGHT_RANGE,
+  DEFAULT_ARENA_PRESET,
+  arenaPreset,
+  type ArenaGeometry,
+  type ArenaPresetId,
+} from '../../arena/presets/ArenaPresets';
+import { ARENA_FLOOR_IDS, DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { RING_OUT_DELAY_RANGE } from '../../arena/ringout/RingOutTuning';
 import {
   BODY_COLLISION_DAMAGE_RANGE,
@@ -35,11 +43,11 @@ import {
 } from '../../config/match/MatchConfig';
 import { DODGE_COOLDOWN_RANGE } from '../../dodge/DodgeTuning';
 import { JUMP_FULL_HEIGHT_RANGE, JUMP_SHORT_HOP_HEIGHT_RANGE } from '../../drift/DriftTuning';
-import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
+import { DEFAULT_MOTION_DIRECTION, MOTION_DIRECTION_IDS, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
-import type { AiPersonalityChoice, SideControllerSpec } from '../session/SideControllers';
+import { AI_PERSONALITY_CHOICES, type AiPersonalityChoice, type SideControllerSpec } from '../session/SideControllers';
 import { BEY_ROSTER, rosterEntry } from './beyRoster';
-import type { RoundsToWin } from './matchScore';
+import { ROUNDS_TO_WIN_CHOICES, type RoundsToWin } from './matchScore';
 
 export interface MatchSetup {
   readonly playerBeyId: string;
@@ -284,16 +292,50 @@ export function loadLastSetup(storage: Pick<Storage, 'getItem'> | null = safeSto
   }
   const visual = sanitizeVfxOptions(saved.visual);
   const clampedRules = clampPersistedMatchRules(rules as unknown as MatchRules);
+
+  const savedAi = saved.ai && typeof saved.ai === 'object' ? saved.ai : null;
+  const aiTier = AI_DIFFICULTY_TIERS.some((tier) => tier.id === savedAi?.tier) ? (savedAi!.tier as AiDifficultyTierId) : base.ai.tier;
+  const aiStyle = AI_PERSONALITY_CHOICES.includes(savedAi?.style as AiPersonalityChoice) ? (savedAi!.style as AiPersonalityChoice) : base.ai.style;
+  const roundsToWin = ROUNDS_TO_WIN_CHOICES.includes(saved.roundsToWin as RoundsToWin) ? (saved.roundsToWin as RoundsToWin) : base.roundsToWin;
+  const motion = MOTION_DIRECTION_IDS.includes(saved.motion as MotionDirectionId) ? (saved.motion as MotionDirectionId) : base.motion;
+  const clashImpactMultiplier = typeof saved.clashImpactMultiplier === 'number' && Number.isFinite(saved.clashImpactMultiplier)
+    ? clamp(saved.clashImpactMultiplier, CLASH_IMPACT_RANGE)
+    : base.clashImpactMultiplier;
+  const arena = sanitizePersistedArena(saved.arena, base.arena);
+
   return {
     ...base,
     opponentBeyId: typeof saved.opponentBeyId === 'string' && rosterEntryExists(saved.opponentBeyId) ? saved.opponentBeyId : base.opponentBeyId,
-    ai: saved.ai && typeof saved.ai === 'object' ? { ...base.ai, ...saved.ai } : base.ai,
-    roundsToWin: saved.roundsToWin ?? base.roundsToWin,
-    arena: saved.arena && typeof saved.arena === 'object' && saved.arena.geometry ? { ...base.arena, ...saved.arena, geometry: { ...base.arena.geometry, ...saved.arena.geometry } } : base.arena,
-    clashImpactMultiplier: typeof saved.clashImpactMultiplier === 'number' ? saved.clashImpactMultiplier : base.clashImpactMultiplier,
-    motion: saved.motion ?? base.motion,
+    ai: { tier: aiTier, style: aiStyle },
+    roundsToWin,
+    arena,
+    clashImpactMultiplier,
+    motion,
     rules: sanitizeMatchRules(clampedRules),
     visual,
+  };
+}
+
+function sanitizePersistedArena(saved: Partial<MatchSetup>['arena'], fallback: MatchSetup['arena']): MatchSetup['arena'] {
+  if (!saved || typeof saved !== 'object' || !saved.geometry || typeof saved.geometry !== 'object') return fallback;
+  if (!ARENA_PRESETS.some((preset) => preset.id === saved.presetId)) return fallback;
+
+  const geometry = saved.geometry as ArenaGeometry;
+  if (geometry.floor !== undefined && !ARENA_FLOOR_IDS.includes(geometry.floor as ArenaFloorId)) return fallback;
+
+  const presetId = saved.presetId as ArenaPresetId;
+  const own = arenaPreset(presetId).geometry;
+  const wallHeightM = typeof geometry.wallHeightM === 'number' && Number.isFinite(geometry.wallHeightM)
+    ? clamp(geometry.wallHeightM, ARENA_WALL_HEIGHT_RANGE)
+    : own.wallHeightM;
+  const wallRestitution = typeof geometry.wallRestitution === 'number' && Number.isFinite(geometry.wallRestitution)
+    ? clamp(geometry.wallRestitution, ARENA_WALL_BOUNCE_RANGE)
+    : own.wallRestitution;
+  const floor = geometry.floor as ArenaFloorId | undefined;
+
+  return {
+    presetId,
+    geometry: floor === undefined ? { ...own, wallHeightM, wallRestitution } : { ...own, wallHeightM, wallRestitution, floor },
   };
 }
 
