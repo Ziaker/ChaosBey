@@ -5,6 +5,7 @@
 // (GDD section 1.4); each Bey's systems still own their own logic.
 // ============================================================
 
+import { BOWL_DEPTH_M, type ArenaFloor } from '../../arena/floor/ArenaFloorProfile';
 import { beyMatchRulesOf, createDefaultMatchConfig, type BeyMatchRules } from '../../config/match/MatchConfig';
 import * as THREE from 'three';
 import { createArenaColliders } from '../../arena/colliders/createArenaColliders';
@@ -113,7 +114,7 @@ export function createMatchScene(
   // approved arena art is built separately by the presentation system. Flag off: the same call on the same scene as always.
   createArenaColliders(features.arenaVisuals ? discardedVisualHolder(scene) : scene, physics, arena.geometry, arena.theme, motionValues);
 
-  const floor = arena.geometry.floor ?? 'flat';
+  const floor: ArenaFloor = { id: arena.geometry.floor ?? 'flat', depthM: arena.geometry.floorDepthM ?? BOWL_DEPTH_M }; // Lote 9: profile + depth
   const spawns = matchSpawnsFor(floor);
   const first = createBey(physics, spawns.first, applyAttackProfileSettings(beys.first, attackProfileSettings), floor, motionValues, rules);
   const second = createBey(physics, spawns.second, applyAttackProfileSettings(beys.second, attackProfileSettings), floor, motionValues, rules);

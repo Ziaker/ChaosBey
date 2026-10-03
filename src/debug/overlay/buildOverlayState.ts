@@ -5,7 +5,7 @@
 // same numbers.
 // ============================================================
 
-import { ARENA_FLOORS } from '../../arena/floor/ArenaFloorProfile';
+import { ARENA_FLOORS, floorIdOf } from '../../arena/floor/ArenaFloorProfile';
 import { floorReadout } from '../../arena/floor/floorReadout';
 import { CAMERA_PRESET_NAMES } from '../../camera/director/CameraRig';
 import { AIController } from '../../ai/controllers/AIController';
@@ -100,5 +100,5 @@ export function buildCombatOverlayFields(session: MatchSession): CombatOverlayFi
 function floorLineFor(session: MatchSession): string {
   const bey = session.getBey('first');
   const r = floorReadout(bey.arenaFloor, bey.body.translation());
-  return `${ARENA_FLOORS[bey.arenaFloor].label} · h ${r.floorHeightM.toFixed(2)} m · slope ${r.slopeDeg.toFixed(1)}° · pull ${r.downhillPullMps2.toFixed(2)} m/s²`;
+  return `${ARENA_FLOORS[floorIdOf(bey.arenaFloor)].label} · h ${r.floorHeightM.toFixed(2)} m · slope ${r.slopeDeg.toFixed(1)}° · pull ${r.downhillPullMps2.toFixed(2)} m/s²`;
 }

@@ -219,8 +219,12 @@ export function tickMatch(
   const firstGrounded = isGrounded(physics, first.collider);
   const secondGrounded = isGrounded(physics, second.collider);
 
-  const firstDrift = first.drift.tick(first.body, firstActions, firstGrounded, fixedDeltaSeconds, first.movement.getHeadingRad());
-  const secondDrift = second.drift.tick(second.body, secondActions, secondGrounded, fixedDeltaSeconds, second.movement.getHeadingRad());
+  // Lote 9 (GDD 12): a jump's Stamina cost — a Bey that can't pay it can't jump; paid when the hop begins.
+  const canPayJump = (bey: Bey): boolean => (bey.rules.jumpStaminaCost ?? 0) <= 0 || bey.stamina.resource.value > bey.rules.jumpStaminaCost;
+  const firstDrift = first.drift.tick(first.body, firstActions, firstGrounded, fixedDeltaSeconds, first.movement.getHeadingRad(), canPayJump(first));
+  const secondDrift = second.drift.tick(second.body, secondActions, secondGrounded, fixedDeltaSeconds, second.movement.getHeadingRad(), canPayJump(second));
+  if (firstDrift.hopBegan && (first.rules.jumpStaminaCost ?? 0) > 0) first.stamina.resource.subtract(first.rules.jumpStaminaCost);
+  if (secondDrift.hopBegan && (second.rules.jumpStaminaCost ?? 0) > 0) second.stamina.resource.subtract(second.rules.jumpStaminaCost);
 
   const firstDodge = first.dodge.tick(
     first.body,
@@ -612,6 +616,7 @@ export function tickMatch(
   if (firstSpunOut) combatEvents.push({ kind: 'spinOut', targetIsFirst: true });
   if (secondSpunOut) combatEvents.push({ kind: 'spinOut', targetIsFirst: false });
   roundState.resolveTick({ firstKoed, secondKoed, firstRingOut: ringOutFirst, secondRingOut: ringOutSecond, firstSpunOut, secondSpunOut });
+  roundState.tickClock(fixedDeltaSeconds); // Lote 9: the round timer (Clash time is not counted)
 
   return {
     first: {

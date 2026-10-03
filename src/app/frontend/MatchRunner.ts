@@ -7,6 +7,7 @@
 // This is the match loop playMode.ts used to own, unchanged in behavior.
 // ============================================================
 
+import type { VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import * as THREE from 'three';
 import type { AppRenderer } from '../bootstrap/createRenderer';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
@@ -64,6 +65,8 @@ export interface MatchPresentation {
   readonly cameraPreset?: CameraPresetSetting;
   /** Condition languages to show when the conditionVisuals presentation flag is enabled. */
   readonly conditionLayers?: readonly ConditionLayerSetting[];
+  /** Lote 9: the Pregame's visual options. */
+  readonly vfx?: VfxOptions;
 }
 
 export interface MatchRunnerEvents {
@@ -169,6 +172,7 @@ export class MatchRunner {
       arenaTheme: start.arenaTheme,
       cameraPreset: start.presentation?.cameraPreset,
       conditionLayers: start.presentation?.conditionLayers,
+      vfx: start.presentation?.vfx,
       renderer: deps.appRenderer.renderer,
     });
     sessionForJumpBuffer = session;

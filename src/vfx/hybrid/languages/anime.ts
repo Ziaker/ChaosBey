@@ -68,8 +68,9 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
       ctx.layer.add(burstFx({ tex: impactStar(8), color: WHITE, pos: at, size: [size * 0.25, size * 0.8], life, rotation: Math.random() * 6 }));
     };
     const shockwave = (at: THREE.Vector3, color: THREE.ColorRepresentation, r: number, life: number): void => {
-      if (TUNING.shockwave <= 0.01) return;
-      ctx.layer.add(flatFx({ tex: ringTexture(), color, pos: onFloor(at, 0.04), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.04 }, size: [0.4, r * 2 * TUNING.shockwave], life, additive: true, opacity: 1 }));
+      const userScale = ctx.groundWaveScale ?? 1;
+      if (TUNING.shockwave <= 0.01 || userScale <= 0.01) return;
+      ctx.layer.add(flatFx({ tex: ringTexture(), color, pos: onFloor(at, 0.04), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.04 }, size: [0.4, r * 2 * TUNING.shockwave * userScale], life, additive: true, opacity: 1 }));
     };
     const lines = (at: THREE.Vector3, color: THREE.Color, count: number, speed: number, dir = new THREE.Vector3(0, 1, 0), spread = 2.2): void => {
       const n = stochastic(count * TUNING.sparkLines);
@@ -190,7 +191,7 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
         shockwave(e.pos, WHITE, (1.5 + 2.5 * e.m) * wave, 0.3);
         if (e.m >= VFX_LIGHT) shockwave(e.pos, color, (2.5 + 3.5 * e.m) * wave, 0.5);
         if (e.m >= VFX_LIGHT) ctx.layer.add(flatFx({ tex: crackMark(), color: 0x000000, pos: onFloor(e.pos, 0.02), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.02 }, size: [1.4 + 2.4 * e.m, 1.4 + 2.4 * e.m], life: 3, opacity: 0.8, hold: 0.7, rotation: Math.random() * 6 }));
-        const puffs = e.m >= VFX_LIGHT ? 8 : 4;
+        const puffs = Math.round((e.m >= VFX_LIGHT ? 8 : 4) * (ctx.dustScale ?? 1));
         ctx.countDust?.(puffs);
         for (let i = 0; i < puffs; i++) {
           const a = (i / puffs) * Math.PI * 2;

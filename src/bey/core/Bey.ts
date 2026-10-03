@@ -18,7 +18,7 @@ import { StaminaSystem } from '../stamina/StaminaSystem';
 import { MomentumSystem } from '../momentum/MomentumSystem';
 import { LEGACY_JUMP_FULL_HEIGHT_M } from '../../drift/DriftTuning';
 import { createBeyRigidBody } from './BeyRigidBody';
-import type { ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import type { ArenaFloor } from '../../arena/floor/ArenaFloorProfile';
 import { DEFAULT_BEY_DEFINITION, type BeyDefinition } from '../archetype/BeyDefinition';
 import { resolveBeyStats } from '../archetype/BeyStatsResolution';
 import type { BeyStats } from '../archetype/BeyStats';
@@ -49,7 +49,7 @@ export interface Bey {
   /** The match's per-Bey rules (MatchConfig): build-time config, in the replay config snapshot. */
   readonly rules: BeyMatchRules;
   /** M11: the floor profile of the arena this Bey plays on (placement helpers put it on the floor). Not simulation state. */
-  readonly arenaFloor: ArenaFloorId;
+  readonly arenaFloor: ArenaFloor;
   /** M11: the motion direction's parameters (Motion Lab A/B/C, from MatchConfig.motion) — gameplay, shared by every system that reads it. */
   readonly motion: MotionParams;
 }
@@ -58,7 +58,7 @@ export function createBey(
   physics: PhysicsWorld,
   spawnPosition: { x: number; y: number; z: number },
   definition: BeyDefinition = DEFAULT_BEY_DEFINITION,
-  arenaFloor: ArenaFloorId = 'flat',
+  arenaFloor: ArenaFloor = 'flat',
   motion: MotionParams = motionParams(),
   /** The match's per-Bey rules (MatchConfig); omitted = the defaults, with the pre-2026-10-02 jump (see LEGACY_JUMP_FULL_HEIGHT_M). */
   matchRules?: BeyMatchRules,
@@ -66,7 +66,7 @@ export function createBey(
   const rules: BeyMatchRules = matchRules ?? { ...beyMatchRulesOf(createDefaultMatchConfig()), jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, defensiveCircular: false };
   const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical, motion);
   const stats = resolveBeyStats(definition.ratings);
-  const movement = new MovementController(definition.handling, motion);
+  const movement = new MovementController(definition.handling, motion, { acceleration: rules.accelerationScale ?? 1, topSpeed: rules.topSpeedScale ?? 1, airControl: rules.airControl ?? 1 });
   return {
     definition,
     stats,

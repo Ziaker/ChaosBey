@@ -12,7 +12,7 @@ import type { BeyDefinition } from '../../src/bey/archetype/BeyDefinition';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import type { ClashAiMashSource } from '../../src/combat/clash/ClashMash';
 import { floorHeightAt } from '../../src/arena/floor/ArenaFloorProfile';
-import { resolveMatchConfig, type MatchConfig } from '../../src/config/match/MatchConfig';
+import { arenaFloorOf, resolveMatchConfig, type MatchConfig } from '../../src/config/match/MatchConfig';
 import { SelfTestMatchWorld } from '../../src/self-test/SelfTestMatchWorld';
 
 /** The test suite's default spawns: closer than the live game's (±4 m), so scripted scenarios reach contact quickly. */
@@ -41,7 +41,7 @@ export class CombatHarness extends SelfTestMatchWorld {
     // the ground); on a bowl floor (the default since the arena scale pass)
     // they are lifted onto it, the same way matchSpawnsFor() lifts the live
     // game's spawns. Flat: unchanged.
-    const floor = resolveMatchConfig(matchConfigOverrides).arenaFloor;
+    const floor = arenaFloorOf(resolveMatchConfig(matchConfigOverrides)); // Lote 9: profile + depth
     const lift = (s: { x: number; y: number; z: number }) => ({ x: s.x, y: s.y + floorHeightAt(floor, s.x, s.z), z: s.z });
     const parts = await SelfTestMatchWorld.buildParts({
       firstSpawn: lift(firstSpawn),

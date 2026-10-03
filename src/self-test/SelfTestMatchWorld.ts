@@ -22,7 +22,7 @@ import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
 import { createBey, type Bey } from '../bey/core/Bey';
 import type { ClashAiMashSource } from '../combat/clash/ClashMash';
 import { RoundState } from '../combat/round-rules/RoundState';
-import { arenaGeometryOf, beyMatchRulesOf, resolveMatchConfig, type MatchConfig } from '../config/match/MatchConfig';
+import { arenaFloorOf, arenaGeometryOf, beyMatchRulesOf, resolveMatchConfig, roundStateOptionsOf, type MatchConfig } from '../config/match/MatchConfig';
 import { motionParams } from '../bey/motion/MotionPresets';
 import type { ControllerActions } from '../input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../physics/fixed-step/FixedTimestepLoop';
@@ -70,12 +70,12 @@ export class SelfTestMatchWorld {
     const config = resolveMatchConfig(options.matchConfigOverrides ?? {});
     const motion = motionParams(config.motion);
     createArenaColliders(new THREE.Scene(), physics, arenaGeometryOf(config), undefined, motion); // detached scene: colliders only, never rendered.
-    const floor = config.arenaFloor;
+    const floor = arenaFloorOf(config); // Lote 9: profile + depth
     const spawns = matchSpawnsFor(floor);
     const first = createBey(physics, options.firstSpawn ?? spawns.first, options.firstDefinition, floor, motion, beyMatchRulesOf(config));
     const second = createBey(physics, options.secondSpawn ?? spawns.second, options.secondDefinition, floor, motion, beyMatchRulesOf(config));
     const clash = options.aiMashSource !== undefined ? new ClashOrchestration(config, options.aiMashSource) : new ClashOrchestration(config);
-    return { physics, first, second, roundState: new RoundState({ ringOutDelayS: config.ringOutDelayS }), clash };
+    return { physics, first, second, roundState: new RoundState(roundStateOptionsOf(config)), clash };
   }
 
   /** Hitstop + controller sampling + tickMatch: the same per-tick step the live MatchSession runs (M9: one simulation). */

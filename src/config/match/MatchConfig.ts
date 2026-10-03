@@ -14,7 +14,7 @@
 // ============================================================
 
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
-import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import { BOWL_DEPTH_M, DEFAULT_ARENA_FLOOR, type ArenaFloor, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { STANDARD_ARENA_GEOMETRY, type ArenaGeometry } from '../../arena/presets/ArenaPresets';
 import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import { RING_OUT_DELAY_DEFAULT_S } from '../../arena/ringout/RingOutTuning';
@@ -82,6 +82,22 @@ export interface MatchConfig {
   dodgeCooldownS: number;
   /** Owner, 2026-10-02 (Lote 5): how hard an active Circular launches whoever touches it (×1 = the provisional default). Pregame slider. */
   circularLaunchForce: number;
+  // Owner, 2026-10-02 (Lote 9, items 3/20 — GDD 12). PROVISIONAL defaults = the game as it was.
+  /** Bowl depth / funnel (m): the rim's height above the centre for bowls A/B/C (0 = flat). */
+  arenaBowlDepthM: number;
+  /** Round time limit (s); 0 = no timer. Running out with nobody beaten = Draw. */
+  roundTimeLimitS: number;
+  winByKo: boolean;
+  winByRingOut: boolean;
+  winBySpinOut: boolean;
+  /** Multipliers on every Bey's acceleration, top speed and in-air steering grip (1 = as designed). */
+  accelerationScale: number;
+  topSpeedScale: number;
+  airControl: number;
+  /** Stamina a hop/jump costs (0 = free); a Bey without that much can't jump. */
+  jumpStaminaCost: number;
+  /** Seconds after a hop/jump begins before the next can (0 = none). */
+  jumpCooldownS: number;
   /**
    * Owner, 2026-10-02 (item 13): the Circular is defensive (its user takes nothing; whoever touches it is launched).
    * Always on in a match; false only for bare constructions (createBey without match rules: the Camera Lab), which
@@ -91,7 +107,7 @@ export interface MatchConfig {
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'defensiveCircular'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'defensiveCircular'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -106,6 +122,11 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     movementStaminaDrain: config.movementStaminaDrain,
     dodgeCooldownS: config.dodgeCooldownS,
     circularLaunchForce: config.circularLaunchForce,
+    accelerationScale: config.accelerationScale,
+    topSpeedScale: config.topSpeedScale,
+    airControl: config.airControl,
+    jumpStaminaCost: config.jumpStaminaCost,
+    jumpCooldownS: config.jumpCooldownS,
     defensiveCircular: config.defensiveCircular ?? true,
   };
 }
@@ -129,6 +150,16 @@ export function createDefaultMatchConfig(): MatchConfig {
     movementStaminaDrain: MOVEMENT_STAMINA_DRAIN_DEFAULT,
     dodgeCooldownS: DODGE_COOLDOWN_S,
     circularLaunchForce: CIRCULAR_LAUNCH_FORCE_DEFAULT,
+    arenaBowlDepthM: BOWL_DEPTH_M,
+    roundTimeLimitS: 0,
+    winByKo: true,
+    winByRingOut: true,
+    winBySpinOut: true,
+    accelerationScale: 1,
+    topSpeedScale: 1,
+    airControl: 1,
+    jumpStaminaCost: 0,
+    jumpCooldownS: 0,
     defensiveCircular: true,
   };
 }
@@ -141,5 +172,28 @@ export function resolveMatchConfig(overrides: Partial<MatchConfig> = {}): MatchC
 /** The arena values of a resolved config, in the shape the arena builder takes. */
 export function arenaGeometryOf(config: MatchConfig): ArenaGeometry {
   // A config without a floor predates floors: flat (as MatchSession and replay playback read it too).
-  return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution, floor: config.arenaFloor ?? 'flat' };
+  return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution, floor: config.arenaFloor ?? 'flat', floorDepthM: config.arenaBowlDepthM ?? BOWL_DEPTH_M };
+}
+
+/** Slider ranges for the Lote 9 rules (owner, 2026-10-02). PROVISIONAL. */
+export const ARENA_BOWL_DEPTH_RANGE = { min: 0, max: 5, step: 0.25 } as const;
+export const ROUND_TIME_LIMIT_RANGE = { min: 0, max: 180, step: 15 } as const;
+export const ACCELERATION_SCALE_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
+export const TOP_SPEED_SCALE_RANGE = { min: 0.5, max: 1.5, step: 0.05 } as const;
+export const AIR_CONTROL_RANGE = { min: 0, max: 3, step: 0.1 } as const;
+export const JUMP_STAMINA_COST_RANGE = { min: 0, max: 20, step: 1 } as const;
+export const JUMP_COOLDOWN_RANGE = { min: 0, max: 3, step: 0.1 } as const;
+
+/** The match's floor: its profile and depth (Lote 9, item 3), the one value every floor reader takes. */
+export function arenaFloorOf(config: MatchConfig): ArenaFloor {
+  return { id: config.arenaFloor ?? 'flat', depthM: config.arenaBowlDepthM ?? BOWL_DEPTH_M };
+}
+
+/** RoundState's options from the match config (ring-out delay, time limit, win conditions — Lote 9). */
+export function roundStateOptionsOf(config: MatchConfig): { ringOutDelayS: number; timeLimitS: number; winConditions: { ko: boolean; ringOut: boolean; spinOut: boolean } } {
+  return {
+    ringOutDelayS: config.ringOutDelayS,
+    timeLimitS: config.roundTimeLimitS ?? 0,
+    winConditions: { ko: config.winByKo ?? true, ringOut: config.winByRingOut ?? true, spinOut: config.winBySpinOut ?? true },
+  };
 }

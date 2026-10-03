@@ -45,6 +45,9 @@ export interface FxContext {
   ghost(slot: Slot, material: THREE.Material): THREE.Object3D;
   /** Telemetry only: `n` toon-dust puffs were just spawned (owner, 2026-10-02: every Dash must raise visible dust). */
   countDust?(n: number): void;
+  /** Lote 9 visual options: ground-wave size and dust amount multipliers (1 = approved; omitted = 1). */
+  readonly groundWaveScale?: number;
+  readonly dustScale?: number;
 }
 
 export interface HitEvent { pos: THREE.Vector3; normal: THREE.Vector3; m: number; attacker: Slot }

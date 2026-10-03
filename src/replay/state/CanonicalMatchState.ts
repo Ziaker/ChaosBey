@@ -94,6 +94,7 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
   MovementController: {
     handling: 'build-time config from the Bey definition (replay config snapshot)',
     motion: 'build-time config: the motion direction (MatchConfig.motion, replay config snapshot)',
+    airControl: 'build-time config: MatchConfig.airControl (replay config snapshot)',
   },
   SpinController: {
     motion: 'build-time config: the motion direction (MatchConfig.motion, replay config snapshot)',
@@ -112,6 +113,9 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     normalLateralGripPerS: 'build-time config from the Bey definition',
     launchMps: 'build-time config: from MatchConfig.jumpFullHeightM (replay config snapshot)',
     shortHopApexM: 'build-time config: MatchConfig.jumpShortHopHeightM (replay config snapshot)',
+    jumpCooldownS: 'build-time config: MatchConfig.jumpCooldownS (replay config snapshot)',
+    hopBeganThisTick: 'per-tick output (reset at the start of every tick)',
+    jumpAllowed: 'per-tick input (set at the start of every tick)',
     legacyLaunch: 'build-time config: whether the match supplied jump rules (a bare construction keeps the immediate launch)',
   },
   DodgeController: { cooldownS: 'build-time config: MatchConfig.dodgeCooldownS (replay config snapshot)' },
@@ -125,6 +129,6 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     aiMashSource: 'stateless (NullAiMashSource live and headless)',
     controller: 'included separately as clash.controller',
   },
-  RoundState: { ringOutDelayS: 'build-time config: MatchConfig.ringOutDelayS (replay config snapshot)' },
+  RoundState: { ringOutDelayS: 'build-time config: MatchConfig.ringOutDelayS (replay config snapshot)', timeLimitS: 'build-time config: MatchConfig.roundTimeLimitS (replay config snapshot)', winConditions: 'build-time config: MatchConfig.winBy* (replay config snapshot)' },
   HitstopClock: {},
 };

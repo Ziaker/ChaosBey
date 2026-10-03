@@ -58,7 +58,12 @@ describe('match setup', () => {
       arena: { presetId: 'foundry', geometry: { wallHeightM: 2, wallRestitution: 0.55 } },
       clashImpactMultiplier: 1,
       motion: 'B',
-      rules: { ringOutDelayS: 1.5, dashCooldownS: 1.5, momentumGain: 1, momentumFillS: 4, momentumDecayS: 2, bodyCollisionDamage: 1, momentumLossOnCollision: 0.5, jumpFullHeightM: 2.5, jumpShortHopHeightM: 0.1265, movementStaminaDrain: 1, dodgeCooldownS: 3, circularLaunchForce: 1 },
+      rules: {
+        ringOutDelayS: 1.5, dashCooldownS: 1.5, momentumGain: 1, momentumFillS: 4, momentumDecayS: 2, bodyCollisionDamage: 1, momentumLossOnCollision: 0.5, jumpFullHeightM: 2.5, jumpShortHopHeightM: 0.1265, movementStaminaDrain: 1, dodgeCooldownS: 3, circularLaunchForce: 1,
+        // Lote 9: the game as it was.
+        arenaBowlDepthM: 2.5, roundTimeLimitS: 0, winByKo: true, winByRingOut: true, winBySpinOut: true, accelerationScale: 1, topSpeedScale: 1, airControl: 1, jumpStaminaCost: 0, jumpCooldownS: 0,
+      },
+      visual: { intensity: 1, groundWaves: 1, dust: 1 },
       seedText: null,
     });
     // The default setup is the Debug Lab / quick-play pairing.

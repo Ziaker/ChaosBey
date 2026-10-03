@@ -24,7 +24,7 @@
 // Observes only: no body, collider, stat, input or camera is written.
 // ============================================================
 
-import { FLOOR_SCAR_HIT_MIN_M, FLOOR_SCAR_LANDING_MIN_M, VFX_LIGHT } from './intensityTiers';
+import { FLOOR_SCAR_HIT_MIN_M, FLOOR_SCAR_LANDING_MIN_M, VFX_LIGHT, type VfxOptions } from './intensityTiers';
 import { FloorScars } from './FloorScars';
 import * as THREE from 'three';
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
@@ -79,6 +79,8 @@ export interface HybridVfxOptions {
   readonly arenaRadiusM: number;
   /** Where the screen overlay is mounted. Default: the page body. `null`: no DOM. */
   readonly overlayParent?: HTMLElement | null;
+  /** Lote 9: the Pregame's visual options (omitted = the approved look). */
+  readonly vfx?: VfxOptions;
 }
 
 /** What the language asked of the camera and the clock: counted, never applied. */
@@ -187,6 +189,8 @@ export class HybridVfxSystem implements PresentationSystem {
         this.flashT = 1;
       },
       countDust: (n) => void (this.dustSpawned += n),
+      groundWaveScale: this.options.vfx?.groundWaves ?? 1,
+      dustScale: this.options.vfx?.dust ?? 1,
       ghost: (slot, material) => {
         const source = this.track(slot).target.visual.group;
         const copy = source.clone(true);
@@ -232,7 +236,10 @@ export class HybridVfxSystem implements PresentationSystem {
 
   onEvents(events: readonly PresentationEvent[], _state: MatchPresentationState): void {
     const windThisCall = new Set<PresentationSide>();
-    for (const event of events) {
+    const intensity = this.options.vfx?.intensity ?? 1;
+    for (const original of events) {
+      // Lote 9: the Pregame's effects intensity scales every event's magnitude (1 = the approved sizes).
+      const event = intensity !== 1 && 'magnitude' in original ? ({ ...original, magnitude: Math.min(1, original.magnitude * intensity) } as PresentationEvent) : original;
       switch (event.kind) {
         case 'hitResolved': {
           const defender = this.tracks[event.defenderSide];

@@ -42,6 +42,13 @@ export interface RoundStateOptions {
    * (MatchSession, SelfTestMatchWorld) passes in; bare RoundStates (unit tests, the Camera Lab prototype) keep the old rule.
    */
   readonly ringOutDelayS?: number;
+  /**
+   * Owner, 2026-10-02 (Lote 9, item 20 / GDD 12): the round's time limit (s); 0 or omitted = no timer (the game's
+   * rule so far). When it runs out with nobody beaten, the round is a Draw (PROVISIONAL: no judging rule was approved).
+   */
+  readonly timeLimitS?: number;
+  /** Which win conditions count (MatchConfig.winBy*). Omitted = all three. A condition that is off never ends the round. */
+  readonly winConditions?: { readonly ko: boolean; readonly ringOut: boolean; readonly spinOut: boolean };
 }
 
 export class RoundState {
@@ -49,9 +56,27 @@ export class RoundState {
   private readonly ringOutDelayS: number;
   /** Continuous time (s) each Bey has spent outside the ring-out radius; back inside resets it. */
   private outsideS = { first: 0, second: 0 };
+  private readonly timeLimitS: number;
+  private readonly winConditions: { readonly ko: boolean; readonly ringOut: boolean; readonly spinOut: boolean };
+  /** Seconds of play this round (advanced by tickClock). */
+  private elapsedS = 0;
 
   constructor(options: RoundStateOptions = {}) {
     this.ringOutDelayS = Math.max(0, options.ringOutDelayS ?? 0);
+    this.timeLimitS = Math.max(0, options.timeLimitS ?? 0);
+    this.winConditions = options.winConditions ?? { ko: true, ringOut: true, spinOut: true };
+  }
+
+  /** Advances the round clock by one tick; past the time limit (if any) an undecided round becomes a Draw. Call after resolveTick. */
+  tickClock(fixedDeltaSeconds: number): void {
+    if (this.isOver) return;
+    this.elapsedS += fixedDeltaSeconds;
+    if (this.timeLimitS > 0 && this.elapsedS >= this.timeLimitS - 1e-9) this.outcome = RoundOutcome.Draw;
+  }
+
+  /** Seconds left on the round timer, or null when there is none (for the HUD). */
+  get timeLeftS(): number | null {
+    return this.timeLimitS > 0 ? Math.max(0, this.timeLimitS - this.elapsedS) : null;
   }
 
   /**
@@ -83,6 +108,16 @@ export class RoundState {
   resolveTick(events: TickRoundEvents): void {
     if (this.isOver) return;
 
+    // Lote 9: a win condition that is off does not end the round.
+    const w = this.winConditions;
+    events = {
+      firstKoed: w.ko && events.firstKoed,
+      secondKoed: w.ko && events.secondKoed,
+      firstRingOut: w.ringOut && events.firstRingOut,
+      secondRingOut: w.ringOut && events.secondRingOut,
+      firstSpunOut: w.spinOut && events.firstSpunOut === true,
+      secondSpunOut: w.spinOut && events.secondSpunOut === true,
+    };
     const firstLost = events.firstKoed || events.firstRingOut || events.firstSpunOut === true;
     const secondLost = events.secondKoed || events.secondRingOut || events.secondSpunOut === true;
 
@@ -98,6 +133,6 @@ export class RoundState {
 
   /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
   getDeterministicState(): CanonicalRecord {
-    return { outcome: this.outcome, outsideS: { first: this.outsideS.first, second: this.outsideS.second } };
+    return { outcome: this.outcome, outsideS: { first: this.outsideS.first, second: this.outsideS.second }, elapsedS: this.elapsedS };
   }
 }

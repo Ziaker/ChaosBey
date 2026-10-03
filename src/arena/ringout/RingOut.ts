@@ -6,7 +6,7 @@
 
 import { length, type Vec2 } from '../../physics/Vec2';
 import { ARENA_FLOOR_RADIUS } from '../colliders/ArenaTuning';
-import { floorHeightAt, floorRimHeight, type ArenaFloorId } from '../floor/ArenaFloorProfile';
+import { floorHeightAt, floorRimHeight, type ArenaFloor } from '../floor/ArenaFloorProfile';
 import { RING_OUT_FALLEN_BELOW_RIM_M, RINGOUT_RADIUS_M } from './RingOutTuning';
 
 export function isRingOut(positionXZ: Vec2): boolean {
@@ -19,7 +19,7 @@ export function isRingOut(positionXZ: Vec2): boolean {
  * delay: a Bey thrown over the wall fell, slipped under the bowl and steered inward beneath it, falling forever inside
  * the ring-out radius. See RingOutTuning.ts.
  */
-export function isOutOfArena(position: { x: number; y: number; z: number }, floor: ArenaFloorId): boolean {
+export function isOutOfArena(position: { x: number; y: number; z: number }, floor: ArenaFloor): boolean {
   const r = Math.hypot(position.x, position.z);
   if (r > RINGOUT_RADIUS_M) return true;
   const surfaceY = r >= ARENA_FLOOR_RADIUS ? floorRimHeight(floor) : floorHeightAt(floor, position.x, position.z);

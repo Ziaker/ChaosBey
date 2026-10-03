@@ -6,7 +6,7 @@
 // feeds the simulation.
 // ============================================================
 
-import { floorHeightAt, floorNormalAt, floorSlopeDegAt, type ArenaFloorId } from './ArenaFloorProfile';
+import { floorHeightAt, floorNormalAt, floorSlopeDegAt, type ArenaFloor } from './ArenaFloorProfile';
 
 /** Gravity used by the physics world (PhysicsWorld.ts), for the downhill-pull readout. */
 const GRAVITY_MPS2 = 9.81;
@@ -20,7 +20,7 @@ export interface FloorReadout {
   readonly downhillPullMps2: number;
 }
 
-export function floorReadout(floor: ArenaFloorId, position: { x: number; y: number; z: number }): FloorReadout {
+export function floorReadout(floor: ArenaFloor, position: { x: number; y: number; z: number }): FloorReadout {
   const floorHeightM = floorHeightAt(floor, position.x, position.z);
   const slopeDeg = floorSlopeDegAt(floor, position.x, position.z);
   return {
