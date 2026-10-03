@@ -15,9 +15,10 @@ const NONE: ControllerActions = { held: new Set(), pressedThisFrame: new Set(), 
 const FORWARD: ControllerActions = { ...NONE, held: new Set([Action.MoveForward]) };
 
 /**
- * Peak speed reached during a fixed real-simulation drive window. The driven Bey starts at the arena centre so this
- * measures thrust rather than a post-wall ricochet. Peak speed is still used instead of final speed as a second guard
- * against any later contact contaminating the comparison.
+ * Peak speed reached during a fixed real-simulation drive window. The driven Bey starts at the arena centre and the
+ * measurement does not begin until the real ground check has reported a stable landing. A fixed 20-tick wait was not
+ * enough for every physical profile: at 0.25x the old test accidentally measured AIRBORNE_ACCELERATION_FACTOR (the
+ * 0.2625 m/s result was exactly the reduced air-thrust regime), not the Pregame ground-acceleration slider.
  */
 async function peakSpeedDuring(ticks: number, accelerationScale: number): Promise<number> {
   const h = await CombatHarness.create(
@@ -25,10 +26,21 @@ async function peakSpeedDuring(ticks: number, accelerationScale: number): Promis
     { x: 20, y: BEY_SPAWN_HEIGHT_M, z: 20 },
     { arenaFloor: 'flat', momentumGain: 0, movementStaminaDrain: 0, accelerationScale },
   );
-  for (let i = 0; i < 20; i++) h.tick(NONE, NONE);
+
+  let groundedStreak = 0;
+  for (let i = 0; i < 180 && groundedStreak < 5; i++) {
+    const result = h.tick(NONE, NONE);
+    groundedStreak = result.first.grounded ? groundedStreak + 1 : 0;
+  }
+  if (groundedStreak < 5) {
+    h.dispose();
+    throw new Error('acceleration fixture never settled on the flat arena');
+  }
+
   let peak = 0;
   for (let i = 0; i < ticks; i++) {
-    h.tick(FORWARD, NONE);
+    const result = h.tick(FORWARD, NONE);
+    if (!result.first.grounded) continue;
     const v = h.first.body.linvel();
     peak = Math.max(peak, Math.hypot(v.x, v.z));
   }
@@ -44,7 +56,7 @@ describe('Pregame acceleration range — Master Design ~3 s playtest', () => {
     expect(nominalSeconds).toBeLessThanOrEqual(3.3);
   });
 
-  it('the real tickMatch movement is materially slower at 0.25x than at the default 1x', async () => {
+  it('the real grounded tickMatch movement is materially slower at 0.25x than at the default 1x', async () => {
     const slow = await peakSpeedDuring(60, 0.25);
     const normal = await peakSpeedDuring(60, 1);
     expect(slow).toBeGreaterThan(1);
