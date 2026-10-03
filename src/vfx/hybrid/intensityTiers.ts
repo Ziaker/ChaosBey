@@ -56,8 +56,8 @@ export const FLOOR_SCAR_LIFE_S = 14;
 export const FLOOR_SCAR_HOLD = 0.8;
 
 /**
- * Owner, 2026-10-02 (Lote 9, item 20): the Pregame's visual options. Presentation only — never in MatchConfig, the
- * replay or the state hash (they change no outcome). 1 = the approved look.
+ * Owner, 2026-10-02 (Lote 9, item 20) + Master §12/§54/§58: Pregame visual options. Presentation only — never in
+ * MatchConfig, replay or state hash (they change no outcome). 1 = the frozen approved look; 0 disables that layer.
  */
 export interface VfxOptions {
   /** Scales every effect's magnitude (size/amount), 0..1.5. */
@@ -66,8 +66,14 @@ export interface VfxOptions {
   readonly groundWaves: number;
   /** Scales the dust amount, 0 = none. */
   readonly dust: number;
+  /** Scales only the anime high-speed motion-trail layer; mechanical sparks/skids remain independent. */
+  readonly motionTrails: number;
+  /** Scales the negative impact-frame / impact-light flash; 0 = none. */
+  readonly impactFlash: number;
 }
-export const DEFAULT_VFX_OPTIONS: VfxOptions = { intensity: 1, groundWaves: 1, dust: 1 };
+export const DEFAULT_VFX_OPTIONS: VfxOptions = { intensity: 1, groundWaves: 1, dust: 1, motionTrails: 1, impactFlash: 1 };
 export const VFX_INTENSITY_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
 export const VFX_GROUND_WAVES_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
 export const VFX_DUST_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
+export const VFX_MOTION_TRAILS_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
+export const VFX_IMPACT_FLASH_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
