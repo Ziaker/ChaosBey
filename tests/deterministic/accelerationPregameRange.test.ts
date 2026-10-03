@@ -15,17 +15,17 @@ const NONE: ControllerActions = { held: new Set(), pressedThisFrame: new Set(), 
 const FORWARD: ControllerActions = { ...NONE, held: new Set([Action.MoveForward]) };
 
 /**
- * Peak speed reached during a fixed real-simulation drive window. We intentionally do not sample only the final tick:
- * on a finite arena a faster setup can reach a wall/contact and be physically slowed before the window ends, which would
- * turn a test of acceleration into a test of whatever collision happened last.
+ * Peak speed reached during a fixed real-simulation drive window. The driven Bey starts at the arena centre so this
+ * measures thrust rather than a post-wall ricochet. Peak speed is still used instead of final speed as a second guard
+ * against any later contact contaminating the comparison.
  */
 async function peakSpeedDuring(ticks: number, accelerationScale: number): Promise<number> {
   const h = await CombatHarness.create(
-    { x: 0, y: BEY_SPAWN_HEIGHT_M, z: -14 },
-    { x: 25, y: BEY_SPAWN_HEIGHT_M, z: 25 },
+    { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 },
+    { x: 20, y: BEY_SPAWN_HEIGHT_M, z: 20 },
     { arenaFloor: 'flat', momentumGain: 0, movementStaminaDrain: 0, accelerationScale },
   );
-  for (let i = 0; i < 30; i++) h.tick(NONE, NONE);
+  for (let i = 0; i < 20; i++) h.tick(NONE, NONE);
   let peak = 0;
   for (let i = 0; i < ticks; i++) {
     h.tick(FORWARD, NONE);
@@ -47,7 +47,7 @@ describe('Pregame acceleration range — Master Design ~3 s playtest', () => {
   it('the real tickMatch movement is materially slower at 0.25x than at the default 1x', async () => {
     const slow = await peakSpeedDuring(60, 0.25);
     const normal = await peakSpeedDuring(60, 1);
-    expect(slow).toBeGreaterThan(0.5);
+    expect(slow).toBeGreaterThan(1);
     expect(normal).toBeGreaterThan(slow * 2.5);
   });
 });
