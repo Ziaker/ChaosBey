@@ -124,21 +124,19 @@ describe('item 11 — speed-centered AI pacing', () => {
     expect(s).toBeGreaterThan(0);
   });
 
-  it('hard-caps the run-up at three seconds even for the patient Stamina archetype', () => {
-    const beforeCap = scenario(
-      { velocityXZ: { x: 0, z: 6 }, momentum: 0 },
-      { positionXZ: { x: 0, z: 5 } },
-      2.9,
-      STAMINA_AI_PERSONALITY,
-    );
-    const afterCap = scenario(
-      { velocityXZ: { x: 0, z: 6 }, momentum: 0 },
-      { positionXZ: { x: 0, z: 5 } },
-      3.01,
-      STAMINA_AI_PERSONALITY,
-    );
-    expect(momentumBuildPriority(beforeCap.world, STAMINA_AI_PERSONALITY, beforeCap.risk, beforeCap.context)).toBeGreaterThan(0);
-    expect(momentumBuildPriority(afterCap.world, STAMINA_AI_PERSONALITY, afterCap.risk, afterCap.context)).toBe(0);
-    expect(afterCap.decision.reason).not.toContain('momentum build');
+  it('gives patient Stamina a shorter run-up window than Attack instead of delaying every archetype for the same three seconds', () => {
+    const own = { velocityXZ: { x: 0, z: 6 }, momentum: 0 };
+    const opponent = { positionXZ: { x: 0, z: 5 } };
+
+    const staminaBefore = scenario(own, opponent, 1.5, STAMINA_AI_PERSONALITY);
+    const staminaAfter = scenario(own, opponent, 1.6, STAMINA_AI_PERSONALITY);
+    expect(momentumBuildPriority(staminaBefore.world, STAMINA_AI_PERSONALITY, staminaBefore.risk, staminaBefore.context)).toBeGreaterThan(0);
+    expect(momentumBuildPriority(staminaAfter.world, STAMINA_AI_PERSONALITY, staminaAfter.risk, staminaAfter.context)).toBe(0);
+
+    const attackBefore = scenario(own, opponent, 2.6, ATTACK_AI_PERSONALITY);
+    const attackAfter = scenario(own, opponent, 2.7, ATTACK_AI_PERSONALITY);
+    expect(momentumBuildPriority(attackBefore.world, ATTACK_AI_PERSONALITY, attackBefore.risk, attackBefore.context)).toBeGreaterThan(0);
+    expect(momentumBuildPriority(attackAfter.world, ATTACK_AI_PERSONALITY, attackAfter.risk, attackAfter.context)).toBe(0);
+    expect(staminaAfter.decision.reason).not.toContain('momentum build');
   });
 });
