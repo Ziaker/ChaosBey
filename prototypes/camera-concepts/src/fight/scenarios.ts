@@ -64,24 +64,16 @@ export const SCENARIOS: readonly Scenario[] = [
     description: 'IA contra IA do jogo, como uma luta de verdade: aproximações, Dash, Circular e recuos.',
     contexts: ['CombatFollow', 'CloseCombat', 'KnockbackFollow', 'HighSpeed'],
     durationS: 15,
-    // Seeds and spawns picked by sweeping the real AI: combat with hits and a Clash, and no round end.
-    // Re-swept after the Motion Lab integration (M11) changed every fight: 'q' (was 'k'), then again
-    // after its follow-up fixes: no seed a..z keeps a Clash and 24 s without a round end any more
-    // (fights end by KO in 8–16 s), so 15 s; 'g' since the owner-playtest controls (Clash at
-    // 5.9 s, round end at 16.6 s; was 'u'); 'k' since wall bounces without input settle like idle
-    // motion (Clash at 2.0 s, round end at 16.6 s; was 'g'); 'r' since the movement/weight/dodge
-    // playtest pass (steering/grip tightened, gravity raised, short hop shortened, dodge rewritten
-    // as a flat state) changed fight timing again — 'k' no longer reaches a Clash at all within 15s
-    // (Clash at 2.0 s, no round end within 15 s); 'b' since the arena scale pass (floor radius 12 m ->
-    // 36 m, the flat floor now a heightfield, then its resolution 288 -> 144 cells, changed every AI fight again: 'r' no longer reaches a
-    // Clash; 'b' is the first of a..z with a Clash and no round end within 15 s). 'c' since the Dash cooldown
-    // replaced Attack Energy (owner, 2026-10-02): 'b' now ends its round inside 15 s; 'c' is the first of a..z with
-    // a hit, a Clash, no round end and every readability guard holding (seed only; no camera value changed).
+    // Organic AI fight used to exercise the ordinary camera path. This scenario must produce real contact, but it must
+    // not depend on one particular AI seed also producing a Clash: Lote 10 intentionally changes attack timing in order
+    // to build speed first. Clash coverage is deterministic and explicit in the dedicated `clash-setup` scenario below.
+    // Keeping the normal duel independent of incidental Clash timing prevents every legitimate AI-scoring change from
+    // turning into another camera-fixture seed hunt.
     firstSpawn: { x: -3, z: -5 },
     secondSpawn: { x: 3, z: 5 },
     first: { kind: 'ai', seed: 'duel-p-c' },
     second: { kind: 'ai', seed: 'duel-o-c' },
-    expects: ['hit', 'clashActive'],
+    expects: ['hit'],
   },
   {
     id: 'close-combat',
