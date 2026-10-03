@@ -69,6 +69,8 @@ export interface DriftTickResult {
   landingIntensity: number;
   /** How long (seconds) the variable-jump height assist applied during the airborne period that just ended; 0 if this wasn't a jump (e.g. a knockback fall) or was a bare tap. Only meaningful when justLanded is true. */
   landingJumpAssistElapsedS: number;
+  /** Lote 9: a hop/jump began this tick (its Stamina cost is charged by the caller). */
+  hopBegan: boolean;
 }
 
 export class DriftController {
@@ -135,12 +137,19 @@ export class DriftController {
   /** B6: the body's height at launch and fixed steps since, for the release cut's height-already-gained (measured, not assumed). */
   private launchY = 0;
   private stepsSinceLaunch = 0;
+  /** Lote 9 (GDD 12): MatchConfig.jumpCooldownS — after a hop begins, the next can't begin for this long (a press meanwhile is kept, as in the air). */
+  private readonly jumpCooldownS: number;
+  private jumpCooldownRemainingS = 0;
+  private hopBeganThisTick = false;
+  /** Lote 9: whether a hop may begin this tick (the caller's Stamina check for the jump's cost). */
+  private jumpAllowed = true;
 
   constructor(
     private readonly normalLateralGripPerS: number = LATERAL_GRIP_PER_S,
     /** The match's jump heights (MatchConfig). Omitted = the pre-2026-10-02 jump (LEGACY_JUMP_FULL_HEIGHT_M). */
-    jumpRules?: { readonly jumpFullHeightM: number; readonly jumpShortHopHeightM: number },
+    jumpRules?: { readonly jumpFullHeightM: number; readonly jumpShortHopHeightM: number; readonly jumpCooldownS?: number },
   ) {
+    this.jumpCooldownS = Math.max(0, jumpRules?.jumpCooldownS ?? 0);
     this.legacyLaunch = jumpRules === undefined;
     const jump = jumpRules ?? { jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, jumpShortHopHeightM: JUMP_SHORT_HOP_TARGET_APEX_M };
     this.launchMps = jumpLaunchVelocityForApexM(jump.jumpFullHeightM);
@@ -166,7 +175,10 @@ export class DriftController {
   }
 
   /** `headingRad` (the Bey's current heading) is only read for directional-control frames (ControllerActions.moveIntent). */
-  tick(body: RAPIER.RigidBody, actions: ControllerActions, grounded: boolean, fixedDeltaSeconds: number, headingRad = 0): DriftTickResult {
+  tick(body: RAPIER.RigidBody, actions: ControllerActions, grounded: boolean, fixedDeltaSeconds: number, headingRad = 0, jumpAllowed = true): DriftTickResult {
+    this.hopBeganThisTick = false;
+    this.jumpAllowed = jumpAllowed;
+    this.jumpCooldownRemainingS = Math.max(0, this.jumpCooldownRemainingS - fixedDeltaSeconds);
     const jumpDriftHeld = actions.held.has(Action.JumpDrift);
     const jumpDriftPressed = actions.pressedThisFrame.has(Action.JumpDrift);
     // The approved control is tap X (a small hop), keep holding X, turn
@@ -351,6 +363,7 @@ export class DriftController {
       landingDescentSpeedMps,
       landingIntensity,
       landingJumpAssistElapsedS,
+      hopBegan: this.hopBeganThisTick,
     };
   }
 
@@ -372,6 +385,13 @@ export class DriftController {
   }
 
   private beginHop(body: RAPIER.RigidBody, actions: ControllerActions, headingRad: number): void {
+    if (this.jumpCooldownRemainingS > 0 || !this.jumpAllowed) {
+      // Lote 9: still cooling down (or the jump's Stamina cost can't be paid): keep the press, like an air press.
+      this.bufferedJumpElapsedS = 0;
+      return;
+    }
+    this.jumpCooldownRemainingS = this.jumpCooldownS;
+    this.hopBeganThisTick = true;
     this.bufferedJumpElapsedS = null;
     this.state = DriftState.Hopping;
     this.driftArmed = false;
@@ -550,6 +570,7 @@ export class DriftController {
   /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
   getDeterministicState(): CanonicalRecord {
     return {
+      jumpCooldownRemainingS: this.jumpCooldownRemainingS,
       launchPending: this.launchPending,
       launchY: this.launchY,
       stepsSinceLaunch: this.stepsSinceLaunch,

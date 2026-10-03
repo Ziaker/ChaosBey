@@ -12,7 +12,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { FLOOR_MATERIAL, WALL_MATERIAL } from '../../physics/materials/PhysicsMaterials';
 import { ARENA_COLLISION_GROUPS } from '../../physics/collision/CollisionGroups';
-import { ARENA_FLOORS, floorRimHeight, type ArenaFloorId } from '../floor/ArenaFloorProfile';
+import { BOWL_DEPTH_M, floorHeightAtRadius, floorRimHeight, type ArenaFloor } from '../floor/ArenaFloorProfile';
 import { motionParams, motionRatio, surfaceColliderRestitution, type MotionParams } from '../../bey/motion/MotionPresets';
 import { FOUNDRY_PIT, STANDARD_ARENA_GEOMETRY, type ArenaGeometry, type ArenaTheme } from '../presets/ArenaPresets';
 import {
@@ -58,8 +58,9 @@ export function createArenaColliders(
   // owner's playtest note was that the Bey must not move by itself. The
   // long glide is an open option (docs/design-decisions/motion-approval.md §16).
   const floorMaterial = (desc: RAPIER.ColliderDesc) => desc.setRestitution(floorRestitution).setFriction(FLOOR_MATERIAL.friction).setCollisionGroups(ARENA_COLLISION_GROUPS);
-  const floor: ArenaFloorId = geometry.floor ?? 'flat';
-  const profile = ARENA_FLOORS[floor];
+  // Lote 9 (item 3): the profile at the match's depth — the same h(r) as everything else that reads the floor.
+  const floor: ArenaFloor = { id: geometry.floor ?? 'flat', depthM: geometry.floorDepthM ?? BOWL_DEPTH_M };
+  const profile = { heightAtRadius: (r: number) => floorHeightAtRadius(floor, r) };
   // The wall is measured from the rim (visual-prototypes-approval.md §2.3):
   // it runs from y = 0 up to rim + wall height, so on a bowl its inner face
   // still covers the floor all the way up to the edge. Flat: rim = 0, as before.
@@ -74,7 +75,7 @@ export function createArenaColliders(
   scene.add(sun);
 
 
-  if (floor === 'flat') {
+  if (floor.id === 'flat' || floor.depthM <= 0) { // 0 m deep is the flat floor itself (Lote 9)
     const floorMesh = new THREE.Mesh(
       new THREE.CylinderGeometry(ARENA_FLOOR_RADIUS, ARENA_FLOOR_RADIUS, ARENA_FLOOR_THICKNESS, ARENA_VISUAL_SEGMENTS),
       new THREE.MeshStandardMaterial({ color: theme.floorHex, roughness: theme.floorRoughness, metalness: theme.floorMetalness }),

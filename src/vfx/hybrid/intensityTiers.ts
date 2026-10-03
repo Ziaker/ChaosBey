@@ -54,3 +54,20 @@ export const FLOOR_SCAR_MAX_COUNT = 10;
 export const FLOOR_SCAR_LIFE_S = 14;
 /** Fraction of the life held fully visible before the fade. */
 export const FLOOR_SCAR_HOLD = 0.8;
+
+/**
+ * Owner, 2026-10-02 (Lote 9, item 20): the Pregame's visual options. Presentation only — never in MatchConfig, the
+ * replay or the state hash (they change no outcome). 1 = the approved look.
+ */
+export interface VfxOptions {
+  /** Scales every effect's magnitude (size/amount), 0..1.5. */
+  readonly intensity: number;
+  /** Scales the ground-wave (shockwave ring) size, 0 = none. */
+  readonly groundWaves: number;
+  /** Scales the dust amount, 0 = none. */
+  readonly dust: number;
+}
+export const DEFAULT_VFX_OPTIONS: VfxOptions = { intensity: 1, groundWaves: 1, dust: 1 };
+export const VFX_INTENSITY_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
+export const VFX_GROUND_WAVES_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
+export const VFX_DUST_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;

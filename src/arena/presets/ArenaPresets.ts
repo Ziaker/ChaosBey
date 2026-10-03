@@ -51,6 +51,8 @@ export interface ArenaGeometry {
   readonly wallRestitution: number;
   /** M11 lane 4: floor profile (flat, or an approved bowl for playtest). Omitted = flat. The wall height is measured from the rim. */
   readonly floor?: ArenaFloorId;
+  /** Lote 9 (item 3): bowl depth (m, rim above centre). Omitted = BOWL_DEPTH_M (2.5 m). */
+  readonly floorDepthM?: number;
 }
 
 export interface ArenaPreset {

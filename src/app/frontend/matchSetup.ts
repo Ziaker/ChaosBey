@@ -5,6 +5,7 @@
 // Bey; the Pregame screen fills the rest.
 // ============================================================
 
+import { DEFAULT_VFX_OPTIONS, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import { CONCEPT_BEYS, conceptBeyFor } from '../../bey/archetype/BeyConceptRoster';
 import { DEFAULT_AI_DIFFICULTY_TIER, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { DEFAULT_ARENA_PRESET, arenaPreset, type ArenaGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
@@ -32,6 +33,8 @@ export interface MatchSetup {
   readonly seedText: string | null;
   /** Advanced gameplay rules the Pregame exposes as sliders (owner, 2026-10-02), passed straight into MatchConfig. */
   readonly rules: MatchRules;
+  /** Lote 9: visual options (presentation only — not MatchConfig, not the replay). */
+  readonly visual: VfxOptions;
 }
 
 /** Range the Pregame slider offers for the Clash impact multiplier. */
@@ -61,6 +64,7 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
     motion: DEFAULT_MOTION_DIRECTION,
     seedText: null,
     rules: defaultMatchRules(),
+    visual: DEFAULT_VFX_OPTIONS,
   };
 }
 
@@ -68,11 +72,40 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
 export type MatchRules = Pick<
   MatchConfig,
   'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'
+  | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS'
 >;
+
+/** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
+export const MATCH_RULE_KEYS = [
+  'ringOutDelayS', 'dashCooldownS', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyCollisionDamage', 'momentumLossOnCollision', 'jumpFullHeightM', 'jumpShortHopHeightM', 'movementStaminaDrain', 'dodgeCooldownS', 'circularLaunchForce',
+  'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS',
+] as const satisfies readonly (keyof MatchRules)[];
+
+/**
+ * Lote 9: win conditions stay playable — at least one is on (all three come back on otherwise), and with ring-out off
+ * a round needs a time limit (a Bey knocked out of the arena could otherwise never be beaten): 90 s if none was set.
+ */
+export const RING_OUT_OFF_TIME_LIMIT_S = 90;
+export function sanitizeMatchRules(rules: MatchRules): MatchRules {
+  let r = rules;
+  if (!r.winByKo && !r.winByRingOut && !r.winBySpinOut) r = { ...r, winByKo: true, winByRingOut: true, winBySpinOut: true };
+  if (!r.winByRingOut && r.roundTimeLimitS <= 0) r = { ...r, roundTimeLimitS: RING_OUT_OFF_TIME_LIMIT_S };
+  return r;
+}
 
 export function defaultMatchRules(): MatchRules {
   const config = createDefaultMatchConfig();
   return {
+    arenaBowlDepthM: config.arenaBowlDepthM,
+    roundTimeLimitS: config.roundTimeLimitS,
+    winByKo: config.winByKo,
+    winByRingOut: config.winByRingOut,
+    winBySpinOut: config.winBySpinOut,
+    accelerationScale: config.accelerationScale,
+    topSpeedScale: config.topSpeedScale,
+    airControl: config.airControl,
+    jumpStaminaCost: config.jumpStaminaCost,
+    jumpCooldownS: config.jumpCooldownS,
     ringOutDelayS: config.ringOutDelayS,
     dashCooldownS: config.dashCooldownS,
     momentumGain: config.momentumGain,
@@ -108,7 +141,7 @@ export function matchConfigFor(setup: MatchSetup): MatchConfig {
     arenaWallRestitution: setup.arena.geometry.wallRestitution,
     arenaFloor: setup.arena.geometry.floor ?? DEFAULT_ARENA_FLOOR,
     motion: setup.motion ?? DEFAULT_MOTION_DIRECTION,
-    ...(setup.rules ?? defaultMatchRules()),
+    ...sanitizeMatchRules({ ...defaultMatchRules(), ...(setup.rules ?? {}) }),
   });
 }
 
@@ -158,4 +191,101 @@ export function matchupLines(setup: MatchSetup): readonly MatchupLine[] {
   if (massRatio > 1.1) lines.push({ tone: 'good', text: 'You are heavier: harder to knock out of the ring' });
   else if (massRatio < 0.9) lines.push({ tone: 'bad', text: 'They are heavier: you get launched further' });
   return lines;
+}
+
+// --- Remembering the last setup (Lote 9) ----------------------------------
+
+const SETUP_STORAGE_KEY = 'chaosbey.pregame.last.v1';
+
+/** The parts of a setup the Pregame remembers between matches (and reloads): everything but the seed. */
+export function saveLastSetup(setup: MatchSetup, storage: Pick<Storage, 'setItem'> | null = safeStorage()): void {
+  try {
+    storage?.setItem(SETUP_STORAGE_KEY, JSON.stringify({ ...setup, seedText: null }));
+  } catch {
+    // Private mode / blocked storage: the setup is simply not remembered.
+  }
+}
+
+/**
+ * The last setup used, validated against today's roster, rules and ranges; anything unknown or out of shape falls
+ * back to the default, so an old save can never break the Pregame.
+ */
+export function loadLastSetup(storage: Pick<Storage, 'getItem'> | null = safeStorage()): MatchSetup | null {
+  let raw: unknown;
+  try {
+    const text = storage?.getItem(SETUP_STORAGE_KEY);
+    if (!text) return null;
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!raw || typeof raw !== 'object') return null;
+  const saved = raw as Partial<MatchSetup>;
+  const base = createDefaultMatchSetup(typeof saved.playerBeyId === 'string' && rosterEntryExists(saved.playerBeyId) ? saved.playerBeyId : undefined);
+  const rules: Record<string, unknown> = { ...base.rules };
+  for (const key of MATCH_RULE_KEYS) {
+    const value = (saved.rules as Record<string, unknown> | undefined)?.[key];
+    if (typeof value === typeof rules[key] && (typeof value !== 'number' || Number.isFinite(value))) rules[key] = value;
+  }
+  const visual: Record<string, unknown> = { ...base.visual };
+  for (const key of Object.keys(DEFAULT_VFX_OPTIONS)) {
+    const value = (saved.visual as Record<string, unknown> | undefined)?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) visual[key] = value;
+  }
+  return {
+    ...base,
+    opponentBeyId: typeof saved.opponentBeyId === 'string' && rosterEntryExists(saved.opponentBeyId) ? saved.opponentBeyId : base.opponentBeyId,
+    ai: saved.ai && typeof saved.ai === 'object' ? { ...base.ai, ...saved.ai } : base.ai,
+    roundsToWin: saved.roundsToWin ?? base.roundsToWin,
+    arena: saved.arena && typeof saved.arena === 'object' && saved.arena.geometry ? { ...base.arena, ...saved.arena, geometry: { ...base.arena.geometry, ...saved.arena.geometry } } : base.arena,
+    clashImpactMultiplier: typeof saved.clashImpactMultiplier === 'number' ? saved.clashImpactMultiplier : base.clashImpactMultiplier,
+    motion: saved.motion ?? base.motion,
+    rules: sanitizeMatchRules(rules as unknown as MatchRules),
+    visual: visual as unknown as VfxOptions,
+  };
+}
+
+function rosterEntryExists(id: string): boolean {
+  return BEY_ROSTER.some((e) => e.definition.id === id);
+}
+
+function safeStorage(): Storage | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Short names and formats of the Pregame rules, for the "What to expect" summary (Lote 9). */
+const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly name: string; readonly format: (v: number | boolean) => string }>> = {
+  ringOutDelayS: { name: 'ring-out delay', format: (v) => `${(v as number).toFixed(2)} s` },
+  dashCooldownS: { name: 'Dash cooldown', format: (v) => `${(v as number).toFixed(2)} s` },
+  momentumGain: { name: 'momentum gain', format: (v) => `+${Math.round((v as number) * 100)}%` },
+  momentumFillS: { name: 'momentum build-up', format: (v) => `${(v as number).toFixed(1)} s` },
+  momentumDecayS: { name: 'momentum decay', format: (v) => `${(v as number).toFixed(2)} s` },
+  bodyCollisionDamage: { name: 'body collision damage', format: (v) => `×${(v as number).toFixed(1)}` },
+  momentumLossOnCollision: { name: 'momentum loss on collision', format: (v) => `${Math.round((v as number) * 100)}%` },
+  jumpFullHeightM: { name: 'full jump', format: (v) => `${(v as number).toFixed(2)} m` },
+  jumpShortHopHeightM: { name: 'short hop', format: (v) => `${(v as number).toFixed(2)} m` },
+  movementStaminaDrain: { name: 'movement stamina drain', format: (v) => `${Math.round((v as number) * 100)}%` },
+  dodgeCooldownS: { name: 'dodge cooldown', format: (v) => `${(v as number).toFixed(2)} s` },
+  circularLaunchForce: { name: 'Circular launch', format: (v) => `×${(v as number).toFixed(1)}` },
+  arenaBowlDepthM: { name: 'bowl depth', format: (v) => `${(v as number).toFixed(2)} m` },
+  roundTimeLimitS: { name: 'time limit', format: (v) => ((v as number) === 0 ? 'none' : `${(v as number).toFixed(0)} s`) },
+  winByKo: { name: 'knock-out', format: (v) => (v ? 'on' : 'off') },
+  winByRingOut: { name: 'ring-out', format: (v) => (v ? 'on' : 'off') },
+  winBySpinOut: { name: 'spin-out', format: (v) => (v ? 'on' : 'off') },
+  accelerationScale: { name: 'acceleration', format: (v) => `×${(v as number).toFixed(2)}` },
+  topSpeedScale: { name: 'top speed', format: (v) => `×${(v as number).toFixed(2)}` },
+  airControl: { name: 'air control', format: (v) => `×${(v as number).toFixed(2)}` },
+  jumpStaminaCost: { name: 'jump stamina cost', format: (v) => `${(v as number).toFixed(0)}` },
+  jumpCooldownS: { name: 'jump cooldown', format: (v) => `${(v as number).toFixed(1)} s` },
+};
+
+/** "Dash cooldown 2.00 s", … for every rule that differs from its default (Lote 9: the explanation reflects the values). */
+export function changedRuleLines(setup: MatchSetup): string[] {
+  const defaults = defaultMatchRules();
+  const rules = setup.rules ?? defaults;
+  return MATCH_RULE_KEYS.filter((key) => rules[key] !== defaults[key]).map((key) => `${RULE_SUMMARY[key].name} ${RULE_SUMMARY[key].format(rules[key])}`);
 }

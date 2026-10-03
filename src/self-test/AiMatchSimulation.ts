@@ -24,7 +24,7 @@ import { matchSpawnsFor, type SpawnPositionM } from '../app/bootstrap/matchSpawn
 import { floorRimHeight } from '../arena/floor/ArenaFloorProfile';
 import type { ChaosBeyReplayV1 } from '../replay/format/ChaosBeyReplayV1';
 import { startHeadlessCapture, type HeadlessCaptureInput } from '../replay/recording/ReplayCapture';
-import { resolveMatchConfig, type MatchConfig } from '../config/match/MatchConfig';
+import { arenaFloorOf, resolveMatchConfig, type MatchConfig } from '../config/match/MatchConfig';
 import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
 import { ARENA_FLOOR_RADIUS } from '../arena/colliders/ArenaTuning';
 import { AttackState } from '../combat/attacks/AttackController';
@@ -363,7 +363,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
   const anomalies: MatchAnomaly[] = [];
   let anomalyCount = 0;
   const resolvedArena = resolveMatchConfig(setup.matchConfigOverrides ?? {});
-  const detector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(resolvedArena.arenaFloor) + resolvedArena.arenaWallHeightM });
+  const detector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(arenaFloorOf(resolvedArena)) + resolvedArena.arenaWallHeightM });
   const detections: DetectedAnomaly[] = [];
   let invalidDetectionCount = 0;
   let warningCount = 0;

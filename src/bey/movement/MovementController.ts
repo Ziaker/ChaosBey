@@ -139,14 +139,21 @@ export class MovementController {
   /** This Bey's handling with the motion direction applied (turn rate and lateral grip scale by the preset's ratio to B). */
   private readonly handling: BeyHandlingProfile;
 
+  /** MatchConfig.airControl (Lote 9): scales the grip in the air — how much the Bey can steer its flight. */
+  private readonly airControl: number;
+
   constructor(
     handling: BeyHandlingProfile = DEFAULT_HANDLING_PROFILE,
     private readonly motion: MotionParams = motionParams(),
+    /** Owner, 2026-10-02 (Lote 9 / GDD 12): the match's acceleration, top speed and air control multipliers (1 = as designed). */
+    scales: { readonly acceleration: number; readonly topSpeed: number; readonly airControl: number } = { acceleration: 1, topSpeed: 1, airControl: 1 },
   ) {
+    this.airControl = scales.airControl;
     this.handling = {
       ...handling,
-      accelerationMps2: handling.accelerationMps2 * motionRatio(motion, 'accel'),
-      maxSpeedMps: handling.maxSpeedMps * motionRatio(motion, 'maxSpeed'),
+      accelerationMps2: handling.accelerationMps2 * motionRatio(motion, 'accel') * scales.acceleration,
+      reverseAccelerationMps2: handling.reverseAccelerationMps2 * scales.acceleration,
+      maxSpeedMps: handling.maxSpeedMps * motionRatio(motion, 'maxSpeed') * scales.topSpeed,
       turnRateRadS: handling.turnRateRadS * motionRatio(motion, 'turnRate'),
       lateralGripPerS: handling.lateralGripPerS * motionRatio(motion, 'lateralGrip'),
     };
@@ -324,7 +331,7 @@ export class MovementController {
       lateralGripPerS = this.handling.lateralGripPerS * 4;
     } else if (!grounded) {
       this.slipping = false;
-      lateralGripPerS = lateralGripOverridePerS ?? this.motion.airGrip;
+      lateralGripPerS = lateralGripOverridePerS ?? this.motion.airGrip * this.airControl;
     } else {
       const lateralSpeed = length(lateralVec);
       this.grip += (1 - this.grip) * (1 - Math.exp(-this.motion.gripRecovery * GRIP_RECOVERY_MULTIPLIER * fixedDeltaSeconds));

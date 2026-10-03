@@ -13,6 +13,7 @@
 // acceleration — GDD section 164) decides how many ticks run.
 // ============================================================
 
+import type { VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import * as THREE from 'three';
 import { createMatchScene, REST_VISUAL_POSE, type BeyVisualPose, type MatchBeys, type MatchScene } from '../bootstrap/createMatchScene';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
@@ -33,7 +34,7 @@ import { buildFightFrame, speedLinesScreenDirection, type FightFrameBey, type Se
 import type { PresetId } from '../../camera/director/CameraParams';
 import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../simulation/impact/ImpactEvents';
 import { CLASH_RESOLVED_MAGNITUDE } from '../simulation/impact/ImpactMagnitude';
-import { arenaGeometryOf, beyMatchRulesOf, type MatchConfig } from '../../config/match/MatchConfig';
+import { arenaFloorOf, arenaGeometryOf, beyMatchRulesOf, resolveMatchConfig, roundStateOptionsOf, type MatchConfig } from '../../config/match/MatchConfig';
 import { ARENA_PRESETS, FOUNDRY_PIT, type ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { Bey } from '../../bey/core/Bey';
@@ -103,6 +104,8 @@ export interface MatchSessionOptions {
   readonly presentationFeatures?: PresentationFeatures;
   /** Which condition languages (A, B, C) show when the `conditionVisuals` flag is on; at least one. Default A. Render only. */
   readonly conditionLayers?: readonly LanguageId[];
+  /** Lote 9: the Pregame's visual options for the Hybrid VFX (presentation only). */
+  readonly vfx?: VfxOptions;
   /** The renderer, for the approved arena art's tone mapping (only touched with the `arenaVisuals` flag, and restored). Render only. */
   readonly renderer?: { toneMapping: THREE.ToneMapping; toneMappingExposure: number };
 }
@@ -201,7 +204,7 @@ export class MatchSession {
       seedText: this.seedText,
       matchConfig: this.matchConfig,
       attackProfileSettings: this.attackProfileSettings,
-      spawns: matchSpawnsFor(this.matchConfig.arenaFloor ?? 'flat'),
+      spawns: matchSpawnsFor(arenaFloorOf(resolveMatchConfig(this.matchConfig))),
       beys: { first: this.match.first.definition, second: this.match.second.definition },
     });
     // Called inside tick() before this.tickIndex advances, so the count comes from the capture, not from this.tickIndex.
@@ -285,7 +288,7 @@ export class MatchSession {
     this.physics = physics;
     this.matchConfig = options.matchConfig;
     // A config without a ring-out delay predates it (instant ring-out).
-    this.roundState = new RoundState({ ringOutDelayS: options.matchConfig.ringOutDelayS ?? 0 });
+    this.roundState = new RoundState(roundStateOptionsOf(resolveMatchConfig(options.matchConfig)));
     this.attackProfileSettings = options.attackProfileSettings;
     this.telemetry = options.telemetry;
     this.stateMachine = options.stateMachine;
@@ -312,11 +315,11 @@ export class MatchSession {
     });
     this.headingArrow = new HeadingArrow(this.root);
     this.camera = options.camera;
-    const arenaFloor = options.matchConfig.arenaFloor ?? 'flat';
+    const arenaFloor = arenaFloorOf(resolveMatchConfig(options.matchConfig)); // Lote 9: profile + depth (the camera's floor guard reads the same h)
     this.initialCameraPreset = options.cameraPreset ?? 'B';
     this.cameraRig =
       options.cameraRig === undefined
-        ? new CameraRig(this.initialCameraPreset, options.camera.aspect, arenaFloor === 'flat' ? undefined : (x, z) => floorHeightAt(arenaFloor, x, z))
+        ? new CameraRig(this.initialCameraPreset, options.camera.aspect, floorRimHeight(arenaFloor) === 0 ? undefined : (x, z) => floorHeightAt(arenaFloor, x, z))
         : options.cameraRig;
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
     const theme = options.arenaTheme ?? FOUNDRY_PIT.theme;
@@ -347,6 +350,7 @@ export class MatchSession {
         floorHeightAtR: (r) => floorAt(r, 0),
         arenaSparks: [theme.sparkHotHex, theme.sparkCoolHex],
         arenaRadiusM: ARENA_FLOOR_RADIUS,
+        vfx: options.vfx,
       });
       this.presentation.attach(this.hybridVfx);
       // The legacy spark and landing bursts give way to the approved language (the existing layer switch; the tick code is untouched).
@@ -381,7 +385,7 @@ export class MatchSession {
     }
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
-    this.anomalyDetector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(options.matchConfig.arenaFloor ?? 'flat') + options.matchConfig.arenaWallHeightM });
+    this.anomalyDetector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(arenaFloorOf(resolveMatchConfig(options.matchConfig))) + options.matchConfig.arenaWallHeightM });
 
     this.controllerSpecs = { first: options.controllers.first, second: options.controllers.second };
     this.drivers = {

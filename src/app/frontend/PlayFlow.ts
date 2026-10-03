@@ -25,7 +25,7 @@ import { AUTO_CONTINUE_S } from './AutoContinue';
 import { MatchResultsScreen, type MatchResultsAction } from './MatchResultsScreen';
 import { MatchRunner } from './MatchRunner';
 import { EMPTY_SCORE, matchWinner, roundSeed, scoreRound, type MatchScore } from './matchScore';
-import { createDefaultMatchSetup, matchBeysFor, matchConfigFor, opponentControllerFor, withPlayerBey, type MatchSetup } from './matchSetup';
+import { createDefaultMatchSetup, loadLastSetup, matchBeysFor, matchConfigFor, opponentControllerFor, saveLastSetup, withPlayerBey, type MatchSetup } from './matchSetup';
 import { PregameScreen } from './PregameScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { CombatHud } from './CombatHud';
@@ -77,7 +77,8 @@ declare global {
 
 export class PlayFlow {
   private screen: PlayFlowScreen = 'character-select';
-  private setup: MatchSetup = createDefaultMatchSetup();
+  /** Lote 9: the last setup used comes back (validated), else the default. */
+  private setup: MatchSetup = loadLastSetup() ?? createDefaultMatchSetup();
   private characterSelect: CharacterSelectScreen | null = null;
   private pregame: PregameScreen | null = null;
   private results: MatchResultsScreen | null = null;
@@ -143,6 +144,7 @@ export class PlayFlow {
       setup: this.setup,
       onStart: (setup) => {
         this.setup = setup;
+        saveLastSetup(setup);
         this.startMatch();
       },
       onBack: (setup) => {
@@ -173,7 +175,7 @@ export class PlayFlow {
         attackProfileSettings: this.deps.attackProfileSettings,
         opponent: opponentControllerFor(this.setup),
         arenaTheme: arenaPreset(this.setup.arena.presetId).theme,
-        presentation: presentationFor(this.settings),
+        presentation: { ...presentationFor(this.settings), vfx: this.setup.visual },
         controlScheme: this.settings.controlScheme,
       },
       {

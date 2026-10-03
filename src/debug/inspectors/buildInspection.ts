@@ -11,7 +11,7 @@
 import { Action } from '../../input/actions/Action';
 import { AIController } from '../../ai/controllers/AIController';
 import type { MatchSession, Side } from '../../app/session/MatchSession';
-import { ARENA_FLOORS, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import { ARENA_FLOORS, floorIdOf, type ArenaFloor } from '../../arena/floor/ArenaFloorProfile';
 import { floorReadout } from '../../arena/floor/floorReadout';
 import { ARENA_CAMERA_RIGS, CAMERA_PRESET_NAMES } from '../../camera/director/CameraRig';
 import { PRESETS, PRESET_IDS } from '../../camera/director/CameraParams';
@@ -481,10 +481,10 @@ function cameraYawDiagnostic(session: MatchSession): string {
 }
 
 /** M11 lane 4: the floor under this Bey (profile, height, slope, downhill pull). */
-function floorRows(floor: ArenaFloorId, position: { x: number; y: number; z: number }): ReturnType<typeof row>[] {
+function floorRows(floor: ArenaFloor, position: { x: number; y: number; z: number }): ReturnType<typeof row>[] {
   const r = floorReadout(floor, position);
   return [
-    row('Floor profile', ARENA_FLOORS[floor].label),
+    row('Floor profile', `${ARENA_FLOORS[floorIdOf(floor)].label}${typeof floor === 'string' ? '' : ` · ${floor.depthM.toFixed(2)} m deep`}`),
     row('Floor height under / above it', `${f(r.floorHeightM)} m / ${f(r.heightAboveFloorM)} m`),
     row('Floor slope / normal', `${f(r.slopeDeg)}° / (${f(r.normal.x)}, ${f(r.normal.y)}, ${f(r.normal.z)})`),
     row('Downhill pull (g·sin slope)', `${f(r.downhillPullMps2)} m/s² toward the centre`),
