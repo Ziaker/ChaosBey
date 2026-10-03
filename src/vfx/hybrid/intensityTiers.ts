@@ -56,8 +56,10 @@ export const FLOOR_SCAR_LIFE_S = 14;
 export const FLOOR_SCAR_HOLD = 0.8;
 
 /**
- * Owner, 2026-10-02 (Lote 9, item 20): the Pregame's visual options. Presentation only — never in MatchConfig, the
- * replay or the state hash (they change no outcome). 1 = the approved look.
+ * Owner, 2026-10-02 (Lote 9, item 20) + Master Design §12/§54 (Lote 11): the Pregame's visual options.
+ * Presentation only — never in MatchConfig, the replay or the state hash (they change no outcome).
+ * Exact final presentation remains under the visual approval gate. 0..150% follows the existing visual-control convention
+ * and is therefore PROVISIONAL for the two Lote 11 additions.
  */
 export interface VfxOptions {
   /** Scales every effect's magnitude (size/amount), 0..1.5. */
@@ -66,8 +68,14 @@ export interface VfxOptions {
   readonly groundWaves: number;
   /** Scales the dust amount, 0 = none. */
   readonly dust: number;
+  /** Speed-trail opacity/intensity. 0 = off. Player Quality may still suppress trails for performance. */
+  readonly motionTrails: number;
+  /** Negative impact-frame strength/duration. 0 = off. Does not touch the frozen camera. */
+  readonly impactFlash: number;
 }
-export const DEFAULT_VFX_OPTIONS: VfxOptions = { intensity: 1, groundWaves: 1, dust: 1 };
+export const DEFAULT_VFX_OPTIONS: VfxOptions = { intensity: 1, groundWaves: 1, dust: 1, motionTrails: 1, impactFlash: 1 };
 export const VFX_INTENSITY_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
 export const VFX_GROUND_WAVES_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
 export const VFX_DUST_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
+export const VFX_MOTION_TRAILS_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
+export const VFX_IMPACT_FLASH_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
