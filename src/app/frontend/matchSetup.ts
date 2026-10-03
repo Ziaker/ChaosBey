@@ -72,13 +72,13 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
 export type MatchRules = Pick<
   MatchConfig,
   'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'
-  | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS'
+  | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'strictSpeedCap' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS'
 >;
 
-/** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
+/** The rule keys the Pregame offers (Lote 9/12: all of them reset together and are remembered between matches). */
 export const MATCH_RULE_KEYS = [
   'ringOutDelayS', 'dashCooldownS', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyCollisionDamage', 'momentumLossOnCollision', 'jumpFullHeightM', 'jumpShortHopHeightM', 'movementStaminaDrain', 'dodgeCooldownS', 'circularLaunchForce',
-  'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS',
+  'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'strictSpeedCap', 'airControl', 'jumpStaminaCost', 'jumpCooldownS',
 ] as const satisfies readonly (keyof MatchRules)[];
 
 /**
@@ -103,6 +103,7 @@ export function defaultMatchRules(): MatchRules {
     winBySpinOut: config.winBySpinOut,
     accelerationScale: config.accelerationScale,
     topSpeedScale: config.topSpeedScale,
+    strictSpeedCap: config.strictSpeedCap,
     airControl: config.airControl,
     jumpStaminaCost: config.jumpStaminaCost,
     jumpCooldownS: config.jumpCooldownS,
@@ -253,7 +254,7 @@ function safeStorage(): Storage | null {
   }
 }
 
-/** Short names and formats of the Pregame rules, for the "What to expect" summary (Lote 9). */
+/** Short names and formats of the Pregame rules, for the "What to expect" summary (Lote 9/12). */
 const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly name: string; readonly format: (v: number | boolean) => string }>> = {
   ringOutDelayS: { name: 'ring-out delay', format: (v) => `${(v as number).toFixed(2)} s` },
   dashCooldownS: { name: 'Dash cooldown', format: (v) => `${(v as number).toFixed(2)} s` },
@@ -274,6 +275,7 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   winBySpinOut: { name: 'spin-out', format: (v) => (v ? 'on' : 'off') },
   accelerationScale: { name: 'acceleration', format: (v) => `×${(v as number).toFixed(2)}` },
   topSpeedScale: { name: 'top speed', format: (v) => `×${(v as number).toFixed(2)}` },
+  strictSpeedCap: { name: 'strict speed cap', format: (v) => (v ? 'on' : 'off') },
   airControl: { name: 'air control', format: (v) => `×${(v as number).toFixed(2)}` },
   jumpStaminaCost: { name: 'jump stamina cost', format: (v) => `${(v as number).toFixed(0)}` },
   jumpCooldownS: { name: 'jump cooldown', format: (v) => `${(v as number).toFixed(1)} s` },
