@@ -93,6 +93,12 @@ export function sanitizeMatchRules(rules: MatchRules): MatchRules {
   return r;
 }
 
+/** Reuses MatchConfig's canonical clamps, then projects back to only the Pregame-owned rule slice. */
+function clampMatchRulesToConfig(rules: MatchRules): MatchRules {
+  const resolved = resolveMatchConfig(rules);
+  return Object.fromEntries(MATCH_RULE_KEYS.map((key) => [key, resolved[key]])) as MatchRules;
+}
+
 export function defaultMatchRules(): MatchRules {
   const config = createDefaultMatchConfig();
   return {
@@ -228,6 +234,7 @@ export function loadLastSetup(storage: Pick<Storage, 'getItem'> | null = safeSto
     if (typeof value === typeof rules[key] && (typeof value !== 'number' || Number.isFinite(value))) rules[key] = value;
   }
   const visual = sanitizeVfxOptions(saved.visual);
+  const clampedRules = clampMatchRulesToConfig(rules as unknown as MatchRules);
   return {
     ...base,
     opponentBeyId: typeof saved.opponentBeyId === 'string' && rosterEntryExists(saved.opponentBeyId) ? saved.opponentBeyId : base.opponentBeyId,
@@ -236,7 +243,7 @@ export function loadLastSetup(storage: Pick<Storage, 'getItem'> | null = safeSto
     arena: saved.arena && typeof saved.arena === 'object' && saved.arena.geometry ? { ...base.arena, ...saved.arena, geometry: { ...base.arena.geometry, ...saved.arena.geometry } } : base.arena,
     clashImpactMultiplier: typeof saved.clashImpactMultiplier === 'number' ? saved.clashImpactMultiplier : base.clashImpactMultiplier,
     motion: saved.motion ?? base.motion,
-    rules: sanitizeMatchRules(rules as unknown as MatchRules),
+    rules: sanitizeMatchRules(clampedRules),
     visual,
   };
 }
