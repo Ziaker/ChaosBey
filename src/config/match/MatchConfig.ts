@@ -167,10 +167,11 @@ export function arenaGeometryOf(config: MatchConfig): ArenaGeometry {
   return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution, floor: config.arenaFloor ?? 'flat', floorDepthM: config.arenaBowlDepthM ?? BOWL_DEPTH_M };
 }
 
-/** Slider ranges for the Lote 9 rules (owner, 2026-10-02). PROVISIONAL. */
+/** Slider ranges for the Lote 9 rules (owner, 2026-10-02). PROVISIONAL except the required acceleration reach from the Master Design. */
 export const ARENA_BOWL_DEPTH_RANGE = { min: 0, max: 5, step: 0.25 } as const;
 export const ROUND_TIME_LIMIT_RANGE = { min: 0, max: 180, step: 15 } as const;
-export const ACCELERATION_SCALE_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
+/** Master Design §12: acceleration playtesting must reach roughly 3 s time-to-speed. The default Bey is ~11 m/s / 14 m/s² ≈ 0.79 s; ×0.25 reaches ~3.1 s. */
+export const ACCELERATION_SCALE_RANGE = { min: 0.25, max: 2, step: 0.05 } as const;
 export const TOP_SPEED_SCALE_RANGE = { min: 0.5, max: 1.5, step: 0.05 } as const;
 export const AIR_CONTROL_RANGE = { min: 0, max: 3, step: 0.1 } as const;
 export const JUMP_STAMINA_COST_RANGE = { min: 0, max: 20, step: 1 } as const;
