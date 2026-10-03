@@ -11,6 +11,14 @@ permissions:
   pages: write
   id-token: write
 
+# A new commit on the same PR supersedes that PR's older build/smoke run.
+# The workflow name + PR number scope cancellation to one PR in this workflow.
+# `github.run_id` keeps non-PR runs (main pushes / manual runs) unique, so
+# parallel PRs never cancel each other and main keeps its existing behavior.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Fast gate (~2-3 min): typecheck, the fast suite, the production build.
   # This is the PR/push signal and the only thing deploy waits on — it does
@@ -66,10 +74,8 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [build]
     runs-on: ubuntu-latest
-    # Only Pages deploys are serialized. At workflow level this group put
-    # every run (each PR's CI included) in one repo-wide queue: runs waited
-    # on each other, and a newly queued run cancelled the one already
-    # waiting, so parallel PRs cancelled each other's CI.
+    # Pages deploys remain serialized independently. Workflow-level
+    # concurrency above only cancels superseded runs of the SAME PR.
     concurrency:
       group: pages
       cancel-in-progress: false
