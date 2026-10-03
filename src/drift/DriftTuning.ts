@@ -28,7 +28,25 @@
 // this can only ever cut the arc short, never add to it — satisfying
 // "vy(t+1) <= vy(t) + tolerance" and "exactly one apex" by construction,
 // not by a separate check bolted on after the fact.
-export const JUMP_LAUNCH_VELOCITY_MPS = 5;
+// Owner, 2026-10-02 (Lote 4): the full jump's height is a match value (Pregame
+// "Full jump height", PROVISIONAL default 2.5 m, 1-5 m), and the launch
+// velocity is derived from it with the world's real gravity (v0 = √(2·g·h)),
+// so the apex is the asked height exactly. JUMP_LAUNCH_VELOCITY_MPS is the
+// default's launch speed (was a fixed 5 m/s ≈ 1.19 m apex).
+import { GRAVITY_MPS2 } from '../physics/world/PhysicsWorld';
+
+export const JUMP_FULL_HEIGHT_DEFAULT_M = 2.5;
+export const JUMP_FULL_HEIGHT_RANGE = { min: 1, max: 5, step: 0.25 } as const;
+export function jumpLaunchVelocityForApexM(apexM: number): number {
+  return Math.sqrt(2 * GRAVITY_MPS2 * apexM);
+}
+export const JUMP_LAUNCH_VELOCITY_MPS = jumpLaunchVelocityForApexM(JUMP_FULL_HEIGHT_DEFAULT_M);
+/**
+ * The pre-2026-10-02 full jump (a fixed 5 m/s launch, ≈1.19 m apex). A DriftController (or a createBey()) built
+ * without a match's rules keeps it — the same way a bare RoundState keeps the instant ring-out: every match passes
+ * MatchConfig (2.5 m by default), while bare constructions (the Camera Lab prototype, mechanism tests) are unchanged.
+ */
+export const LEGACY_JUMP_FULL_HEIGHT_M = (5 * 5) / (2 * GRAVITY_MPS2);
 // Jump/air-control hotfix FOLLOW-UP (owner review): the first version of
 // this release cut targeted a fixed VELOCITY floor (JUMP_SHORT_RELEASE_FLOOR_MPS,
 // since removed), which only gave a genuinely consistent short hop for a
@@ -52,6 +70,8 @@ export const JUMP_LAUNCH_VELOCITY_MPS = 5;
 // of linear-in-velocity-from-tick-1. 0.2036 m = the movement/weight/dodge
 // pass's own measured baseline apex (0.177 m) x1.15.
 export const JUMP_SHORT_HOP_TARGET_APEX_M = 0.1265;
+// Owner, 2026-10-02 (Lote 4): Pregame "Short hop height", default the value above, 0.05-0.5 m.
+export const JUMP_SHORT_HOP_HEIGHT_RANGE = { min: 0.05, max: 0.5, step: 0.01 } as const;
 // How long, from the press, a release still shapes the jump's height at
 // all: release before this and computeJumpReleaseCapMps's ramp (fixed
 // target, then smoothly toward the natural arc) applies; hold at least

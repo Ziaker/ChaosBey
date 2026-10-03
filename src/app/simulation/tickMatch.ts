@@ -290,8 +290,8 @@ export function tickMatch(
   const gapBefore = length(subtract(positionXZ(second.body), positionXZ(first.body)));
   physics.step();
 
-  const firstMovement = first.movement.postStep(first.body, firstGrounded);
-  const secondMovement = second.movement.postStep(second.body, secondGrounded);
+  const firstMovement = first.movement.postStep(first.body, firstGrounded, firstDrift.driftState === DriftState.Hopping);
+  const secondMovement = second.movement.postStep(second.body, secondGrounded, secondDrift.driftState === DriftState.Hopping);
 
   // Note: a wall/floor bounce does NOT call dodge.registerLaunch() — GDD
   // section 21 grants Air Recovery only for being launched/knocked

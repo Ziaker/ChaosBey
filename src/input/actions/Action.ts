@@ -44,7 +44,9 @@ export interface ControllerActions {
    * M11 directional control: where the player wants to go, as a world X/Z
    * vector of length 0..1 (0 = no direction). When present, movement,
    * drift and dodge read it instead of SteerLeft/SteerRight/MoveForward/
-   * MoveBackward, which are then never held. The input layer resolves it
+   * MoveBackward. MoveForward/MoveBackward are then never held;
+   * SteerLeft/SteerRight stay held as the screen's lateral input (left/right
+   * or a diagonal), which only the drift rule reads (owner, 2026-10-02). The input layer resolves it
    * from screen directions; the simulation never sees the camera. Absent
    * (undefined) = the classic tank semantics: AI, scripted tests, the
    * Classic control setting and every V1 replay.

@@ -431,6 +431,9 @@ export class ActionSelector {
         (world.own.driftState === DriftState.Drifting && this.driftingTicks <= AI_DRIFT_MAX_TICKS))
     ) {
       desiredHeld.add(Action.JumpDrift);
+      // The drift rule (owner, 2026-10-02): X + a lateral direction while moving drifts. The evasive hop slides
+      // sideways off the attack line, so it always holds a side (toward the evasion, or the circling side).
+      if (!desiredHeld.has(Action.SteerLeft) && !desiredHeld.has(Action.SteerRight)) desiredHeld.add(this.circleSign >= 0 ? Action.SteerRight : Action.SteerLeft);
     }
 
     return this.commit(desiredHeld, fixedDeltaSeconds);

@@ -18,6 +18,7 @@ import {
   MOMENTUM_GAIN_RANGE,
   MOMENTUM_LOSS_ON_COLLISION_RANGE,
 } from '../../bey/momentum/MomentumTuning';
+import { JUMP_FULL_HEIGHT_RANGE, JUMP_SHORT_HOP_HEIGHT_RANGE } from '../../drift/DriftTuning';
 import { AI_DIFFICULTY_TIERS, aiDifficultyTier, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { isEditableEventTarget } from '../../input/devices/EditableTarget';
 import { AI_PERSONALITY_CHOICES, resolveAiPersonality, type AiPersonalityChoice } from '../session/SideControllers';
@@ -312,6 +313,24 @@ export class PregameScreen {
         write: (s, v) => ({ ...s, rules: { ...s.rules, momentumLossOnCollision: v } }),
         format: (v) => `${Math.round(v * 100)}%`,
         note: 'Share of momentum the faster Bey loses in a collision (also on a hit taken or a wall impact). Provisional 50%.',
+      }),
+      this.slider({
+        id: 'jump-full-height',
+        label: 'Full jump height',
+        range: JUMP_FULL_HEIGHT_RANGE,
+        read: (s) => s.rules.jumpFullHeightM,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, jumpFullHeightM: v } }),
+        format: (v) => `${v.toFixed(2)} m`,
+        note: 'How high a held X jump goes. Provisional default 2.5 m (the wall is 2 m: a full jump near the rim can clear it).',
+      }),
+      this.slider({
+        id: 'jump-short-hop-height',
+        label: 'Short hop height',
+        range: JUMP_SHORT_HOP_HEIGHT_RANGE,
+        read: (s) => s.rules.jumpShortHopHeightM,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, jumpShortHopHeightM: v } }),
+        format: (v) => `${v.toFixed(2)} m`,
+        note: 'How high a quick X tap hops. Default the previous ~0.13 m.',
       }),
     );
 

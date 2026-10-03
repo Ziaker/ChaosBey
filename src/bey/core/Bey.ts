@@ -16,6 +16,7 @@ import { SpinController } from '../spin/SpinController';
 import { StabilitySystem } from '../stability/StabilitySystem';
 import { StaminaSystem } from '../stamina/StaminaSystem';
 import { MomentumSystem } from '../momentum/MomentumSystem';
+import { LEGACY_JUMP_FULL_HEIGHT_M } from '../../drift/DriftTuning';
 import { createBeyRigidBody } from './BeyRigidBody';
 import type { ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { DEFAULT_BEY_DEFINITION, type BeyDefinition } from '../archetype/BeyDefinition';
@@ -59,8 +60,8 @@ export function createBey(
   definition: BeyDefinition = DEFAULT_BEY_DEFINITION,
   arenaFloor: ArenaFloorId = 'flat',
   motion: MotionParams = motionParams(),
-  /** The match's per-Bey rules (MatchConfig); omitted = the defaults. */
-  rules: BeyMatchRules = beyMatchRulesOf(createDefaultMatchConfig()),
+  /** The match's per-Bey rules (MatchConfig); omitted = the defaults, with the pre-2026-10-02 jump (see LEGACY_JUMP_FULL_HEIGHT_M). */
+  rules: BeyMatchRules = { ...beyMatchRulesOf(createDefaultMatchConfig()), jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M },
 ): Bey {
   const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical, motion);
   const stats = resolveBeyStats(definition.ratings);
@@ -72,7 +73,7 @@ export function createBey(
     collider,
     movement,
     spin: new SpinController(motion),
-    drift: new DriftController(movement.getLateralGripPerS()),
+    drift: new DriftController(movement.getLateralGripPerS(), rules),
     dodge: new DodgeController(),
     stamina: new StaminaSystem(stats.stamina),
     stability: new StabilitySystem(),

@@ -10,8 +10,13 @@ import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import type { ControllerActions } from '../../src/input/actions/Action';
 
 const intentArgs = (x: number, z: number) => ({ x, z });
+/**
+ * Directional control as DirectionalController sends it (owner, 2026-10-02): the world intent plus the screen's lateral
+ * key kept in `held` (here the screen's up is +Z, so a direction toward ±X is a right/left key).
+ */
 function intent(x: number, z: number, held: Action[] = [], pressed: Action[] = []): ControllerActions {
-  return { held: new Set(held), pressedThisFrame: new Set(pressed), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0, moveIntent: { x, z } };
+  const lateral = x > 0.3 ? [Action.SteerRight] : x < -0.3 ? [Action.SteerLeft] : [];
+  return { held: new Set([...held, ...lateral]), pressedThisFrame: new Set(pressed), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0, moveIntent: { x, z } };
 }
 
 describe('hop -> hold -> drift -> recover', () => {
@@ -145,7 +150,8 @@ describe('drift grip recovery targets the Bey\'s own archetype grip', () => {
   // Minimal stand-in for the two RAPIER.RigidBody methods DriftController
   // touches (the hop impulse) — grip recovery itself never reads the body.
   function stubBody() {
-    let vel = { x: 0, y: 0, z: 0 };
+    // Moving: the drift rule needs the Bey in motion when X is pressed (owner, 2026-10-02).
+    let vel = { x: 0, y: 0, z: 5 };
     return {
       linvel: () => vel,
       setLinvel: (v: { x: number; y: number; z: number }) => {
