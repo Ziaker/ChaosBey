@@ -10,8 +10,31 @@ import { CONCEPT_BEYS, conceptBeyFor } from '../../bey/archetype/BeyConceptRoste
 import { DEFAULT_AI_DIFFICULTY_TIER, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { DEFAULT_ARENA_PRESET, arenaPreset, type ArenaGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
 import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import { RING_OUT_DELAY_RANGE } from '../../arena/ringout/RingOutTuning';
+import {
+  BODY_COLLISION_DAMAGE_RANGE,
+  MOMENTUM_DECAY_RANGE,
+  MOMENTUM_FILL_RANGE,
+  MOMENTUM_GAIN_RANGE,
+  MOMENTUM_LOSS_ON_COLLISION_RANGE,
+} from '../../bey/momentum/MomentumTuning';
+import { MOVEMENT_STAMINA_DRAIN_RANGE } from '../../bey/stamina/StaminaTuning';
+import { CIRCULAR_LAUNCH_FORCE_RANGE, DASH_COOLDOWN_RANGE } from '../../combat/attacks/AttackTuning';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
-import { createDefaultMatchConfig, type MatchConfig, resolveMatchConfig } from '../../config/match/MatchConfig';
+import {
+  ACCELERATION_SCALE_RANGE,
+  AIR_CONTROL_RANGE,
+  ARENA_BOWL_DEPTH_RANGE,
+  createDefaultMatchConfig,
+  JUMP_COOLDOWN_RANGE,
+  JUMP_STAMINA_COST_RANGE,
+  ROUND_TIME_LIMIT_RANGE,
+  TOP_SPEED_SCALE_RANGE,
+  type MatchConfig,
+  resolveMatchConfig,
+} from '../../config/match/MatchConfig';
+import { DODGE_COOLDOWN_RANGE } from '../../dodge/DodgeTuning';
+import { JUMP_FULL_HEIGHT_RANGE, JUMP_SHORT_HOP_HEIGHT_RANGE } from '../../drift/DriftTuning';
 import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
 import type { AiPersonalityChoice, SideControllerSpec } from '../session/SideControllers';
@@ -93,10 +116,36 @@ export function sanitizeMatchRules(rules: MatchRules): MatchRules {
   return r;
 }
 
-/** Reuses MatchConfig's canonical clamps, then projects back to only the Pregame-owned rule slice. */
-function clampMatchRulesToConfig(rules: MatchRules): MatchRules {
-  const resolved = resolveMatchConfig(rules);
-  return Object.fromEntries(MATCH_RULE_KEYS.map((key) => [key, resolved[key]])) as MatchRules;
+const clamp = (value: number, range: { readonly min: number; readonly max: number }): number => Math.min(range.max, Math.max(range.min, value));
+
+/**
+ * Persisted Pregame values are untrusted/old UI data. Clamp them against the exact range constants that the current
+ * Pregame renders; do not change resolveMatchConfig globally, because replay/backcompat may intentionally carry an old
+ * but valid resolved MatchConfig outside today's playtest sliders.
+ */
+function clampPersistedMatchRules(rules: MatchRules): MatchRules {
+  return {
+    ...rules,
+    ringOutDelayS: clamp(rules.ringOutDelayS, RING_OUT_DELAY_RANGE),
+    dashCooldownS: clamp(rules.dashCooldownS, DASH_COOLDOWN_RANGE),
+    momentumGain: clamp(rules.momentumGain, MOMENTUM_GAIN_RANGE),
+    momentumFillS: clamp(rules.momentumFillS, MOMENTUM_FILL_RANGE),
+    momentumDecayS: clamp(rules.momentumDecayS, MOMENTUM_DECAY_RANGE),
+    bodyCollisionDamage: clamp(rules.bodyCollisionDamage, BODY_COLLISION_DAMAGE_RANGE),
+    momentumLossOnCollision: clamp(rules.momentumLossOnCollision, MOMENTUM_LOSS_ON_COLLISION_RANGE),
+    jumpFullHeightM: clamp(rules.jumpFullHeightM, JUMP_FULL_HEIGHT_RANGE),
+    jumpShortHopHeightM: clamp(rules.jumpShortHopHeightM, JUMP_SHORT_HOP_HEIGHT_RANGE),
+    movementStaminaDrain: clamp(rules.movementStaminaDrain, MOVEMENT_STAMINA_DRAIN_RANGE),
+    dodgeCooldownS: clamp(rules.dodgeCooldownS, DODGE_COOLDOWN_RANGE),
+    circularLaunchForce: clamp(rules.circularLaunchForce, CIRCULAR_LAUNCH_FORCE_RANGE),
+    arenaBowlDepthM: clamp(rules.arenaBowlDepthM, ARENA_BOWL_DEPTH_RANGE),
+    roundTimeLimitS: clamp(rules.roundTimeLimitS, ROUND_TIME_LIMIT_RANGE),
+    accelerationScale: clamp(rules.accelerationScale, ACCELERATION_SCALE_RANGE),
+    topSpeedScale: clamp(rules.topSpeedScale, TOP_SPEED_SCALE_RANGE),
+    airControl: clamp(rules.airControl, AIR_CONTROL_RANGE),
+    jumpStaminaCost: clamp(rules.jumpStaminaCost, JUMP_STAMINA_COST_RANGE),
+    jumpCooldownS: clamp(rules.jumpCooldownS, JUMP_COOLDOWN_RANGE),
+  };
 }
 
 export function defaultMatchRules(): MatchRules {
@@ -234,7 +283,7 @@ export function loadLastSetup(storage: Pick<Storage, 'getItem'> | null = safeSto
     if (typeof value === typeof rules[key] && (typeof value !== 'number' || Number.isFinite(value))) rules[key] = value;
   }
   const visual = sanitizeVfxOptions(saved.visual);
-  const clampedRules = clampMatchRulesToConfig(rules as unknown as MatchRules);
+  const clampedRules = clampPersistedMatchRules(rules as unknown as MatchRules);
   return {
     ...base,
     opponentBeyId: typeof saved.opponentBeyId === 'string' && rosterEntryExists(saved.opponentBeyId) ? saved.opponentBeyId : base.opponentBeyId,
