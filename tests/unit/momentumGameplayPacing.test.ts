@@ -124,19 +124,21 @@ describe('item 11 — speed-centered AI pacing', () => {
     expect(s).toBeGreaterThan(0);
   });
 
-  it('fades the run-up away under the existing anti-passivity clock so it cannot become a no-attack stalemate', () => {
-    const early = scenario(
+  it('hard-caps the run-up at three seconds even for the patient Stamina archetype', () => {
+    const beforeCap = scenario(
       { velocityXZ: { x: 0, z: 6 }, momentum: 0 },
       { positionXZ: { x: 0, z: 5 } },
-      0,
+      2.9,
+      STAMINA_AI_PERSONALITY,
     );
-    const late = scenario(
+    const afterCap = scenario(
       { velocityXZ: { x: 0, z: 6 }, momentum: 0 },
       { positionXZ: { x: 0, z: 5 } },
-      20,
+      3.01,
+      STAMINA_AI_PERSONALITY,
     );
-    expect(momentumBuildPriority(early.world, ATTACK_AI_PERSONALITY, early.risk, early.context)).toBeGreaterThan(0.8);
-    expect(momentumBuildPriority(late.world, ATTACK_AI_PERSONALITY, late.risk, late.context)).toBe(0);
-    expect(late.decision.intent).toBe(AiIntent.AttackDash);
+    expect(momentumBuildPriority(beforeCap.world, STAMINA_AI_PERSONALITY, beforeCap.risk, beforeCap.context)).toBeGreaterThan(0);
+    expect(momentumBuildPriority(afterCap.world, STAMINA_AI_PERSONALITY, afterCap.risk, afterCap.context)).toBe(0);
+    expect(afterCap.decision.reason).not.toContain('momentum build');
   });
 });
