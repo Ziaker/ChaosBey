@@ -93,6 +93,21 @@ describe('Lote 10 visual options', () => {
     expect(on.layerAdds() - off.layerAdds()).toBe(2);
   });
 
+  it('motion trails 150% produces more anime trail sprites than the unchanged approved 100% baseline', () => {
+    const approved = fastMoveContext(1);
+    const boosted = fastMoveContext(1.5);
+    const event = { pos: new THREE.Vector3(0, 0.3, 0), vel: new THREE.Vector3(12, 0, 0), m: 0.8, slot: 0 as const };
+    const approvedRuntime = makeHybrid('cel').create(approved.ctx);
+    const boostedRuntime = makeHybrid('cel').create(boosted.ctx);
+
+    for (let frame = 0; frame < 2; frame++) {
+      approvedRuntime.fastMove(event, 1 / 60);
+      boostedRuntime.fastMove(event, 1 / 60);
+    }
+
+    expect(boosted.layerAdds()).toBeGreaterThan(approved.layerAdds());
+  });
+
   it('the persistent SpeedTrail uses the same 0/100/150% control without changing the approved 100% baseline', () => {
     const trail = new SpeedTrail(0xffffff);
     const position = { x: 0, y: 0.2, z: 0 };
