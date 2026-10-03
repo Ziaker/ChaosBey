@@ -284,8 +284,8 @@ export function tickMatch(
     floorNormal: floorNormalUnder(second, secondGrounded),
   });
 
-  first.spin.tick(first.body, fixedDeltaSeconds, firstCondition, firstGrounded, firstDrift.driftState === DriftState.Drifting ? first.movement.getHeadingRad() : null);
-  second.spin.tick(second.body, fixedDeltaSeconds, secondCondition, secondGrounded, secondDrift.driftState === DriftState.Drifting ? second.movement.getHeadingRad() : null);
+  first.spin.tick(first.body, fixedDeltaSeconds, firstCondition, firstGrounded, firstDrift.driftState === DriftState.Drifting ? first.movement.getHeadingRad() : null, axisCondition(first));
+  second.spin.tick(second.body, fixedDeltaSeconds, secondCondition, secondGrounded, secondDrift.driftState === DriftState.Drifting ? second.movement.getHeadingRad() : null, axisCondition(second));
 
 
   // Body collisions (owner, 2026-10-02) judge the speeds the Beys had going into the contact, before the solver
@@ -666,6 +666,11 @@ export function tickMatch(
  * slope under its centre is shallower, and following it would lift the rim
  * off the floor when rolling downhill.
  */
+/** The lower of a Bey's Stamina and Stability fractions: what the render-only axis wobble/precession ramp reads (Lote 6). */
+function axisCondition(bey: Bey): number {
+  return Math.min(bey.stamina.resource.fraction, bey.stability.resource.fraction);
+}
+
 function keepHorizontalVelocity(bey: Bey, velocity: Vec2): void {
   const v = bey.body.linvel();
   bey.body.setLinvel({ x: velocity.x, y: v.y, z: velocity.z }, true);

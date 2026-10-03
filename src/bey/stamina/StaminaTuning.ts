@@ -37,4 +37,4 @@ export const STAMINA_PENALTY_START_FRACTION = 0.4;
 export const STAMINA_MIN_ACCEL_FACTOR = 0.6;
 export const STAMINA_MIN_RECOVERY_TORQUE_FACTOR = 0.5;
 export const STAMINA_MAX_SPIN_DECAY_MULTIPLIER = 3; // spin decays up to 3x faster at zero stamina.
-export const STAMINA_MAX_WOBBLE_ENERGY_FLOOR = 0.25; // ambient wobble energy floor blended in at zero stamina — a tired Bey never looks perfectly steady.
+// The ambient wobble floor moved to SpinTuning (owner, 2026-10-02, Lote 6: it ramps in below 70% Stamina or Stability).
