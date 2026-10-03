@@ -13,7 +13,7 @@
 // normal game since 0.16.0; see src/presentation/features.ts).
 // ============================================================
 
-import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../archetype/BeyArchetypes';
+import { CONCEPT_BEYS } from '../archetype/BeyConceptRoster';
 import { BEY_VISUAL_REGISTRY, resolveBeyVisualDefinition, type BeyVisualDefinition, type BeyVisualPieceSpec, type BeyVisualRegistry } from '../../presentation/beyVisual';
 import type { PresentationFeatures } from '../../presentation/features';
 import type { BeyDefinition } from '../archetype/BeyDefinition';
@@ -21,12 +21,8 @@ import { createConceptBeyVisual } from './conceptBeyVisual';
 import { CONCEPTS } from './concepts/conceptDefinitions';
 import type { ConceptDefinition } from './model/types';
 
-/** Gameplay definition id → visual id. Provisional (concept A of each family). */
-export const PROVISIONAL_ARCHETYPE_VISUALS: Readonly<Record<string, string>> = {
-  [ATTACK_ARCHETYPE.id]: 'concept:attack-a',
-  [DEFENSE_ARCHETYPE.id]: 'concept:defense-a',
-  [STAMINA_ARCHETYPE.id]: 'concept:stamina-a',
-};
+/** Gameplay definition id → visual id: each of the nine selectable Beys wears its own concept (Lote 8); the family archetypes are concept A. */
+export const PROVISIONAL_ARCHETYPE_VISUALS: Readonly<Record<string, string>> = Object.fromEntries(CONCEPT_BEYS.map((c) => [c.definition.id, `concept:${c.conceptId}`]));
 
 export function conceptVisualId(concept: ConceptDefinition): string {
   return `concept:${concept.id}`;

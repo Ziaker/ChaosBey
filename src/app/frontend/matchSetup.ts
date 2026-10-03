@@ -5,6 +5,7 @@
 // Bey; the Pregame screen fills the rest.
 // ============================================================
 
+import { CONCEPT_BEYS, conceptBeyFor } from '../../bey/archetype/BeyConceptRoster';
 import { DEFAULT_AI_DIFFICULTY_TIER, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { DEFAULT_ARENA_PRESET, arenaPreset, type ArenaGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
 import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
@@ -37,14 +38,16 @@ export interface MatchSetup {
 export const CLASH_IMPACT_RANGE = { min: 0.5, max: 2, step: 0.25 } as const;
 
 /**
- * The opponent a player meets by default: the next Bey in the roster, so
- * the first match is never a mirror (Attack meets Defense, as in the
- * Debug Lab).
+ * The opponent a player meets by default: the same letter of the next family (Attack A meets Defense A, as in the
+ * Debug Lab; Defense B meets Stamina B), so the first match is never a mirror — not even of gameplay, which B and C
+ * share with their family for now (Lote 8).
  */
 export function defaultOpponentFor(playerBeyId: string): string {
-  const index = BEY_ROSTER.findIndex((e) => e.definition.id === playerBeyId);
-  const next = BEY_ROSTER[(index + 1) % BEY_ROSTER.length]!;
-  return next.definition.id;
+  const own = conceptBeyFor(playerBeyId);
+  if (!own) return BEY_ROSTER[1]!.definition.id;
+  const families = ['attack', 'defense', 'stamina'] as const;
+  const nextFamily = families[(families.indexOf(own.family) + 1) % families.length];
+  return CONCEPT_BEYS.find((c) => c.family === nextFamily && c.letter === own.letter)!.definition.id;
 }
 
 export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.definition.id): MatchSetup {
