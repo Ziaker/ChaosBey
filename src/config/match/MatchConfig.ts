@@ -17,6 +17,7 @@ import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning'
 import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { STANDARD_ARENA_GEOMETRY, type ArenaGeometry } from '../../arena/presets/ArenaPresets';
 import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
+import { RING_OUT_DELAY_DEFAULT_S } from '../../arena/ringout/RingOutTuning';
 
 export interface MatchConfig {
   /** Multiplies the real knockback/Stability consequence a Clash resolution applies (both the FirstWins/SecondWins loser's knockback and a Tie's symmetric repulsion) — GDD section 152's "configurable impact multiplier". */
@@ -39,6 +40,11 @@ export interface MatchConfig {
    * bounce use it, so it is recorded in every replay.
    */
   motion: MotionDirectionId;
+  /**
+   * Owner, 2026-10-02: seconds a Bey must stay outside the ring-out radius before the ring-out counts (back inside
+   * resets it). PROVISIONAL default 1.5 s; 0 = the old instant rule. Pregame slider.
+   */
+  ringOutDelayS: number;
 }
 
 export function createDefaultMatchConfig(): MatchConfig {
@@ -48,6 +54,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     arenaWallRestitution: STANDARD_ARENA_GEOMETRY.wallRestitution,
     arenaFloor: DEFAULT_ARENA_FLOOR,
     motion: DEFAULT_MOTION_DIRECTION,
+    ringOutDelayS: RING_OUT_DELAY_DEFAULT_S,
   };
 }
 

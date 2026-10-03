@@ -49,7 +49,13 @@ export class Speedlines {
   }
 
   clear(): void {
+    // GAME: clear the whole backing store in device pixels, whatever transform is active. With the dpr transform still
+    // on, clearRect(0, 0, width, height) covers only dpr x the canvas: below 1 (a zoomed-out browser, e.g. 75%) it left
+    // the right and bottom bands uncleared and the Clash lines stayed on screen after the Clash.
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.restore();
     this.lastDrawn = 0;
   }
 

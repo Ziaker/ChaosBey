@@ -59,6 +59,10 @@ test('Character Select and Pregame set up the match that really runs, and Result
   await page.getByTestId('pregame-wall-height').fill('0.8');
   await expect(page.getByTestId('pregame-wall-height-value')).toHaveText('0.8 m');
   await expect(page.getByTestId('pregame-rules')).toContainText('Custom walls: 0.8 m high, bounce 0.40');
+  // Owner 2026-10-02: the Ring-out delay slider (0-3 s, provisional default 1.5 s) reaches the match.
+  await expect(page.getByTestId('pregame-ring-out-delay-value')).toHaveText('1.50 s');
+  await page.getByTestId('pregame-ring-out-delay').fill('0.5');
+  await expect(page.getByTestId('pregame-ring-out-delay-value')).toHaveText('0.50 s');
   await page.getByTestId('pregame-seed').fill('flow-seed');
   await expect(page.getByTestId('pregame-rules')).toContainText('Fixed seed "flow-seed"');
   await page.getByTestId('pregame-start').click();
@@ -73,6 +77,7 @@ test('Character Select and Pregame set up the match that really runs, and Result
       seed: session.seedText,
       opponent: session.describeController('second'),
       walls: [session.matchConfig.arenaWallHeightM, session.matchConfig.arenaWallRestitution],
+      ringOutDelayS: session.matchConfig.ringOutDelayS,
     };
   });
   // The pick plays first; the default opponent is the next roster entry (no mirror).
@@ -80,6 +85,7 @@ test('Character Select and Pregame set up the match that really runs, and Result
   expect(match.seed).toBe('flow-seed');
   expect(match.opponent).toBe('AI (archetype, ace)');
   expect(match.walls).toEqual([0.8, 0.4]);
+  expect(match.ringOutDelayS).toBe(0.5);
 
   // Play the round for real (F3 shows the overlay the helper reads).
   await page.keyboard.press('F3');

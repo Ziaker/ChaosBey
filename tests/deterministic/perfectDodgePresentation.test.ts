@@ -103,13 +103,14 @@ describe('Perfect Dodge reaches the player as presentation, and only as presenta
     });
     const normal = await perfectDodgeRun(PRESENTATION_FEATURES_DEFAULT);
     const perfect = normal.events.filter((event) => event.kind === 'perfectDodge');
-    expect(perfect.length).toBeGreaterThan(0);
-    for (const event of perfect) expect(event).toMatchObject({ kind: 'perfectDodge', side: 'second' });
-    const perfectTicks = new Set(perfect.map((event) => event.tick));
+    // Exactly one Perfect Dodge for one dodge against one attack (owner, 2026-10-02: it used to fire on every overlapping tick).
+    expect(perfect).toHaveLength(1);
+    expect(perfect[0]).toMatchObject({ kind: 'perfectDodge', side: 'second' });
+    expect(normal.events.filter((event) => event.kind === 'dodged')).toHaveLength(1);
     // The attack was avoided: no hit landed on the dodger, so nothing makes a contact spark.
     expect(normal.events.filter((event) => event.kind === 'hitResolved' && event.defenderSide === 'second')).toEqual([]);
-    // The Hybrid VFX system got the Perfect Dodge, in every tick batch that carried one.
-    expect(normal.hybridPerfectDodges).toBe(perfectTicks.size);
+    // The Hybrid VFX system got the Perfect Dodge exactly once.
+    expect(normal.hybridPerfectDodges).toBe(1);
     expect(normal.systemErrors).toBe(0);
 
     // Presentation never feeds back: with every package off the same inputs give the same state on every tick.

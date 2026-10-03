@@ -25,7 +25,7 @@ import { AttackState } from '../../combat/attacks/AttackController';
 import { detectHits, type HitEvent } from '../../combat/hit-detection/HitDetection';
 import { applyKnockback, computeKnockback, computeStabilityDamage, type KnockbackComponents } from '../../combat/knockback/Knockback';
 import { CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS } from '../../combat/attacks/AttackTuning';
-import { isRingOut } from '../../arena/ringout/RingOut';
+import { isOutOfArena } from '../../arena/ringout/RingOut';
 import { RoundState } from '../../combat/round-rules/RoundState';
 import type { ControllerActions } from '../../input/actions/Action';
 import { WALL_IMPACT_STABILITY_DAMAGE_PER_MPS } from '../../bey/stability/StabilityTuning';
@@ -316,8 +316,13 @@ export function tickMatch(
     const defenderIsFirst = !hit.attackerIsFirst;
     const defenderDodge = defenderIsFirst ? firstDodge : secondDodge;
     if (defenderDodge.hasIFrames) {
-      combatEvents.push({ kind: 'dodged', targetIsFirst: defenderIsFirst });
-      if (defenderDodge.isPerfectWindow) combatEvents.push({ kind: 'perfectDodge', targetIsFirst: defenderIsFirst });
+      // Nullified on every overlapping tick; reported once per (dodge, opponent attack).
+      const defender = defenderIsFirst ? first : second;
+      const attacker = defenderIsFirst ? second : first;
+      if (defender.dodge.firstEvasionOf(attacker.attack.getActivationId())) {
+        combatEvents.push({ kind: 'dodged', targetIsFirst: defenderIsFirst });
+        if (defenderDodge.isPerfectWindow) combatEvents.push({ kind: 'perfectDodge', targetIsFirst: defenderIsFirst });
+      }
       continue;
     }
     hitEvents.push(hit);
@@ -436,8 +441,10 @@ export function tickMatch(
     );
   }
 
-  const ringOutFirst = isRingOut(firstPos);
-  const ringOutSecond = isRingOut(secondPos);
+  // Outside the ring-out radius only counts after the match's ring-out delay (owner, 2026-10-02).
+  const ringedOut = roundState.trackRingOut(isOutOfArena(first.body.translation(), first.arenaFloor), isOutOfArena(second.body.translation(), second.arenaFloor), fixedDeltaSeconds);
+  const ringOutFirst = ringedOut.first;
+  const ringOutSecond = ringedOut.second;
   if (ringOutFirst) combatEvents.push({ kind: 'ringOut', targetIsFirst: true });
   if (ringOutSecond) combatEvents.push({ kind: 'ringOut', targetIsFirst: false });
   roundState.resolveTick({ firstKoed, secondKoed, firstRingOut: ringOutFirst, secondRingOut: ringOutSecond });

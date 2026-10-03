@@ -242,6 +242,55 @@ test('clashPresentation in a real browser: locked contact, speedlines and dust o
   expect(on.camera).toBe(off.camera);
 });
 
+test('clashPresentation at a browser zoom below 100% (dpr 0.75): the speedlines leave no trace once the Clash ends (owner item 4)', async ({ browser }) => {
+  // A zoomed-out browser (devicePixelRatio < 1) used to keep the last speedlines on screen: clear() only covered dpr x
+  // the canvas. Visual check, so the presentation runs with its flag, not the all-off gameplay baseline.
+  const context = await browser.newContext({ deviceScaleFactor: 0.75 });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  await openDebugLab(page, '&pfx=clashPresentation,newBeyVisuals', errors);
+  await page.evaluate(async () => {
+    const lab = window.__chaosBeyDebugLab!;
+    lab.setPaused(true);
+    await lab.restart('clash-camera-proof');
+    const system = lab.getSession()!.getClashPresentation()!;
+    const w = window as unknown as { __stagedClash: boolean };
+    w.__stagedClash = true;
+    const original = system.update.bind(system);
+    (system as { update: typeof system.update }).update = (frame) =>
+      original({
+        dtSeconds: frame.dtSeconds,
+        state: frame.state
+          ? {
+              ...frame.state,
+              clash: w.__stagedClash
+                ? { phase: 'active', active: true, progress: 0.6, elapsedS: 2.4, firstPower: 1.6, secondPower: 1, firstMashEventCount: 4, secondMashEventCount: 3, resolution: null, cooldownRemainingS: 0 }
+                : { phase: 'idle', active: false, progress: 0.5, elapsedS: 0, firstPower: 0, secondPower: 0, firstMashEventCount: 0, secondMashEventCount: 0, resolution: null, cooldownRemainingS: 0 },
+            }
+          : null,
+      });
+    system.onEvents([{ kind: 'clashStarted', tick: 5 }, { kind: 'clashProgress', tick: 5, side: 'first', mashEventCount: 1, progress: 0.3 }], { tick: 5, round: {}, camera: null } as never);
+    lab.step(30);
+  });
+  const paintedPixels = (): Promise<{ dpr: number; size: number[]; painted: number }> =>
+    page.evaluate(() => {
+      const canvas = document.querySelector('[data-testid="clash-presentation-overlay"] canvas') as HTMLCanvasElement;
+      const data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+      let painted = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i]! > 0) painted++;
+      return { dpr: window.devicePixelRatio, size: [canvas.width, canvas.height], painted };
+    });
+  await page.waitForFunction(() => (window.__chaosBeyDebugLab!.getSession()!.getPresentationStats().hub.perSystem['clash-presentation']?.speedlinesDrawn ?? 0) > 20, null, { timeout: 20_000 });
+  const during = await paintedPixels();
+  expect(during.dpr).toBe(0.75);
+  expect(during.painted).toBeGreaterThan(1000);
+  // The Clash ends: the overlay must go fully transparent, to the last device pixel.
+  await page.evaluate(() => ((window as unknown as { __stagedClash: boolean }).__stagedClash = false));
+  await expect.poll(async () => (await paintedPixels()).painted, { timeout: 20_000 }).toBe(0);
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
 test('arenaVisuals in a real browser: the approved arena art draws, the temporary arena visuals are hidden, camera as with the flag off', async ({ browser }) => {
   const run = async (search: string): Promise<{ camera: string; art: string[]; hiddenHolder: boolean | null; errors: string[] }> => {
     const context = await browser.newContext();

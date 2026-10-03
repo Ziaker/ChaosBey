@@ -68,7 +68,7 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
     };
     const shockwave = (at: THREE.Vector3, color: THREE.ColorRepresentation, r: number, life: number): void => {
       if (TUNING.shockwave <= 0.01) return;
-      ctx.layer.add(flatFx({ tex: ringTexture(), color, pos: onFloor(at, 0.04), size: [0.4, r * 2 * TUNING.shockwave], life, additive: true, opacity: 1 }));
+      ctx.layer.add(flatFx({ tex: ringTexture(), color, pos: onFloor(at, 0.04), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.04 }, size: [0.4, r * 2 * TUNING.shockwave], life, additive: true, opacity: 1 }));
     };
     const lines = (at: THREE.Vector3, color: THREE.Color, count: number, speed: number, dir = new THREE.Vector3(0, 1, 0), spread = 2.2): void => {
       const n = stochastic(count * TUNING.sparkLines);
@@ -96,7 +96,7 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
         if (chargeTimer <= 0) {
           chargeTimer = 0.13 - 0.07 * e.progress;
           const center = e.pos.clone().setY(e.pos.y - 0.1);
-          if (TUNING.chargeAura > 0.01) ctx.layer.add(flatFx({ tex: ringTexture(), color, pos: onFloor(center, 0.05), size: [(2.6 - 0.4 * e.progress) * Math.max(0.4, TUNING.chargeAura), 0.3], life: 0.32, additive: true, opacity: Math.min(1, (0.4 + 0.6 * e.progress) * TUNING.chargeAura) }));
+          if (TUNING.chargeAura > 0.01) ctx.layer.add(flatFx({ tex: ringTexture(), color, pos: onFloor(center, 0.05), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.05 }, size: [(2.6 - 0.4 * e.progress) * Math.max(0.4, TUNING.chargeAura), 0.3], life: 0.32, additive: true, opacity: Math.min(1, (0.4 + 0.6 * e.progress) * TUNING.chargeAura) }));
           for (let i = 0; i < stochastic((2 + Math.round(4 * e.progress)) * TUNING.chargeAura); i++) {
             const a = Math.random() * Math.PI * 2;
             const r = rand(1.0, 1.6);
@@ -184,7 +184,7 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
         const color = ctx.beyColor(e.slot);
         shockwave(e.pos, WHITE, 1.5 + 2.5 * e.m, 0.3);
         shockwave(e.pos, color, 2.5 + 3.5 * e.m, 0.5);
-        ctx.layer.add(flatFx({ tex: crackMark(), color: 0x000000, pos: onFloor(e.pos, 0.02), size: [1.4 + 2.4 * e.m, 1.4 + 2.4 * e.m], life: 3, opacity: 0.8, hold: 0.7, rotation: Math.random() * 6 }));
+        ctx.layer.add(flatFx({ tex: crackMark(), color: 0x000000, pos: onFloor(e.pos, 0.02), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.02 }, size: [1.4 + 2.4 * e.m, 1.4 + 2.4 * e.m], life: 3, opacity: 0.8, hold: 0.7, rotation: Math.random() * 6 }));
         for (let i = 0; i < 8; i++) {
           const a = (i / 8) * Math.PI * 2;
           ctx.layer.add(spriteFx({ tex: smokePuff(), color: 0xf2f2f2, additive: false, opacity: 0.85, pos: onFloor(e.pos, 0.2), vel: new THREE.Vector3(Math.cos(a) * (2.5 + 3 * e.m), 0.5, Math.sin(a) * (2.5 + 3 * e.m)), drag: 4, size: [0.5, 1 + e.m], life: 0.55 }));

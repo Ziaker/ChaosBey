@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
-import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
+import { RING_OUT_DELAY_DEFAULT_S, RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { ClashOutcome, ClashState } from '../../src/combat/clash/ClashController';
 import { CLASH_COOLDOWN_S, CLASH_TARGET_DURATION_S } from '../../src/combat/clash/ClashTuning';
 import { ScriptedController, type ScriptedFrame } from '../../src/automation/scripted-scenarios/ScriptedController';
@@ -351,7 +351,9 @@ describe('Clash never artificially declares a ring-out', () => {
 
     // Run all the way through resolution + into normal (Cooldown) ticks — physics never moved them (frozen the whole time), so they're still beyond the boundary, and the ordinary isRingOut() check (unrelated to Clash) now catches it naturally.
     let sawNaturalRingOut = false;
-    for (let i = 0; i < DURATION_TICKS + 5 && !sawNaturalRingOut; i++) {
+    // (Plus the ring-out delay, owner 2026-10-02: the outside clock only starts once ring-out is checked again.)
+    const ringOutDelayTicks = Math.round(RING_OUT_DELAY_DEFAULT_S / FIXED_DELTA_SECONDS);
+    for (let i = 0; i < DURATION_TICKS + ringOutDelayTicks + 5 && !sawNaturalRingOut; i++) {
       const result = harness.tick(NO_ACTIONS, NO_ACTIONS);
       if (result.ringOutFirst || result.ringOutSecond) sawNaturalRingOut = true;
     }

@@ -225,6 +225,8 @@ class Latch {
 export class MatchAnomalyDetector {
   private readonly streaks = new Map<string, Streak>();
   private readonly latches = new Map<string, Latch>();
+  /** Per side: its running ring-out clock started past the floor's edge (left over the wall), see check(). */
+  private readonly offArenaEpisode = { first: false, second: false };
 
   constructor(private readonly thresholds: AnomalyThresholds = DEFAULT_ANOMALY_THRESHOLDS) {}
 
@@ -256,10 +258,17 @@ export class MatchAnomalyDetector {
 
       const p = bey.body.translation();
       const radius = Math.hypot(p.x, p.z);
-      if (this.latch(key('left'), roundRunning && radius > t.leftWorldRadiusM)) {
+      // Ring-out delay (owner, 2026-10-02): a Bey whose ring-out clock started past the floor's edge left the arena over
+      // the wall; until the delay elapses it may legitimately be past the radius, falling off the rim or even under the
+      // bowl. Only one the ring-out rule never saw outside left the world, and one whose clock started inside the floor
+      // radius went through the floor.
+      if (input.roundState.ringOutClock[side] === 0) this.offArenaEpisode[side] = false;
+      else if (radius > ARENA_FLOOR_RADIUS) this.offArenaEpisode[side] = true;
+      const ringOutPending = this.offArenaEpisode[side];
+      if (this.latch(key('left'), roundRunning && radius > t.leftWorldRadiusM && !ringOutPending)) {
         emit('left-world', side, `centre ${radius.toFixed(2)} m from the arena centre (limit ${t.leftWorldRadiusM.toFixed(2)} m) with no ring-out declared`);
       }
-      if (this.latch(key('floor'), p.y < t.belowFloorYM)) {
+      if (this.latch(key('floor'), p.y < t.belowFloorYM && !ringOutPending)) {
         // Past the floor's edge (outside the wall) it fell off the rim (what
         // the fixed ext-32 wall gaps used to cause); inside it, it went
         // through the floor.
