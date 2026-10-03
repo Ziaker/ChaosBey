@@ -21,6 +21,7 @@ import { DEFAULT_ARENA_FLOOR } from '../../src/arena/floor/ArenaFloorProfile';
 import { arenaGeometryOf, createDefaultMatchConfig } from '../../src/config/match/MatchConfig';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
+import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
 import { simulateAiMatch } from '../../src/self-test/AiMatchSimulation';
 import { currentRuntimeFingerprint } from '../../src/replay/format/runtimeFingerprint';
 import { decodeReplay, encodeReplay, sealReplay } from '../../src/replay/format/ChaosBeyReplayV1';
@@ -50,10 +51,10 @@ describe('arena presets', () => {
 });
 
 describe('arena values in real matches', () => {
-  it('a low, soft rim ends rounds sooner and by ring-out; a tall, bouncy barrier keeps Beys in', async () => {
+  it('both extreme wall presets remain valid in full AI matches, and the lower rim never produces fewer ring-outs', async () => {
     const run = async (geometry: typeof STANDARD_ARENA_GEOMETRY) => {
       let ringOuts = 0;
-      let ticks = 0;
+      let unresolved = 0;
       const pairs = [
         [ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE],
         [DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE],
@@ -68,18 +69,20 @@ describe('arena values in real matches', () => {
             matchConfigOverrides: { arenaWallHeightM: geometry.wallHeightM, arenaWallRestitution: geometry.wallRestitution, ringOutDelayS: 0 },
           });
           if (String(record.stats.outcome).includes('RingOut')) ringOuts++;
-          ticks += record.stats.ticks;
+          if (record.stats.outcome === RoundOutcome.Ongoing) unresolved++;
         }
       }
-      return { ringOuts, ticks };
+      return { ringOuts, unresolved };
     };
     const rift = await run(RIFT_CRATER.geometry);
     const tournament = await run(TOURNAMENT_STADIUM.geometry);
-    // Arena scale pass + later gameplay passes make AI-vs-AI ring-outs rare on the 36 m bowl. This aggregate check is
-    // intentionally loose: the detailed replay test below now uses a controlled near-wall opening instead of relying on
-    // whichever AI seed happens to touch the boundary after every gameplay retune.
+    // On the 36 m bowl, later movement/combat passes made wall height stop predicting aggregate round duration. The old
+    // `rift.ticks < tournament.ticks * 1.03` assertion therefore encoded a stale correlation, not an arena invariant.
+    // Keep the full-match safety/result check here; the controlled wall/replay test below proves the wall values have a
+    // deterministic gameplay consequence without depending on which centre-spawn AI seed happens to reach the boundary.
+    expect(rift.unresolved).toBe(0);
+    expect(tournament.unresolved).toBe(0);
     expect(rift.ringOuts).toBeGreaterThanOrEqual(tournament.ringOuts);
-    expect(rift.ticks).toBeLessThan(tournament.ticks * 1.03);
   }, 300_000);
 
   it('are recorded in the replay and used on playback: a controlled wall encounter diverges with a different wall', async () => {
