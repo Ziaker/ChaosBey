@@ -39,6 +39,22 @@ import type { WorldState } from './WorldState';
  * without ever resolving the round (defense vs defense, matrix-2/-4), so it is not used.
  */
 const MOMENTUM_COMMIT_BONUS = 0.5;
+/**
+ * Owner item 11 follow-up (Lote 10): once a Bey is already moving, preserve a finite run-up instead of immediately
+ * cashing every opening into another routine attack. At 60% momentum the current +100% default gain already raises
+ * the top-speed ceiling to 1.6x, which is enough for the speed build-up to read before normal scoring resumes.
+ * The target and score weights are PROVISIONAL playtest values; punish/counter/threat/edge overrides remain above this.
+ */
+const MOMENTUM_BUILD_TARGET = 0.6;
+/** No artificial retreat-from-rest: normal scoring first gets the Bey moving. The pacing layer fades in from 2.5 to 5 m/s. */
+const MOMENTUM_BUILD_MIN_SPEED_MPS = 2.5;
+const MOMENTUM_BUILD_FULL_SPEED_MPS = 5;
+/** At full build priority, routine attack scores keep 25%; tactical openings zero the priority and therefore bypass this. */
+const MOMENTUM_BUILD_ATTACK_DAMPING = 0.75;
+/** Additive score that makes the moving Bey open space inside Dash range, or accelerate toward the fight from outside it. */
+const MOMENTUM_BUILD_MOVE_BONUS = 0.8;
+/** Circling/waiting are deliberately not the build-up answer: that experiment previously caused orbit stalemates. */
+const MOMENTUM_BUILD_PASSIVE_DAMPING = 0.7;
 const EDGE_RISK_OVERRIDE_THRESHOLD = 0.55;
 /** Once recovering, keep recovering until edgeRisk falls below this (hysteresis). Without it the AI stopped the moment it crossed back under the override threshold, turned to re-engage, and drifted straight back into danger. */
 const EDGE_RISK_RELEASE_THRESHOLD = 0.3;
@@ -138,6 +154,29 @@ export const NEUTRAL_DECISION_CONTEXT: DecisionContext = { counterDash: false, s
 export function passivityTempo(secondsSinceOwnAttack: number, personality: AiPersonality): number {
   const fullTempoS = TEMPO_BASE_S * (1 + personality.patience * TEMPO_PATIENCE_SCALE);
   return clamp01(secondsSinceOwnAttack / fullTempoS);
+}
+
+/**
+ * Owner item 11: finite speed-build pacing for a Bey that is already moving. This deliberately does not create another
+ * AI state machine. The current public momentum/speed plus the existing anti-passivity clock are enough to make the
+ * behavior self-ending and deterministic:
+ * - below Circular range: fight normally (already in contact; running away would look absurd);
+ * - while moving and below the target: prefer straight run-up movement over routine attacks;
+ * - a punish/opening/edge-pressure opportunity bypasses the pacing;
+ * - as the no-attack tempo rises, the pacing fades to zero, so it cannot become a retreat/orbit stalemate.
+ */
+export function momentumBuildPriority(
+  world: WorldState,
+  personality: AiPersonality,
+  risk: RiskAssessment,
+  context: DecisionContext = NEUTRAL_DECISION_CONTEXT,
+): number {
+  if (world.distanceToOpponentM <= AI_CIRCULAR_ATTACK_RANGE_M || world.own.momentum >= MOMENTUM_BUILD_TARGET) return 0;
+  const speedGate = clamp01((world.own.speedMps - MOMENTUM_BUILD_MIN_SPEED_MPS) / (MOMENTUM_BUILD_FULL_SPEED_MPS - MOMENTUM_BUILD_MIN_SPEED_MPS));
+  if (speedGate <= 0) return 0;
+  const buildNeed = clamp01((MOMENTUM_BUILD_TARGET - world.own.momentum) / MOMENTUM_BUILD_TARGET);
+  const tacticalOpening = clamp01(Math.max(risk.opportunity, risk.punishWindow ? 1 : 0, risk.edgePressure));
+  return buildNeed * speedGate * (1 - passivityTempo(context.secondsSinceOwnAttack, personality)) * (1 - tacticalOpening);
 }
 
 /**
@@ -290,6 +329,8 @@ export function selectIntent(
   const tempo = passivityTempo(context.secondsSinceOwnAttack, personality);
   const opening = Math.max(risk.opportunity, risk.punishWindow ? 1 : 0);
   const collisionReluctance = clamp01(personality.collisionAvoidance * (1 - opening) * (1 - tempo));
+  const buildPriority = momentumBuildPriority(world, personality, risk, context);
+  const routineAttackScale = 1 - buildPriority * MOMENTUM_BUILD_ATTACK_DAMPING;
 
   const scores = new Map<AiIntent, number>();
   const willingness = clashWillingness(world, personality);
@@ -308,7 +349,7 @@ export function selectIntent(
   scores.set(
     AiIntent.AttackCircular,
     inCircularRange && !alreadyAttacking
-      ? (0.4 + personality.aggression * 0.4 - personality.caution * 0.2 + punishBonus * PUNISH_CIRCULAR_SCORE_BONUS) * willingness
+      ? (0.4 + personality.aggression * 0.4 - personality.caution * 0.2 + punishBonus * PUNISH_CIRCULAR_SCORE_BONUS) * willingness * routineAttackScale
       : 0,
   );
 
@@ -317,7 +358,8 @@ export function selectIntent(
     inDashRange && !alreadyAttacking && world.own.dashReadiness >= 1
       ? (0.3 + personality.aggression * 0.5 - personality.patience * 0.2 + punishBonus * PUNISH_DASH_SCORE_BONUS) *
           willingness *
-          (1 - collisionReluctance * COLLISION_AVOIDANCE_DASH_DAMPING)
+          (1 - collisionReluctance * COLLISION_AVOIDANCE_DASH_DAMPING) *
+          routineAttackScale
       : 0,
   );
 
@@ -343,13 +385,24 @@ export function selectIntent(
     AiIntent.Circle,
     ((!tooClose && !tooFar ? 0.35 + personality.patience * 0.3 : 0.1) + collisionReluctance * COLLISION_AVOIDANCE_CIRCLE_BONUS) * passiveDamping,
   );
-  // Momentum (owner, 2026-10-02, Lote 3): "build-up de velocidade, não ataques um atrás do outro" — with momentum
-  // built (a raised top speed, harder body collisions and Dashes) the AI commits more.
+  scores.set(AiIntent.Wait, alreadyAttacking ? 0 : personality.patience * 0.15 * passiveDamping);
+
+  // Item 11 follow-up: turn existing intents into a finite run-up cycle, not a new hidden movement mode. A moving,
+  // low-momentum Bey inside Dash range opens space (Retreat is already edge-safe); outside Dash range it accelerates
+  // toward the fight. Circle/Wait are damped so this cannot repeat the discarded "orbit to build momentum" experiment.
+  if (buildPriority > 0) {
+    const runUpIntent = world.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M ? AiIntent.Retreat : AiIntent.Approach;
+    scores.set(runUpIntent, (scores.get(runUpIntent) ?? 0) + buildPriority * MOMENTUM_BUILD_MOVE_BONUS);
+    const passiveScale = 1 - buildPriority * MOMENTUM_BUILD_PASSIVE_DAMPING;
+    scores.set(AiIntent.Circle, (scores.get(AiIntent.Circle) ?? 0) * passiveScale);
+    scores.set(AiIntent.Wait, (scores.get(AiIntent.Wait) ?? 0) * passiveScale);
+  }
+
+  // Momentum already built: its raised top speed, harder body collisions and faster Dash entry make commitment more
+  // valuable. This is deliberately separate from the run-up pacing above: one builds speed, the other cashes it in.
   const own = world.own.momentum;
   scores.set(AiIntent.Approach, (scores.get(AiIntent.Approach) ?? 0) * (1 + own * MOMENTUM_COMMIT_BONUS));
   scores.set(AiIntent.AttackDash, (scores.get(AiIntent.AttackDash) ?? 0) * (1 + own * MOMENTUM_COMMIT_BONUS));
-
-  scores.set(AiIntent.Wait, alreadyAttacking ? 0 : personality.patience * 0.15 * passiveDamping);
 
   // Below the hard override threshold, a milder threat with Dodge already
   // on cooldown still nudges normal scoring toward a preemptive jump — the
@@ -376,10 +429,11 @@ export function selectIntent(
   // Stable (score desc, then insertion order) so debug/telemetry output is
   // deterministic.
   const consideredScores = [...scores.entries()].map(([intent, score]) => ({ intent, score })).sort((a, b) => b.score - a.score);
+  const buildReason = buildPriority > 0.01 ? `; momentum build ${world.own.momentum.toFixed(2)}→${MOMENTUM_BUILD_TARGET.toFixed(2)} (${buildPriority.toFixed(2)})` : '';
 
   return {
     intent: bestIntent,
-    reason: `best score ${clamp01(bestScore).toFixed(2)} among ${scores.size} candidates`,
+    reason: `best score ${clamp01(bestScore).toFixed(2)} among ${scores.size} candidates${buildReason}`,
     consideredScores,
     clashWillingness: willingness,
   };
