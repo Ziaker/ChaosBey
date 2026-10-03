@@ -138,7 +138,7 @@ export class PregameScreen {
   private readonly root = el('div', 'cb-screen cb-screen--opaque cb-pregame', 'pregame');
   private readonly rowButtons: HTMLButtonElement[][] = [];
   private readonly explanation = el('div', 'cb-pregame__explain', 'pregame-explanation');
-  private readonly toggles: { readonly input: HTMLInputElement; readonly key: 'winByKo' | 'winByRingOut' | 'winBySpinOut' }[] = [];
+  private readonly toggles: { readonly input: HTMLInputElement; readonly key: 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'strictSpeedCap' }[] = [];
   private readonly sliders: { readonly input: HTMLInputElement; readonly output: HTMLOutputElement; readonly read: (setup: MatchSetup) => number; readonly format: (value: number) => string }[] = [];
   private readonly seedInput = el('input', 'cb-pregame__seed', 'pregame-seed');
   private setup: MatchSetup;
@@ -261,6 +261,7 @@ export class PregameScreen {
         items: [
           this.slider({ id: 'acceleration', label: 'Acceleration', range: ACCELERATION_SCALE_RANGE, ...rule('accelerationScale'), format: times, note: 'How fast every Bey gets up to speed (time to top speed). ×1 = as designed. Provisional.' }),
           this.slider({ id: 'top-speed', label: 'Top speed', range: TOP_SPEED_SCALE_RANGE, ...rule('topSpeedScale'), format: times, note: 'Every Bey\'s top speed before momentum. ×1 = as designed. Provisional.' }),
+          this.toggle({ id: 'strict-speed-cap', label: 'Strict speed cap', key: 'strictSpeedCap', note: 'Off (recommended/default): physical overspeed can exceed the current top-speed ceiling and bleed back gradually. On (PROVISIONAL): ordinary grounded locomotion is capped at the current ceiling; Dash, Dodge, airborne flight and live knockback stay physical.' }),
           this.slider({ id: 'air-control', label: 'Air control', range: AIR_CONTROL_RANGE, ...rule('airControl'), format: times, note: 'How much a Bey can steer while in the air. ×1 = as designed, 0 = none. Provisional.' }),
           this.slider({ id: 'movement-stamina-drain', label: 'Movement stamina drain', range: MOVEMENT_STAMINA_DRAIN_RANGE, ...rule('movementStaminaDrain'), format: pct, note: 'Stamina spent by moving fast (the spin itself always drains a little). 100% = 30% less than before. Stamina 0 loses the round (spin-out).' }),
           this.slider({ id: 'momentum-gain', label: 'Momentum gain', range: MOMENTUM_GAIN_RANGE, ...rule('momentumGain'), format: (v) => `+${Math.round(v * 100)}%`, note: 'How much full momentum raises the top speed. +100% = twice the top speed.' }),
@@ -360,7 +361,7 @@ export class PregameScreen {
     });
   }
 
-  private toggle(spec: { id: string; label: string; key: 'winByKo' | 'winByRingOut' | 'winBySpinOut'; note: string }): DocumentFragment {
+  private toggle(spec: { id: string; label: string; key: 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'strictSpeedCap'; note: string }): DocumentFragment {
     const fragment = document.createDocumentFragment();
     const wrapper = el('label', 'cb-pregame__row cb-pregame__row--toggle');
     const input = el('input', 'cb-pregame__toggle', `pregame-${spec.id}`);
