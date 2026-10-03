@@ -66,7 +66,7 @@ export interface VfxOptions {
   readonly groundWaves: number;
   /** Scales the dust amount, 0 = none. */
   readonly dust: number;
-  /** Scales only the anime high-speed motion-trail layer; mechanical sparks/skids remain independent. */
+  /** Scales both approved high-speed trail presentations (anime Hybrid + persistent SpeedTrail); mechanical sparks/skids remain independent. */
   readonly motionTrails: number;
   /** Scales the negative impact-frame / impact-light flash; 0 = none. */
   readonly impactFlash: number;
