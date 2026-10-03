@@ -68,6 +68,18 @@ describe('Lote 10 visual options', () => {
     overlay.dispose();
   });
 
+  it('impact-flash intensity never stretches the approved negative-frame timing', () => {
+    for (const strength of [1, 1.5]) {
+      const overlay = new ScreenOverlay(new THREE.PerspectiveCamera(), null);
+      overlay.impactFrame(0.1, strength);
+      overlay.update(0.09);
+      expect(overlay.getStats().impactFrame).toBe(1);
+      overlay.update(0.02);
+      expect(overlay.getStats().impactFrame).toBe(0);
+      overlay.dispose();
+    }
+  });
+
   it('motion trails 0 suppresses only the anime trail; the mechanical fast-move skid still runs', () => {
     const off = fastMoveContext(0);
     const on = fastMoveContext(1);
