@@ -100,8 +100,9 @@ export interface MatchConfig {
   jumpCooldownS: number;
   /**
    * Owner, 2026-10-02 (item 13): the Circular is defensive (its user takes nothing; whoever touches it is launched).
-   * Always on in a match; false only for bare constructions (createBey without match rules: the Camera Lab), which
-   * keep the pre-2026-10-02 Circular like their jump and ring-out. Not a Pregame option.
+   * This field remains in the config shape only for compatibility with existing snapshots/replays. It is NOT a match
+   * option: every resolved real match forces it true. The only false path is createBey() with match rules omitted,
+   * reserved for bare Camera-Lab/prototype constructions that need the pre-2026-10-02 behavior.
    */
   defensiveCircular: boolean;
 }
@@ -127,7 +128,8 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     airControl: config.airControl,
     jumpStaminaCost: config.jumpStaminaCost,
     jumpCooldownS: config.jumpCooldownS,
-    defensiveCircular: config.defensiveCircular ?? true,
+    // Item 13 is a gameplay invariant, not a hidden config switch. Bare createBey() supplies its own legacy false rules.
+    defensiveCircular: true,
   };
 }
 
@@ -166,7 +168,8 @@ export function createDefaultMatchConfig(): MatchConfig {
 
 /** Merges a pre-match override on top of the defaults, producing the single resolved MatchConfig the rest of the app consumes. */
 export function resolveMatchConfig(overrides: Partial<MatchConfig> = {}): MatchConfig {
-  return { ...createDefaultMatchConfig(), ...overrides };
+  // Item 13: no caller, replay payload or pregame data may turn the real-match defensive Circular off.
+  return { ...createDefaultMatchConfig(), ...overrides, defensiveCircular: true };
 }
 
 /** The arena values of a resolved config, in the shape the arena builder takes. */
