@@ -63,6 +63,11 @@ const MOMENTUM_BUILD_PASSIVE_DAMPING = 0.7;
  */
 const MOMENTUM_BUILD_PATIENCE_WEIGHT = 0.6;
 const MOMENTUM_BUILD_MIN_AFFINITY = 0.4;
+/**
+ * A run-up is a short combat beat, not another patience state. Keeping this fixed prevents the Stamina personality's
+ * longer anti-passivity horizon from accidentally extending the momentum-build phase into a no-attack loop.
+ */
+const MOMENTUM_BUILD_MAX_DURATION_S = 3;
 const EDGE_RISK_OVERRIDE_THRESHOLD = 0.55;
 /** Once recovering, keep recovering until edgeRisk falls below this (hysteresis). Without it the AI stopped the moment it crossed back under the override threshold, turned to re-engage, and drifted straight back into danger. */
 const EDGE_RISK_RELEASE_THRESHOLD = 0.3;
@@ -166,14 +171,14 @@ export function passivityTempo(secondsSinceOwnAttack: number, personality: AiPer
 
 /**
  * Owner item 11: finite speed-build pacing for a Bey that is already moving. This deliberately does not create another
- * AI state machine. The current public momentum/speed plus the existing anti-passivity clock are enough to make the
- * behavior self-ending and deterministic:
+ * AI state machine. The current public momentum/speed plus the existing no-attack clock are enough to make the behavior
+ * self-ending and deterministic:
  * - below Circular range: fight normally (already in contact; running away would look absurd);
  * - while moving and below the target: prefer a straight Approach over routine attacks; if contact happens before the
  *   target, that becomes the speed-difference body collision the owner explicitly asked for rather than a fake retreat;
  * - a punish/opening/edge-pressure or live Clash opportunity bypasses the pacing;
  * - patient archetypes use a gentler build bias, preserving their approved behavioral identity;
- * - as the no-attack tempo rises, the pacing fades to zero, so it cannot become a retreat/orbit stalemate.
+ * - the build phase itself has a fixed 3 s ceiling, then normal scoring resumes regardless of personality patience.
  */
 export function momentumBuildPriority(
   world: WorldState,
@@ -184,6 +189,8 @@ export function momentumBuildPriority(
   if (world.distanceToOpponentM <= AI_CIRCULAR_ATTACK_RANGE_M || world.own.momentum >= MOMENTUM_BUILD_TARGET) return 0;
   const speedGate = clamp01((world.own.speedMps - MOMENTUM_BUILD_MIN_SPEED_MPS) / (MOMENTUM_BUILD_FULL_SPEED_MPS - MOMENTUM_BUILD_MIN_SPEED_MPS));
   if (speedGate <= 0) return 0;
+  const buildWindow = 1 - clamp01(context.secondsSinceOwnAttack / MOMENTUM_BUILD_MAX_DURATION_S);
+  if (buildWindow <= 0) return 0;
   const buildNeed = clamp01((MOMENTUM_BUILD_TARGET - world.own.momentum) / MOMENTUM_BUILD_TARGET);
   const tacticalOpening = clamp01(
     Math.max(
@@ -194,7 +201,7 @@ export function momentumBuildPriority(
     ),
   );
   const personalityAffinity = MOMENTUM_BUILD_MIN_AFFINITY + MOMENTUM_BUILD_PATIENCE_WEIGHT * (1 - personality.patience);
-  return buildNeed * speedGate * personalityAffinity * (1 - passivityTempo(context.secondsSinceOwnAttack, personality)) * (1 - tacticalOpening);
+  return buildNeed * speedGate * personalityAffinity * buildWindow * (1 - tacticalOpening);
 }
 
 /**
