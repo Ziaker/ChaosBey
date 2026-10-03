@@ -18,6 +18,9 @@ export enum RoundOutcome {
   SecondWinsByKo = 'SecondWinsByKo',
   FirstWinsByRingOut = 'FirstWinsByRingOut',
   SecondWinsByRingOut = 'SecondWinsByRingOut',
+  /** Owner, 2026-10-02 (Lote 5): the opponent's Stamina reached 0 — it stopped spinning. */
+  FirstWinsBySpinOut = 'FirstWinsBySpinOut',
+  SecondWinsBySpinOut = 'SecondWinsBySpinOut',
   Draw = 'Draw',
 }
 
@@ -27,6 +30,9 @@ export interface TickRoundEvents {
   secondKoed: boolean;
   firstRingOut: boolean;
   secondRingOut: boolean;
+  /** Owner, 2026-10-02: Stamina at 0 this tick — the Bey stopped spinning (spin-out). Omitted = false. */
+  firstSpunOut?: boolean;
+  secondSpunOut?: boolean;
 }
 
 export interface RoundStateOptions {
@@ -77,15 +83,16 @@ export class RoundState {
   resolveTick(events: TickRoundEvents): void {
     if (this.isOver) return;
 
-    const firstLost = events.firstKoed || events.firstRingOut;
-    const secondLost = events.secondKoed || events.secondRingOut;
+    const firstLost = events.firstKoed || events.firstRingOut || events.firstSpunOut === true;
+    const secondLost = events.secondKoed || events.secondRingOut || events.secondSpunOut === true;
 
+    // Both on the same tick, whatever the causes: a Draw (the existing simultaneity rule).
     if (firstLost && secondLost) {
       this.outcome = RoundOutcome.Draw;
     } else if (secondLost) {
-      this.outcome = events.secondKoed ? RoundOutcome.FirstWinsByKo : RoundOutcome.FirstWinsByRingOut;
+      this.outcome = events.secondKoed ? RoundOutcome.FirstWinsByKo : events.secondRingOut ? RoundOutcome.FirstWinsByRingOut : RoundOutcome.FirstWinsBySpinOut;
     } else if (firstLost) {
-      this.outcome = events.firstKoed ? RoundOutcome.SecondWinsByKo : RoundOutcome.SecondWinsByRingOut;
+      this.outcome = events.firstKoed ? RoundOutcome.SecondWinsByKo : events.firstRingOut ? RoundOutcome.SecondWinsByRingOut : RoundOutcome.SecondWinsBySpinOut;
     }
   }
 

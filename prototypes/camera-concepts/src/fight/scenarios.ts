@@ -204,7 +204,7 @@ export const SCENARIOS: readonly Scenario[] = [
     firstSpawn: { x: 0, z: -1 + WALL_SHIFT_M },
     secondSpawn: { x: 0, z: 5 + WALL_SHIFT_M },
     setup: ({ second }) => {
-      second.stamina.resource.set(0);
+      second.stamina.resource.set(0.05 * second.stamina.resource.max); // nearly empty: Stamina 0 is a spin-out now (owner, 2026-10-02)
       second.stability.debugSetValue(30);
     },
     first: { kind: 'script', held: (t) => when(t < 1.25, Z) },

@@ -129,6 +129,12 @@ describe('match setup rules', () => {
     expect(matchConfigFor({ ...createDefaultMatchSetup(), rules })).toEqual({ ...createDefaultMatchConfig(), ...rules });
   });
 
+  it('feeds the combat rules (owner, 2026-10-02) through MatchConfig', () => {
+    expect(createDefaultMatchSetup().rules).toMatchObject({ movementStaminaDrain: 1, dodgeCooldownS: 3, circularLaunchForce: 1 });
+    const rules = { ...createDefaultMatchSetup().rules, movementStaminaDrain: 0.5, dodgeCooldownS: 1.5, circularLaunchForce: 2 };
+    expect(matchConfigFor({ ...createDefaultMatchSetup(), rules })).toEqual({ ...createDefaultMatchConfig(), ...rules });
+  });
+
   it('builds the arena walls from the preset, and a preset change resets moved sliders', () => {
     const rift = withArenaPreset(createDefaultMatchSetup(), 'rift');
     expect(matchConfigFor(rift)).toMatchObject({ arenaWallHeightM: 1, arenaWallRestitution: 0.4 });

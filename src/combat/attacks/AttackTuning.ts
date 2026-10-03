@@ -54,4 +54,13 @@ export const DASH_MAX_KNOCKBACK_FORCE = 20;
 // start charging. PROVISIONAL default (no number from the owner); a Pregame
 // slider (MatchConfig.dashCooldownS) sets it per match.
 export const DASH_COOLDOWN_DEFAULT_S = 1.5;
+// Owner, 2026-10-02 (Lote 5, item 13): the Circular is defensive. While it is
+// active its user takes no damage or knockback from hits or body contact, and
+// whoever touches it (attack or body) is launched — strong knockback plus
+// lift, like the old "Circular catches a Dash". PROVISIONAL launch: this
+// horizontal speed away from the Circular user plus CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS
+// upward, both × the Pregame slider "Circular launch force" (×1 default).
+export const CIRCULAR_LAUNCH_HORIZONTAL_MPS = 9;
+export const CIRCULAR_LAUNCH_FORCE_DEFAULT = 1;
+export const CIRCULAR_LAUNCH_FORCE_RANGE = { min: 0, max: 2.5, step: 0.1 } as const;
 export const DASH_COOLDOWN_RANGE = { min: 0.5, max: 5, step: 0.25 } as const;

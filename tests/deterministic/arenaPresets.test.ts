@@ -101,7 +101,7 @@ describe('arena values in real matches', () => {
   it('are recorded in the replay and used on playback: a different wall diverges', async () => {
     const fingerprint = await currentRuntimeFingerprint();
     const record = await simulateAiMatch({
-      seed: 'arena-5' /* arena-1 with the Dash cooldown (Lote 2), arena-0 with momentum (Lote 3), arena-5 with the 2.5 m jump (Lote 4) */,
+      seed: 'arena-6' /* re-pinned in each gameplay lote of 2026-10-02 (Dash cooldown, momentum, jump, combat rules) */,
       firstDefinition: ATTACK_ARCHETYPE,
       secondDefinition: DEFENSE_ARCHETYPE,
       matchConfigOverrides: { arenaWallHeightM: RIFT_CRATER.geometry.wallHeightM, arenaWallRestitution: RIFT_CRATER.geometry.wallRestitution },

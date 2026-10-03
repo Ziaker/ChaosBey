@@ -71,7 +71,12 @@ describe('AI difficulty tiers in real matches', () => {
     // effectively, and wins more — only the hitsDodged threshold moves, to
     // stay below the new measured ratio with margin.
     expect(totals.ace.deliberateErrors).toBeLessThan(totals.rookie.deliberateErrors * 0.7);
-    expect(totals.ace.hitsDodged).toBeGreaterThan(totals.rookie.hitsDodged * 1.25);
+    // Lote 5 (owner, 2026-10-02: the dodge goes 40% farther, 9 -> 12.6 m/s; Stamina 0 is a spin-out, so the AI keeps a
+    // 15-Stamina reserve before dodging): measured errors 330 vs 749, hits dodged 12 vs 10, dodges 133 vs 72, wins
+    // 38 vs 34. The longer burst carries the Bey clear of the hitbox, so most dodges now avoid the hit by distance
+    // instead of overlapping it inside the i-frames — "dodged" (an i-frame nullification) collapses for both tiers
+    // (at 9 m/s this same run still passes the old 1.25x). Ace still dodges far more often and wins more.
+    expect(totals.ace.hitsDodged).toBeGreaterThan(totals.rookie.hitsDodged);
     expect(totals.ace.dodges).toBeGreaterThan(totals.rookie.dodges * 1.4);
     expect(totals.ace.wins).toBeGreaterThan(totals.rookie.wins);
   }, 300_000);

@@ -20,7 +20,12 @@ export const STAMINA_BASE_DRAIN_PER_S = 0.4;
 // Extra drain tied to aggressive movement (GDD section 12): draining
 // faster while moving fast, on top of the baseline above.
 export const STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION = 0.5; // fraction of INTENDED_MAX_SPEED_MPS above which the extra drain kicks in
-export const STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED = 3;
+// Owner, 2026-10-02 (Lote 5, item 14): the movement drain is 30% lower (3 -> 2.1) — with Stamina 0 now a loss
+// (spin-out), sustained speed (momentum) must not empty it in seconds. The base spin drain stays. Pregame slider
+// "Movement stamina drain" scales it (MatchConfig.movementStaminaDrain, 100% = this).
+export const STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED = 2.1;
+export const MOVEMENT_STAMINA_DRAIN_DEFAULT = 1;
+export const MOVEMENT_STAMINA_DRAIN_RANGE = { min: 0, max: 2, step: 0.1 } as const;
 
 // Degradation curve: below this fraction, physical penalties start
 // ramping in linearly down to zero stamina. Above it, no penalty at all —

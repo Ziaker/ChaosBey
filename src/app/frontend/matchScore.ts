@@ -24,9 +24,11 @@ export function scoreRound(score: MatchScore, outcome: RoundOutcome): MatchScore
   switch (outcome) {
     case RoundOutcome.FirstWinsByKo:
     case RoundOutcome.FirstWinsByRingOut:
+    case RoundOutcome.FirstWinsBySpinOut:
       return { ...score, player: score.player + 1, rounds: score.rounds + 1 };
     case RoundOutcome.SecondWinsByKo:
     case RoundOutcome.SecondWinsByRingOut:
+    case RoundOutcome.SecondWinsBySpinOut:
       return { ...score, opponent: score.opponent + 1, rounds: score.rounds + 1 };
     case RoundOutcome.Draw:
       return { ...score, rounds: score.rounds + 1 };

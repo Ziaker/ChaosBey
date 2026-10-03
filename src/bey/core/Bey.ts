@@ -61,7 +61,7 @@ export function createBey(
   arenaFloor: ArenaFloorId = 'flat',
   motion: MotionParams = motionParams(),
   /** The match's per-Bey rules (MatchConfig); omitted = the defaults, with the pre-2026-10-02 jump (see LEGACY_JUMP_FULL_HEIGHT_M). */
-  rules: BeyMatchRules = { ...beyMatchRulesOf(createDefaultMatchConfig()), jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M },
+  rules: BeyMatchRules = { ...beyMatchRulesOf(createDefaultMatchConfig()), jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, defensiveCircular: false },
 ): Bey {
   const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical, motion);
   const stats = resolveBeyStats(definition.ratings);
@@ -74,8 +74,8 @@ export function createBey(
     movement,
     spin: new SpinController(motion),
     drift: new DriftController(movement.getLateralGripPerS(), rules),
-    dodge: new DodgeController(),
-    stamina: new StaminaSystem(stats.stamina),
+    dodge: new DodgeController(rules.dodgeCooldownS),
+    stamina: new StaminaSystem(stats.stamina, rules.movementStaminaDrain),
     stability: new StabilitySystem(),
     attack: new AttackController(definition.attack, rules.dashCooldownS),
     momentum: new MomentumSystem(rules),

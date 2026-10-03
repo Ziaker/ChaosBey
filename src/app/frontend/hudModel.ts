@@ -75,9 +75,10 @@ export function hudSide(facts: TickSideFacts): HudSide {
   };
 }
 
-/** "RING OUT!", "K.O.!" or "DRAW" for the round-end banner. */
+/** "RING OUT!", "K.O.!", "SPIN OUT!" or "DRAW" for the round-end banner. */
 export function roundEndBanner(outcome: string): string | null {
   if (outcome.includes('RingOut')) return 'RING OUT!';
+  if (outcome.includes('SpinOut')) return 'SPIN OUT!';
   if (outcome.includes('Ko')) return 'K.O.!';
   if (outcome === 'Draw') return 'DRAW';
   return null;

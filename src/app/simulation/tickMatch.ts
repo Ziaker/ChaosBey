@@ -24,7 +24,7 @@ import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { detectHits, type HitEvent } from '../../combat/hit-detection/HitDetection';
 import { applyKnockback, computeKnockback, computeStabilityDamage, type KnockbackComponents } from '../../combat/knockback/Knockback';
-import { CIRCULAR_BASE_KNOCKBACK_FORCE, CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, CIRCULAR_STABILITY_DAMAGE } from '../../combat/attacks/AttackTuning';
+import { CIRCULAR_BASE_KNOCKBACK_FORCE, CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, CIRCULAR_LAUNCH_HORIZONTAL_MPS, CIRCULAR_STABILITY_DAMAGE } from '../../combat/attacks/AttackTuning';
 import {
   BODY_COLLISION_CONTACT_SLOP_M,
   BODY_COLLISION_COOLDOWN_S,
@@ -92,6 +92,8 @@ export type CombatEvent =
     }
   | { kind: 'ko'; targetIsFirst: boolean }
   | { kind: 'ringOut'; targetIsFirst: boolean }
+  /** Owner, 2026-10-02: Stamina reached 0 — the Bey stopped spinning (loses the round). */
+  | { kind: 'spinOut'; targetIsFirst: boolean }
   /** An attack that would have connected was nullified by the target's dodge i-frames (Milestone 3). */
   | { kind: 'dodged'; targetIsFirst: boolean }
   /** A dodged hit whose i-frames were within the tighter "perfect" sub-window. Detection only — no gameplay reward is implemented yet, per the GDD's explicit approval gate on Perfect Dodge's reward. */
@@ -290,6 +292,18 @@ export function tickMatch(
   const gapBefore = length(subtract(positionXZ(second.body), positionXZ(first.body)));
   physics.step();
 
+  // The defensive Circular (owner, 2026-10-02, item 13): the other Bey's contact must not push its user either —
+  // the solver's push is undone (horizontal velocity back to what it carried into the step) before the movement
+  // controller reads it as an impact.
+  // MatchConfig.defensiveCircular: every real match has it; a bare construction (no match rules — the Camera Lab
+  // prototype, physics-only tests) keeps the pre-2026-10-02 Circular, like its jump and ring-out.
+  const defensiveCircular = first.rules.defensiveCircular !== false;
+  const firstCircularActive = defensiveCircular && firstAttack.state === AttackState.CircularActive;
+  const secondCircularActive = defensiveCircular && secondAttack.state === AttackState.CircularActive;
+  const beysTouching = length(subtract(positionXZ(second.body), positionXZ(first.body))) <= first.definition.physical.colliderRadiusM + second.definition.physical.colliderRadiusM + BODY_COLLISION_CONTACT_SLOP_M;
+  if (beysTouching && firstCircularActive) keepHorizontalVelocity(first, firstVelBefore);
+  if (beysTouching && secondCircularActive) keepHorizontalVelocity(second, secondVelBefore);
+
   const firstMovement = first.movement.postStep(first.body, firstGrounded, firstDrift.driftState === DriftState.Hopping);
   const secondMovement = second.movement.postStep(second.body, secondGrounded, secondDrift.driftState === DriftState.Hopping);
 
@@ -297,11 +311,12 @@ export function tickMatch(
   // section 21 grants Air Recovery only for being launched/knocked
   // airborne, not merely "some impact occurred" (a wall clip while still
   // grounded must never arm it for a later, unrelated normal jump).
-  if (firstMovement.impactDeltaSpeedMps > 0) {
+  // (An active Circular's user takes no impact damage from the other Bey's contact either — item 13.)
+  if (firstMovement.impactDeltaSpeedMps > 0 && !(firstCircularActive && beysTouching)) {
     first.spin.registerImpact(first.body, firstMovement.impactDeltaSpeedMps, firstMovement.impactDirection);
     first.stability.applyDamage(firstMovement.impactDeltaSpeedMps * WALL_IMPACT_STABILITY_DAMAGE_PER_MPS);
   }
-  if (secondMovement.impactDeltaSpeedMps > 0) {
+  if (secondMovement.impactDeltaSpeedMps > 0 && !(secondCircularActive && beysTouching)) {
     second.spin.registerImpact(second.body, secondMovement.impactDeltaSpeedMps, secondMovement.impactDirection);
     second.stability.applyDamage(secondMovement.impactDeltaSpeedMps * WALL_IMPACT_STABILITY_DAMAGE_PER_MPS);
   }
@@ -402,29 +417,55 @@ export function tickMatch(
   });
   const { toResolveNormally } = clash.processTickHits(fixedDeltaSeconds, hitSnapshots);
 
+  // The defensive Circular (owner, 2026-10-02, item 13): launches whoever touches an active Circular — strong
+  // knockback away from it plus lift, × MatchConfig.circularLaunchForce. Once per Bey per tick.
+  const launchedThisTick = { first: false, second: false };
+  const bothCircular = firstAttack.state === AttackState.CircularActive && secondAttack.state === AttackState.CircularActive;
+  function launchAwayFromCircular(targetIsFirst: boolean): void {
+    const key = targetIsFirst ? 'first' : 'second';
+    if (launchedThisTick[key]) return;
+    launchedThisTick[key] = true;
+    const target = targetIsFirst ? first : second;
+    const force = first.rules.circularLaunchForce;
+    const dir = normalize(subtract(targetIsFirst ? firstPos : secondPos, targetIsFirst ? secondPos : firstPos));
+    const vel = target.body.linvel();
+    target.body.setLinvel({ x: dir.x * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force, y: Math.max(0, vel.y) + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS * force, z: dir.z * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force }, true);
+    target.movement.registerKnockback();
+    target.momentum.loseOnCollision();
+    // A genuine launch: arm Air Recovery at once if already airborne, else the short pending window.
+    target.dodge.registerLaunch(!isGrounded(physics, target.collider));
+    combatEvents.push({ kind: 'knockback', targetIsFirst, force: CIRCULAR_LAUNCH_HORIZONTAL_MPS * force, directionXZ: dir });
+  }
+
   for (const resolved of toResolveNormally) {
     const hit = resolved.hit;
     const defenderIsFirst = !hit.attackerIsFirst;
     const attacker = hit.attackerIsFirst ? first : second;
     const defender = hit.attackerIsFirst ? second : first;
 
-    if (hit.caughtOpponentDashing) {
-      // GDD section 23/107: Circular Attack catching an active Dash Attack
-      // launches the attacker's *target* upward instead of normal knockback.
-      // Never routed through Clash (see ClashOrchestration.processTickHits).
-      // The catch stops the Dash: the dasher keeps only part of its
-      // horizontal speed. (The old movement's heavy air and overspeed drag
-      // used to stop the flight short; with the Motion Lab's air model a
-      // caught 15 m/s Dash flew on ~18 m, over the wall from the centre.)
+    // The defensive Circular: its user takes nothing from a hit while it is active; the attacker is launched. Two
+    // active Circulars meeting keep the existing rules (Clash, or the cooldown alternative's "slower suffers more").
+    if (defensiveCircular && !bothCircular && (defenderIsFirst ? firstAttack.state : secondAttack.state) === AttackState.CircularActive) {
+      launchAwayFromCircular(hit.attackerIsFirst);
+      continue;
+    }
+
+    if (!defensiveCircular && hit.caughtOpponentDashing) {
+      // The pre-2026-10-02 rule (bare constructions only): a Circular catching an active Dash launches the dasher
+      // upward and stops most of its run (GDD section 23/107).
       const vel = defender.body.linvel();
       const keep = CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP;
       defender.body.setLinvel({ x: vel.x * keep, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z * keep }, true);
       defender.movement.registerKnockback();
-      // A genuine launch: arm Air Recovery immediately if the defender was
-      // already airborne (no further grounded->airborne transition would
-      // ever come this period), otherwise arm the short pending window
-      // until it actually leaves the ground.
       defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
+      applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense));
+      continue;
+    }
+
+    if (defensiveCircular && (hit.caughtOpponentDashing || (hit.hitbox.kind === 'circular' && !bothCircular))) {
+      // A Circular landing on the opponent launches it (it used to only when catching a Dash, GDD section 23/107),
+      // with the Circular's Stability damage. Never routed through Clash (see ClashOrchestration.processTickHits).
+      launchAwayFromCircular(defenderIsFirst);
       applyStabilityDamageAndTrackKo(
         defenderIsFirst,
         defender,
@@ -432,6 +473,7 @@ export function tickMatch(
       );
       continue;
     }
+
 
     const knockback = computeKnockback({
       baseForce: hit.hitbox.knockbackForce * resolved.forceMultiplier,
@@ -483,6 +525,16 @@ export function tickMatch(
   }
 
   function resolveBodyCollision(): void {
+    first.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
+    second.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
+    // The defensive Circular (item 13): touching an active Circular launches you; its user is unaffected.
+    const firstCircular = firstAttack.state === AttackState.CircularActive;
+    const secondCircular = secondAttack.state === AttackState.CircularActive;
+    if (defensiveCircular && (firstCircular || secondCircular)) {
+      if (firstCircular && !secondCircular) launchAwayFromCircular(false);
+      if (secondCircular && !firstCircular) launchAwayFromCircular(true);
+      return;
+    }
     const scaleDamage = first.rules.bodyCollisionDamage;
     const firstSpeed = length(firstVelBefore);
     const secondSpeed = length(secondVelBefore);
@@ -498,8 +550,6 @@ export function tickMatch(
     const fasterImmune = firstIsSlower ? secondImmune : firstImmune;
     const minDamage = BODY_COLLISION_MIN_DAMAGE * scaleDamage;
     const slowerDamage = minDamage + (CIRCULAR_STABILITY_DAMAGE / BODY_COLLISION_REFERENCE_SPEED_DIFF_MPS) * diff * scaleDamage;
-    first.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
-    second.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
     faster.momentum.loseOnCollision();
     let dealt = 0;
     if (!slowerImmune && slowerDamage > 0) {
@@ -537,7 +587,12 @@ export function tickMatch(
   const ringOutSecond = ringedOut.second;
   if (ringOutFirst) combatEvents.push({ kind: 'ringOut', targetIsFirst: true });
   if (ringOutSecond) combatEvents.push({ kind: 'ringOut', targetIsFirst: false });
-  roundState.resolveTick({ firstKoed, secondKoed, firstRingOut: ringOutFirst, secondRingOut: ringOutSecond });
+  // Spin-out (owner, 2026-10-02, item 12): Stamina at 0 — the Bey stops spinning and loses the round.
+  const firstSpunOut = first.stamina.resource.value <= 0;
+  const secondSpunOut = second.stamina.resource.value <= 0;
+  if (firstSpunOut) combatEvents.push({ kind: 'spinOut', targetIsFirst: true });
+  if (secondSpunOut) combatEvents.push({ kind: 'spinOut', targetIsFirst: false });
+  roundState.resolveTick({ firstKoed, secondKoed, firstRingOut: ringOutFirst, secondRingOut: ringOutSecond, firstSpunOut, secondSpunOut });
 
   return {
     first: {
@@ -592,6 +647,11 @@ export function tickMatch(
  * slope under its centre is shallower, and following it would lift the rim
  * off the floor when rolling downhill.
  */
+function keepHorizontalVelocity(bey: Bey, velocity: Vec2): void {
+  const v = bey.body.linvel();
+  bey.body.setLinvel({ x: velocity.x, y: v.y, z: velocity.z }, true);
+}
+
 function horizontalVelocity(body: Bey['body']): Vec2 {
   const v = body.linvel();
   return { x: v.x, z: v.z };
