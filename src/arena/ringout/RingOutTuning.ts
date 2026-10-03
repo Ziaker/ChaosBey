@@ -30,3 +30,12 @@ export const RINGOUT_RADIUS_M = 36.9;
 export const RING_OUT_DELAY_DEFAULT_S = 1.5;
 export const RING_OUT_DELAY_RANGE = { min: 0, max: 3, step: 0.25 } as const;
 
+
+// With the delay, a Bey launched over the wall falls off the arena while its
+// clock runs, and its own steering can pull it back inside the ring-out
+// radius: under the rim (seen: r = 36.6 m, 5 m below the floor) or even under
+// the bowl itself (seen: r = 11.7 m, falling forever) — the round would never
+// end. So a Bey this far below the floor surface under it (the rim past the
+// floor's edge) has fallen off the arena and counts as outside whatever its
+// radius: it can never climb back.
+export const RING_OUT_FALLEN_BELOW_RIM_M = 1;

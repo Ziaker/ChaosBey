@@ -422,7 +422,7 @@ Pedido do owner de 2026-10-02 ("correções de gameplay e apresentação"), exec
 
 | Item | Decisão / override | Valor | Lote / versão |
 |---|---|---|---|
-| 17 — Ring-out | O ring-out só conta depois que o Bey fica fora do raio continuamente pelo **Ring-out delay**; voltar para dentro zera o contador. 0 = regra antiga (instantânea). `MatchConfig.ringOutDelayS`, determinístico, no replay e no hash (schema 2). | **1,5 s PROVISÓRIO**; slider Pregame 0–3 s, passo 0,25 | Lote 1 / 0.17.0 |
+| 17 — Ring-out | O ring-out só conta depois que o Bey fica fora do raio continuamente pelo **Ring-out delay**; voltar para dentro zera o contador. 0 = regra antiga (instantânea). Um Bey que caiu da arena (mais de 1 m abaixo da superfície do chão sob ele — a borda, além do chão) conta como fora em qualquer raio: sem isso, com o delay, um Bey jogado por cima da parede podia voltar por baixo do bowl e o round nunca terminava. `MatchConfig.ringOutDelayS`, determinístico, no replay e no hash (schema 2). | **1,5 s PROVISÓRIO**; slider Pregame 0–3 s, passo 0,25 | Lote 1 / 0.17.0 |
 | 8a — Perfect Dodge | `dodged` / `perfectDodge` são reportados **uma vez por esquiva e por ataque** (antes: a cada tick de sobreposição). Consequência de jogo: o hitstop do Perfect Dodge também acontece uma vez só (antes repetia). A anulação do golpe continua em todo tick. | — | Lote 1 / 0.17.0 |
 | 18 — Efeitos no chão | Ondas de impacto, aura de carga, rachaduras, marcas de arrasto e de ponta acompanham a curvatura real do chão (bowl), em vez de um plano reto enterrado. Só apresentação; colliders intactos. | — | Lote 1 / 0.17.0 |
 | 4 — Speedlines do Clash | O overlay limpa o canvas inteiro em qualquer zoom do navegador (antes ficavam rastros com `devicePixelRatio` < 1). | — | Lote 1 / 0.17.0 |

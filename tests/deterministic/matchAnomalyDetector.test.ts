@@ -81,13 +81,23 @@ describe('MatchAnomalyDetector — each GDD 67 condition is caught, once per epi
     expect(found.filter((d) => d.kind === 'left-world')).toHaveLength(1);
   });
 
-  it('a Bey past the radius, or falling off the rim, while its ring-out delay runs is not flagged (owner, 2026-10-02)', async () => {
+  it('a Bey that left over the wall is not flagged while its ring-out delay runs, even back under the bowl (owner, 2026-10-02)', async () => {
     const pending = { isOver: false, ringOutClock: { first: 0, second: 0.5 } } as unknown as RoundState;
-    const found = await run(20, (w, tick) => {
+    const found = await run(30, (w, tick) => {
       if (tick >= 10) w.second.body.setTranslation({ x: DEFAULT_ANOMALY_THRESHOLDS.leftWorldRadiusM + 1, y: -3, z: 0 }, false);
-      return { roundState: pending };
+      if (tick >= 20) w.second.body.setTranslation({ x: 9, y: -40, z: -7 }, false); // slipped under the bowl
+      return tick >= 10 ? { roundState: pending } : {};
     });
     expect(found.filter((d) => d.kind === 'left-world' || d.kind === 'below-floor')).toEqual([]);
+  });
+
+  it('a Bey through the floor inside the arena is still flagged even once its ring-out clock runs', async () => {
+    const pending = { isOver: false, ringOutClock: { first: 0.5, second: 0 } } as unknown as RoundState;
+    const found = await run(20, (w, tick) => {
+      if (tick >= 5) w.first.body.setTranslation({ x: 0, y: -3, z: 0 }, false);
+      return tick >= 5 ? { roundState: pending } : {};
+    });
+    expect(found.filter((d) => d.kind === 'below-floor')).toHaveLength(1);
   });
 
   it('through the floor (inside the arena) — not attributed to a known issue', async () => {

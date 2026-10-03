@@ -1,6 +1,8 @@
 import { createDefaultMatchConfig } from '../../src/config/match/MatchConfig';
 import { describe, expect, it } from 'vitest';
-import { isRingOut } from '../../src/arena/ringout/RingOut';
+import { isOutOfArena, isRingOut } from '../../src/arena/ringout/RingOut';
+import { floorHeightAt, floorRimHeight } from '../../src/arena/floor/ArenaFloorProfile';
+import { ARENA_FLOOR_RADIUS } from '../../src/arena/colliders/ArenaTuning';
 import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { RoundOutcome, RoundState } from '../../src/combat/round-rules/RoundState';
 
@@ -120,5 +122,27 @@ describe('ring-out delay (owner, 2026-10-02: not the instant a Bey is outside)',
     for (let i = 0; i < ticksFor(1.5) - 1; i++) round.trackRingOut(true, false, DT);
     expect(round.trackRingOut(true, false, DT).first).toBe(true);
     expect(round.getDeterministicState()).toMatchObject({ outsideS: { first: expect.any(Number), second: 0 } });
+  });
+});
+
+describe('isOutOfArena (owner, 2026-10-02: ring-out delay)', () => {
+  it('is outside beyond the ring-out radius at any height', () => {
+    expect(isOutOfArena({ x: RINGOUT_RADIUS_M + 0.1, y: 5, z: 0 }, 'bowl-a')).toBe(true);
+    expect(isOutOfArena({ x: 0, y: 0.6, z: 0 }, 'bowl-a')).toBe(false);
+  });
+
+  it('counts a Bey fallen off the arena under the rim as outside, even inside the ring-out radius', () => {
+    for (const floor of ['flat', 'bowl-a', 'bowl-b', 'bowl-c'] as const) {
+      const r = (ARENA_FLOOR_RADIUS + RINGOUT_RADIUS_M) / 2; // past the floor edge, inside the ring-out radius
+      expect(isOutOfArena({ x: 0, y: floorRimHeight(floor) - 5, z: r }, floor), floor).toBe(true);
+      // On (or above) the rim there it is still in play: over the wall, not yet out.
+      expect(isOutOfArena({ x: 0, y: floorRimHeight(floor) + 0.5, z: r }, floor), floor).toBe(false);
+      // Inside the floor radius: on the floor is in play; well under it (slipped beneath the bowl) is out.
+      const inside = { x: 0, z: 11.7 };
+      const surface = floorHeightAt(floor, inside.x, inside.z);
+      expect(isOutOfArena({ ...inside, y: surface + 0.3 }, floor), floor).toBe(false);
+      expect(isOutOfArena({ ...inside, y: surface - 0.5 }, floor), floor).toBe(false);
+      expect(isOutOfArena({ ...inside, y: -544 }, floor), floor).toBe(true);
+    }
   });
 });

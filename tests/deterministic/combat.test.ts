@@ -259,6 +259,25 @@ describe('ring-out', () => {
     expect(harness.roundState.result).toBe(RoundOutcome.FirstWinsByRingOut);
   });
 
+  it.each([
+    ['wedged under the rim', { x: -36.6, y: -5.2, z: 0 }],
+    ['fallen under the bowl', { x: 9.1, y: -544, z: -7.4 }],
+  ])('a Bey fallen off the arena (%s), inside the ring-out radius, still rings out (owner, 2026-10-02)', async (_where, fallen) => {
+    // Seen in the browser with the delay: thrown over the wall, the Bey fell and steered back inside the ring-out radius,
+    // under the rim (r = 36.6 m, 5 m down) or under the bowl itself (r = 11.7 m, falling) — the round never ended.
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+    const delayTicks = Math.round(RING_OUT_DELAY_DEFAULT_S / FIXED_DELTA_SECONDS);
+    let ended = -1;
+    for (let i = 0; i < delayTicks + 5 && ended < 0; i++) {
+      harness.second.body.setTranslation(fallen, true);
+      harness.second.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      if (harness.tick(NO_ACTIONS, NO_ACTIONS).ringOutSecond) ended = i + 1;
+    }
+    expect(ended).toBe(delayTicks);
+    expect(harness.roundState.result).toBe(RoundOutcome.FirstWinsByRingOut);
+  });
+
   it('resolves a genuinely simultaneous double-ring-out as a Draw, not tiebroken by check order', async () => {
     const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(harness);

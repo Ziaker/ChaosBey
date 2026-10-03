@@ -105,6 +105,12 @@ describe('match setup rules', () => {
     expect(opponentControllerFor(setup)).toEqual({ kind: 'ai', personality: 'defense', difficulty: 'ace' });
   });
 
+  it('feeds the Ring-out delay (owner, 2026-10-02; provisional 1.5 s) through MatchConfig', () => {
+    expect(createDefaultMatchSetup().rules.ringOutDelayS).toBe(1.5);
+    const setup = { ...createDefaultMatchSetup(), rules: { ringOutDelayS: 0.25 } };
+    expect(matchConfigFor(setup)).toEqual({ ...createDefaultMatchConfig(), ringOutDelayS: 0.25 });
+  });
+
   it('builds the arena walls from the preset, and a preset change resets moved sliders', () => {
     const rift = withArenaPreset(createDefaultMatchSetup(), 'rift');
     expect(matchConfigFor(rift)).toMatchObject({ arenaWallHeightM: 1, arenaWallRestitution: 0.4 });
