@@ -31,6 +31,7 @@ export interface HudBeyState {
   readonly stability: number;
   readonly broken: boolean;
   readonly dashReadiness: number;
+  readonly momentum: number;
   readonly dashCharge: number;
   readonly attackState: BeyPresentationState['attackState'];
   readonly driftState: BeyPresentationState['driftState'];
@@ -57,6 +58,7 @@ function hudBey(bey: BeyPresentationState): HudBeyState {
     stability: bey.stability,
     broken: bey.broken,
     dashReadiness: bey.dashReadiness,
+    momentum: bey.momentum,
     dashCharge: bey.dashCharge,
     attackState: bey.attackState,
     driftState: bey.driftState,

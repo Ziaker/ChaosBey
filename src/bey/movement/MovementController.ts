@@ -49,6 +49,8 @@ export interface MovementPreStepInput {
   lateralGripOverridePerS: number | null;
   /** From StaminaSystem's PhysicalCondition; 1 = no penalty. */
   staminaAccelFactor: number;
+  /** From MomentumSystem (owner, 2026-10-02): the top speed is the handling's × this. Omitted = 1. */
+  topSpeedMultiplier?: number;
   /**
    * From AttackController during an active Dash Attack: forces heading and
    * longitudinal speed directly instead of reading steer/throttle input,
@@ -153,6 +155,11 @@ export class MovementController {
   }
 
   /** Current heading, live (not lagged behind a snapshot) — for consumers like AttackController's lock-on that need it mid-tick, before this tick's postStep(). */
+  /** The handling's top speed (m/s, motion direction included), before momentum. */
+  getMaxSpeedMps(): number {
+    return this.handling.maxSpeedMps;
+  }
+
   getHeadingRad(): number {
     return this.headingRad;
   }
@@ -202,6 +209,7 @@ export class MovementController {
   /** Call before physics.step(). Reads/writes the body's linear velocity directly (the "hybrid" model GDD section 16 permits). */
   applyPreStep(body: RAPIER.RigidBody, input: MovementPreStepInput): void {
     const { actions, fixedDeltaSeconds, grounded, lateralGripOverridePerS, staminaAccelFactor, dashOverride, dodgeOverride, floorNormal } = input;
+    const topSpeedMultiplier = input.topSpeedMultiplier ?? 1;
 
     if (dodgeOverride) {
       this.applyDodgeOverride(body, dodgeOverride, grounded, fixedDeltaSeconds, floorNormal);
@@ -279,7 +287,7 @@ export class MovementController {
       // Stamina degrades acceleration physically (GDD section 30) — never
       // by making input feel unresponsive, just genuinely weaker thrust.
       const accelFactor = (grounded ? 1 : AIRBORNE_ACCELERATION_FACTOR) * staminaAccelFactor;
-      const maxSpeed = this.handling.maxSpeedMps;
+      const maxSpeed = this.handling.maxSpeedMps * topSpeedMultiplier;
       newLongitudinalSpeed = longitudinalSpeed;
       if (throttleInput > 0) {
         if (newLongitudinalSpeed < maxSpeed) {

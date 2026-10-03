@@ -65,6 +65,7 @@ function beyState(bey: Bey): CanonicalRecord {
     stamina: bey.stamina.getDeterministicState(),
     stability: bey.stability.getDeterministicState(),
     attack: bey.attack.getDeterministicState(),
+    momentum: bey.momentum.getDeterministicState(),
   };
 }
 
@@ -111,6 +112,7 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
   StaminaSystem: { staminaStat: 'build-time config (resolved Bey stat)' },
   StabilitySystem: {},
   AttackController: { profile: 'build-time config (attack profile settings, in the replay config snapshot)', dashCooldownS: 'build-time config: MatchConfig.dashCooldownS (replay config snapshot)' },
+  MomentumSystem: { rules: 'build-time config: MatchConfig momentum values (replay config snapshot)' },
   ClashController: {},
   ClashOrchestration: {
     matchConfig: 'build-time config (replay config snapshot)',

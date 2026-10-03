@@ -37,6 +37,8 @@ export interface HudSide {
   readonly stability: number;
   readonly broken: boolean;
   readonly dashReadiness: number;
+  /** 0..1 (owner, 2026-10-02, Lote 3). */
+  readonly momentum: number;
   /** Dash charge 0..1 while charging, else 0. */
   readonly dashCharge: number;
   /** Short state tag for the card ("DASH", "BROKEN"...), or null. */
@@ -48,6 +50,7 @@ export interface TickSideFacts {
   readonly stabilityFraction: number;
   readonly isBroken: boolean;
   readonly dashReadiness: number;
+  readonly momentum: number;
   readonly dashChargeFraction: number;
   readonly attackState: AttackState;
 }
@@ -66,6 +69,7 @@ export function hudSide(facts: TickSideFacts): HudSide {
     stability: clamp01(facts.stabilityFraction),
     broken: facts.isBroken,
     dashReadiness: clamp01(facts.dashReadiness),
+    momentum: clamp01(facts.momentum),
     dashCharge: charging ? clamp01(facts.dashChargeFraction) : 0,
     tag,
   };

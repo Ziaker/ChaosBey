@@ -1013,6 +1013,7 @@ export class MatchSession {
         },
         roundOver: this.roundState.isOver,
         roundOutcome: this.roundState.result,
+        positions: { first: this.match.first.body.translation(), second: this.match.second.body.translation() },
       },
       (recentImpact: Readonly<Record<PresentationSide, RecentImpact | null>>) => ({
         tick: tickIndex,

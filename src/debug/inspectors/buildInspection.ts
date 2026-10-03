@@ -199,6 +199,7 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('Stability: since last damage', seconds(bey.stability.getTimeSinceLastDamageS())),
         row('Cooldown: dodge', `${f(dodge.cooldownRemainingS)} s`),
         row('Cooldown: Dash', `${f(bey.attack.getDashCooldownRemainingS())} s`),
+        row('Momentum', `${(bey.momentum.value * 100).toFixed(0)}% (top speed ×${f(bey.momentum.topSpeedMultiplier)})`),
         row('Cooldown: post-impact steering', `${f(movementDebug.postImpactCooldownRemainingS)} s`),
         row('Cooldown: Clash (shared)', `${f(session.clash.controller.getCooldownRemainingS())} s`),
         row(

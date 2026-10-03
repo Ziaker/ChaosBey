@@ -34,6 +34,7 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     stabilityFraction: 1,
     isBroken: false,
     dashReadiness: 1,
+    momentum: 0,
     airRecoveryAvailable: false,
     canAffordDodge: true,
     ...overrides,

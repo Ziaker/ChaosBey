@@ -24,7 +24,14 @@ import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { detectHits, type HitEvent } from '../../combat/hit-detection/HitDetection';
 import { applyKnockback, computeKnockback, computeStabilityDamage, type KnockbackComponents } from '../../combat/knockback/Knockback';
-import { CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS } from '../../combat/attacks/AttackTuning';
+import { CIRCULAR_BASE_KNOCKBACK_FORCE, CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, CIRCULAR_STABILITY_DAMAGE } from '../../combat/attacks/AttackTuning';
+import {
+  BODY_COLLISION_CONTACT_SLOP_M,
+  BODY_COLLISION_COOLDOWN_S,
+  BODY_COLLISION_MIN_CLOSING_SPEED_MPS,
+  BODY_COLLISION_MIN_DAMAGE,
+  BODY_COLLISION_REFERENCE_SPEED_DIFF_MPS,
+} from '../../bey/momentum/MomentumTuning';
 import { isOutOfArena } from '../../arena/ringout/RingOut';
 import { RoundState } from '../../combat/round-rules/RoundState';
 import type { ControllerActions } from '../../input/actions/Action';
@@ -35,7 +42,7 @@ import { DriftState } from '../../drift/DriftController';
 import type { DodgeState } from '../../dodge/DodgeController';
 import { isGrounded } from '../../physics/collision/GroundCheck';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
-import { normalize, subtract, type Vec2 } from '../../physics/Vec2';
+import { dot, length, normalize, subtract, type Vec2 } from '../../physics/Vec2';
 import { ClashState, type ClashResult } from '../../combat/clash/ClashController';
 import { ClashOrchestration, type HitSnapshotInput, type ResolvedHitToApply } from './ClashOrchestration';
 
@@ -52,6 +59,8 @@ export interface BeySnapshot {
   isBroken: boolean;
   /** 0..1: Dash cooldown readiness (AttackController.getDashReadiness(); 1 = a Dash can start charging). Owner, 2026-10-02: replaces Attack Energy. */
   dashReadiness: number;
+  /** 0..1: momentum (owner, 2026-10-02, Lote 3). */
+  momentum: number;
   /** True for exactly one tick: this Bey just landed (any cause) — see DriftController. Milestone 4 data, no gameplay effect. */
   justLanded: boolean;
   /** Only meaningful when justLanded is true. */
@@ -86,7 +95,12 @@ export type CombatEvent =
   /** An attack that would have connected was nullified by the target's dodge i-frames (Milestone 3). */
   | { kind: 'dodged'; targetIsFirst: boolean }
   /** A dodged hit whose i-frames were within the tighter "perfect" sub-window. Detection only — no gameplay reward is implemented yet, per the GDD's explicit approval gate on Perfect Dodge's reward. */
-  | { kind: 'perfectDodge'; targetIsFirst: boolean };
+  | { kind: 'perfectDodge'; targetIsFirst: boolean }
+  /**
+   * Owner, 2026-10-02 (Lote 3): the Beys touched without an attack. targetIsFirst = the slower one (the one that took
+   * the speed-difference damage); damage = the larger of the two Stability damages dealt (presentation magnitude).
+   */
+  | { kind: 'bodyCollision'; targetIsFirst: boolean; damage: number; speedDifferenceMps: number };
 
 export interface MatchTickResult {
   first: BeySnapshot;
@@ -119,6 +133,7 @@ function buildFrozenSnapshot(physics: PhysicsWorld, bey: Bey): BeySnapshot {
     stabilityFraction: bey.stability.resource.fraction,
     isBroken: bey.stability.isBroken,
     dashReadiness: bey.attack.getDashReadiness(),
+    momentum: bey.momentum.value,
     justLanded: false,
     landingDescentSpeedMps: 0,
     landingIntensity: 0,
@@ -247,6 +262,7 @@ export function tickMatch(
     grounded: firstGrounded,
     lateralGripOverridePerS: firstDodge.lateralGripOverridePerS ?? firstDrift.lateralGripOverridePerS,
     staminaAccelFactor: firstCondition.accelFactor,
+    topSpeedMultiplier: first.momentum.topSpeedMultiplier,
     dashOverride: firstAttack.dashOverride,
     dodgeOverride: firstDodge.dodgeOverride,
     floorNormal: floorNormalUnder(first, firstGrounded),
@@ -257,6 +273,7 @@ export function tickMatch(
     grounded: secondGrounded,
     lateralGripOverridePerS: secondDodge.lateralGripOverridePerS ?? secondDrift.lateralGripOverridePerS,
     staminaAccelFactor: secondCondition.accelFactor,
+    topSpeedMultiplier: second.momentum.topSpeedMultiplier,
     dashOverride: secondAttack.dashOverride,
     dodgeOverride: secondDodge.dodgeOverride,
     floorNormal: floorNormalUnder(second, secondGrounded),
@@ -266,6 +283,11 @@ export function tickMatch(
   second.spin.tick(second.body, fixedDeltaSeconds, secondCondition, secondGrounded, secondDrift.driftState === DriftState.Drifting ? second.movement.getHeadingRad() : null);
 
 
+  // Body collisions (owner, 2026-10-02) judge the speeds the Beys had going into the contact, before the solver
+  // bounces them apart.
+  const firstVelBefore = horizontalVelocity(first.body);
+  const secondVelBefore = horizontalVelocity(second.body);
+  const gapBefore = length(subtract(positionXZ(second.body), positionXZ(first.body)));
   physics.step();
 
   const firstMovement = first.movement.postStep(first.body, firstGrounded);
@@ -286,6 +308,9 @@ export function tickMatch(
 
   first.stamina.tick(firstMovement.speedMps, fixedDeltaSeconds);
   second.stamina.tick(secondMovement.speedMps, fixedDeltaSeconds);
+  // Momentum (owner, 2026-10-02): builds with sustained fast, straight movement; a wall impact costs part of it.
+  tickMomentum(first, firstMovement, firstGrounded, fixedDeltaSeconds);
+  tickMomentum(second, secondMovement, secondGrounded, fixedDeltaSeconds);
   first.stability.tick(fixedDeltaSeconds);
   second.stability.tick(fixedDeltaSeconds);
 
@@ -421,6 +446,7 @@ export function tickMatch(
     });
     applyKnockback(defender.body, resolved.attackerPositionXZ, resolved.defenderPositionXZ, knockback, defender.motion);
     defender.movement.registerKnockback();
+    defender.momentum.loseOnCollision();
     // Same immediate-vs-pending arming as the catch-launch path above.
     defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
     combatEvents.push({
@@ -436,6 +462,73 @@ export function tickMatch(
       defender,
       computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense) * resolved.forceMultiplier,
     );
+  }
+
+  // Body collision (owner, 2026-10-02, item 9): the Beys touch with no attack connecting this tick.
+  if (hitEvents.length === 0 && rawHitEvents.length === 0 && !roundState.isOver) {
+    const contactReach = first.definition.physical.colliderRadiusM + second.definition.physical.colliderRadiusM + BODY_COLLISION_CONTACT_SLOP_M;
+    const firstToSecond = subtract(secondPos, firstPos);
+    const closingSpeed = dot(subtract(firstVelBefore, secondVelBefore), normalize(firstToSecond));
+    // Touching after the step, or would have met during it (a fast contact can bounce them apart within the tick).
+    const touched = Math.min(length(firstToSecond), gapBefore - closingSpeed * fixedDeltaSeconds) <= contactReach;
+    if (
+      touched &&
+      Math.abs(firstYM - secondYM) <= contactReach &&
+      closingSpeed >= BODY_COLLISION_MIN_CLOSING_SPEED_MPS &&
+      first.momentum.collisionCooldownRemainingS === 0 &&
+      second.momentum.collisionCooldownRemainingS === 0
+    ) {
+      resolveBodyCollision();
+    }
+  }
+
+  function resolveBodyCollision(): void {
+    const scaleDamage = first.rules.bodyCollisionDamage;
+    const firstSpeed = length(firstVelBefore);
+    const secondSpeed = length(secondVelBefore);
+    const diff = Math.abs(firstSpeed - secondSpeed);
+    const firstIsSlower = firstSpeed < secondSpeed;
+    const slower = firstIsSlower ? first : second;
+    const faster = firstIsSlower ? second : first;
+    // Dodge i-frames and a defensive Circular (item 13) make a Bey immune to the collision's damage and push.
+    const immune = (bey: Bey, dodge: { hasIFrames: boolean }, attackState: AttackState): boolean => dodge.hasIFrames || attackState === AttackState.CircularActive;
+    const firstImmune = immune(first, firstDodge, firstAttack.state);
+    const secondImmune = immune(second, secondDodge, secondAttack.state);
+    const slowerImmune = firstIsSlower ? firstImmune : secondImmune;
+    const fasterImmune = firstIsSlower ? secondImmune : firstImmune;
+    const minDamage = BODY_COLLISION_MIN_DAMAGE * scaleDamage;
+    const slowerDamage = minDamage + (CIRCULAR_STABILITY_DAMAGE / BODY_COLLISION_REFERENCE_SPEED_DIFF_MPS) * diff * scaleDamage;
+    first.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
+    second.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
+    faster.momentum.loseOnCollision();
+    let dealt = 0;
+    if (!slowerImmune && slowerDamage > 0) {
+      applyStabilityDamageAndTrackKo(firstIsSlower, slower, slowerDamage);
+      dealt = slowerDamage;
+      if (diff > 0 && scaleDamage > 0) {
+        const fasterPos = firstIsSlower ? secondPos : firstPos;
+        const slowerPos = firstIsSlower ? firstPos : secondPos;
+        const knockback = computeKnockback({
+          baseForce: (CIRCULAR_BASE_KNOCKBACK_FORCE * diff * scaleDamage) / BODY_COLLISION_REFERENCE_SPEED_DIFF_MPS,
+          attackerSpeedMps: firstIsSlower ? secondSpeed : firstSpeed,
+          defenderSpeedMps: firstIsSlower ? firstSpeed : secondSpeed,
+          defenderStabilityFraction: slower.stability.resource.fraction,
+          defenderStaminaPenaltyFraction: 1 - slower.stamina.resource.fraction,
+          attackStat: 1,
+          defenseStat: 1,
+          attackerVelocityXZ: firstIsSlower ? secondVelBefore : firstVelBefore,
+          impactDirectionXZ: normalize(subtract(slowerPos, fasterPos)),
+        });
+        applyKnockback(slower.body, fasterPos, slowerPos, knockback, slower.motion);
+        slower.movement.registerKnockback();
+        combatEvents.push({ kind: 'knockback', targetIsFirst: firstIsSlower, force: knockback.force, components: knockback.components, directionXZ: normalize(subtract(slowerPos, fasterPos)) });
+      }
+    }
+    if (!fasterImmune && minDamage > 0) {
+      applyStabilityDamageAndTrackKo(!firstIsSlower, faster, minDamage);
+      dealt = Math.max(dealt, minDamage);
+    }
+    combatEvents.push({ kind: 'bodyCollision', targetIsFirst: firstIsSlower, damage: dealt, speedDifferenceMps: diff });
   }
 
   // Outside the ring-out radius only counts after the match's ring-out delay (owner, 2026-10-02).
@@ -459,6 +552,7 @@ export function tickMatch(
       stabilityFraction: first.stability.resource.fraction,
       isBroken: first.stability.isBroken,
       dashReadiness: first.attack.getDashReadiness(),
+      momentum: first.momentum.value,
       justLanded: firstDrift.justLanded,
       landingDescentSpeedMps: firstDrift.landingDescentSpeedMps,
       landingIntensity: firstDrift.landingIntensity,
@@ -476,6 +570,7 @@ export function tickMatch(
       stabilityFraction: second.stability.resource.fraction,
       isBroken: second.stability.isBroken,
       dashReadiness: second.attack.getDashReadiness(),
+      momentum: second.momentum.value,
       justLanded: secondDrift.justLanded,
       landingDescentSpeedMps: secondDrift.landingDescentSpeedMps,
       landingIntensity: secondDrift.landingIntensity,
@@ -497,6 +592,19 @@ export function tickMatch(
  * slope under its centre is shallower, and following it would lift the rim
  * off the floor when rolling downhill.
  */
+function horizontalVelocity(body: Bey['body']): Vec2 {
+  const v = body.linvel();
+  return { x: v.x, z: v.z };
+}
+
+/** Momentum bookkeeping after the physics step (owner, 2026-10-02, Lote 3; see bey/momentum/). */
+function tickMomentum(bey: Bey, movement: MovementSnapshot, grounded: boolean, fixedDeltaSeconds: number): void {
+  const v = movement.actualVelocityVector;
+  const heading = movement.speedMps > 0.5 ? Math.atan2(v.x, v.z) : null;
+  bey.momentum.tick(movement.speedMps, bey.movement.getMaxSpeedMps() * bey.momentum.topSpeedMultiplier, heading, grounded, fixedDeltaSeconds);
+  if (movement.impactDeltaSpeedMps > 0) bey.momentum.loseOnCollision();
+}
+
 function floorNormalUnder(bey: Bey, grounded: boolean): { x: number; y: number; z: number } | null {
   if (!grounded || bey.arenaFloor === 'flat') return null;
   const p = bey.body.translation();

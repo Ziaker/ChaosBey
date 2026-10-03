@@ -251,6 +251,7 @@ function facts(overrides: Partial<BeyPresentationFacts> = {}): BeyPresentationFa
     stabilityFraction: 0.4,
     isBroken: false,
     dashReadiness: 1,
+    momentum: 0,
     movement: { speedMps: 5.5 },
     spin: { spinRateRadPerSec: 22, wobbleEnergy: 0.3, tiltRad: 0.1, isTumbling: false },
     ...overrides,

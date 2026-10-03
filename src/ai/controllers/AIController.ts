@@ -96,6 +96,7 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     stabilityFraction: bey.stability.resource.fraction,
     isBroken: bey.stability.isBroken,
     dashReadiness: bey.attack.getDashReadiness(),
+    momentum: bey.momentum.value,
     airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable(),
     canAffordDodge: bey.stamina.resource.value >= DODGE_STAMINA_COST,
   };
