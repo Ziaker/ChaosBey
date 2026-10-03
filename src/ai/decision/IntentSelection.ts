@@ -46,12 +46,12 @@ const MOMENTUM_COMMIT_BONUS = 0.5;
  * The target and score weights are PROVISIONAL playtest values; punish/counter/threat/edge overrides remain above this.
  */
 const MOMENTUM_BUILD_TARGET = 0.6;
-/** No artificial retreat-from-rest: normal scoring first gets the Bey moving. The pacing layer fades in from 2.5 to 5 m/s. */
+/** No artificial run-up from rest: normal scoring first gets the Bey moving. The pacing layer fades in from 2.5 to 5 m/s. */
 const MOMENTUM_BUILD_MIN_SPEED_MPS = 2.5;
 const MOMENTUM_BUILD_FULL_SPEED_MPS = 5;
 /** At full build priority, routine attack scores keep 25%; tactical openings zero the priority and therefore bypass this. */
 const MOMENTUM_BUILD_ATTACK_DAMPING = 0.75;
-/** Additive score that makes the moving Bey open space inside Dash range, or accelerate toward the fight from outside it. */
+/** Additive score that keeps a moving, low-momentum Bey accelerating straight into the engagement before routine attacks. */
 const MOMENTUM_BUILD_MOVE_BONUS = 0.8;
 /** Circling/waiting are deliberately not the build-up answer: that experiment previously caused orbit stalemates. */
 const MOMENTUM_BUILD_PASSIVE_DAMPING = 0.7;
@@ -161,7 +161,8 @@ export function passivityTempo(secondsSinceOwnAttack: number, personality: AiPer
  * AI state machine. The current public momentum/speed plus the existing anti-passivity clock are enough to make the
  * behavior self-ending and deterministic:
  * - below Circular range: fight normally (already in contact; running away would look absurd);
- * - while moving and below the target: prefer straight run-up movement over routine attacks;
+ * - while moving and below the target: prefer a straight Approach over routine attacks; if contact happens before the
+ *   target, that becomes the speed-difference body collision the owner explicitly asked for rather than a fake retreat;
  * - a punish/opening/edge-pressure opportunity bypasses the pacing;
  * - as the no-attack tempo rises, the pacing fades to zero, so it cannot become a retreat/orbit stalemate.
  */
@@ -387,12 +388,12 @@ export function selectIntent(
   );
   scores.set(AiIntent.Wait, alreadyAttacking ? 0 : personality.patience * 0.15 * passiveDamping);
 
-  // Item 11 follow-up: turn existing intents into a finite run-up cycle, not a new hidden movement mode. A moving,
-  // low-momentum Bey inside Dash range opens space (Retreat is already edge-safe); outside Dash range it accelerates
-  // toward the fight. Circle/Wait are damped so this cannot repeat the discarded "orbit to build momentum" experiment.
+  // Item 11 follow-up: keep the run-up straight. Retreat can reverse the throttle and throw momentum away, while the
+  // previously-tried Circle bonus could orbit forever. Approach is forward-only; if the Bey reaches the opponent before
+  // 60% momentum, the contact resolves through the real speed-difference body-collision mechanic instead of inventing
+  // a hidden spacing move. Tactical openings still bypass this layer entirely.
   if (buildPriority > 0) {
-    const runUpIntent = world.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M ? AiIntent.Retreat : AiIntent.Approach;
-    scores.set(runUpIntent, (scores.get(runUpIntent) ?? 0) + buildPriority * MOMENTUM_BUILD_MOVE_BONUS);
+    scores.set(AiIntent.Approach, (scores.get(AiIntent.Approach) ?? 0) + buildPriority * MOMENTUM_BUILD_MOVE_BONUS);
     const passiveScale = 1 - buildPriority * MOMENTUM_BUILD_PASSIVE_DAMPING;
     scores.set(AiIntent.Circle, (scores.get(AiIntent.Circle) ?? 0) * passiveScale);
     scores.set(AiIntent.Wait, (scores.get(AiIntent.Wait) ?? 0) * passiveScale);
