@@ -15,11 +15,13 @@ import {
   arenaPreset,
   isPresetGeometry,
 } from '../../src/arena/presets/ArenaPresets';
-import { ARENA_WALL_HEIGHT } from '../../src/arena/colliders/ArenaTuning';
+import { ARENA_FLOOR_RADIUS, ARENA_WALL_HEIGHT } from '../../src/arena/colliders/ArenaTuning';
 import { WALL_MATERIAL } from '../../src/physics/materials/PhysicsMaterials';
 import { DEFAULT_ARENA_FLOOR } from '../../src/arena/floor/ArenaFloorProfile';
 import { arenaGeometryOf, createDefaultMatchConfig } from '../../src/config/match/MatchConfig';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
+import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
+import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
 import { simulateAiMatch } from '../../src/self-test/AiMatchSimulation';
 import { currentRuntimeFingerprint } from '../../src/replay/format/runtimeFingerprint';
 import { decodeReplay, encodeReplay, sealReplay } from '../../src/replay/format/ChaosBeyReplayV1';
@@ -49,10 +51,10 @@ describe('arena presets', () => {
 });
 
 describe('arena values in real matches', () => {
-  it('a low, soft rim ends rounds sooner and by ring-out; a tall, bouncy barrier keeps Beys in', async () => {
+  it('both extreme wall presets remain valid in full AI matches, and the lower rim never produces fewer ring-outs', async () => {
     const run = async (geometry: typeof STANDARD_ARENA_GEOMETRY) => {
       let ringOuts = 0;
-      let ticks = 0;
+      let unresolved = 0;
       const pairs = [
         [ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE],
         [DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE],
@@ -67,55 +69,66 @@ describe('arena values in real matches', () => {
             matchConfigOverrides: { arenaWallHeightM: geometry.wallHeightM, arenaWallRestitution: geometry.wallRestitution, ringOutDelayS: 0 },
           });
           if (String(record.stats.outcome).includes('RingOut')) ringOuts++;
-          ticks += record.stats.ticks;
+          if (record.stats.outcome === RoundOutcome.Ongoing) unresolved++;
         }
       }
-      return { ringOuts, ticks };
+      return { ringOuts, unresolved };
     };
     const rift = await run(RIFT_CRATER.geometry);
     const tournament = await run(TOURNAMENT_STADIUM.geometry);
-    // Measured before the Motion Lab movement: Rift 15/15 ring-outs in 6338 ticks, Tournament
-    // 10/15 in 13190. With it (M11, direction B): Rift 3/15 in 10341, Tournament 0/15 in 12111 —
-    // B launches with the Lab's knockback lift (0.18 of the push, the game used 0.35), so even a
-    // 1 m rim is rarely cleared. Still more ring-outs and shorter rounds (was: < 0.7×).
-    //
-    // Arena scale pass (36 m bowl, the default floor): AI-vs-AI ring-outs are now
-    // essentially gone on the bowl — Rift 0/15, Tournament 0/15 (flat 36 m: Rift 3/45
-    // matches over three presets, none for the other two); every round ends by KO
-    // (~1300-1400 ticks per match). The low rim only shows in round length now
-    // (Rift 1300 vs Tournament 1370 ticks per match), so ring-outs are compared with
-    // >= and the round-length comparison stays strict. See the arena scale pass
-    // report: whether ring-outs should stay this rare is an owner call.
-    //
-    // Ring-out delay (owner, 2026-10-02, default 1.5 s): this compares the walls alone, so it runs
-    // with the old instant ring-out (delay 0): Rift 1/15 ring-outs in 21889 ticks, Tournament 0/15
-    // in 21901. With the 1.5 s default the Rift's one ring-out lands 99 ticks later (21988 ticks),
-    // so the low rim no longer shortens AI rounds overall — reported to the owner.
-    // Lote 4 (2.5 m jump, momentum, body collisions): even with the instant rule the two rims now give about the same
-    // round length (Rift 21280 vs Tournament 21088 ticks over 15 matches) — the rim no longer decides how long AI
-    // rounds last. Reported to the owner; the test keeps the ring-out ordering and allows rounds within 3%.
+    // On the 36 m bowl, later movement/combat passes made wall height stop predicting aggregate round duration. The old
+    // `rift.ticks < tournament.ticks * 1.03` assertion therefore encoded a stale correlation, not an arena invariant.
+    // Keep the full-match safety/result check here; the controlled wall/replay test below proves the wall values have a
+    // deterministic gameplay consequence without depending on which centre-spawn AI seed happens to reach the boundary.
+    expect(rift.unresolved).toBe(0);
+    expect(tournament.unresolved).toBe(0);
     expect(rift.ringOuts).toBeGreaterThanOrEqual(tournament.ringOuts);
-    expect(rift.ticks).toBeLessThan(tournament.ticks * 1.03);
   }, 300_000);
 
-  it('are recorded in the replay and used on playback: a different wall diverges', async () => {
+  it('are recorded in the replay and used on playback: a controlled wall encounter diverges with a different wall', async () => {
     const fingerprint = await currentRuntimeFingerprint();
+    let reachedWallZone = false;
     const record = await simulateAiMatch({
-      seed: 'arena-18' /* re-pinned in each gameplay lote of 2026-10-02 (Dash cooldown, momentum, jump, combat rules) and with the 2026-10-03 audit fixes (bumper filter really running, deferred jump launch, AI dodge reserve). This test needs a match where the wall changes the outcome: arena-18, -31, -33 are the first of arena-0..59 that do (AI fights rarely reach the wall). */,
+      seed: 'arena-wall-replay',
+      // Do not keep re-pinning an AI seed until a normal centre-spawn fight happens to touch a 36 m wall. Put the fight
+      // near the real boundary on a flat floor so the Attack side's approach has to exercise the wall early.
+      firstSpawn: { x: 33.4, y: BEY_SPAWN_HEIGHT_M, z: 0 },
+      secondSpawn: { x: 35.0, y: BEY_SPAWN_HEIGHT_M, z: 0 },
       firstDefinition: ATTACK_ARCHETYPE,
       secondDefinition: DEFENSE_ARCHETYPE,
-      matchConfigOverrides: { arenaWallHeightM: RIFT_CRATER.geometry.wallHeightM, arenaWallRestitution: RIFT_CRATER.geometry.wallRestitution },
+      matchConfigOverrides: {
+        arenaFloor: 'flat',
+        arenaWallHeightM: RIFT_CRATER.geometry.wallHeightM,
+        arenaWallRestitution: RIFT_CRATER.geometry.wallRestitution,
+        ringOutDelayS: 0,
+      },
       record: { fingerprint },
+      onTick: (_tick, world) => {
+        const a = world.first.body.translation();
+        const b = world.second.body.translation();
+        const maxRadius = Math.max(Math.hypot(a.x, a.z), Math.hypot(b.x, b.z));
+        // Collider radii are ~0.6 m, so a centre this close to the 36 m floor edge is in the real wall-contact zone.
+        if (maxRadius >= ARENA_FLOOR_RADIUS - 0.8) reachedWallZone = true;
+      },
     });
+    expect(reachedWallZone, 'controlled replay fixture must actually exercise the wall zone').toBe(true);
     const replay = record.replay!;
-    expect(replay.config.matchConfig).toMatchObject({ arenaWallHeightM: 1, arenaWallRestitution: 0.4 });
+    expect(replay.config.matchConfig).toMatchObject({ arenaFloor: 'flat', arenaWallHeightM: 1, arenaWallRestitution: 0.4 });
     expect((await playReplayHeadless(replay, fingerprint)).status).toBe('verified');
 
     const { integrity: _integrity, ...rest } = replay;
-    const standardWall = sealReplay({ ...rest, config: { ...rest.config, matchConfig: { ...rest.config.matchConfig, ...{ arenaWallHeightM: 2, arenaWallRestitution: 0.55 } } } });
-    const decoded = decodeReplay(encodeReplay(standardWall));
+    // Use a deliberately different but still legal wall response. Because this fixture really reaches the wall, playback
+    // must consume the recorded config rather than accidentally verifying under a changed arena.
+    const changedWall = sealReplay({
+      ...rest,
+      config: {
+        ...rest.config,
+        matchConfig: { ...rest.config.matchConfig, arenaWallHeightM: 2, arenaWallRestitution: 1 },
+      },
+    });
+    const decoded = decodeReplay(encodeReplay(changedWall));
     expect(decoded.ok).toBe(true);
-    const verdict = await playReplayHeadless(standardWall, fingerprint);
+    const verdict = await playReplayHeadless(changedWall, fingerprint);
     expect(verdict.status).toBe('diverged');
   }, 300_000);
 });

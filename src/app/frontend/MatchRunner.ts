@@ -59,13 +59,13 @@ export interface MatchRunnerStart {
 export interface MatchPresentation {
   /** Camera shake and speed/impact FOV. */
   readonly cameraEffects: boolean;
-  /** Speed trails (off on Low quality). */
+  /** Quality-level permission for speed trails (Low can force them off). Pregame intensity is combined with this. */
   readonly trails: boolean;
   /** M11: the player's camera preset (A/B/C); the Clash forces B regardless. Default B. */
   readonly cameraPreset?: CameraPresetSetting;
   /** Condition languages to show when the conditionVisuals presentation flag is enabled. */
   readonly conditionLayers?: readonly ConditionLayerSetting[];
-  /** Lote 9: the Pregame's visual options. */
+  /** Lote 9/10: the Pregame's visual options. */
   readonly vfx?: VfxOptions;
 }
 
@@ -213,7 +213,11 @@ export class MatchRunner {
   /** Applies presentation settings live (e.g. changed from the Pause menu). */
   setPresentation(presentation: MatchPresentation): void {
     this.presentation = presentation;
-    this.session.getVfxManager().setLayerVisible('trails', presentation.trails);
+    const trailScale = presentation.vfx?.motionTrails ?? 1;
+    const vfx = this.session.getVfxManager();
+    vfx.setTrailIntensity(trailScale);
+    // Quality remains a hard performance gate. Pregame 0 also disables drawing while preserving the persistent buffer.
+    vfx.setLayerVisible('trails', presentation.trails && trailScale > 0);
     if (presentation.cameraPreset) this.session.setCameraPreset(presentation.cameraPreset);
     if (presentation.conditionLayers) this.session.setConditionLayers(presentation.conditionLayers);
   }

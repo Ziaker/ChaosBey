@@ -79,7 +79,7 @@ export interface HybridVfxOptions {
   readonly arenaRadiusM: number;
   /** Where the screen overlay is mounted. Default: the page body. `null`: no DOM. */
   readonly overlayParent?: HTMLElement | null;
-  /** Lote 9: the Pregame's visual options (omitted = the approved look). */
+  /** Lote 9/10: the Pregame's presentation-only visual options (omitted = the approved look). */
   readonly vfx?: VfxOptions;
 }
 
@@ -165,6 +165,7 @@ export class HybridVfxSystem implements PresentationSystem {
   /** The context the language sees: the game's pose, floor and scene; camera and time requests are dropped. */
   private context(): FxContext {
     const { scene, camera, floorHeightAtR, arenaSparks } = this.options;
+    const impactFlashScale = Math.max(0, this.options.vfx?.impactFlash ?? 1);
     return {
       scene,
       camera,
@@ -177,20 +178,27 @@ export class HybridVfxSystem implements PresentationSystem {
       shake: () => void this.dropped.shake++,
       hitstop: () => void this.dropped.hitstop++,
       slowMotion: () => void this.dropped.slowMotion++,
-      impactFrame: (seconds) => this.overlay.impactFrame(seconds * TUNING.impactFrameLength),
+      impactFrame: (seconds) => this.overlay.impactFrame(seconds * TUNING.impactFrameLength, impactFlashScale),
       focusLines: (at, strength, seconds, color) => {
         if (TUNING.focusLines > 0) this.overlay.focusLines(at, strength * TUNING.focusLines, seconds, color);
       },
       tint: (css, seconds) => this.overlay.tint(css, seconds),
       flash: (at, color, intensity) => {
+        if (impactFlashScale <= 0) {
+          this.flashPeak = 0;
+          this.flashT = 0;
+          this.flashLight.intensity = 0;
+          return;
+        }
         this.flashLight.position.set(at.x, at.y + 0.5, at.z);
         this.flashLight.color.set(color);
-        this.flashPeak = intensity * TUNING.flash;
+        this.flashPeak = intensity * TUNING.flash * impactFlashScale;
         this.flashT = 1;
       },
       countDust: (n) => void (this.dustSpawned += n),
       groundWaveScale: this.options.vfx?.groundWaves ?? 1,
       dustScale: this.options.vfx?.dust ?? 1,
+      motionTrailScale: this.options.vfx?.motionTrails ?? 1,
       ghost: (slot, material) => {
         const source = this.track(slot).target.visual.group;
         const copy = source.clone(true);
@@ -352,7 +360,7 @@ export class HybridVfxSystem implements PresentationSystem {
     }
     if (bey.dodgeState === DodgeState.Dodging) this.runtime.dodgeMove({ pos, vel: track.vel.clone(), m: 0.6, slot }, dt);
     track.dodgeState = bey.dodgeState;
-    // Speed sparks and skid marks.
+    // Speed sparks, skid marks and the independently configurable anime motion trail.
     if (bey.speedMps > FAST_MOVE_SPEED_MPS) this.runtime.fastMove({ pos, vel: track.vel.clone(), m: bey.speedFraction, slot }, dt);
     // A broken Bey wobbles and grinds.
     if (bey.broken) this.runtime.wobble({ pos, m: bey.stabilityDeficit, slot }, dt);

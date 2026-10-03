@@ -177,11 +177,33 @@ export function makeHybrid(style: WindStyle): VfxLanguage {
       const a = MECHANICAL.create(ctx);
       // Getter: the impact-frame threshold follows the live tuning panel.
       const b = createAnime(ctx, { get impactFrameMinM() { return TUNING.impactFrameMin; } });
+      // Above the approved 100% look the anime timer already emits every 60 Hz frame, so dt-scaling alone saturates.
+      // Carry fractional extra copies instead: 150% adds one extra anime emission every two fast-move frames while
+      // leaving the approved 100% path byte-for-byte equivalent and keeping Mechanical sparks/skids independent.
+      let trailBoostCarry = 0;
       return {
         hit(e) { a.hit(e); b.hit(e); },
         dashCharge(e, dt) { b.dashCharge(e, dt); },
         dashRelease(e) { b.dashRelease(e); },
-        fastMove(e, dt) { a.fastMove(e, dt); b.fastMove(e, dt); },
+        fastMove(e, dt) {
+          a.fastMove(e, dt);
+          const trailScale = Math.max(0, Math.min(1.5, ctx.motionTrailScale ?? 1));
+          if (trailScale <= 0) {
+            trailBoostCarry = 0;
+            return;
+          }
+          if (trailScale <= 1) {
+            trailBoostCarry = 0;
+            b.fastMove(e, dt * trailScale);
+            return;
+          }
+          b.fastMove(e, dt);
+          trailBoostCarry += trailScale - 1;
+          if (trailBoostCarry >= 1) {
+            trailBoostCarry -= 1;
+            b.fastMove(e, dt);
+          }
+        },
         circularSweep(e, t, dt) { b.circularSweep(e, t, dt); },
         perfectDodge(e) { b.perfectDodge(e); },
         dodgeMove(e, dt) { b.dodgeMove(e, dt); },

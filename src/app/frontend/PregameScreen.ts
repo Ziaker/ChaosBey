@@ -33,7 +33,15 @@ import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
 import { CLASH_IMPACT_RANGE, changedRuleLines, defaultMatchRules, matchupLines, normalizeSeedText, RING_OUT_OFF_TIME_LIMIT_S, sanitizeMatchRules, withArenaFloor, withArenaPreset, type MatchRules, type MatchSetup } from './matchSetup';
 import { ACCELERATION_SCALE_RANGE, AIR_CONTROL_RANGE, ARENA_BOWL_DEPTH_RANGE, JUMP_COOLDOWN_RANGE, JUMP_STAMINA_COST_RANGE, ROUND_TIME_LIMIT_RANGE, TOP_SPEED_SCALE_RANGE } from '../../config/match/MatchConfig';
-import { DEFAULT_VFX_OPTIONS, VFX_DUST_RANGE, VFX_GROUND_WAVES_RANGE, VFX_INTENSITY_RANGE, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
+import {
+  DEFAULT_VFX_OPTIONS,
+  VFX_DUST_RANGE,
+  VFX_GROUND_WAVES_RANGE,
+  VFX_IMPACT_FLASH_RANGE,
+  VFX_INTENSITY_RANGE,
+  VFX_MOTION_TRAILS_RANGE,
+  type VfxOptions,
+} from '../../vfx/hybrid/intensityTiers';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { DEFAULT_MOTION_DIRECTION, MOTION_DIRECTIONS, MOTION_DIRECTION_IDS, type MotionDirectionId } from '../../bey/motion/MotionPresets';
@@ -308,7 +316,9 @@ export class PregameScreen {
         items: [
           this.slider({ id: 'vfx-intensity', label: 'Effects intensity', range: VFX_INTENSITY_RANGE, ...visual('intensity'), format: pct, note: 'Size and amount of every hit, landing and movement effect. Visual only: changes no outcome and is not in the replay.' }),
           this.slider({ id: 'vfx-ground-waves', label: 'Ground waves', range: VFX_GROUND_WAVES_RANGE, ...visual('groundWaves'), format: pct, note: 'Size of the shockwave rings on the floor. 0 = none.' }),
-          this.slider({ id: 'vfx-dust', label: 'Dust', range: VFX_DUST_RANGE, ...visual('dust'), format: pct, note: 'How much dust Dashes, dodges and landings raise. 0 = none. Camera options stay out of this screen (camera frozen).' }),
+          this.slider({ id: 'vfx-dust', label: 'Dust', range: VFX_DUST_RANGE, ...visual('dust'), format: pct, note: 'How much dust Dashes, dodges and landings raise. 0 = none.' }),
+          this.slider({ id: 'vfx-motion-trails', label: 'Motion trails', range: VFX_MOTION_TRAILS_RANGE, ...visual('motionTrails'), format: pct, note: 'Intensity/density of the anime high-speed motion trail. Mechanical sparks and skids stay independent. 100% = approved look; range is provisional.' }),
+          this.slider({ id: 'vfx-impact-flash', label: 'Impact flash', range: VFX_IMPACT_FLASH_RANGE, ...visual('impactFlash'), format: pct, note: 'Strength of the hit flash/negative impact frame. 0 = off, 100% = approved look. Visual only; range is provisional. Camera options stay out of this screen (camera frozen).' }),
         ],
       },
     ];
