@@ -336,7 +336,7 @@ O HUD de combate **deve comunicar**:
 
 - Stamina;
 - Stability;
-- Attack Energy / recurso ofensivo;
+- cooldown do Dash (linha CD; substituiu Attack Energy / recurso ofensivo — owner, 2026-10-02);
 - cooldowns relevantes;
 - feedback de lock-on do Dash;
 - outros estados/recursos necessários à leitura do combate;
@@ -426,6 +426,7 @@ Pedido do owner de 2026-10-02 ("correções de gameplay e apresentação"), exec
 | 8a — Perfect Dodge | `dodged` / `perfectDodge` são reportados **uma vez por esquiva e por ataque** (antes: a cada tick de sobreposição). Consequência de jogo: o hitstop do Perfect Dodge também acontece uma vez só (antes repetia). A anulação do golpe continua em todo tick. | — | Lote 1 / 0.17.0 |
 | 18 — Efeitos no chão | Ondas de impacto, aura de carga, rachaduras, marcas de arrasto e de ponta acompanham a curvatura real do chão (bowl), em vez de um plano reto enterrado. Só apresentação; colliders intactos. | — | Lote 1 / 0.17.0 |
 | 4 — Speedlines do Clash | O overlay limpa o canvas inteiro em qualquer zoom do navegador (antes ficavam rastros com `devicePixelRatio` < 1). | — | Lote 1 / 0.17.0 |
+| 1/2/19 — Dash | O Dash **não** é limitado por recurso: Attack Energy foi removida do jogo. Há um **cooldown** entre Dashes (jogador e IA), que começa quando o Dash termina (acerto ou erro); segurar Z durante o cooldown espera e carrega quando fica pronto. HUD: a linha ATK virou **CD** (esvazia ao usar, enche no cooldown, cheia = pronto); a linha DASH continua mostrando a carga. O Dash só gasta Stamina pelo dreno normal de movimento. Todo Dash solta vento + poeira (Cel Cyclone) com intensidade mínima Light (0,3) do protótipo. | **Dash cooldown 1,5 s PROVISÓRIO**; slider Pregame 0,5–5 s, passo 0,25 | Lote 2 / 0.18.0 |
 
 # 13. PENDÊNCIAS REAIS — NÃO INVENTAR NEM REABRIR O RESTO
 

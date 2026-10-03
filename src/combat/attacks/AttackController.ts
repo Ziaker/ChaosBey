@@ -2,6 +2,8 @@
 // ATTACK CONTROLLER
 // Tap Z (quick press, released before TAP_MAX_HOLD_S) = Circular Attack.
 // Hold Z then release = Dash Attack, charged while held (GDD section 23).
+// Owner, 2026-10-02: a Dash cooldown (not Attack Energy) spaces Dashes out;
+// a hold while it runs waits, then starts charging once the Dash is ready.
 // Never writes to the rigid body directly — hands MovementController a
 // dashOverride the same way DriftController hands it a grip override, and
 // exposes an activeHitbox for the hit-detection module to query.
@@ -17,6 +19,7 @@ import {
   CIRCULAR_RECOVERY_S,
   CIRCULAR_STABILITY_DAMAGE,
   DASH_ACTIVE_DURATION_S,
+  DASH_COOLDOWN_DEFAULT_S,
   DASH_LOCK_ON_MAX_TURN_RATE_RAD_S,
   DASH_MAX_CHARGE_S,
   DASH_MAX_KNOCKBACK_FORCE,
@@ -50,7 +53,6 @@ export interface AttackTickResult {
   state: AttackState;
   activeHitbox: ActiveHitbox | null;
   dashOverride: MovementPreStepInput['dashOverride'];
-  isConsumingAttackEnergy: boolean;
   /** 0..1, for debug/HUD — how charged the current (or most recent) Dash Attack is. */
   chargeFraction: number;
 }
@@ -84,8 +86,16 @@ export class AttackController {
   private recoveryTimerS = 0;
   /** Counts every attack that became active (Circular or Dash): one id per swing, for "once per attack" bookkeeping. */
   private activationCount = 0;
+  /** Seconds until the next Dash may start charging (owner, 2026-10-02); 0 = ready. */
+  private dashCooldownRemainingS = 0;
+  /** Attack held past the tap window while the Dash was cooling down: it charges once ready; a release is not a tap. */
+  private waitingForDash = false;
 
-  constructor(private readonly profile: BeyAttackProfile = DEFAULT_ATTACK_PROFILE) {}
+  constructor(
+    private readonly profile: BeyAttackProfile = DEFAULT_ATTACK_PROFILE,
+    /** MatchConfig.dashCooldownS. */
+    private readonly dashCooldownS: number = DASH_COOLDOWN_DEFAULT_S,
+  ) {}
 
   getState(): AttackState {
     return this.state;
@@ -94,6 +104,26 @@ export class AttackController {
   /** Id of the current (or last) active attack: changes each time a Circular or Dash becomes active. */
   getActivationId(): number {
     return this.activationCount;
+  }
+
+  /** Debug Lab "reset cooldowns" only: the Dash is ready at once. */
+  debugResetDashCooldown(): void {
+    this.dashCooldownRemainingS = 0;
+  }
+
+  /** Seconds until the next Dash is ready (0 = ready). */
+  getDashCooldownRemainingS(): number {
+    return this.dashCooldownRemainingS;
+  }
+
+  /**
+   * 0..1 for the HUD's Dash line: 0 while a Dash is active, refilling during the cooldown, 1 = ready (also while
+   * charging, which the DASH charge line shows).
+   */
+  getDashReadiness(): number {
+    if (this.state === AttackState.DashActive) return 0;
+    if (this.dashCooldownS <= 0) return 1;
+    return clamp01(1 - this.dashCooldownRemainingS / this.dashCooldownS);
   }
 
   /** Current Dash charge fraction without advancing anything — for read-only consumers (e.g. a frozen post-round snapshot). */
@@ -117,12 +147,11 @@ export class AttackController {
     ownHeadingRad: number,
     ownPositionXZ: Vec2,
     opponentPositionXZ: Vec2,
-    attackEnergyFraction: number,
     fixedDeltaSeconds: number,
   ): AttackTickResult {
     const attackHeld = actions.held.has(Action.Attack);
     let dashOverride: MovementPreStepInput['dashOverride'] = null;
-    let isConsumingAttackEnergy = false;
+    if (this.state !== AttackState.DashActive) this.dashCooldownRemainingS = Math.max(0, this.dashCooldownRemainingS - fixedDeltaSeconds);
 
     switch (this.state) {
       case AttackState.Neutral:
@@ -135,21 +164,30 @@ export class AttackController {
       case AttackState.Buffering:
         this.bufferTimerS += fixedDeltaSeconds;
         if (!attackHeld) {
-          this.state = AttackState.CircularActive;
-          this.activeTimerS = 0;
-          this.activationCount++;
+          if (this.waitingForDash) {
+            // A hold that waited for the Dash cooldown, released before it ran out: no Dash, and not a tap either.
+            this.state = AttackState.Neutral;
+            this.waitingForDash = false;
+          } else {
+            this.state = AttackState.CircularActive;
+            this.activeTimerS = 0;
+            this.activationCount++;
+          }
         } else if (this.bufferTimerS >= TAP_MAX_HOLD_S) {
-          this.state = AttackState.ChargingDash;
-          this.chargeTimerS = this.bufferTimerS;
+          if (this.dashCooldownRemainingS > 0) {
+            this.waitingForDash = true;
+          } else {
+            this.state = AttackState.ChargingDash;
+            // A hold that waited starts its charge where a fresh hold would (the tap window), not with the wait.
+            this.chargeTimerS = this.waitingForDash ? TAP_MAX_HOLD_S : this.bufferTimerS;
+            this.waitingForDash = false;
+          }
         }
         break;
 
       case AttackState.ChargingDash:
-        isConsumingAttackEnergy = true;
-        if (attackEnergyFraction > 0) {
-          this.chargeTimerS = Math.min(DASH_MAX_CHARGE_S, this.chargeTimerS + fixedDeltaSeconds);
-        }
-        if (!attackHeld || attackEnergyFraction <= 0) {
+        this.chargeTimerS = Math.min(DASH_MAX_CHARGE_S, this.chargeTimerS + fixedDeltaSeconds);
+        if (!attackHeld) {
           this.state = AttackState.DashActive;
           this.activeTimerS = 0;
           this.activationCount++;
@@ -165,6 +203,7 @@ export class AttackController {
         if (this.activeTimerS >= DASH_ACTIVE_DURATION_S) {
           this.state = AttackState.DashRecovery;
           this.recoveryTimerS = 0;
+          this.dashCooldownRemainingS = this.dashCooldownS;
         }
         break;
       }
@@ -192,7 +231,6 @@ export class AttackController {
       state: this.state,
       activeHitbox: this.computeActiveHitbox(),
       dashOverride,
-      isConsumingAttackEnergy,
       chargeFraction: this.dashChargeFraction(),
     };
   }
@@ -201,6 +239,7 @@ export class AttackController {
   registerHitConfirmed(): void {
     if (this.state === AttackState.DashActive) {
       this.state = AttackState.Neutral;
+      this.dashCooldownRemainingS = this.dashCooldownS;
     } else if (this.state === AttackState.CircularActive) {
       this.state = AttackState.CircularRecovery;
       this.recoveryTimerS = 0;
@@ -241,6 +280,8 @@ export class AttackController {
       activeTimerS: this.activeTimerS,
       recoveryTimerS: this.recoveryTimerS,
       activationCount: this.activationCount,
+      dashCooldownRemainingS: this.dashCooldownRemainingS,
+      waitingForDash: this.waitingForDash,
     };
   }
 }

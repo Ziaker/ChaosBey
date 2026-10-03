@@ -38,7 +38,7 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     staminaFraction: 1,
     stabilityFraction: 1,
     isBroken: false,
-    attackEnergyFraction: 1,
+    dashReadiness: 1,
     airRecoveryAvailable: false,
     canAffordDodge: true,
     ...overrides,
@@ -165,12 +165,12 @@ describe('air recovery (GDD section 21)', () => {
   describe('launched mid-Dash-charge (releasing Attack would fire the Dash from the air)', () => {
     const far = { positionXZ: { x: 6, z: 0 } };
     const charging = (grounded: boolean, airRecoveryAvailable: boolean) =>
-      world({ grounded, airRecoveryAvailable, attackState: AttackState.ChargingDash, dashChargeFraction: 0.3, attackEnergyFraction: 0.8 }, far);
+      world({ grounded, airRecoveryAvailable, attackState: AttackState.ChargingDash, dashChargeFraction: 0.3, dashReadiness: 0.8 }, far);
 
     it('AirRecover keeps holding the existing charge while pressing Dodge — no new Attack press', () => {
       const selector = new ActionSelector();
       // Charging on the ground under AttackDash: Attack held (pressed once).
-      selector.selectActions(AiIntent.AttackDash, world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.3, attackEnergyFraction: 0.8 }, far), ATTACK_AI_PERSONALITY, false, DT);
+      selector.selectActions(AiIntent.AttackDash, world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.3, dashReadiness: 0.8 }, far), ATTACK_AI_PERSONALITY, false, DT);
       const actions = selector.selectActions(AiIntent.AirRecover, charging(false, true), ATTACK_AI_PERSONALITY, false, DT);
       expect(actions.held.has(Action.Attack)).toBe(true);
       expect(actions.pressedThisFrame.has(Action.Attack)).toBe(false);
@@ -197,21 +197,21 @@ describe('air recovery (GDD section 21)', () => {
     it('launched while charging, before AirRecover is decided: the previous intent can no longer release the charge in the air', () => {
       const selector = new ActionSelector();
       // Charging on the ground (Attack already held).
-      selector.selectActions(AiIntent.AttackDash, world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.3, attackEnergyFraction: 0.8 }, far), ATTACK_AI_PERSONALITY, false, DT);
+      selector.selectActions(AiIntent.AttackDash, world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.3, dashReadiness: 0.8 }, far), ATTACK_AI_PERSONALITY, false, DT);
       // Full charge: AttackDash on its own would release here.
-      const launchedFull = world({ grounded: false, airRecoveryAvailable: true, attackState: AttackState.ChargingDash, dashChargeFraction: 1, attackEnergyFraction: 0.5 }, far);
+      const launchedFull = world({ grounded: false, airRecoveryAvailable: true, attackState: AttackState.ChargingDash, dashChargeFraction: 1, dashReadiness: 0.5 }, far);
       const actions = selector.selectActions(AiIntent.AttackDash, launchedFull, ATTACK_AI_PERSONALITY, false, DT);
       expect(actions.held.has(Action.Attack)).toBe(true);
       expect(actions.pressedThisFrame.has(Action.Attack)).toBe(false);
       // Still in that flight after the window is used: still held.
-      const afterRecovery = world({ grounded: false, airRecoveryAvailable: false, attackState: AttackState.ChargingDash, dashChargeFraction: 1, attackEnergyFraction: 0.5 }, far);
+      const afterRecovery = world({ grounded: false, airRecoveryAvailable: false, attackState: AttackState.ChargingDash, dashChargeFraction: 1, dashReadiness: 0.5 }, far);
       expect(selector.selectActions(AiIntent.AttackDash, afterRecovery, ATTACK_AI_PERSONALITY, false, DT).held.has(Action.Attack)).toBe(true);
     });
 
     it('the same full charge in a voluntary jump (no launch window) is released by the intent as usual', () => {
       const selector = new ActionSelector();
-      selector.selectActions(AiIntent.AttackDash, world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.3, attackEnergyFraction: 0.8 }, far), ATTACK_AI_PERSONALITY, false, DT);
-      const jumpingFull = world({ grounded: false, airRecoveryAvailable: false, attackState: AttackState.ChargingDash, dashChargeFraction: 1, attackEnergyFraction: 0.5 }, far);
+      selector.selectActions(AiIntent.AttackDash, world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.3, dashReadiness: 0.8 }, far), ATTACK_AI_PERSONALITY, false, DT);
+      const jumpingFull = world({ grounded: false, airRecoveryAvailable: false, attackState: AttackState.ChargingDash, dashChargeFraction: 1, dashReadiness: 0.5 }, far);
       expect(selector.selectActions(AiIntent.AttackDash, jumpingFull, ATTACK_AI_PERSONALITY, false, DT).held.has(Action.Attack)).toBe(false);
     });
 

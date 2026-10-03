@@ -87,8 +87,6 @@ describe('Debug Lab mutations', () => {
     expect(stability.resource.fraction).toBe(1);
     setResourceFraction(session, 'first', 'stamina', 0.25);
     expect(session.getBey('first').stamina.resource.fraction).toBeCloseTo(0.25, 9);
-    setResourceFraction(session, 'first', 'attackEnergy', 0.5);
-    expect(session.getBey('first').attackEnergy.resource.fraction).toBeCloseTo(0.5, 9);
     session.dispose();
   });
 
@@ -149,7 +147,7 @@ describe('Debug Lab mutations', () => {
     for (let i = 0; i < 10; i++) session.tick();
     prepareClash(session);
     expect(runUntil(session, 240, () => session.clash.controller.getState() === ClashState.Active)).toBe(true);
-    expect(session.getDebugMutations().length).toBeGreaterThanOrEqual(6);
+    expect(session.getDebugMutations().length).toBeGreaterThanOrEqual(5) // two teleports, reset cooldowns (the Dash's included), two forced Dashes;
     session.dispose();
   });
 });

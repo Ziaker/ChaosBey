@@ -44,6 +44,10 @@ test('the HUD reads the live match, a round ends with its banner, and round 2 ca
   const sessionStamina = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getLastResult()!.first.staminaFraction);
   expect(Math.abs((await widthPercent(page, 'hud-first-stamina')) / 100 - sessionStamina)).toBeLessThan(0.05);
 
+  // Owner 2026-10-02 (Lote 2): the old ATK line is the Dash cooldown (CD), full = Dash ready at the start.
+  await expect(page.getByTestId('hud-first').locator('.cb-hud__meter--dash-cd .cb-hud__meter-name')).toHaveText('CD');
+  await expect.poll(() => widthPercent(page, 'hud-first-dash-cd'), { timeout: 10_000 }).toBeGreaterThan(99);
+
   // Play round 1 for real.
   await page.keyboard.press('F3');
   const round = await playRoundToEnd(page, page.locator('#debug-overlay-root pre'));

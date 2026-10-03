@@ -18,6 +18,7 @@ import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaF
 import { STANDARD_ARENA_GEOMETRY, type ArenaGeometry } from '../../arena/presets/ArenaPresets';
 import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import { RING_OUT_DELAY_DEFAULT_S } from '../../arena/ringout/RingOutTuning';
+import { DASH_COOLDOWN_DEFAULT_S } from '../../combat/attacks/AttackTuning';
 
 export interface MatchConfig {
   /** Multiplies the real knockback/Stability consequence a Clash resolution applies (both the FirstWins/SecondWins loser's knockback and a Tie's symmetric repulsion) — GDD section 152's "configurable impact multiplier". */
@@ -45,6 +46,18 @@ export interface MatchConfig {
    * resets it). PROVISIONAL default 1.5 s; 0 = the old instant rule. Pregame slider.
    */
   ringOutDelayS: number;
+  /**
+   * Owner, 2026-10-02: seconds after a Dash ends before the next one can start charging, for player and AI alike (the
+   * Dash no longer spends Attack Energy). PROVISIONAL default 1.5 s. Pregame slider.
+   */
+  dashCooldownS: number;
+}
+
+/** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS'>;
+
+export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
+  return { dashCooldownS: config.dashCooldownS };
 }
 
 export function createDefaultMatchConfig(): MatchConfig {
@@ -55,6 +68,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     arenaFloor: DEFAULT_ARENA_FLOOR,
     motion: DEFAULT_MOTION_DIRECTION,
     ringOutDelayS: RING_OUT_DELAY_DEFAULT_S,
+    dashCooldownS: DASH_COOLDOWN_DEFAULT_S,
   };
 }
 

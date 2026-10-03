@@ -74,11 +74,13 @@ export const SCENARIOS: readonly Scenario[] = [
     // as a flat state) changed fight timing again — 'k' no longer reaches a Clash at all within 15s
     // (Clash at 2.0 s, no round end within 15 s); 'b' since the arena scale pass (floor radius 12 m ->
     // 36 m, the flat floor now a heightfield, then its resolution 288 -> 144 cells, changed every AI fight again: 'r' no longer reaches a
-    // Clash; 'b' is the first of a..z with a Clash and no round end within 15 s).
+    // Clash; 'b' is the first of a..z with a Clash and no round end within 15 s). 'c' since the Dash cooldown
+    // replaced Attack Energy (owner, 2026-10-02): 'b' now ends its round inside 15 s; 'c' is the first of a..z with
+    // a hit, a Clash, no round end and every readability guard holding (seed only; no camera value changed).
     firstSpawn: { x: -3, z: -5 },
     secondSpawn: { x: 3, z: 5 },
-    first: { kind: 'ai', seed: 'duel-p-b' },
-    second: { kind: 'ai', seed: 'duel-o-b' },
+    first: { kind: 'ai', seed: 'duel-p-c' },
+    second: { kind: 'ai', seed: 'duel-o-c' },
     expects: ['hit', 'clashActive'],
   },
   {

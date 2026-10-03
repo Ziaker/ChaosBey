@@ -15,7 +15,7 @@
 // Only events with a real source today exist. What the master list in the
 // brief maps to:
 //   BeySpawned                       → PresentationSystem.create(context)
-//   Stamina/Stability/AttackEnergy
+//   Stamina/Stability/Dash readiness
 //   Changed                          → state (BeyPresentationState), not events
 //   MovementStateChanged             → driftStarted/driftEnded/jumpStarted + state
 //   CollisionResolved                → collisionResolved (movement impacts today)

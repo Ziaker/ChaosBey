@@ -27,7 +27,7 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     staminaFraction: 1,
     stabilityFraction: 1,
     isBroken: false,
-    attackEnergyFraction: 1,
+    dashReadiness: 1,
     airRecoveryAvailable: false,
     canAffordDodge: true,
     ...overrides,

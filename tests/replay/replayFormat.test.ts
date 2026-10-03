@@ -265,7 +265,7 @@ describe('strict validation', () => {
       [(r) => (r.format = 'ChaosBeyReplayV3'), 'wrong-format', 'format'],
       [(r) => (r.stateHashAlgorithm = 'sha-256'), 'unsupported-version', 'stateHashAlgorithm'],
       [(r) => (r.config.rngScheme = 1), 'unsupported-version', 'config.rngScheme'],
-      [(r) => (r.config.stateSchema = 1), 'unsupported-version', 'config.stateSchema'],
+      [(r) => (r.config.stateSchema = 2), 'unsupported-version', 'config.stateSchema'],
       [(r) => (r.config.fixedTicksPerSecond = 30), 'unsupported-version', 'config.fixedTicksPerSecond'],
       [(r) => (r.config.matchConfig.addedLater = 1), 'unknown-field', 'config.matchConfig.addedLater'],
       [(r) => delete r.config.matchConfig.clashImpactMultiplier, 'missing-field', 'config.matchConfig.clashImpactMultiplier'],

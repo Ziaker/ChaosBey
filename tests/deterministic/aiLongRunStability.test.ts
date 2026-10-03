@@ -85,7 +85,7 @@ describe('AI vs AI long-run stability', () => {
       ] as const) {
         assertFiniteFraction(snapshot.staminaFraction, `${label} tick ${i} staminaFraction`);
         assertFiniteFraction(snapshot.stabilityFraction, `${label} tick ${i} stabilityFraction`);
-        assertFiniteFraction(snapshot.attackEnergyFraction, `${label} tick ${i} attackEnergyFraction`);
+        assertFiniteFraction(snapshot.dashReadiness, `${label} tick ${i} dashReadiness`);
         assertFiniteFraction(snapshot.dashChargeFraction, `${label} tick ${i} dashChargeFraction`);
         expect(Number.isFinite(snapshot.spin.angularVelocity.x), `${label} tick ${i} angularVelocity.x finite`).toBe(true);
         expect(Number.isFinite(snapshot.spin.angularVelocity.y), `${label} tick ${i} angularVelocity.y finite`).toBe(true);

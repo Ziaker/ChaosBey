@@ -60,7 +60,7 @@ export function buildCombatOverlayFields(session: MatchSession): CombatOverlayFi
     firstStaminaFraction: result.first.staminaFraction,
     firstStabilityFraction: result.first.stabilityFraction,
     firstIsBroken: result.first.isBroken,
-    firstAttackEnergyFraction: result.first.attackEnergyFraction,
+    firstDashReadiness: result.first.dashReadiness,
     secondAttackState: result.second.attackState,
     secondStaminaFraction: result.second.staminaFraction,
     secondStabilityFraction: result.second.stabilityFraction,

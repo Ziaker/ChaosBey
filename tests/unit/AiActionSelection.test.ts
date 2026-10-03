@@ -33,7 +33,7 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     staminaFraction: 1,
     stabilityFraction: 1,
     isBroken: false,
-    attackEnergyFraction: 1,
+    dashReadiness: 1,
     airRecoveryAvailable: false,
     canAffordDodge: true,
     ...overrides,
@@ -79,7 +79,7 @@ describe('ActionSelector', () => {
       AiIntent.AttackDash,
       // Opponent straight ahead (heading 0 faces +Z) so only the charge
       // target decides — see the alignment test below for the other gate.
-      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.1, attackEnergyFraction: 1 }, { positionXZ: { x: 0, z: 5 } }),
+      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.1, dashReadiness: 1 }, { positionXZ: { x: 0, z: 5 } }),
       ATTACK_AI_PERSONALITY,
       false,
       1 / 60,
@@ -89,7 +89,7 @@ describe('ActionSelector', () => {
 
     const chargedEnough = selector.selectActions(
       AiIntent.AttackDash,
-      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.99, attackEnergyFraction: 1 }, { positionXZ: { x: 0, z: 5 } }),
+      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.99, dashReadiness: 1 }, { positionXZ: { x: 0, z: 5 } }),
       ATTACK_AI_PERSONALITY,
       false,
       1 / 60,
@@ -115,7 +115,7 @@ describe('ActionSelector', () => {
     const selector = new ActionSelector();
     const actions = selector.selectActions(
       AiIntent.PressAdvantage,
-      world({ attackState: AttackState.Neutral, attackEnergyFraction: 1 }, { positionXZ: { x: 5, z: 0 }, isBroken: true, stabilityFraction: 0 }),
+      world({ attackState: AttackState.Neutral, dashReadiness: 1 }, { positionXZ: { x: 5, z: 0 }, isBroken: true, stabilityFraction: 0 }),
       ATTACK_AI_PERSONALITY,
       false,
       1 / 60,
@@ -275,7 +275,7 @@ describe('ActionSelector — steering discipline (M7 Part 2)', () => {
 describe('ActionSelector — Dash release (M7 Part 2)', () => {
   it('keeps charging past the charge target until the heading is on line, then releases', () => {
     const selector = new ActionSelector();
-    const charged = { attackState: AttackState.ChargingDash, dashChargeFraction: 0.9, attackEnergyFraction: 0.8 };
+    const charged = { attackState: AttackState.ChargingDash, dashChargeFraction: 0.9, dashReadiness: 0.8 };
 
     const offLine = selector.selectActions(AiIntent.AttackDash, world(charged, { positionXZ: { x: 5, z: 0 } }), ATTACK_AI_PERSONALITY, false, DT);
     expect(offLine.held.has(Action.Attack)).toBe(true);

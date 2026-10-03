@@ -32,8 +32,10 @@ const RUN_TICKS = 600;
  * AI RNG seed whose control run reaches all three freeze situations. Was
  * 'hitstop-freeze'; since the Motion Lab integration (M11) that run never
  * enters a counter stance, so re-swept: -6 reaches them at ticks 28 / 112 / 365.
+ * Re-swept for the Dash cooldown (owner, 2026-10-02: no more Attack Energy): -6
+ * never reaches a counter stance; -2 is the first of -1..-15 that reaches all three.
  */
-const AI_SEED = 'hitstop-freeze-6';
+const AI_SEED = 'hitstop-freeze-2';
 /** ~0.2 s: a strong hit's hitstop. */
 const FREEZE_TICKS = 12;
 /** How long after the freeze the action sequence must match the control run. */

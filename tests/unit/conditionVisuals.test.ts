@@ -202,7 +202,7 @@ function harness(layers: readonly LanguageId[], placeholder = false): Harness {
     staminaFraction: o.stamina,
     stabilityFraction: o.stability,
     isBroken: o.broken,
-    attackEnergyFraction: 1,
+    dashReadiness: 1,
     movement: { speedMps: 0 },
     spin: { spinRateRadPerSec: 22, wobbleEnergy: 0, tiltRad: 0, isTumbling: false },
   });

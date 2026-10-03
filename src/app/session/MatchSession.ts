@@ -33,7 +33,7 @@ import { buildFightFrame, speedLinesScreenDirection, type FightFrameBey, type Se
 import type { PresetId } from '../../camera/director/CameraParams';
 import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../simulation/impact/ImpactEvents';
 import { CLASH_RESOLVED_MAGNITUDE } from '../simulation/impact/ImpactMagnitude';
-import { arenaGeometryOf, type MatchConfig } from '../../config/match/MatchConfig';
+import { arenaGeometryOf, beyMatchRulesOf, type MatchConfig } from '../../config/match/MatchConfig';
 import { ARENA_PRESETS, FOUNDRY_PIT, type ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { Bey } from '../../bey/core/Bey';
@@ -301,7 +301,7 @@ export class MatchSession {
     this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys, {
       geometry: arenaGeometryOf(options.matchConfig),
       theme: options.arenaTheme ?? FOUNDRY_PIT.theme,
-    }, options.matchConfig.motion ?? 'B', presentationFeatures);
+    }, options.matchConfig.motion ?? 'B', presentationFeatures, beyMatchRulesOf(options.matchConfig));
     this.presentation = new PresentationHub({
       features: presentationFeatures,
       beys: [

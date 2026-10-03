@@ -5,6 +5,7 @@
 // (GDD section 1.4); each Bey's systems still own their own logic.
 // ============================================================
 
+import { beyMatchRulesOf, createDefaultMatchConfig, type BeyMatchRules } from '../../config/match/MatchConfig';
 import * as THREE from 'three';
 import { createArenaColliders } from '../../arena/colliders/createArenaColliders';
 import { FOUNDRY_PIT, STANDARD_ARENA_GEOMETRY, type ArenaGeometry, type ArenaTheme } from '../../arena/presets/ArenaPresets';
@@ -104,6 +105,7 @@ export function createMatchScene(
   arena: MatchArena = { geometry: STANDARD_ARENA_GEOMETRY, theme: FOUNDRY_PIT.theme },
   motion: MotionDirectionId = 'B',
   features: PresentationFeatures = PRESENTATION_FEATURES_OFF,
+  rules: BeyMatchRules = beyMatchRulesOf(createDefaultMatchConfig()),
 ): MatchScene {
   const motionValues = motionParams(motion);
   // arenaVisuals: createArenaColliders builds the colliders AND its temporary visuals (floor, wall, rings, two lights) in one call, and it is
@@ -113,8 +115,8 @@ export function createMatchScene(
 
   const floor = arena.geometry.floor ?? 'flat';
   const spawns = matchSpawnsFor(floor);
-  const first = createBey(physics, spawns.first, applyAttackProfileSettings(beys.first, attackProfileSettings), floor, motionValues);
-  const second = createBey(physics, spawns.second, applyAttackProfileSettings(beys.second, attackProfileSettings), floor, motionValues);
+  const first = createBey(physics, spawns.first, applyAttackProfileSettings(beys.first, attackProfileSettings), floor, motionValues, rules);
+  const second = createBey(physics, spawns.second, applyAttackProfileSettings(beys.second, attackProfileSettings), floor, motionValues, rules);
 
   // The same resolution Character Select's preview uses (beyVisualDefinitionFor):
   // the approved concept with `newBeyVisuals` on, the legacy placeholder

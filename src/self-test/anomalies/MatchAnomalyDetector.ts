@@ -290,7 +290,6 @@ export class MatchAnomalyDetector {
       for (const [name, resource] of [
         ['Stamina', bey.stamina.resource],
         ['Stability', bey.stability.resource],
-        ['Attack Energy', bey.attackEnergy.resource],
       ] as const) {
         const bad = !Number.isFinite(resource.value) || resource.value < -t.resourceTolerance || resource.value > resource.max + t.resourceTolerance;
         if (this.latch(key(`resource-${name}`), bad)) emit('resource-out-of-range', side, `${name} = ${resource.value} outside [0, ${resource.max}]`);

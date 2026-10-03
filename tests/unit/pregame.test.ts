@@ -107,8 +107,14 @@ describe('match setup rules', () => {
 
   it('feeds the Ring-out delay (owner, 2026-10-02; provisional 1.5 s) through MatchConfig', () => {
     expect(createDefaultMatchSetup().rules.ringOutDelayS).toBe(1.5);
-    const setup = { ...createDefaultMatchSetup(), rules: { ringOutDelayS: 0.25 } };
+    const setup = { ...createDefaultMatchSetup(), rules: { ...createDefaultMatchSetup().rules, ringOutDelayS: 0.25 } };
     expect(matchConfigFor(setup)).toEqual({ ...createDefaultMatchConfig(), ringOutDelayS: 0.25 });
+  });
+
+  it('feeds the Dash cooldown (owner, 2026-10-02; provisional 1.5 s) through MatchConfig', () => {
+    expect(createDefaultMatchSetup().rules.dashCooldownS).toBe(1.5);
+    const setup = { ...createDefaultMatchSetup(), rules: { ...createDefaultMatchSetup().rules, dashCooldownS: 4 } };
+    expect(matchConfigFor(setup)).toEqual({ ...createDefaultMatchConfig(), dashCooldownS: 4 });
   });
 
   it('builds the arena walls from the preset, and a preset change resets moved sliders', () => {

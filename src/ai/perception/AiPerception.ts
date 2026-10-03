@@ -39,7 +39,7 @@ export interface CombatantRawState {
   staminaFraction: number;
   stabilityFraction: number;
   isBroken: boolean;
-  attackEnergyFraction: number;
+  dashReadiness: number;
   /** DodgeController.isAirRecoveryAvailable(): pressing Dodge right now (airborne) would trigger air recovery (GDD section 21) — see that method for why this is not privileged information. */
   airRecoveryAvailable: boolean;
   /** Current Stamina covers a Dodge's cost — the Bey's own resource bar, which a player reads off the HUD. DodgeController silently ignores a Dodge press it cannot pay for. */

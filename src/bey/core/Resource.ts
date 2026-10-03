@@ -1,6 +1,6 @@
 // ============================================================
 // RESOURCE — SHARED BOUNDED NUMERIC RESOURCE
-// Stamina, Stability and Attack Energy are structurally the same shape (a
+// Stamina and Stability are structurally the same shape (a
 // clamped 0..max value with consumption/recovery) even though their
 // gameplay meaning is different (GDD section 31: avoid duplicating the
 // same *effect* across stats — this is not that, it's just the shared

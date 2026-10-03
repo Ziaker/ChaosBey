@@ -35,7 +35,7 @@ export const CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP = 0.3;
 
 // --- Dash Attack ---
 export const DASH_MIN_CHARGE_S = 0.15; // below this, charge contributes ~nothing beyond the minimum force.
-export const DASH_MAX_CHARGE_S = 1.2; // charge stops adding force beyond this — a backstop; Attack Energy running out is the primary limiter (GDD section 24).
+export const DASH_MAX_CHARGE_S = 1.2; // charge stops adding force beyond this (a full charge holds there until released).
 export const DASH_MIN_SPEED_MPS = 10;
 export const DASH_MAX_SPEED_MPS = 18;
 export const DASH_ACTIVE_DURATION_S = 0.5;
@@ -48,3 +48,10 @@ export const DASH_MIN_STABILITY_DAMAGE = 10;
 export const DASH_MAX_STABILITY_DAMAGE = 25;
 export const DASH_MIN_KNOCKBACK_FORCE = 8;
 export const DASH_MAX_KNOCKBACK_FORCE = 20;
+// Owner, 2026-10-02: the Dash is not limited by a resource (Attack Energy is
+// gone) but by a cooldown between uses, for player and AI alike. It starts
+// when a Dash ends (hit or whiff) and must run out before the next Dash can
+// start charging. PROVISIONAL default (no number from the owner); a Pregame
+// slider (MatchConfig.dashCooldownS) sets it per match.
+export const DASH_COOLDOWN_DEFAULT_S = 1.5;
+export const DASH_COOLDOWN_RANGE = { min: 0.5, max: 5, step: 0.25 } as const;
