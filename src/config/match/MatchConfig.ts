@@ -98,10 +98,16 @@ export interface MatchConfig {
   jumpStaminaCost: number;
   /** Seconds after a hop/jump begins before the next can (0 = none). */
   jumpCooldownS: number;
+  /**
+   * Owner, 2026-10-02 (item 13): the Circular is defensive (its user takes nothing; whoever touches it is launched).
+   * Always on in a match; false only for bare constructions (createBey without match rules: the Camera Lab), which
+   * keep the pre-2026-10-02 Circular like their jump and ring-out. Not a Pregame option.
+   */
+  defensiveCircular: boolean;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'defensiveCircular'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -121,6 +127,7 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     airControl: config.airControl,
     jumpStaminaCost: config.jumpStaminaCost,
     jumpCooldownS: config.jumpCooldownS,
+    defensiveCircular: config.defensiveCircular ?? true,
   };
 }
 
@@ -153,6 +160,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     airControl: 1,
     jumpStaminaCost: 0,
     jumpCooldownS: 0,
+    defensiveCircular: true,
   };
 }
 
