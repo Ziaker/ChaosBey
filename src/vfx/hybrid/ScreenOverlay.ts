@@ -37,7 +37,7 @@ export class ScreenOverlay {
   private readonly focus: FocusLines[] = [];
   private tintState: { css: string; remaining: number } | null = null;
   private impactRemaining = 0;
-  /** Pregame presentation scale: 1 = the approved full negative frame, 0 = disabled. Values >1 saturate visually. */
+  /** Pregame presentation scale: 1 = the approved full negative frame, 0 = disabled. */
   private impactStrength = 0;
   private readonly normal: CanvasRenderingContext2D | null = null;
   private readonly invert: CanvasRenderingContext2D | null = null;
@@ -72,12 +72,17 @@ export class ScreenOverlay {
     this.tintState = { css, remaining: seconds };
   }
 
-  /** The negative flash, for `seconds`. Strength 1 preserves the approved look; 0 suppresses it. */
+  /**
+   * The negative flash. Strength 1 preserves the approved look; 0 suppresses it. Below 1 the alpha scales down while
+   * keeping the approved duration. Above 1 alpha is already physically capped, so the extra strength is represented by
+   * proportionally longer presentation-only duration (150% = 1.5x duration) rather than silently doing nothing.
+   */
   impactFrame(seconds: number, strength = 1): void {
     const resolvedStrength = Math.max(0, strength);
     if (seconds <= 0 || resolvedStrength <= 0) return;
-    this.impactRemaining = Math.max(this.impactRemaining, seconds);
-    this.impactStrength = Math.max(this.impactStrength, resolvedStrength);
+    const durationScale = Math.max(1, resolvedStrength);
+    this.impactRemaining = Math.max(this.impactRemaining, seconds * durationScale);
+    this.impactStrength = Math.max(this.impactStrength, Math.min(1, resolvedStrength));
   }
 
   clear(): void {
