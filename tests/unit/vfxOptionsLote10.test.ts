@@ -9,6 +9,8 @@ import {
 import { ScreenOverlay } from '../../src/vfx/hybrid/ScreenOverlay';
 import { makeHybrid } from '../../src/vfx/hybrid/languages/hybrid';
 import type { FxContext } from '../../src/vfx/hybrid/languages/types';
+import { SpeedTrail } from '../../src/vfx/SpeedTrailVfx';
+import { TRAIL_FULL_OPACITY_SPEED_MPS, TRAIL_MAX_OPACITY } from '../../src/vfx/VfxTuning';
 
 /** Minimal language context: enough to exercise fastMove without a renderer/DOM. */
 function fastMoveContext(motionTrailScale: number): { ctx: FxContext; layerAdds: () => number } {
@@ -33,6 +35,10 @@ function fastMoveContext(motionTrailScale: number): { ctx: FxContext; layerAdds:
     motionTrailScale,
   } as unknown as FxContext;
   return { ctx, layerAdds: () => adds };
+}
+
+function trailOpacity(trail: SpeedTrail): number {
+  return ((trail.object3D as THREE.Line).material as THREE.LineBasicMaterial).opacity;
 }
 
 describe('Lote 10 visual options', () => {
@@ -73,5 +79,27 @@ describe('Lote 10 visual options', () => {
     // Mechanical fastMove always emits its first skid mark. Anime adds two trail sprites at the approved 100% setting.
     expect(off.layerAdds()).toBeGreaterThanOrEqual(1);
     expect(on.layerAdds() - off.layerAdds()).toBe(2);
+  });
+
+  it('the persistent SpeedTrail uses the same 0/100/150% control without changing the approved 100% baseline', () => {
+    const trail = new SpeedTrail(0xffffff);
+    const position = { x: 0, y: 0.2, z: 0 };
+
+    trail.setIntensityScale(0);
+    trail.update(position, TRAIL_FULL_OPACITY_SPEED_MPS);
+    expect(trailOpacity(trail)).toBe(0);
+
+    trail.setIntensityScale(1);
+    trail.update(position, TRAIL_FULL_OPACITY_SPEED_MPS);
+    expect(trailOpacity(trail)).toBeCloseTo(TRAIL_MAX_OPACITY, 6);
+
+    trail.setIntensityScale(1.5);
+    trail.update(position, TRAIL_FULL_OPACITY_SPEED_MPS);
+    expect(trailOpacity(trail)).toBeCloseTo(Math.min(1, TRAIL_MAX_OPACITY * 1.5), 6);
+
+    trail.setIntensityScale(999);
+    trail.update(position, TRAIL_FULL_OPACITY_SPEED_MPS);
+    expect(trailOpacity(trail)).toBeCloseTo(Math.min(1, TRAIL_MAX_OPACITY * 1.5), 6);
+    trail.dispose();
   });
 });
