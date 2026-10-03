@@ -5,7 +5,7 @@
 // Bey; the Pregame screen fills the rest.
 // ============================================================
 
-import { DEFAULT_VFX_OPTIONS, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
+import { DEFAULT_VFX_OPTIONS, sanitizeVfxOptions, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import { CONCEPT_BEYS, conceptBeyFor } from '../../bey/archetype/BeyConceptRoster';
 import { DEFAULT_AI_DIFFICULTY_TIER, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { DEFAULT_ARENA_PRESET, arenaPreset, type ArenaGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
@@ -227,11 +227,7 @@ export function loadLastSetup(storage: Pick<Storage, 'getItem'> | null = safeSto
     const value = (saved.rules as Record<string, unknown> | undefined)?.[key];
     if (typeof value === typeof rules[key] && (typeof value !== 'number' || Number.isFinite(value))) rules[key] = value;
   }
-  const visual: Record<string, unknown> = { ...base.visual };
-  for (const key of Object.keys(DEFAULT_VFX_OPTIONS)) {
-    const value = (saved.visual as Record<string, unknown> | undefined)?.[key];
-    if (typeof value === 'number' && Number.isFinite(value)) visual[key] = value;
-  }
+  const visual = sanitizeVfxOptions(saved.visual);
   return {
     ...base,
     opponentBeyId: typeof saved.opponentBeyId === 'string' && rosterEntryExists(saved.opponentBeyId) ? saved.opponentBeyId : base.opponentBeyId,
@@ -241,7 +237,7 @@ export function loadLastSetup(storage: Pick<Storage, 'getItem'> | null = safeSto
     clashImpactMultiplier: typeof saved.clashImpactMultiplier === 'number' ? saved.clashImpactMultiplier : base.clashImpactMultiplier,
     motion: saved.motion ?? base.motion,
     rules: sanitizeMatchRules(rules as unknown as MatchRules),
-    visual: visual as unknown as VfxOptions,
+    visual,
   };
 }
 
