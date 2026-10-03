@@ -79,7 +79,7 @@ export interface HybridVfxOptions {
   readonly arenaRadiusM: number;
   /** Where the screen overlay is mounted. Default: the page body. `null`: no DOM. */
   readonly overlayParent?: HTMLElement | null;
-  /** Lote 9: the Pregame's visual options (omitted = the approved look). */
+  /** Lote 9/11: the Pregame's visual options (omitted = the approved look). */
   readonly vfx?: VfxOptions;
 }
 
@@ -177,7 +177,10 @@ export class HybridVfxSystem implements PresentationSystem {
       shake: () => void this.dropped.shake++,
       hitstop: () => void this.dropped.hitstop++,
       slowMotion: () => void this.dropped.slowMotion++,
-      impactFrame: (seconds) => this.overlay.impactFrame(seconds * TUNING.impactFrameLength),
+      impactFrame: (seconds) => {
+        const scale = this.options.vfx?.impactFlash ?? 1;
+        this.overlay.impactFrame(seconds * TUNING.impactFrameLength * scale, scale);
+      },
       focusLines: (at, strength, seconds, color) => {
         if (TUNING.focusLines > 0) this.overlay.focusLines(at, strength * TUNING.focusLines, seconds, color);
       },
