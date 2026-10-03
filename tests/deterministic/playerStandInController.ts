@@ -50,6 +50,7 @@ interface RawState {
   dodgeState: DodgeState;
   staminaFraction: number;
   dashReadiness: number;
+  momentum: number;
   airRecoveryAvailable: boolean;
   canAffordDodge: boolean;
 }
@@ -65,6 +66,7 @@ function extractRawState(physics: PhysicsWorld, bey: Bey): RawState {
     dodgeState: bey.dodge.getState(),
     staminaFraction: bey.stamina.resource.fraction,
     dashReadiness: bey.attack.getDashReadiness(),
+    momentum: bey.momentum.value,
     airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable(),
     canAffordDodge: bey.stamina.resource.value >= DODGE_STAMINA_COST,
   };

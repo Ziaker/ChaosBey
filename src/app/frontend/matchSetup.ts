@@ -62,11 +62,22 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
 }
 
 /** The Pregame-adjustable gameplay rules: a slice of MatchConfig, so each one reaches the match (and its replay) through the one config path. */
-export type MatchRules = Pick<MatchConfig, 'ringOutDelayS' | 'dashCooldownS'>;
+export type MatchRules = Pick<
+  MatchConfig,
+  'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision'
+>;
 
 export function defaultMatchRules(): MatchRules {
   const config = createDefaultMatchConfig();
-  return { ringOutDelayS: config.ringOutDelayS, dashCooldownS: config.dashCooldownS };
+  return {
+    ringOutDelayS: config.ringOutDelayS,
+    dashCooldownS: config.dashCooldownS,
+    momentumGain: config.momentumGain,
+    momentumFillS: config.momentumFillS,
+    momentumDecayS: config.momentumDecayS,
+    bodyCollisionDamage: config.bodyCollisionDamage,
+    momentumLossOnCollision: config.momentumLossOnCollision,
+  };
 }
 
 /** The setup with a new player Bey; the opponent follows unless the player had picked one different from the default. */

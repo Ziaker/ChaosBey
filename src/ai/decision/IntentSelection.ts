@@ -33,6 +33,12 @@ import type { RiskAssessment } from './RiskEvaluation';
 import type { WorldState } from './WorldState';
 
 /** Above this edgeRisk, recovering toward the center overrides normal intent scoring entirely (GDD section 129). */
+/**
+ * Owner, 2026-10-02 (Lote 3): how much full momentum boosts committing (Approach, Dash) (PROVISIONAL). Its straight
+ * approaches are what build momentum; a bonus for circling to build it was tried and made patient AIs orbit each other
+ * without ever resolving the round (defense vs defense, matrix-2/-4), so it is not used.
+ */
+const MOMENTUM_COMMIT_BONUS = 0.5;
 const EDGE_RISK_OVERRIDE_THRESHOLD = 0.55;
 /** Once recovering, keep recovering until edgeRisk falls below this (hysteresis). Without it the AI stopped the moment it crossed back under the override threshold, turned to re-engage, and drifted straight back into danger. */
 const EDGE_RISK_RELEASE_THRESHOLD = 0.3;
@@ -337,6 +343,11 @@ export function selectIntent(
     AiIntent.Circle,
     ((!tooClose && !tooFar ? 0.35 + personality.patience * 0.3 : 0.1) + collisionReluctance * COLLISION_AVOIDANCE_CIRCLE_BONUS) * passiveDamping,
   );
+  // Momentum (owner, 2026-10-02, Lote 3): "build-up de velocidade, não ataques um atrás do outro" — with momentum
+  // built (a raised top speed, harder body collisions and Dashes) the AI commits more.
+  const own = world.own.momentum;
+  scores.set(AiIntent.Approach, (scores.get(AiIntent.Approach) ?? 0) * (1 + own * MOMENTUM_COMMIT_BONUS));
+  scores.set(AiIntent.AttackDash, (scores.get(AiIntent.AttackDash) ?? 0) * (1 + own * MOMENTUM_COMMIT_BONUS));
 
   scores.set(AiIntent.Wait, alreadyAttacking ? 0 : personality.patience * 0.15 * passiveDamping);
 

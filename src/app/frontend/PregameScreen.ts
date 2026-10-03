@@ -11,6 +11,13 @@
 
 import { RING_OUT_DELAY_RANGE } from '../../arena/ringout/RingOutTuning';
 import { DASH_COOLDOWN_RANGE } from '../../combat/attacks/AttackTuning';
+import {
+  BODY_COLLISION_DAMAGE_RANGE,
+  MOMENTUM_DECAY_RANGE,
+  MOMENTUM_FILL_RANGE,
+  MOMENTUM_GAIN_RANGE,
+  MOMENTUM_LOSS_ON_COLLISION_RANGE,
+} from '../../bey/momentum/MomentumTuning';
 import { AI_DIFFICULTY_TIERS, aiDifficultyTier, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { isEditableEventTarget } from '../../input/devices/EditableTarget';
 import { AI_PERSONALITY_CHOICES, resolveAiPersonality, type AiPersonalityChoice } from '../session/SideControllers';
@@ -260,6 +267,51 @@ export class PregameScreen {
         write: (s, v) => ({ ...s, rules: { ...s.rules, dashCooldownS: v } }),
         format: (v) => `${v.toFixed(2)} s`,
         note: 'Time after a Dash before the next one can charge, for you and the AI (the CD line on the HUD refills; full = ready). Provisional default 1.5 s.',
+      }),
+      this.slider({
+        id: 'momentum-gain',
+        label: 'Momentum gain',
+        range: MOMENTUM_GAIN_RANGE,
+        read: (s) => s.rules.momentumGain,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, momentumGain: v } }),
+        format: (v) => `+${Math.round(v * 100)}%`,
+        note: 'How much full momentum raises the top speed. Default +100% (twice the top speed).',
+      }),
+      this.slider({
+        id: 'momentum-fill',
+        label: 'Momentum build-up',
+        range: MOMENTUM_FILL_RANGE,
+        read: (s) => s.rules.momentumFillS,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, momentumFillS: v } }),
+        format: (v) => `${v.toFixed(1)} s`,
+        note: 'Seconds of fast, steady movement to fill momentum. Default 4 s.',
+      }),
+      this.slider({
+        id: 'momentum-decay',
+        label: 'Momentum decay',
+        range: MOMENTUM_DECAY_RANGE,
+        read: (s) => s.rules.momentumDecayS,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, momentumDecayS: v } }),
+        format: (v) => `${v.toFixed(2)} s`,
+        note: 'Seconds for full momentum to drain when you brake, turn hard or stop. Default 2 s.',
+      }),
+      this.slider({
+        id: 'body-collision-damage',
+        label: 'Body collision damage',
+        range: BODY_COLLISION_DAMAGE_RANGE,
+        read: (s) => s.rules.bodyCollisionDamage,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, bodyCollisionDamage: v } }),
+        format: (v) => `×${v.toFixed(1)}`,
+        note: 'Stability damage the slower Bey takes when the Beys collide without attacking. ×1 = a Circular Attack at a 10 m/s speed difference. Provisional.',
+      }),
+      this.slider({
+        id: 'momentum-loss',
+        label: 'Momentum loss on collision',
+        range: MOMENTUM_LOSS_ON_COLLISION_RANGE,
+        read: (s) => s.rules.momentumLossOnCollision,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, momentumLossOnCollision: v } }),
+        format: (v) => `${Math.round(v * 100)}%`,
+        note: 'Share of momentum the faster Bey loses in a collision (also on a hit taken or a wall impact). Provisional 50%.',
       }),
     );
 

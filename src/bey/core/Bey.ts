@@ -15,6 +15,7 @@ import { MovementController } from '../movement/MovementController';
 import { SpinController } from '../spin/SpinController';
 import { StabilitySystem } from '../stability/StabilitySystem';
 import { StaminaSystem } from '../stamina/StaminaSystem';
+import { MomentumSystem } from '../momentum/MomentumSystem';
 import { createBeyRigidBody } from './BeyRigidBody';
 import type { ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { DEFAULT_BEY_DEFINITION, type BeyDefinition } from '../archetype/BeyDefinition';
@@ -42,6 +43,10 @@ export interface Bey {
   readonly stamina: StaminaSystem;
   readonly stability: StabilitySystem;
   readonly attack: AttackController;
+  /** Owner, 2026-10-02 (Lote 3): speed build-up (see bey/momentum/). */
+  readonly momentum: MomentumSystem;
+  /** The match's per-Bey rules (MatchConfig): build-time config, in the replay config snapshot. */
+  readonly rules: BeyMatchRules;
   /** M11: the floor profile of the arena this Bey plays on (placement helpers put it on the floor). Not simulation state. */
   readonly arenaFloor: ArenaFloorId;
   /** M11: the motion direction's parameters (Motion Lab A/B/C, from MatchConfig.motion) — gameplay, shared by every system that reads it. */
@@ -72,6 +77,8 @@ export function createBey(
     stamina: new StaminaSystem(stats.stamina),
     stability: new StabilitySystem(),
     attack: new AttackController(definition.attack, rules.dashCooldownS),
+    momentum: new MomentumSystem(rules),
+    rules,
     arenaFloor,
     motion,
   };

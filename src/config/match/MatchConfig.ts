@@ -19,6 +19,13 @@ import { STANDARD_ARENA_GEOMETRY, type ArenaGeometry } from '../../arena/presets
 import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import { RING_OUT_DELAY_DEFAULT_S } from '../../arena/ringout/RingOutTuning';
 import { DASH_COOLDOWN_DEFAULT_S } from '../../combat/attacks/AttackTuning';
+import {
+  BODY_COLLISION_DAMAGE_DEFAULT,
+  MOMENTUM_DECAY_DEFAULT_S,
+  MOMENTUM_FILL_DEFAULT_S,
+  MOMENTUM_GAIN_DEFAULT,
+  MOMENTUM_LOSS_ON_COLLISION_DEFAULT,
+} from '../../bey/momentum/MomentumTuning';
 
 export interface MatchConfig {
   /** Multiplies the real knockback/Stability consequence a Clash resolution applies (both the FirstWins/SecondWins loser's knockback and a Tie's symmetric repulsion) — GDD section 152's "configurable impact multiplier". */
@@ -51,13 +58,30 @@ export interface MatchConfig {
    * Dash no longer spends Attack Energy). PROVISIONAL default 1.5 s. Pregame slider.
    */
   dashCooldownS: number;
+  /** Owner, 2026-10-02 (Lote 3): top speed = maxSpeed × (1 + momentum × this). +100% (1.0). Pregame slider. */
+  momentumGain: number;
+  /** Seconds of sustained fast movement to fill momentum. 4 s. Pregame slider. */
+  momentumFillS: number;
+  /** Seconds for full momentum to drain. 2 s. Pregame slider. */
+  momentumDecayS: number;
+  /** Body collision Stability damage, ×1 = a Circular Attack's at a 10 m/s speed difference. PROVISIONAL. Pregame slider. */
+  bodyCollisionDamage: number;
+  /** Fraction of momentum lost by the faster Bey in a body collision (and on a hit taken or a wall impact). PROVISIONAL 0.5. Pregame slider. */
+  momentumLossOnCollision: number;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
-  return { dashCooldownS: config.dashCooldownS };
+  return {
+    dashCooldownS: config.dashCooldownS,
+    momentumGain: config.momentumGain,
+    momentumFillS: config.momentumFillS,
+    momentumDecayS: config.momentumDecayS,
+    bodyCollisionDamage: config.bodyCollisionDamage,
+    momentumLossOnCollision: config.momentumLossOnCollision,
+  };
 }
 
 export function createDefaultMatchConfig(): MatchConfig {
@@ -69,6 +93,11 @@ export function createDefaultMatchConfig(): MatchConfig {
     motion: DEFAULT_MOTION_DIRECTION,
     ringOutDelayS: RING_OUT_DELAY_DEFAULT_S,
     dashCooldownS: DASH_COOLDOWN_DEFAULT_S,
+    momentumGain: MOMENTUM_GAIN_DEFAULT,
+    momentumFillS: MOMENTUM_FILL_DEFAULT_S,
+    momentumDecayS: MOMENTUM_DECAY_DEFAULT_S,
+    bodyCollisionDamage: BODY_COLLISION_DAMAGE_DEFAULT,
+    momentumLossOnCollision: MOMENTUM_LOSS_ON_COLLISION_DEFAULT,
   };
 }
 

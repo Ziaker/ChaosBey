@@ -52,6 +52,7 @@ describe('AI jump/drift — real physics', () => {
         stabilityFraction: 1,
         isBroken: false,
         dashReadiness: 1,
+        momentum: 0,
         airRecoveryAvailable: false,
         canAffordDodge: true,
       };

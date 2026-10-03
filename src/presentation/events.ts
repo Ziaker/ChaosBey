@@ -22,6 +22,7 @@
 //   MatchEnded                       → owned by the play flow (matchScore), outside a session
 // ============================================================
 
+import { DASH_MAX_STABILITY_DAMAGE } from '../combat/attacks/AttackTuning';
 import type { MatchTickResult } from '../app/simulation/tickMatch';
 import type { ClashMashInputEdge } from '../app/simulation/ClashPresentationTracker';
 import type { ImpactEvent, WorldPositionM } from '../app/simulation/impact/ImpactEvents';
@@ -86,6 +87,8 @@ export interface PresentationTickInput {
   readonly roundOver: boolean;
   /** The RoundOutcome name while over. */
   readonly roundOutcome: string;
+  /** The Beys' positions this tick, for events not carried by an ImpactEvent (a body collision). */
+  readonly positions?: { readonly first: WorldPositionM; readonly second: WorldPositionM };
 }
 
 const sideOf = (isFirst: boolean): PresentationSide => (isFirst ? 'first' : 'second');
@@ -115,6 +118,13 @@ export class PresentationEventDeriver {
       for (const combat of input.result.combatEvents) {
         if (combat.kind === 'knockback') {
           events.push({ kind: 'knockbackStarted', tick, side: sideOf(combat.targetIsFirst), force: combat.force, directionXZ: combat.directionXZ ?? null });
+        } else if (combat.kind === 'bodyCollision' && input.positions) {
+          // Owner, 2026-10-02 (Lote 3): a body collision, magnitude ∝ the Stability damage (a Dash's maximum = 1). Its own
+          // event, not an ImpactEvent: those also drive the camera, which stays exactly as it is.
+          const a = input.positions.first;
+          const b = input.positions.second;
+          const position = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+          events.push({ kind: 'collisionResolved', tick, side: sideOf(combat.targetIsFirst), magnitude: Math.min(1, combat.damage / DASH_MAX_STABILITY_DAMAGE), position });
         }
       }
     }

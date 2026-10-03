@@ -45,6 +45,7 @@ interface CardParts {
   readonly stamina: HTMLElement;
   readonly stability: HTMLElement;
   readonly dashCooldown: HTMLElement;
+  readonly momentum: HTMLElement;
   readonly dash: HTMLElement | null;
   readonly tag: HTMLElement;
 }
@@ -177,13 +178,20 @@ export class CombatHud {
     const dashCooldown = meter('dash-cd', 'CD');
     dashCooldown.parentElement!.parentElement!.title = 'Dash cooldown: full = Dash ready';
     const dash = isPlayer ? meter('dash', 'DASH') : null;
-    return { root, stamina, stability, dashCooldown, dash, tag };
+    // Owner, 2026-10-02 (Lote 3): momentum as a thin line under the meters, no label (the card is not redesigned).
+    const momentumTrack = el('div', 'cb-hud__momentum');
+    momentumTrack.title = 'Momentum: full = top speed raised';
+    const momentum = el('div', 'cb-hud__momentum-fill', `hud-${side}-momentum`);
+    momentumTrack.append(momentum);
+    root.append(momentumTrack);
+    return { root, stamina, stability, dashCooldown, momentum, dash, tag };
   }
 
   private fillCard(card: CardParts, side: HudSide): void {
     card.stamina.style.width = `${side.stamina * 100}%`;
     card.stability.style.width = `${side.stability * 100}%`;
     card.dashCooldown.style.width = `${side.dashReadiness * 100}%`;
+    card.momentum.style.width = `${side.momentum * 100}%`;
     if (card.dash) {
       card.dash.style.width = `${side.dashCharge * 100}%`;
       card.dash.parentElement!.parentElement!.classList.toggle('is-idle', side.dashCharge === 0);
@@ -294,6 +302,9 @@ function injectHudStyle(): void {
     .cb-hud__meter--stamina .cb-hud__fill.is-low { background: #ff9f43; }
     .cb-hud__meter--stability .cb-hud__fill { background: linear-gradient(90deg, #5ab8ff, #8fe3ff); }
     .cb-hud__meter--dash-cd .cb-hud__fill { background: var(--bey-accent); }
+    .cb-hud__momentum { height: 2px; margin-top: 4px; background: rgba(255,255,255,0.08); border-radius: 1px; overflow: hidden; }
+    .cb-hud__momentum-fill { height: 100%; width: 0; background: linear-gradient(90deg, #7ad7ff, #ffffff); }
+    .cb-hud__card--second .cb-hud__momentum-fill { margin-left: auto; }
     .cb-hud__meter--dash .cb-hud__fill { background: #ffe066; }
     .cb-hud__card.is-broken { border-color: var(--cb-loss); animation: cb-hud-broken 0.5s ease-in-out infinite alternate; }
     .cb-hud__card.is-broken .cb-hud__meter--stability .cb-hud__fill { background: var(--cb-loss); }
