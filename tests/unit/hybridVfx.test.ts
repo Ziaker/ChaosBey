@@ -230,6 +230,28 @@ describe('HybridVfxSystem', () => {
     h.hub.dispose();
   });
 
+  it('every dodge raises the wind and dust as it starts, Perfect or not (owner, 2026-10-02)', () => {
+    const h = harness();
+    const runtime = (h.system as unknown as { runtime: { windBurst(e: { m: number }): void } }).runtime;
+    const seen: number[] = [];
+    const original = runtime.windBurst.bind(runtime);
+    runtime.windBurst = (e) => {
+      seen.push(e.m);
+      original(e);
+    };
+    h.setState({ first: { dodgeState: DodgeState.Idle } });
+    h.frame();
+    const before = h.system.getStats().dust!;
+    h.setState({ first: { dodgeState: DodgeState.Dodging, speedMps: 12 } });
+    h.frame();
+    h.setState({ first: { dodgeState: DodgeState.Dodging, speedMps: 12 } });
+    h.frame(); // still dodging: no second burst
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBeGreaterThanOrEqual(0.3);
+    expect(h.system.getStats().dust! - before).toBeGreaterThan(0);
+    h.hub.dispose();
+  });
+
   it('wobbles and grinds while broken, drives the circular sweep, and shows dodge afterimages', () => {
     const fxAfter = (first: Partial<Facts>): number => {
       const h = harness();

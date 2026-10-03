@@ -244,7 +244,7 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
       // ceiling without a Dash's stability damage reaching exactly zero —
       // which freezes the round via an instant break/KO before the
       // physics can carry the launch out).
-      first.stamina.resource.set(0);
+      first.stamina.resource.set(0.1 * first.stamina.resource.max); // nearly empty: Stamina 0 is a spin-out now (owner, 2026-10-02)
       first.stability.debugSetValue(30);
     },
     // Jump 10 ticks after the Dash release (the hit lands 18 ticks after
@@ -305,7 +305,7 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     setup: ({ first, second }) => {
       placeBey(first, 0, -3, 0);
       placeBey(second, 0, 0, Math.PI);
-      second.stamina.resource.set(0);
+      second.stamina.resource.set(0.05 * second.stamina.resource.max); // nearly empty: Stamina 0 is a spin-out now (owner, 2026-10-02)
       second.stability.debugSetValue(10);
     },
     first: script(hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS)),
@@ -322,7 +322,7 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     setup: ({ first, second }) => {
       placeBey(first, 0, -6, 0);
       placeBey(second, 6, 6, 0);
-      first.stamina.resource.set(0);
+      first.stamina.resource.set(0.05 * first.stamina.resource.max); // nearly empty: Stamina 0 is a spin-out now (owner, 2026-10-02)
     },
     first: script([{ fromTick: 0, held: [Action.MoveForward] }]),
     second: idle,

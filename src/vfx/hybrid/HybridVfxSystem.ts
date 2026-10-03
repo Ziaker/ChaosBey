@@ -333,7 +333,11 @@ export class HybridVfxSystem implements PresentationSystem {
       this.runtime.circularSweep({ pos, m: 0.6, slot }, t, dt);
     }
     track.attackState = bey.attackState;
-    // Dodge: afterimages while dodging.
+    // Dodge: every dodge raises the Cel Cyclone wind and dust as it starts (owner, 2026-10-02; it used to show only
+    // on an evaded hit, strongly only on a Perfect Dodge), at the lab's Light intensity; afterimages while dodging.
+    if (track.dodgeState !== DodgeState.Dodging && bey.dodgeState === DodgeState.Dodging) {
+      this.runtime.windBurst({ pos: pos.clone(), dir: this.travelDirection(track, this.dir).clone(), m: VFX_LIGHT, slot });
+    }
     if (bey.dodgeState === DodgeState.Dodging) this.runtime.dodgeMove({ pos, vel: track.vel.clone(), m: 0.6, slot }, dt);
     track.dodgeState = bey.dodgeState;
     // Speed sparks and skid marks.

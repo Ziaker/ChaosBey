@@ -27,6 +27,9 @@ import {
   MOMENTUM_LOSS_ON_COLLISION_DEFAULT,
 } from '../../bey/momentum/MomentumTuning';
 import { JUMP_FULL_HEIGHT_DEFAULT_M, JUMP_SHORT_HOP_TARGET_APEX_M } from '../../drift/DriftTuning';
+import { MOVEMENT_STAMINA_DRAIN_DEFAULT } from '../../bey/stamina/StaminaTuning';
+import { DODGE_COOLDOWN_S } from '../../dodge/DodgeTuning';
+import { CIRCULAR_LAUNCH_FORCE_DEFAULT } from '../../combat/attacks/AttackTuning';
 
 export interface MatchConfig {
   /** Multiplies the real knockback/Stability consequence a Clash resolution applies (both the FirstWins/SecondWins loser's knockback and a Tie's symmetric repulsion) — GDD section 152's "configurable impact multiplier". */
@@ -73,10 +76,16 @@ export interface MatchConfig {
   jumpFullHeightM: number;
   /** Apex of a short hop (a tap), m. Default the previous value (~0.13 m). Pregame slider. */
   jumpShortHopHeightM: number;
+  /** Owner, 2026-10-02 (Lote 5): scales the movement (speed) Stamina drain; 1 = the new 2.1/s at full speed (was 3). Pregame slider 0-200%. */
+  movementStaminaDrain: number;
+  /** Seconds between dodges (GDD section 12 "pre-game configurable"). 3 s. Pregame slider. */
+  dodgeCooldownS: number;
+  /** Owner, 2026-10-02 (Lote 5): how hard an active Circular launches whoever touches it (×1 = the provisional default). Pregame slider. */
+  circularLaunchForce: number;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -88,6 +97,9 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     momentumLossOnCollision: config.momentumLossOnCollision,
     jumpFullHeightM: config.jumpFullHeightM,
     jumpShortHopHeightM: config.jumpShortHopHeightM,
+    movementStaminaDrain: config.movementStaminaDrain,
+    dodgeCooldownS: config.dodgeCooldownS,
+    circularLaunchForce: config.circularLaunchForce,
   };
 }
 
@@ -107,6 +119,9 @@ export function createDefaultMatchConfig(): MatchConfig {
     momentumLossOnCollision: MOMENTUM_LOSS_ON_COLLISION_DEFAULT,
     jumpFullHeightM: JUMP_FULL_HEIGHT_DEFAULT_M,
     jumpShortHopHeightM: JUMP_SHORT_HOP_TARGET_APEX_M,
+    movementStaminaDrain: MOVEMENT_STAMINA_DRAIN_DEFAULT,
+    dodgeCooldownS: DODGE_COOLDOWN_S,
+    circularLaunchForce: CIRCULAR_LAUNCH_FORCE_DEFAULT,
   };
 }
 

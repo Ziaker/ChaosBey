@@ -13,11 +13,12 @@
 // approved separately before it's implemented (do not invent one here).
 // ============================================================
 
-export const DODGE_BURST_SPEED_MPS = 9; // engineering placeholder (GDD section 167).
+export const DODGE_BURST_SPEED_MPS = 12.6; // owner, 2026-10-02 (Lote 5): +40% distance (was 9); same duration and i-frames.
 // GDD section 22's approved current baseline (not a final balance number,
 // but the currently-approved concept — do not silently retune this one).
 export const DODGE_ACTIVE_DURATION_S = 0.5; // i-frame window.
-export const DODGE_COOLDOWN_S = 3; // default; pre-game configurable per GDD section 12.
+export const DODGE_COOLDOWN_S = 3; // default; pre-game configurable per GDD section 12 — Pregame slider "Dodge cooldown" (MatchConfig.dodgeCooldownS, owner 2026-10-02).
+export const DODGE_COOLDOWN_RANGE = { min: 0.5, max: 6, step: 0.25 } as const;
 // Early sub-window of the active dodge that counts as "perfect" if it
 // avoids a hit — tighter than the full i-frame window, rewarding precise
 // timing over a defensive habit of dodging early/often. Placeholder.

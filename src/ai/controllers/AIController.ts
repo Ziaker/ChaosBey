@@ -98,9 +98,13 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     dashReadiness: bey.attack.getDashReadiness(),
     momentum: bey.momentum.value,
     airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable(),
-    canAffordDodge: bey.stamina.resource.value >= DODGE_STAMINA_COST,
+    // Owner, 2026-10-02 (Lote 5): Stamina 0 is a spin-out loss, so the AI keeps a reserve and never dodges itself into one.
+    canAffordDodge: bey.stamina.resource.value >= DODGE_STAMINA_COST + AI_DODGE_STAMINA_RESERVE,
   };
 }
+
+/** Stamina the AI keeps after a dodge (Lote 5: Stamina 0 = spin-out). */
+const AI_DODGE_STAMINA_RESERVE = 15;
 
 const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, punishWindow: false, edgePressure: 0 };
 

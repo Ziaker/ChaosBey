@@ -92,14 +92,13 @@ interface Recording {
 // arena, slightly different contact physics): replay-0 no longer qualifies;
 // now only replay-58 (1103 ticks, 110 frozen) and replay-26 (1950 ticks, 104
 // frozen, 449 steering ticks after tick 900) do.
-// Ring-out delay + Perfect Dodge reported once per dodge (owner, 2026-10-02 —
-// the per-tick Perfect Dodge repeats also re-triggered hitstop), the Dash
-// cooldown (Lote 2), then momentum and body collisions (Lote 3): re-swept
-// replay-0..599, only replay-487 qualifies (1621 ticks, 109 frozen, 189
-// steering ticks after tick 900), so it serves both roles.
+// Re-swept with each gameplay lote of the owner's 2026-10-02 request (ring-out
+// delay and Perfect Dodge once, Dash cooldown, momentum, jump, combat rules):
+// after Lote 5, replay-0..599 has 19 qualifying; replay-56 (2610 ticks, 161
+// frozen) and replay-51 (2304 ticks, 127 frozen, 682 steering ticks after 900).
 // Most seeds end within a few hundred ticks.
-const LONG_SEED = 'replay-487';
-const MUTATION_SEED = 'replay-487';
+const LONG_SEED = 'replay-56';
+const MUTATION_SEED = 'replay-51';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {

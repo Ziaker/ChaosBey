@@ -277,12 +277,18 @@ describe('Debug Lab inspection (GDD section 69)', () => {
   });
 
   it('shows the knockback breakdown after a real hit', async () => {
-    const { session } = await createSession('knockback-breakdown');
+    // A normal hit (not a Circular launch, owner 2026-10-02) in an AI match: the first seed of a few that has one.
+    let session!: MatchSession;
     let found = false;
-    for (let i = 0; i < 3600 && !found; i++) {
-      session.tick();
-      const kb = session.getLastKnockback('first') ?? session.getLastKnockback('second');
-      found = kb?.components != null;
+    for (const seed of ['knockback-breakdown', 'knockback-breakdown-2', 'knockback-breakdown-3', 'knockback-breakdown-4']) {
+      session = (await createSession(seed)).session;
+      for (let i = 0; i < 3600 && !found; i++) {
+        session.tick();
+        const kb = session.getLastKnockback('first') ?? session.getLastKnockback('second');
+        found = kb?.components != null;
+      }
+      if (found) break;
+      session.dispose();
     }
     expect(found).toBe(true);
     const side: Side = session.getLastKnockback('first')?.components ? 'first' : 'second';

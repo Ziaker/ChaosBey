@@ -28,6 +28,10 @@ export function outcomeText(outcome: RoundOutcome): OutcomeText | null {
       return { result: 'loss', headline: 'DEFEAT', finish: 'Knock-out: you were hit while broken' };
     case RoundOutcome.SecondWinsByRingOut:
       return { result: 'loss', headline: 'DEFEAT', finish: 'Ring-out: you left the arena' };
+    case RoundOutcome.FirstWinsBySpinOut:
+      return { result: 'win', headline: 'VICTORY', finish: 'Spin-out: the opponent ran out of Stamina and stopped spinning' };
+    case RoundOutcome.SecondWinsBySpinOut:
+      return { result: 'loss', headline: 'DEFEAT', finish: 'Spin-out: you ran out of Stamina and stopped spinning' };
     case RoundOutcome.Draw:
       return { result: 'draw', headline: 'DRAW', finish: 'Both Beys went down on the same tick' };
   }

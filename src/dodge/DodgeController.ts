@@ -65,6 +65,9 @@ export interface DodgeTickResult {
 }
 
 export class DodgeController {
+  /** MatchConfig.dodgeCooldownS (owner, 2026-10-02: a Pregame slider). */
+  constructor(private readonly cooldownS: number = DODGE_COOLDOWN_S) {}
+
   private state = DodgeState.Idle;
   private activeTimerS = 0;
   private cooldownTimerS = 0;
@@ -91,7 +94,7 @@ export class DodgeController {
   getDebugTimers(): { activeTimerS: number; cooldownRemainingS: number; airRecoveryAvailable: boolean; launchPending: boolean } {
     return {
       activeTimerS: this.state === DodgeState.Dodging ? this.activeTimerS : 0,
-      cooldownRemainingS: this.state === DodgeState.Cooldown ? Math.max(0, DODGE_COOLDOWN_S - this.cooldownTimerS) : 0,
+      cooldownRemainingS: this.state === DodgeState.Cooldown ? Math.max(0, this.cooldownS - this.cooldownTimerS) : 0,
       airRecoveryAvailable: this.isAirRecoveryAvailable(),
       launchPending: this.launchPending,
     };
@@ -208,7 +211,7 @@ export class DodgeController {
 
       case DodgeState.Cooldown:
         this.cooldownTimerS += fixedDeltaSeconds;
-        if (this.cooldownTimerS >= DODGE_COOLDOWN_S) {
+        if (this.cooldownTimerS >= this.cooldownS) {
           this.state = DodgeState.Idle;
         }
         break;

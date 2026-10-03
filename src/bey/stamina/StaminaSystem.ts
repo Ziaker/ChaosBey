@@ -51,7 +51,11 @@ export class StaminaSystem {
    * only, or a curve instead of a flat divisor) is equally open pending
    * owner balance review.
    */
-  constructor(private readonly staminaStat: number = 1) {
+  constructor(
+    private readonly staminaStat: number = 1,
+    /** MatchConfig.movementStaminaDrain: scales the speed (movement) drain; the base spin drain is unaffected. */
+    private readonly movementDrainScale: number = 1,
+  ) {
     this.resource = new Resource(STAMINA_MAX * staminaStat);
   }
 
@@ -59,7 +63,7 @@ export class StaminaSystem {
   tick(currentSpeedMps: number, fixedDeltaSeconds: number): void {
     const speedFraction = currentSpeedMps / INTENDED_MAX_SPEED_MPS;
     const extraEffortFraction = Math.max(0, speedFraction - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION) / (1 - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION);
-    const drainPerS = STAMINA_BASE_DRAIN_PER_S + STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED * Math.min(1, extraEffortFraction);
+    const drainPerS = STAMINA_BASE_DRAIN_PER_S + STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED * this.movementDrainScale * Math.min(1, extraEffortFraction);
     this.resource.subtract((drainPerS / this.staminaStat) * fixedDeltaSeconds);
   }
 

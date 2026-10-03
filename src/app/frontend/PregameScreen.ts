@@ -19,6 +19,9 @@ import {
   MOMENTUM_LOSS_ON_COLLISION_RANGE,
 } from '../../bey/momentum/MomentumTuning';
 import { JUMP_FULL_HEIGHT_RANGE, JUMP_SHORT_HOP_HEIGHT_RANGE } from '../../drift/DriftTuning';
+import { MOVEMENT_STAMINA_DRAIN_RANGE } from '../../bey/stamina/StaminaTuning';
+import { DODGE_COOLDOWN_RANGE } from '../../dodge/DodgeTuning';
+import { CIRCULAR_LAUNCH_FORCE_RANGE } from '../../combat/attacks/AttackTuning';
 import { AI_DIFFICULTY_TIERS, aiDifficultyTier, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { isEditableEventTarget } from '../../input/devices/EditableTarget';
 import { AI_PERSONALITY_CHOICES, resolveAiPersonality, type AiPersonalityChoice } from '../session/SideControllers';
@@ -331,6 +334,33 @@ export class PregameScreen {
         write: (s, v) => ({ ...s, rules: { ...s.rules, jumpShortHopHeightM: v } }),
         format: (v) => `${v.toFixed(2)} m`,
         note: 'How high a quick X tap hops. Default the previous ~0.13 m.',
+      }),
+      this.slider({
+        id: 'movement-stamina-drain',
+        label: 'Movement stamina drain',
+        range: MOVEMENT_STAMINA_DRAIN_RANGE,
+        read: (s) => s.rules.movementStaminaDrain,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, movementStaminaDrain: v } }),
+        format: (v) => `${Math.round(v * 100)}%`,
+        note: 'Stamina spent by moving fast (the spin itself always drains a little). 100% = 30% less than before. Stamina 0 loses the round (spin-out).',
+      }),
+      this.slider({
+        id: 'dodge-cooldown',
+        label: 'Dodge cooldown',
+        range: DODGE_COOLDOWN_RANGE,
+        read: (s) => s.rules.dodgeCooldownS,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, dodgeCooldownS: v } }),
+        format: (v) => `${v.toFixed(2)} s`,
+        note: 'Time between dodges. Default 3 s.',
+      }),
+      this.slider({
+        id: 'circular-launch-force',
+        label: 'Circular launch force',
+        range: CIRCULAR_LAUNCH_FORCE_RANGE,
+        read: (s) => s.rules.circularLaunchForce,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, circularLaunchForce: v } }),
+        format: (v) => `×${v.toFixed(1)}`,
+        note: 'How hard an active Circular (tap Z) throws whoever touches it. Provisional.',
       }),
     );
 
