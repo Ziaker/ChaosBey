@@ -76,6 +76,8 @@ describe('AI difficulty tiers in real matches', () => {
     // 38 vs 34. The longer burst carries the Bey clear of the hitbox, so most dodges now avoid the hit by distance
     // instead of overlapping it inside the i-frames — "dodged" (an i-frame nullification) collapses for both tiers
     // (at 9 m/s this same run still passes the old 1.25x). Ace still dodges far more often and wins more.
+    // Owner audit fixes (2026-10-03), with the AI's dodge reserve raised 15 -> 45 Stamina (Ace was losing 18 of these
+    // rounds by spin-out): errors 409 vs 856, hits dodged 14 vs 8, dodges 87 vs 54, wins 45 vs 25.
     expect(totals.ace.hitsDodged).toBeGreaterThan(totals.rookie.hitsDodged);
     expect(totals.ace.dodges).toBeGreaterThan(totals.rookie.dodges * 1.4);
     expect(totals.ace.wins).toBeGreaterThan(totals.rookie.wins);

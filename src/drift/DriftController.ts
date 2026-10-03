@@ -33,6 +33,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import { Action, type ControllerActions } from '../input/actions/Action';
 import { LATERAL_GRIP_PER_S } from '../bey/movement/MovementTuning';
 import { GRAVITY_MPS2 } from '../physics/world/PhysicsWorld';
+import { FIXED_DELTA_SECONDS as FIXED_STEP_S } from '../physics/fixed-step/FixedTimestepLoop';
 import {
   DRIFT_AIRBORNE_GRACE_S,
   DRIFT_HOP_TARGET_APEX_M,
@@ -118,12 +119,30 @@ export class DriftController {
   /** Launch speed of this match's full jump (√(2·g·fullHeight)) and its short-hop apex (owner, 2026-10-02). */
   private readonly launchMps: number;
   private readonly shortHopApexM: number;
+  /**
+   * Owner audit B6 (2026-10-03): the Full jump slider must not change the short hop or the drift hop. With the full
+   * impulse applied on the press tick, the first tick of flight at the full launch speed already rose 0.12 m at 2.5 m
+   * (0.17 m at 5 m) — more than the short/drift hop's whole target (0.127 m) — before any cut could act. Now a press
+   * decides its one launch on the tick after it (16.7 ms), from what the input says by then: released = a short hop,
+   * X + a lateral direction while moving = a drift hop, still held = the full jump (cut on release). A drift hop
+   * whose lateral is already held on the press tick launches at once. Still one impulse, one flight, no
+   * re-acceleration. Matches built without jump rules (bare constructions, the Camera Lab) keep the old immediate
+   * full launch.
+   */
+  private readonly legacyLaunch: boolean;
+  /** B6: a press began the hop; its single launch is decided this tick. */
+  private launchPending = false;
+  /** B6: the body's height at launch and fixed steps since, for the release cut's height-already-gained (measured, not assumed). */
+  private launchY = 0;
+  private stepsSinceLaunch = 0;
 
   constructor(
     private readonly normalLateralGripPerS: number = LATERAL_GRIP_PER_S,
     /** The match's jump heights (MatchConfig). Omitted = the pre-2026-10-02 jump (LEGACY_JUMP_FULL_HEIGHT_M). */
-    jump: { readonly jumpFullHeightM: number; readonly jumpShortHopHeightM: number } = { jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, jumpShortHopHeightM: JUMP_SHORT_HOP_TARGET_APEX_M },
+    jumpRules?: { readonly jumpFullHeightM: number; readonly jumpShortHopHeightM: number },
   ) {
+    this.legacyLaunch = jumpRules === undefined;
+    const jump = jumpRules ?? { jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, jumpShortHopHeightM: JUMP_SHORT_HOP_TARGET_APEX_M };
     this.launchMps = jumpLaunchVelocityForApexM(jump.jumpFullHeightM);
     // A short hop can never be taller than the full jump.
     this.shortHopApexM = Math.min(jump.jumpShortHopHeightM, jump.jumpFullHeightM);
@@ -225,6 +244,18 @@ export class DriftController {
         break;
 
       case DriftState.Hopping: {
+        if (this.launchPending) {
+          // B6: the press's one launch, decided now.
+          // The press tick was on the floor; one tick on, the launch happens whatever that tick's ground contact (a
+          // bowl's terrain or a landing bounce can lift the Bey for a tick) — exactly as the immediate launch did.
+          this.launchPending = false;
+          this.hopBaseVerticalMps = body.linvel().y;
+          if (this.driftArmed) this.launch(body, this.driftHopLaunchMps, true);
+          else if (!jumpDriftHeld) this.launch(body, this.shortHopLaunchMps, true);
+          else this.launch(body, this.launchMps, false);
+          break;
+        }
+        this.stepsSinceLaunch++;
         this.hopTimerS += fixedDeltaSeconds;
 
         // Variable jump height: a single launch impulse was already applied
@@ -245,11 +276,11 @@ export class DriftController {
           const vel = body.linvel();
           if (vel.y > this.hopBaseVerticalMps) {
             if (this.driftArmed) {
-              const target = this.hopBaseVerticalMps + this.computeDriftHopCutMps(this.jumpAssistElapsedS);
+              const target = this.hopBaseVerticalMps + this.computeDriftHopCutMps(body, this.jumpAssistElapsedS);
               if (vel.y > target) body.setLinvel({ x: vel.x, y: target, z: vel.z }, true);
               this.jumpCutApplied = true;
             } else if (!jumpDriftHeld) {
-              const target = this.hopBaseVerticalMps + this.computeJumpReleaseCapMps(this.jumpAssistElapsedS);
+              const target = this.hopBaseVerticalMps + this.computeJumpReleaseCapMps(body, this.jumpAssistElapsedS);
               if (vel.y > target) body.setLinvel({ x: vel.x, y: target, z: vel.z }, true);
               this.jumpCutApplied = true;
             } else if (this.jumpAssistElapsedS >= JUMP_RELEASE_WINDOW_S) {
@@ -360,12 +391,46 @@ export class DriftController {
     this.jumpCutApplied = false;
     const vel = body.linvel();
     this.hopBaseVerticalMps = vel.y;
-    // The entire vertical launch, applied once, immediately (no waiting to
-    // see how long the press lasts — GDD section 13 of the jump/air-control
-    // hotfix). Every other height (short/medium, or the drift hop) comes
-    // from cutting THIS SAME arc short later, in the Hopping state above —
-    // never from a second application of force.
-    body.setLinvel({ x: vel.x, y: vel.y + this.launchMps, z: vel.z }, true);
+    if (this.legacyLaunch) {
+      // The entire vertical launch, applied once, immediately (GDD section 13 of the jump/air-control hotfix); every
+      // other height comes from cutting THIS SAME arc short later, in the Hopping state above.
+      this.launch(body, this.launchMps, false);
+      return;
+    }
+    // B6: X with a lateral direction while moving is a drift hop from the first tick: launch it now. Anything else
+    // launches next tick, once the input shows a tap or a hold.
+    if (this.movingAtHop && this.lateralHeld(actions)) {
+      this.driftArmed = true;
+      this.launch(body, this.driftHopLaunchMps, true);
+    } else {
+      this.launchPending = true;
+    }
+  }
+
+  /** The hop's single vertical impulse: `addedMps` on top of the vertical speed it had (a bowl slope's). `final` = no release cut will follow. */
+  private launch(body: RAPIER.RigidBody, addedMps: number, final: boolean): void {
+    const vel = body.linvel();
+    body.setLinvel({ x: vel.x, y: this.hopBaseVerticalMps + addedMps, z: vel.z }, true);
+    this.jumpCutApplied = final;
+    this.jumpAssistElapsedS = 0;
+    this.stepsSinceLaunch = 0;
+    if (!this.legacyLaunch) this.launchY = body.translation().y; // legacy cuts use the analytic arc (and never read it)
+  }
+
+  /** Launch speed of a short hop / a drift hop: their own apex, whatever the full jump is (B6). */
+  private get shortHopLaunchMps(): number {
+    return Math.sqrt(2 * GRAVITY_MPS2 * this.shortHopApexM);
+  }
+
+  private get driftHopLaunchMps(): number {
+    return Math.sqrt(2 * GRAVITY_MPS2 * DRIFT_HOP_TARGET_APEX_M);
+  }
+
+  /** Height the launch has added so far (above the bowl slope's own motion): measured (B6), or the old analytic arc for legacy constructions. */
+  private heightAlreadyGainedM(body: RAPIER.RigidBody, holdElapsedS: number): number {
+    if (this.legacyLaunch) return this.launchMps * holdElapsedS - 0.5 * GRAVITY_MPS2 * holdElapsedS * holdElapsedS;
+    const t = this.stepsSinceLaunch * FIXED_STEP_S;
+    return body.translation().y - this.launchY - this.hopBaseVerticalMps * t;
   }
 
   /**
@@ -428,10 +493,10 @@ export class DriftController {
    * add to it — "no positive vy reacceleration after launch" and "exactly
    * one apex" by construction, not by a separate safety check.
    */
-  private computeJumpReleaseCapMps(holdElapsedS: number): number {
+  private computeJumpReleaseCapMps(body: RAPIER.RigidBody, holdElapsedS: number): number {
     const t = Math.min(holdElapsedS, JUMP_RELEASE_WINDOW_S);
     const exactWindowS = this.shortHopExactWindowS;
-    const heightAlreadyGainedM = this.launchMps * t - 0.5 * GRAVITY_MPS2 * t * t;
+    const heightAlreadyGainedM = this.heightAlreadyGainedM(body, t);
     let targetApexM: number;
     if (t <= exactWindowS) {
       targetApexM = this.shortHopApexM;
@@ -464,9 +529,9 @@ export class DriftController {
    * enough" is), and "stop rising immediately" — never "keep rising" — once
    * it hasn't.
    */
-  private computeDriftHopCutMps(holdElapsedS: number): number {
+  private computeDriftHopCutMps(body: RAPIER.RigidBody, holdElapsedS: number): number {
     const t = Math.min(holdElapsedS, JUMP_RELEASE_WINDOW_S);
-    const heightAlreadyGainedM = this.launchMps * t - 0.5 * GRAVITY_MPS2 * t * t;
+    const heightAlreadyGainedM = this.heightAlreadyGainedM(body, t);
     const remainingM = Math.max(0, DRIFT_HOP_TARGET_APEX_M - heightAlreadyGainedM);
     return Math.sqrt(2 * GRAVITY_MPS2 * remainingM);
   }
@@ -485,6 +550,9 @@ export class DriftController {
   /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
   getDeterministicState(): CanonicalRecord {
     return {
+      launchPending: this.launchPending,
+      launchY: this.launchY,
+      stepsSinceLaunch: this.stepsSinceLaunch,
       state: this.state,
       hopTimerS: this.hopTimerS,
       recoveryTimerS: this.recoveryTimerS,

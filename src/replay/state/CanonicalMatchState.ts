@@ -111,6 +111,7 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     normalLateralGripPerS: 'build-time config from the Bey definition',
     launchMps: 'build-time config: from MatchConfig.jumpFullHeightM (replay config snapshot)',
     shortHopApexM: 'build-time config: MatchConfig.jumpShortHopHeightM (replay config snapshot)',
+    legacyLaunch: 'build-time config: whether the match supplied jump rules (a bare construction keeps the immediate launch)',
   },
   DodgeController: { cooldownS: 'build-time config: MatchConfig.dodgeCooldownS (replay config snapshot)' },
   StaminaSystem: { staminaStat: 'build-time config (resolved Bey stat)', movementDrainScale: 'build-time config: MatchConfig.movementStaminaDrain (replay config snapshot)' },

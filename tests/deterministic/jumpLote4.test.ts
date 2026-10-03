@@ -165,9 +165,9 @@ describe('jump heights (owner, 2026-10-02): full 2.5 m provisional, short hop ~0
   });
 
   it('a tap stays a short hop and follows the Short hop height slider', async () => {
-    // Measured body rise (the slider sets the arc's own target; one tick of launch rises before the release cut can
-    // act): 0.205 m with the old 1.19 m full jump, 0.242 m with the new 2.5 m default — the approved one-impulse rule
-    // (no re-acceleration after launch) keeps that one tick.
+    // Measured body rise: 0.205 m with the old 1.19 m full jump, 0.242 m with the 2.5 m default while the full
+    // impulse fired on the press tick. Owner audit B6 (2026-10-03): a tap now launches at the short hop's own speed
+    // one tick after the press, so it no longer depends on Full jump (see jumpSlidersIndependent.test.ts).
     const tap = await apex(1);
     expect(tap).toBeLessThan(0.26);
     expect(tap).toBeLessThan(0.1 * (await apex(40)));
