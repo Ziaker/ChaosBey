@@ -27,6 +27,7 @@ import { DodgeState } from '../../dodge/DodgeController';
 import { DriftState } from '../../drift/DriftController';
 import { probeGround } from '../../physics/collision/GroundProbe';
 import { FIXED_DELTA_SECONDS } from '../../physics/fixed-step/FixedTimestepLoop';
+import { axisUnrest } from '../../bey/spin/SpinTuning';
 
 export interface InspectorRow {
   readonly label: string;
@@ -204,7 +205,7 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('Cooldown: Clash (shared)', `${f(session.clash.controller.getCooldownRemainingS())} s`),
         row(
           'Modifier: low-Stamina condition',
-          `accel ×${f(condition.accelFactor)}, recovery ×${f(condition.recoveryTorqueFactor)}, spin decay ×${f(condition.spinDecayMultiplier)}, wobble floor ${f(condition.ambientWobbleFloor)}`,
+          `accel ×${f(condition.accelFactor)}, recovery ×${f(condition.recoveryTorqueFactor)}, spin decay ×${f(condition.spinDecayMultiplier)}, axis wobble/precession ×${f(axisUnrest(Math.min(bey.stamina.resource.fraction, bey.stability.resource.fraction)))}`,
         ),
       ],
     },

@@ -33,6 +33,8 @@ export interface TickResult {
 }
 
 export class TestBeyHarness {
+  /** The lower of Stamina and Stability fractions the attitude sees (Lote 6: wobble/precession/tumble only below 70%). 1 = healthy. */
+  conditionFraction = 1;
   private constructor(
     readonly physics: PhysicsWorld,
     readonly beyBody: RAPIER.RigidBody,
@@ -81,7 +83,7 @@ export class TestBeyHarness {
       dodgeOverride: dodgeResult.dodgeOverride,
     });
     midStepEffect?.(this.beyBody);
-    this.spin.tick(this.beyBody, FIXED_DELTA_SECONDS, FULL_PHYSICAL_CONDITION, grounded);
+    this.spin.tick(this.beyBody, FIXED_DELTA_SECONDS, FULL_PHYSICAL_CONDITION, grounded, null, this.conditionFraction);
 
     this.physics.step();
 

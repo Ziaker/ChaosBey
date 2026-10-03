@@ -78,10 +78,16 @@ export interface MotionDirection {
   readonly params: MotionParams;
 }
 
+/**
+ * Owner, 2026-10-02 (Lote 6, item 10): the lean — leanStrength, speedTilt and maxTilt — of every direction (A/B/C)
+ * is 25% smaller. Render-only (the attitude never feeds the physics; see SpinController).
+ */
+export const LEAN_SCALE = 0.75;
+
 const B: MotionParams = {
   accel: 14, maxSpeed: 11, turnRate: 2.6,
   lateralGrip: 5.5, longitudinalGrip: 0.6, slipThreshold: 2.5, slipGrip: 0.35, gripRecovery: 3, airGrip: 0.4,
-  leanStrength: 0.022, speedTilt: 0.006, maxTilt: 35,
+  leanStrength: 0.022 * LEAN_SCALE, speedTilt: 0.006 * LEAN_SCALE, maxTilt: 35 * LEAN_SCALE,
   wobbleAmplitude: 6, wobbleFrequency: 7, wobbleFromImpact: 0.12, wobbleDecay: 1.2, precession: 4,
   uprightStrength: 60, recoveryDamping: 7, postImpactRecovery: 0.6,
   restitutionBey: 0.55, floorBounce: 0.35, wallBounce: 0.5, wallFriction: 1.2, impactAngularImpulse: 0.12, linearToAngular: 0.5,
@@ -97,7 +103,7 @@ export const MOTION_DIRECTIONS: Readonly<Record<MotionDirectionId, MotionDirecti
     params: {
       ...B,
       turnRate: 3.4, lateralGrip: 9, slipThreshold: 5.5, slipGrip: 0.6, gripRecovery: 7,
-      leanStrength: 0.01, speedTilt: 0.002, maxTilt: 18,
+      leanStrength: 0.01 * LEAN_SCALE, speedTilt: 0.002 * LEAN_SCALE, maxTilt: 18 * LEAN_SCALE,
       wobbleAmplitude: 3, wobbleFromImpact: 0.06, wobbleDecay: 2.5, precession: 1,
       uprightStrength: 140, recoveryDamping: 16, postImpactRecovery: 0.15,
       restitutionBey: 0.45, floorBounce: 0.15, wallBounce: 0.35, wallFriction: 1.8, impactAngularImpulse: 0.05, linearToAngular: 0.2,
@@ -117,7 +123,7 @@ export const MOTION_DIRECTIONS: Readonly<Record<MotionDirectionId, MotionDirecti
     params: {
       ...B,
       turnRate: 2.2, lateralGrip: 3.2, slipThreshold: 2.2, slipGrip: 0.18, gripRecovery: 1.4,
-      leanStrength: 0.04, speedTilt: 0.012, maxTilt: 48,
+      leanStrength: 0.04 * LEAN_SCALE, speedTilt: 0.012 * LEAN_SCALE, maxTilt: 48 * LEAN_SCALE,
       wobbleAmplitude: 11, wobbleFrequency: 6, wobbleFromImpact: 0.22, wobbleDecay: 0.6, precession: 8,
       uprightStrength: 30, recoveryDamping: 3.5, postImpactRecovery: 1.4,
       restitutionBey: 0.75, floorBounce: 0.55, wallBounce: 0.75, wallFriction: 0.6, impactAngularImpulse: 0.26, linearToAngular: 1.1,

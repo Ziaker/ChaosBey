@@ -99,6 +99,7 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     motion: 'build-time config: the motion direction (MatchConfig.motion, replay config snapshot)',
     sinceImpactS: 'render-only (fade-in of the visual Motion Lab attitude spring)',
     tumbleRemainingS: 'render-only (tumble window of the visual Motion Lab attitude)',
+    unrest: 'render-only (the Lote 6 wobble/precession/tumble ramp, from Stamina/Stability already in the hash)',
     lean: 'render-only (visual Motion Lab attitude, never fed back into physics)',
     leanRate: 'render-only (visual Motion Lab attitude rate)',
     accel: 'render-only (smoothed acceleration driving the visual lean target)',

@@ -12,7 +12,6 @@ import {
   STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED,
   STAMINA_MAX,
   STAMINA_MAX_SPIN_DECAY_MULTIPLIER,
-  STAMINA_MAX_WOBBLE_ENERGY_FLOOR,
   STAMINA_MIN_ACCEL_FACTOR,
   STAMINA_MIN_RECOVERY_TORQUE_FACTOR,
   STAMINA_PENALTY_START_FRACTION,
@@ -25,7 +24,6 @@ export interface PhysicalCondition {
   accelFactor: number;
   recoveryTorqueFactor: number;
   spinDecayMultiplier: number;
-  ambientWobbleFloor: number;
 }
 
 /** No penalty at all — for contexts with no Stamina system (e.g. Milestone 1 physics-only tests). */
@@ -33,7 +31,6 @@ export const FULL_PHYSICAL_CONDITION: PhysicalCondition = {
   accelFactor: 1,
   recoveryTorqueFactor: 1,
   spinDecayMultiplier: 1,
-  ambientWobbleFloor: 0,
 };
 
 export class StaminaSystem {
@@ -73,7 +70,6 @@ export class StaminaSystem {
       accelFactor: lerp(1, STAMINA_MIN_ACCEL_FACTOR, penaltyProgress),
       recoveryTorqueFactor: lerp(1, STAMINA_MIN_RECOVERY_TORQUE_FACTOR, penaltyProgress),
       spinDecayMultiplier: lerp(1, STAMINA_MAX_SPIN_DECAY_MULTIPLIER, penaltyProgress),
-      ambientWobbleFloor: lerp(0, STAMINA_MAX_WOBBLE_ENERGY_FLOOR, penaltyProgress),
     };
   }
 
