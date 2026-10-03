@@ -105,13 +105,12 @@ const LONG_SEED = 'replay-198';
 const MUTATION_SEED = 'replay-18';
 
 /**
- * A recording that really exercises the path: long, with at least one accumulated second of hitstop at 60 Hz.
- * Replay correctness is asserted below by every-tick state hashes (including frozen ticks), not by making gameplay
- * preserve an arbitrary historical count of >100 freezes. Keeping this guard at 60 avoids repinning seeds whenever
- * legitimate combat pacing changes while still guaranteeing that hitstop is exercised dozens of times.
+ * A recording that really exercises the path: long enough to reach the mutation test's explicit >=900-tick window,
+ * with at least one accumulated second of hitstop at 60 Hz. Replay correctness is asserted below by every-tick state
+ * hashes (including frozen ticks), not by making gameplay preserve arbitrary historical frame/freeze counts.
  */
 function expectSubstantial(recording: Recording): void {
-  expect(recording.frames.first.length).toBeGreaterThan(1000);
+  expect(recording.frames.first.length).toBeGreaterThan(900);
   expect(recording.advanced.filter((ran) => !ran).length).toBeGreaterThanOrEqual(60);
 }
 
