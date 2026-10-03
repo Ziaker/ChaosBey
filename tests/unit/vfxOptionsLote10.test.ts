@@ -4,6 +4,7 @@ import {
   DEFAULT_VFX_OPTIONS,
   VFX_IMPACT_FLASH_RANGE,
   VFX_MOTION_TRAILS_RANGE,
+  sanitizeVfxOptions,
 } from '../../src/vfx/hybrid/intensityTiers';
 import { ScreenOverlay } from '../../src/vfx/hybrid/ScreenOverlay';
 import { makeHybrid } from '../../src/vfx/hybrid/languages/hybrid';
@@ -40,6 +41,16 @@ describe('Lote 10 visual options', () => {
     expect(DEFAULT_VFX_OPTIONS.impactFlash).toBe(1);
     expect(VFX_MOTION_TRAILS_RANGE).toEqual({ min: 0, max: 1.5, step: 0.05 });
     expect(VFX_IMPACT_FLASH_RANGE).toEqual({ min: 0, max: 1.5, step: 0.05 });
+  });
+
+  it('clamps persisted/corrupt visual values back into the same safe ranges and defaults missing data', () => {
+    expect(sanitizeVfxOptions({ motionTrails: -20, impactFlash: 999, intensity: Number.NaN })).toEqual({
+      intensity: 1,
+      groundWaves: 1,
+      dust: 1,
+      motionTrails: 0,
+      impactFlash: 1.5,
+    });
   });
 
   it('impact flash 0 really disables the negative frame while 100% preserves it', () => {
