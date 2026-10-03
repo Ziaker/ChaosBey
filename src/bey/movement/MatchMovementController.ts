@@ -7,9 +7,10 @@ import { MovementController, type MovementPreStepInput } from './MovementControl
  * Match-only policy wrapper for Master §12's speed-limit behavior playtest.
  *
  * The underlying MovementController remains the single owner of steering, grip, acceleration and physical response.
- * Permissive (default) is exactly the existing behavior. Strict only clamps ordinary locomotion after that controller
- * has done its normal pre-step work. It deliberately leaves Dash, Dodge and an active post-impact window alone so
- * counters, knockback, wall bounces and ring-outs keep their real physical overspeed.
+ * Permissive (default) is exactly the existing behavior. Strict only clamps ordinary GROUNDED locomotion after that
+ * controller has done its normal pre-step work. It deliberately leaves Dash, Dodge, airborne flight and an active
+ * post-impact window alone so counters, knockback, wall bounces, launches and ring-outs keep their real physical
+ * overspeed. Air control remains the only locomotion policy that acts on a normal airborne trajectory.
  */
 export class MatchMovementController extends MovementController {
   constructor(
@@ -26,7 +27,7 @@ export class MatchMovementController extends MovementController {
     const postImpactPlaying = this.getSnapshot(body, input.grounded).isPostImpactCooldown;
     super.applyPreStep(body, input);
 
-    if (!this.strictSpeedCap || postImpactPlaying || input.dashOverride || input.dodgeOverride) return;
+    if (!this.strictSpeedCap || !input.grounded || postImpactPlaying || input.dashOverride || input.dodgeOverride) return;
 
     const capMps = this.getMaxSpeedMps() * (input.topSpeedMultiplier ?? 1);
     if (!(capMps > 0)) return;
