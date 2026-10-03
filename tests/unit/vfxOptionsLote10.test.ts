@@ -68,6 +68,22 @@ describe('Lote 10 visual options', () => {
     overlay.dispose();
   });
 
+  it('impact flash above 100% remains visibly stronger by extending only the presentation frame duration', () => {
+    const approved = new ScreenOverlay(new THREE.PerspectiveCamera(), null);
+    approved.impactFrame(0.1, 1);
+    approved.update(0.11);
+    expect(approved.getStats().impactFrame).toBe(0);
+    approved.dispose();
+
+    const boosted = new ScreenOverlay(new THREE.PerspectiveCamera(), null);
+    boosted.impactFrame(0.1, 1.5);
+    boosted.update(0.11);
+    expect(boosted.getStats().impactFrame).toBe(1);
+    boosted.update(0.05);
+    expect(boosted.getStats().impactFrame).toBe(0);
+    boosted.dispose();
+  });
+
   it('motion trails 0 suppresses only the anime trail; the mechanical fast-move skid still runs', () => {
     const off = fastMoveContext(0);
     const on = fastMoveContext(1);
