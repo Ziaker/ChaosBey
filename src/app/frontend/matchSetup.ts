@@ -64,7 +64,7 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
 /** The Pregame-adjustable gameplay rules: a slice of MatchConfig, so each one reaches the match (and its replay) through the one config path. */
 export type MatchRules = Pick<
   MatchConfig,
-  'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision'
+  'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM'
 >;
 
 export function defaultMatchRules(): MatchRules {
@@ -77,6 +77,8 @@ export function defaultMatchRules(): MatchRules {
     momentumDecayS: config.momentumDecayS,
     bodyCollisionDamage: config.bodyCollisionDamage,
     momentumLossOnCollision: config.momentumLossOnCollision,
+    jumpFullHeightM: config.jumpFullHeightM,
+    jumpShortHopHeightM: config.jumpShortHopHeightM,
   };
 }
 

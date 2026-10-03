@@ -107,7 +107,11 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     wobbleEnergy: 'render-only (drives the visual wobble; read by overlay/inspector/detector only)',
     wobbleTimeAccumulatorS: 'render-only (phase of the visual wobble)',
   },
-  DriftController: { normalLateralGripPerS: 'build-time config from the Bey definition' },
+  DriftController: {
+    normalLateralGripPerS: 'build-time config from the Bey definition',
+    launchMps: 'build-time config: from MatchConfig.jumpFullHeightM (replay config snapshot)',
+    shortHopApexM: 'build-time config: MatchConfig.jumpShortHopHeightM (replay config snapshot)',
+  },
   DodgeController: {},
   StaminaSystem: { staminaStat: 'build-time config (resolved Bey stat)' },
   StabilitySystem: {},

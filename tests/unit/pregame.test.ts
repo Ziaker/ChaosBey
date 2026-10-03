@@ -123,6 +123,12 @@ describe('match setup rules', () => {
     expect(matchConfigFor({ ...createDefaultMatchSetup(), rules })).toEqual({ ...createDefaultMatchConfig(), ...rules });
   });
 
+  it('feeds the jump heights (owner, 2026-10-02) through MatchConfig', () => {
+    expect(createDefaultMatchSetup().rules).toMatchObject({ jumpFullHeightM: 2.5, jumpShortHopHeightM: 0.1265 });
+    const rules = { ...createDefaultMatchSetup().rules, jumpFullHeightM: 4, jumpShortHopHeightM: 0.3 };
+    expect(matchConfigFor({ ...createDefaultMatchSetup(), rules })).toEqual({ ...createDefaultMatchConfig(), ...rules });
+  });
+
   it('builds the arena walls from the preset, and a preset change resets moved sliders', () => {
     const rift = withArenaPreset(createDefaultMatchSetup(), 'rift');
     expect(matchConfigFor(rift)).toMatchObject({ arenaWallHeightM: 1, arenaWallRestitution: 0.4 });

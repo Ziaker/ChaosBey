@@ -163,11 +163,11 @@ describe('DirectionalController: gameplay-owned reference, no camera in the chai
     near(seen.get(Action.SteerRight), 1, 0);
   });
 
-  it('turns arrows into moveIntent and removes the four movement actions', () => {
+  it('turns arrows into moveIntent, removes forward/back and keeps left/right as the lateral input (drift rule, owner 2026-10-02)', () => {
     const controller = new DirectionalController(held(Action.MoveForward, Action.SteerRight, Action.Attack));
     const actions = controller.sampleActions(CONTEXT);
-    expect([...actions.held]).toEqual([Action.Attack]);
-    expect([...actions.pressedThisFrame]).toEqual([Action.Attack]);
+    expect([...actions.held].sort()).toEqual([Action.Attack, Action.SteerRight].sort());
+    expect([...actions.pressedThisFrame].sort()).toEqual([Action.Attack, Action.SteerRight].sort());
     expect(Math.hypot(actions.moveIntent!.x, actions.moveIntent!.z)).toBeLessThanOrEqual(1);
     expect(actions.moveIntent).toEqual(screenToWorld(screenVectorFromDigital(true, false, false, true), WORLD_CONTROL_REFERENCE.yawRad(true)));
     expect(controller.getDebug().screen.x).toBeCloseTo(Math.SQRT1_2, 12);

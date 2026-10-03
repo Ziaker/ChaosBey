@@ -261,8 +261,8 @@ export class CombatHud {
     if (pad === this.hintsForPad) return;
     this.hintsForPad = pad;
     const items = pad
-      ? [['Stick', 'move'], ['A', 'attack · hold: Dash'], ['X', 'hop / drift'], ['B', 'dodge'], ['Start', 'pause']]
-      : [['← → ↑ ↓', 'move'], ['Z', 'attack · hold: Dash'], ['X', 'hop / drift'], ['C', 'dodge'], ['Esc', 'pause']];
+      ? [['Stick', 'move'], ['A', 'attack · hold: Dash'], ['X', 'jump · + ← → while moving: drift'], ['B', 'dodge'], ['Start', 'pause']]
+      : [['← → ↑ ↓', 'move'], ['Z', 'attack · hold: Dash'], ['X', 'jump · + ← → while moving: drift'], ['C', 'dodge'], ['Esc', 'pause']];
     this.hints.replaceChildren(
       ...items.map(([key, meaning]) => {
         const item = el('span', 'cb-hud__hint');

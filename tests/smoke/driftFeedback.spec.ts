@@ -42,6 +42,16 @@ test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with 
   await page.getByTestId('pregame-start').click();
   await page.waitForFunction(() => window.__chaosBeyPlay?.getScreen() === 'match' && window.__chaosBeyPlay.getSession() != null, null, { timeout: 30_000 });
   await page.waitForTimeout(1200); // past the FIGHT banner
+  // The opponent stays out of the way (as in the Debug Lab test below): this checks the drift, and a bump from the AI
+  // that launches the Bey is a legitimate drift end. With Lote 3's body collisions and Lote 4's longer full jump (X
+  // goes down before the turn) it happened once on CI (Drifting,Recovering,Recovering,Idle) after passing the run before.
+  await page.evaluate(() => {
+    const s = window.__chaosBeyPlay!.getSession()!;
+    s.setController('second', { kind: 'idle' });
+    const p = s.getBey('first').body.translation();
+    s.getBey('second').body.setTranslation({ x: p.x, y: p.y + 0.2, z: p.z - 6 }, true); // behind it: the drive goes forward
+    s.getBey('second').body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  });
 
   const tag = page.getByTestId('hud-drift');
   const states: string[] = [];

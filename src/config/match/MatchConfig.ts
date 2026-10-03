@@ -26,6 +26,7 @@ import {
   MOMENTUM_GAIN_DEFAULT,
   MOMENTUM_LOSS_ON_COLLISION_DEFAULT,
 } from '../../bey/momentum/MomentumTuning';
+import { JUMP_FULL_HEIGHT_DEFAULT_M, JUMP_SHORT_HOP_TARGET_APEX_M } from '../../drift/DriftTuning';
 
 export interface MatchConfig {
   /** Multiplies the real knockback/Stability consequence a Clash resolution applies (both the FirstWins/SecondWins loser's knockback and a Tie's symmetric repulsion) — GDD section 152's "configurable impact multiplier". */
@@ -68,10 +69,14 @@ export interface MatchConfig {
   bodyCollisionDamage: number;
   /** Fraction of momentum lost by the faster Bey in a body collision (and on a hit taken or a wall impact). PROVISIONAL 0.5. Pregame slider. */
   momentumLossOnCollision: number;
+  /** Owner, 2026-10-02 (Lote 4): apex of a full (held) jump, m; the launch speed is derived from it. PROVISIONAL 2.5 m. Pregame slider. */
+  jumpFullHeightM: number;
+  /** Apex of a short hop (a tap), m. Default the previous value (~0.13 m). Pregame slider. */
+  jumpShortHopHeightM: number;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -81,6 +86,8 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     momentumDecayS: config.momentumDecayS,
     bodyCollisionDamage: config.bodyCollisionDamage,
     momentumLossOnCollision: config.momentumLossOnCollision,
+    jumpFullHeightM: config.jumpFullHeightM,
+    jumpShortHopHeightM: config.jumpShortHopHeightM,
   };
 }
 
@@ -98,6 +105,8 @@ export function createDefaultMatchConfig(): MatchConfig {
     momentumDecayS: MOMENTUM_DECAY_DEFAULT_S,
     bodyCollisionDamage: BODY_COLLISION_DAMAGE_DEFAULT,
     momentumLossOnCollision: MOMENTUM_LOSS_ON_COLLISION_DEFAULT,
+    jumpFullHeightM: JUMP_FULL_HEIGHT_DEFAULT_M,
+    jumpShortHopHeightM: JUMP_SHORT_HOP_TARGET_APEX_M,
   };
 }
 

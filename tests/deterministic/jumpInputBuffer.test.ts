@@ -22,13 +22,17 @@ import { describe, expect, it } from 'vitest';
 import { Action } from '../../src/input/actions/Action';
 import type { ControllerActions } from '../../src/input/actions/Action';
 import { DriftController, DriftState, type DriftTickResult } from '../../src/drift/DriftController';
-import { HOP_MIN_AIRBORNE_DURATION_S, JUMP_INPUT_BUFFER_WINDOW_S, JUMP_LAUNCH_VELOCITY_MPS, JUMP_RELEASE_WINDOW_S } from '../../src/drift/DriftTuning';
+import { HOP_MIN_AIRBORNE_DURATION_S, JUMP_INPUT_BUFFER_WINDOW_S, JUMP_RELEASE_WINDOW_S, LEGACY_JUMP_FULL_HEIGHT_M, jumpLaunchVelocityForApexM } from '../../src/drift/DriftTuning';
+
+/** A bare DriftController keeps the pre-2026-10-02 jump (5 m/s launch); matches use MatchConfig's height. */
+const JUMP_LAUNCH_VELOCITY_MPS = jumpLaunchVelocityForApexM(LEGACY_JUMP_FULL_HEIGHT_M);
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { GRAVITY_MPS2 } from '../../src/physics/world/PhysicsWorld';
 
 /** Minimal stand-in for the two RAPIER.RigidBody methods DriftController touches. */
 function stubBody() {
-  let vel = { x: 0, y: 0, z: 0 };
+  // Moving: the drift rule needs the Bey in motion when X is pressed (owner, 2026-10-02).
+  let vel = { x: 0, y: 0, z: 5 };
   return {
     linvel: () => vel,
     setLinvel: (v: { x: number; y: number; z: number }) => {
@@ -111,25 +115,23 @@ describe('jump input buffer — B: the same scenario from Recovering', () => {
   });
 });
 
-describe('jump input buffer — C: expiry', () => {
-  it('a press not followed by a landing within the buffer window produces no later ghost hop', () => {
+describe('jump input buffer — C: a press in the air is kept until landing (owner, 2026-10-02; was a 0.1 s expiry)', () => {
+  it('however long the flight, the press is used once, on the landing tick, and never again', () => {
     const drift = new DriftController();
     const body = stubBody();
 
-    drift.tick(body, actions([], [Action.JumpDrift]), false, DT); // buffer starts
+    drift.tick(body, actions([], [Action.JumpDrift]), false, DT); // pressed in the air
 
-    // Stay airborne well past the window — several ticks of margin either side of it.
-    const ticksToExpire = BUFFER_TICKS + 5;
+    // A long flight — far past the old 0.1 s window, which used to throw the press away (PR #76).
     const results: DriftTickResult[] = [];
-    for (let i = 0; i < ticksToExpire; i++) {
-      results.push(drift.tick(body, actions([]), false, DT));
-    }
+    for (let i = 0; i < BUFFER_TICKS * 6; i++) results.push(drift.tick(body, actions([]), false, DT));
     expect(results.every((r) => r.driftState === DriftState.Idle)).toBe(true);
 
-    // Lands only now, long after the buffer expired: must NOT begin a hop.
-    const afterExpiry = drift.tick(body, actions([]), true, DT);
-    expect(afterExpiry.driftState).toBe(DriftState.Idle);
-    expect(body.linvel().y).toBe(0); // no launch impulse — the press is gone, not a ghost hop.
+    // Lands: the kept press begins exactly one hop.
+    expect(drift.tick(body, actions([]), true, DT).driftState).toBe(DriftState.Hopping);
+    for (let i = 0; i < 20; i++) drift.tick(body, actions([]), false, DT);
+    expect(drift.tick(body, actions([]), true, DT).driftState).toBe(DriftState.Idle);
+    for (let i = 0; i < 30; i++) expect(drift.tick(body, actions([]), true, DT).driftState).toBe(DriftState.Idle);
   });
 });
 

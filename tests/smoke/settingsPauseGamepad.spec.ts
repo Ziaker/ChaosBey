@@ -136,8 +136,9 @@ test('a standard gamepad drives the menus, the Bey and the pause', async ({ page
   // The stick drives the Bey (M11 Directional default, resolved in the
   // gameplay-owned control reference — never the camera, see
   // PlayerSettings.ts's header): full tilt up-right is a full-strength world
-  // direction, and no turn/throttle actions are held (that's Classic, a
-  // selectable, non-default option).
+  // direction; no throttle action is held (that's Classic), only the right
+  // side as the screen's lateral input, which the drift rule reads (owner,
+  // 2026-10-02: X + left/right while moving drifts).
   await page.evaluate(() => ((window as unknown as { __pad: { axes: number[] } }).__pad.axes = [1, -1, 0, 0]));
   await expect
     .poll(() =>
@@ -147,7 +148,7 @@ test('a standard gamepad drives the menus, the Bey and the pause', async ({ page
         return { held: [...(actions?.held ?? [])], strength: move ? Math.round(Math.hypot(move.x, move.z) * 100) / 100 : null };
       }),
     )
-    .toEqual({ held: [], strength: 1 });
+    .toEqual({ held: ['SteerRight'], strength: 1 });
   await page.evaluate(() => ((window as unknown as { __pad: { axes: number[] } }).__pad.axes = [0, 0, 0, 0]));
 
   // Start pauses; B (back) resumes.

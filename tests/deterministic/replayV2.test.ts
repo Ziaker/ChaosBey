@@ -72,7 +72,9 @@ describe('Replay V2 (M11)', () => {
     expect(moves.every((m) => Array.isArray(m))).toBe(true); // every player frame is directional
     expect(moves.some((m) => m && Math.hypot(m[0], m[1]) > 0.99)).toBe(true);
     expect(back.frames.every((f) => f.second.move === null)).toBe(true); // the AI stays classic
-    expect(back.frames.every((f) => !f.first.held.includes(Action.MoveForward) && !f.first.held.includes(Action.SteerLeft))).toBe(true);
+    // Forward/back become the intent; left/right stay held as the screen's lateral input (drift rule, owner 2026-10-02).
+    expect(back.frames.every((f) => !f.first.held.includes(Action.MoveForward) && !f.first.held.includes(Action.MoveBackward))).toBe(true);
+    expect(back.frames.some((f) => f.first.held.includes(Action.SteerLeft) || f.first.held.includes(Action.SteerRight))).toBe(true);
 
     const verdict = await playReplayHeadless(back, fingerprint);
     expect(verdict).toMatchObject({ status: 'verified', ticksPlayed: back.frames.length });

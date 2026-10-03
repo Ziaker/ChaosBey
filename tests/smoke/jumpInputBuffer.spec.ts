@@ -117,25 +117,18 @@ test('jump input buffer: a JumpDrift press on this run\'s own landing-bounce tic
   }
   expect(landedTick, 'the hop must land back in Idle within the probe window').toBeGreaterThan(hopStart);
 
-  let bounceTick = -1;
+  // Owner, 2026-10-02 (Lote 4): one X press = one flight — landing from the Bey's own hop no longer bounces, so the
+  // old "press on the landing-bounce tick" situation cannot happen any more: check that, then that a press made in the
+  // air just before landing (the same drop the old bug made, PR #76) begins exactly one more hop on landing.
   for (let t = landedTick; t < Math.min(probe.length, landedTick + BOUNCE_SEARCH_WINDOW_TICKS); t++) {
-    if (probe[t]!.state === 'Idle' && probe[t]!.grounded === false) {
-      bounceTick = t;
-      break;
-    }
+    expect(probe[t]!.grounded, `no landing bounce after the Bey's own hop (tick ${t})`).toBe(true);
   }
-  expect(bounceTick, 'this run must produce the landing-contact bounce (grounded briefly false right after landing) the fix is about — see DriftTuning.ts\'s DRIFT_AIRBORNE_GRACE_S comment for the same phenomenon relied on elsewhere').toBeGreaterThan(-1);
-
-  // Pass 2 (repro, SAME seed): a second JumpDrift tap landing exactly on
-  // that bounce tick — grounded false, DriftState Idle, the old bug's exact
-  // drop condition.
-  const repro = await runTappedMatch(page, SEED, bounceTick);
-  expect(repro[bounceTick]!.grounded, 'sanity check: the repro run must reproduce the same bounce at the same tick (deterministic fixed-seed replay)').toBe(false);
-  expect(repro[bounceTick]!.state, 'and DriftController must still be in Idle at that exact tick').toBe('Idle');
-
-  const secondHopStarts = hopStartTicks(repro).filter((t) => t > bounceTick);
-  expect(secondHopStarts.length, 'the buffered press must begin exactly one more hop after the bounce tick — not zero (dropped, the old bug) and not more than one (a double hop)').toBe(1);
-  expect(secondHopStarts[0]! - bounceTick, 'the buffered hop must begin within the jump input buffer window, not arbitrarily later').toBeLessThanOrEqual(10);
+  const airTick = landedTick - 3;
+  expect(probe[airTick]!.grounded, 'the repro press lands in the air').toBe(false);
+  const repro = await runTappedMatch(page, SEED, airTick);
+  const secondHopStarts = hopStartTicks(repro).filter((t) => t > airTick);
+  expect(secondHopStarts.length, 'the press made in the air must begin exactly one more hop on landing — not zero (dropped, the old bug) and not more than one').toBe(1);
+  expect(secondHopStarts[0]! - landedTick, 'the kept press is used right at the landing').toBeLessThanOrEqual(3);
 
   expect(consoleErrors, `console errors: ${consoleErrors.join('\n')}`).toEqual([]);
 });

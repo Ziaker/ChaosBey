@@ -132,6 +132,10 @@ export class MovementController {
   private preStepHorizontal: Vec2 = { x: 0, z: 0 };
   /** Consecutive ticks that started airborne (a landing bounces only after a real fall). */
   private airborneTicks = 0;
+  /** This tick's flight is the Bey's own jump/hop (DriftController Hopping), see postStep. */
+  private ownJumpFlight = false;
+  /** A knockback landed since the current own jump began: its landing bounces physically. */
+  private knockedThisJump = false;
   /** This Bey's handling with the motion direction applied (turn rate and lateral grip scale by the preset's ratio to B). */
   private readonly handling: BeyHandlingProfile;
 
@@ -180,6 +184,7 @@ export class MovementController {
    * knockback survived and a countered dasher flew on over the wall.
    */
   registerKnockback(): void {
+    this.knockedThisJump = true;
     this.knockbackPlaying = true;
     this.postImpactCooldownRemainingS = POST_IMPACT_GRIP_SUPPRESSION_S;
     this.intendedVelocityThisTick = null;
@@ -424,8 +429,15 @@ export class MovementController {
    * SpinController.registerImpact()/telemetry won't fire for it. Revisit
    * once strong landings/vertical knockback matter (GDD section 20/109).
    */
-  postStep(body: RAPIER.RigidBody, grounded: boolean): MovementSnapshot {
+  postStep(body: RAPIER.RigidBody, grounded: boolean, ownJumpFlight = false): MovementSnapshot {
+    // Owner, 2026-10-02 (Lote 4): one X press = one flight. Landing from the Bey's own jump or hop never bounces (the
+    // floor bounce relaunched it up to 13 cm after a full jump: "pula duas vezes"); knockback and falls still do.
+    // Latched from the hop's takeoff through the step where the floor stops the fall: the ground check reads
+    // "grounded" a tick before that step, when DriftController has already left Hopping.
+    if (ownJumpFlight && !this.ownJumpFlight) this.knockedThisJump = false;
+    if (ownJumpFlight) this.ownJumpFlight = true;
     this.applyLandingBounce(body);
+    if (grounded && this.airborneTicks === 0 && !ownJumpFlight) this.ownJumpFlight = false;
     this.airborneTicks = grounded ? 0 : this.airborneTicks + 1;
     const vel = body.linvel();
     const actualVelocityVector: Vec2 = { x: vel.x, z: vel.z };
@@ -475,6 +487,11 @@ export class MovementController {
     if (after > 0.1 && after < before && (v.x * this.preStepHorizontal.x + v.z * this.preStepHorizontal.z) > LANDING_SAME_LINE_COS * after * before) {
       x = (v.x / after) * before;
       z = (v.z / after) * before;
+    }
+    if (this.ownJumpFlight && !this.knockedThisJump) {
+      body.setLinvel({ x, y: Math.min(v.y, 0), z }, true);
+      this.ownJumpFlight = false;
+      return;
     }
     const bounce = descent * this.motion.floorBounce;
     body.setLinvel({ x, y: bounce < LANDING_BOUNCE_MIN_MPS ? v.y : Math.max(v.y, bounce), z }, true);
@@ -544,6 +561,8 @@ export class MovementController {
   /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */
   getDeterministicState(): CanonicalRecord {
     return {
+      ownJumpFlight: this.ownJumpFlight,
+      knockedThisJump: this.knockedThisJump,
       headingRad: this.headingRad,
       turnRateRadPerS: this.turnRateRadPerS,
       postImpactCooldownRemainingS: this.postImpactCooldownRemainingS,
