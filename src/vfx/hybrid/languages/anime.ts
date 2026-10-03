@@ -15,6 +15,7 @@ import { crackMark, impactStar, ringTexture, smokePuff, softDot } from '../fx/te
 import { TUNING } from '../tuning';
 import { stochastic } from './mechanical';
 import type { FxContext, LanguageRuntime, VfxLanguage } from './types';
+import { groundWaveScale, VFX_LIGHT } from '../intensityTiers';
 
 // ---------------- TUNING ----------------
 const HIT_STOP = [0.04, 0.13] as const;       // Hitstop seconds at m = 0 / 1 (longer than A).
@@ -82,7 +83,8 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
         const color = ctx.beyColor(e.attacker);
         if (m >= opts.impactFrameMinM) ctx.impactFrame(0.035 + 0.06 * m);
         stars(e.pos, color, m);
-        shockwave(e.pos, color, 1.5 + 3.5 * m, 0.35 + 0.15 * m);
+        // Owner, 2026-10-02 (Lote 7; audit J1): below Medium the ground wave shrinks (groundWaveScale); Medium and up keep the lab's.
+        shockwave(e.pos, color, (1.5 + 3.5 * m) * groundWaveScale(m), 0.35 + 0.15 * m);
         lines(e.pos, color, Math.round(16 + 34 * m), 10 + 12 * m, e.normal, 2.4);
         ctx.focusLines(e.pos, 0.45 + 0.55 * m, 0.16 + 0.22 * m);
         ctx.flash(e.pos, WHITE, 40 + 110 * m);
@@ -182,12 +184,17 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
       },
       landing(e) {
         const color = ctx.beyColor(e.slot);
-        shockwave(e.pos, WHITE, 1.5 + 2.5 * e.m, 0.3);
-        shockwave(e.pos, color, 2.5 + 3.5 * e.m, 0.5);
-        ctx.layer.add(flatFx({ tex: crackMark(), color: 0x000000, pos: onFloor(e.pos, 0.02), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.02 }, size: [1.4 + 2.4 * e.m, 1.4 + 2.4 * e.m], life: 3, opacity: 0.8, hold: 0.7, rotation: Math.random() * 6 }));
-        for (let i = 0; i < 8; i++) {
-          const a = (i / 8) * Math.PI * 2;
-          ctx.layer.add(spriteFx({ tex: smokePuff(), color: 0xf2f2f2, additive: false, opacity: 0.85, pos: onFloor(e.pos, 0.2), vel: new THREE.Vector3(Math.cos(a) * (2.5 + 3 * e.m), 0.5, Math.sin(a) * (2.5 + 3 * e.m)), drag: 4, size: [0.5, 1 + e.m], life: 0.55 }));
+        // Owner, 2026-10-02 (Lote 7, item 7): the rings scale with the landing (an own hop or jump, capped small upstream,
+        // gets a small ring and no crack); after a hit or launch (≥ Light) the double shockwave, crack and dust.
+        const wave = groundWaveScale(e.m);
+        shockwave(e.pos, WHITE, (1.5 + 2.5 * e.m) * wave, 0.3);
+        if (e.m >= VFX_LIGHT) shockwave(e.pos, color, (2.5 + 3.5 * e.m) * wave, 0.5);
+        if (e.m >= VFX_LIGHT) ctx.layer.add(flatFx({ tex: crackMark(), color: 0x000000, pos: onFloor(e.pos, 0.02), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.02 }, size: [1.4 + 2.4 * e.m, 1.4 + 2.4 * e.m], life: 3, opacity: 0.8, hold: 0.7, rotation: Math.random() * 6 }));
+        const puffs = e.m >= VFX_LIGHT ? 8 : 4;
+        ctx.countDust?.(puffs);
+        for (let i = 0; i < puffs; i++) {
+          const a = (i / puffs) * Math.PI * 2;
+          ctx.layer.add(spriteFx({ tex: smokePuff(), color: 0xf2f2f2, additive: false, opacity: 0.85, pos: onFloor(e.pos, 0.2), vel: new THREE.Vector3(Math.cos(a) * (2.5 + 3 * e.m), 0.5, Math.sin(a) * (2.5 + 3 * e.m)), drag: 4, size: [0.5 * wave, (1 + e.m) * wave], life: 0.55 }));
         }
         if (e.m > 0.5) ctx.focusLines(e.pos, 0.5, 0.2);
         ctx.shake(0.06 + 0.16 * e.m, 0.22);
