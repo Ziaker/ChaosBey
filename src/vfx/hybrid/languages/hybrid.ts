@@ -181,7 +181,11 @@ export function makeHybrid(style: WindStyle): VfxLanguage {
         hit(e) { a.hit(e); b.hit(e); },
         dashCharge(e, dt) { b.dashCharge(e, dt); },
         dashRelease(e) { b.dashRelease(e); },
-        fastMove(e, dt) { a.fastMove(e, dt); b.fastMove(e, dt); },
+        fastMove(e, dt) {
+          a.fastMove(e, dt);
+          const trailScale = Math.max(0, ctx.motionTrailScale ?? 1);
+          if (trailScale > 0) b.fastMove(e, dt * trailScale);
+        },
         circularSweep(e, t, dt) { b.circularSweep(e, t, dt); },
         perfectDodge(e) { b.perfectDodge(e); },
         dodgeMove(e, dt) { b.dodgeMove(e, dt); },
