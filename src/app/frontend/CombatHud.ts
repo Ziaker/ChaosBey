@@ -2,7 +2,9 @@
 // COMBAT HUD (M10, GDD 50/56)
 // The player's HUD over a running round:
 // - a card per side: Stamina, Stability (red and tagged BROKEN when
-//   broken), Attack Energy, and the player's Dash charge while charging;
+//   broken), the Dash cooldown (CD: empties when a Dash is used, refills
+//   during the cooldown, full = ready; owner 2026-10-02, it was the Attack
+//   Energy line), and the player's Dash charge while charging;
 // - the round and the score pips (first to N);
 // - short banners: "ROUND n / FIGHT" at the start, "RING OUT!" / "K.O.!" /
 //   "DRAW" at the end (never at a Clash resolution: the approved Clash has
@@ -42,7 +44,7 @@ interface CardParts {
   readonly root: HTMLElement;
   readonly stamina: HTMLElement;
   readonly stability: HTMLElement;
-  readonly energy: HTMLElement;
+  readonly dashCooldown: HTMLElement;
   readonly dash: HTMLElement | null;
   readonly tag: HTMLElement;
 }
@@ -172,15 +174,16 @@ export class CombatHud {
     root.append(head);
     const stamina = meter('stamina', 'STA');
     const stability = meter('stability', 'STB');
-    const energy = meter('energy', 'ATK');
+    const dashCooldown = meter('dash-cd', 'CD');
+    dashCooldown.parentElement!.parentElement!.title = 'Dash cooldown: full = Dash ready';
     const dash = isPlayer ? meter('dash', 'DASH') : null;
-    return { root, stamina, stability, energy, dash, tag };
+    return { root, stamina, stability, dashCooldown, dash, tag };
   }
 
   private fillCard(card: CardParts, side: HudSide): void {
     card.stamina.style.width = `${side.stamina * 100}%`;
     card.stability.style.width = `${side.stability * 100}%`;
-    card.energy.style.width = `${side.attackEnergy * 100}%`;
+    card.dashCooldown.style.width = `${side.dashReadiness * 100}%`;
     if (card.dash) {
       card.dash.style.width = `${side.dashCharge * 100}%`;
       card.dash.parentElement!.parentElement!.classList.toggle('is-idle', side.dashCharge === 0);
@@ -290,7 +293,7 @@ function injectHudStyle(): void {
     .cb-hud__meter--stamina .cb-hud__fill { background: linear-gradient(90deg, #58e38c, #b6ff7a); }
     .cb-hud__meter--stamina .cb-hud__fill.is-low { background: #ff9f43; }
     .cb-hud__meter--stability .cb-hud__fill { background: linear-gradient(90deg, #5ab8ff, #8fe3ff); }
-    .cb-hud__meter--energy .cb-hud__fill { background: var(--bey-accent); }
+    .cb-hud__meter--dash-cd .cb-hud__fill { background: var(--bey-accent); }
     .cb-hud__meter--dash .cb-hud__fill { background: #ffe066; }
     .cb-hud__card.is-broken { border-color: var(--cb-loss); animation: cb-hud-broken 0.5s ease-in-out infinite alternate; }
     .cb-hud__card.is-broken .cb-hud__meter--stability .cb-hud__fill { background: var(--cb-loss); }

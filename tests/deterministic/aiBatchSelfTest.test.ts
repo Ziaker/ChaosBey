@@ -168,7 +168,7 @@ async function runMatch(pairing: [ArchetypeKey, ArchetypeKey], seed: string, tot
       const key = pairing[i]!;
       totals[key].seconds += FIXED_DELTA_SECONDS;
       if (ais[i]!.getDebugState().activeIntent === 'Circle') totals[key].circleSeconds += FIXED_DELTA_SECONDS;
-      for (const value of [snapshot.staminaFraction, snapshot.stabilityFraction, snapshot.attackEnergyFraction, snapshot.movement.speedMps]) {
+      for (const value of [snapshot.staminaFraction, snapshot.stabilityFraction, snapshot.dashReadiness, snapshot.movement.speedMps]) {
         assertFinite(value, `${label} side ${i} tick ${tick} resources/speed`);
       }
       const position = beys[i]!.body.translation();
@@ -191,7 +191,7 @@ async function runMatch(pairing: [ArchetypeKey, ArchetypeKey], seed: string, tot
       if (!clashActive) {
         const debug = ais[i]!.getDebugState();
         const inDashRange = debug.distanceToOpponentM > AI_CIRCULAR_ATTACK_RANGE_M && debug.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M;
-        const canAttack = snapshot.attackState === AttackState.Neutral && snapshot.attackEnergyFraction > 0.25;
+        const canAttack = snapshot.attackState === AttackState.Neutral && snapshot.dashReadiness > 0.25;
         if (dashes[i as 0 | 1] >= 1 && debug.activeIntent === 'AttackDash' && canAttack && inDashRange) wantedDashAgainTicks[i as 0 | 1]++;
         const wantsToAttack = debug.activeIntent === 'AttackDash' || debug.activeIntent === 'AttackCircular';
         const stalled = wantsToAttack && canAttack && debug.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M && !actions[i]!.held.has(Action.Attack);

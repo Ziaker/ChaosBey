@@ -89,7 +89,7 @@ function fingerprint(session: MatchSession): number[] {
     const bey = session.getBey(side);
     const t = bey.body.translation();
     const v = bey.body.linvel();
-    values.push(t.x, t.y, t.z, v.x, v.y, v.z, bey.stamina.resource.value, bey.stability.resource.value, bey.attackEnergy.resource.value);
+    values.push(t.x, t.y, t.z, v.x, v.y, v.z, bey.stamina.resource.value, bey.stability.resource.value, bey.attack.getDashCooldownRemainingS());
   }
   return values;
 }
@@ -218,7 +218,7 @@ describe('Debug Lab inspection (GDD section 69)', () => {
       }
     }
     const allRows = sections.flatMap((s) => s.rows);
-    for (const label of ['Match ID', 'Seed', 'Tick', 'Elapsed sim time', 'Position', 'Velocity', 'Spin rate', 'Ground normal', 'Stamina', 'Stability', 'Attack Energy', 'Hitbox active', 'Perfect-dodge window', 'Jump force (vertical speed added)', 'Difficulty profile', 'Risk values', 'FOV', 'Event count']) {
+    for (const label of ['Match ID', 'Seed', 'Tick', 'Elapsed sim time', 'Position', 'Velocity', 'Spin rate', 'Ground normal', 'Stamina', 'Stability', 'Cooldown: Dash', 'Hitbox active', 'Perfect-dodge window', 'Jump force (vertical speed added)', 'Difficulty profile', 'Risk values', 'FOV', 'Event count']) {
       expect(allRows.some((r) => r.label === label), label).toBe(true);
     }
     for (const r of allRows) {

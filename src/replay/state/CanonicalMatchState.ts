@@ -64,7 +64,6 @@ function beyState(bey: Bey): CanonicalRecord {
     dodge: bey.dodge.getDeterministicState(),
     stamina: bey.stamina.getDeterministicState(),
     stability: bey.stability.getDeterministicState(),
-    attackEnergy: bey.attackEnergy.getDeterministicState(),
     attack: bey.attack.getDeterministicState(),
   };
 }
@@ -111,8 +110,7 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
   DodgeController: {},
   StaminaSystem: { staminaStat: 'build-time config (resolved Bey stat)' },
   StabilitySystem: {},
-  AttackEnergySystem: {},
-  AttackController: { profile: 'build-time config (attack profile settings, in the replay config snapshot)' },
+  AttackController: { profile: 'build-time config (attack profile settings, in the replay config snapshot)', dashCooldownS: 'build-time config: MatchConfig.dashCooldownS (replay config snapshot)' },
   ClashController: {},
   ClashOrchestration: {
     matchConfig: 'build-time config (replay config snapshot)',

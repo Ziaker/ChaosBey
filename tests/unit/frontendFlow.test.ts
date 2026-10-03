@@ -54,7 +54,7 @@ describe('match setup', () => {
       arena: { presetId: 'foundry', geometry: { wallHeightM: 2, wallRestitution: 0.55 } },
       clashImpactMultiplier: 1,
       motion: 'B',
-      rules: { ringOutDelayS: 1.5 },
+      rules: { ringOutDelayS: 1.5, dashCooldownS: 1.5 },
       seedText: null,
     });
     // The default setup is the Debug Lab / quick-play pairing.

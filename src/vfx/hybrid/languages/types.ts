@@ -43,6 +43,8 @@ export interface FxContext {
   beyPos(slot: Slot): THREE.Vector3;
   /** Ghost copy of a Bey at its current pose, using `material`. */
   ghost(slot: Slot, material: THREE.Material): THREE.Object3D;
+  /** Telemetry only: `n` toon-dust puffs were just spawned (owner, 2026-10-02: every Dash must raise visible dust). */
+  countDust?(n: number): void;
 }
 
 export interface HitEvent { pos: THREE.Vector3; normal: THREE.Vector3; m: number; attacker: Slot }

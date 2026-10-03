@@ -127,7 +127,7 @@ test('Debug Lab: pause, step, restart, seeds, speed and controller switching on 
   await page.getByTestId('debug-lab-mut-reset-cooldowns').click();
   await page.getByTestId('debug-lab-mut-force-jump').click();
   await page.getByTestId('debug-lab-mut-prepare-clash').click();
-  await expect.poll(async () => Number(await log.getAttribute('data-count'))).toBeGreaterThanOrEqual(9);
+  await expect.poll(async () => Number(await log.getAttribute('data-count'))).toBeGreaterThanOrEqual(8); // teleport, reset, jump, then Prepare Clash: two teleports, reset (the Dash's included), two forced Dashes
   // Prepare Clash + run: a real Clash starts.
   await page.evaluate(() => window.__chaosBeyDebugLab!.step(240));
   await inspector.locator('[data-section="clash"] summary').click();
@@ -142,7 +142,7 @@ test('Debug Lab: pause, step, restart, seeds, speed and controller switching on 
   const report = JSON.parse(reportText);
   expect(report.format).toBe('ChaosBeyDebugReportV1');
   expect(report.mutated).toBe(true);
-  expect(report.mutations.length).toBeGreaterThanOrEqual(10);
+  expect(report.mutations.length).toBeGreaterThanOrEqual(9); // the 8 above + set Stability
   expect(report.replay.status).toBe('idle');
   expect(report.replay.stateHash).toMatch(/^[0-9a-f]{16}$/);
   expect(reportText).not.toMatch(/NaN|Infinity/);

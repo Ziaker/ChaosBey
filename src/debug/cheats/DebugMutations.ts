@@ -1,7 +1,7 @@
 // ============================================================
 // DEBUG LAB MUTATIONS (GDD section 70)
 // The explicit "change the simulation" tools: teleport, set linear /
-// angular velocity, set Stamina / Stability / Attack Energy, force an
+// angular velocity, set Stamina / Stability, force an
 // attack (or jump / dodge) through real inputs, reset cooldowns and
 // prepare a Clash. Every call is logged on the session as a debug
 // mutation (GDD section 160: mutation tools must be explicit actions), so
@@ -125,7 +125,7 @@ export function setAngularVelocity(session: MatchSession, side: Side, w: { x: nu
   session.recordDebugMutation(`${side}: set angular velocity (${w.x}, ${w.y}, ${w.z}) rad/s`);
 }
 
-export type DebugResource = 'stamina' | 'stability' | 'attackEnergy';
+export type DebugResource = 'stamina' | 'stability';
 
 /** Sets a resource to `fraction` (0..1) of its max. Stability goes through StabilitySystem so Broken stays consistent. */
 export function setResourceFraction(session: MatchSession, side: Side, resource: DebugResource, fraction: number): void {
@@ -138,27 +138,25 @@ export function setResourceFraction(session: MatchSession, side: Side, resource:
     case 'stability':
       bey.stability.debugSetValue(clamped * bey.stability.resource.max);
       break;
-    case 'attackEnergy':
-      bey.attackEnergy.resource.set(clamped * bey.attackEnergy.resource.max);
-      break;
   }
   session.recordDebugMutation(`${side}: set ${resource} to ${(clamped * 100).toFixed(0)}%`);
 }
 
-/** Dodge and post-impact steering cooldowns for both sides, plus the shared Clash cooldown. */
+/** Dodge, Dash and post-impact steering cooldowns for both sides, plus the shared Clash cooldown. */
 export function resetCooldowns(session: MatchSession): void {
   for (const side of ['first', 'second'] as const) {
     const bey = session.getBey(side);
     bey.dodge.debugResetCooldown();
+    bey.attack.debugResetDashCooldown();
     bey.movement.debugResetCooldown();
   }
   session.clash.controller.debugResetCooldown();
-  session.recordDebugMutation('reset cooldowns (dodge, post-impact steering, Clash)');
+  session.recordDebugMutation('reset cooldowns (dodge, Dash, post-impact steering, Clash)');
 }
 
 /**
  * "Trigger/prepare Clash" (GDD section 70): lines the Beys up facing each
- * other, stopped, with full Attack Energy and no cooldowns, then forces
+ * other, stopped, with no cooldowns (the Dash's included), then forces
  * both to release a fully charged Dash on the same tick. Whether a Clash
  * actually starts is still decided by the real Clash window rules.
  */
@@ -167,8 +165,6 @@ export function prepareClash(session: MatchSession): void {
   teleportBey(session, 'first', 0, -half, { headingRad: 0 });
   teleportBey(session, 'second', 0, half, { headingRad: Math.PI });
   resetCooldowns(session);
-  setResourceFraction(session, 'first', 'attackEnergy', 1);
-  setResourceFraction(session, 'second', 'attackEnergy', 1);
   forceAction(session, 'first', 'dash');
   forceAction(session, 'second', 'dash');
 }

@@ -197,9 +197,8 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('Stamina', resource(bey.stamina.resource)),
         row('Stability', `${resource(bey.stability.resource)}${bey.stability.isBroken ? ' — BROKEN' : ''}`),
         row('Stability: since last damage', seconds(bey.stability.getTimeSinceLastDamageS())),
-        row('Attack Energy', resource(bey.attackEnergy.resource)),
-        row('Attack Energy: since last use', seconds(bey.attackEnergy.getTimeSinceLastConsumptionS())),
         row('Cooldown: dodge', `${f(dodge.cooldownRemainingS)} s`),
+        row('Cooldown: Dash', `${f(bey.attack.getDashCooldownRemainingS())} s`),
         row('Cooldown: post-impact steering', `${f(movementDebug.postImpactCooldownRemainingS)} s`),
         row('Cooldown: Clash (shared)', `${f(session.clash.controller.getCooldownRemainingS())} s`),
         row(

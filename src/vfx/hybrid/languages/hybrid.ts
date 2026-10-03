@@ -107,6 +107,7 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
     }
   };
   const toonDust = (n: number): void => {
+    ctx.countDust?.(n);
     const origin = follow();
     for (let i = 0; i < n; i++) {
       const p = origin.clone().addScaledVector(back, rand(0.3, 2.2 + 1.5 * m));

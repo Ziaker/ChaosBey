@@ -10,6 +10,7 @@
 // ============================================================
 
 import { RING_OUT_DELAY_RANGE } from '../../arena/ringout/RingOutTuning';
+import { DASH_COOLDOWN_RANGE } from '../../combat/attacks/AttackTuning';
 import { AI_DIFFICULTY_TIERS, aiDifficultyTier, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { isEditableEventTarget } from '../../input/devices/EditableTarget';
 import { AI_PERSONALITY_CHOICES, resolveAiPersonality, type AiPersonalityChoice } from '../session/SideControllers';
@@ -250,6 +251,15 @@ export class PregameScreen {
         write: (s, v) => ({ ...s, rules: { ...s.rules, ringOutDelayS: v } }),
         format: (v) => `${v.toFixed(2)} s`,
         note: 'How long a Bey must stay outside the arena before the ring-out counts (back inside resets it). 0 = instant. Provisional default 1.5 s.',
+      }),
+      this.slider({
+        id: 'dash-cooldown',
+        label: 'Dash cooldown',
+        range: DASH_COOLDOWN_RANGE,
+        read: (s) => s.rules.dashCooldownS,
+        write: (s, v) => ({ ...s, rules: { ...s.rules, dashCooldownS: v } }),
+        format: (v) => `${v.toFixed(2)} s`,
+        note: 'Time after a Dash before the next one can charge, for you and the AI (the CD line on the HUD refills; full = ready). Provisional default 1.5 s.',
       }),
     );
 

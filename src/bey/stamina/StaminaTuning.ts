@@ -10,8 +10,8 @@
 export const STAMINA_MAX = 100;
 
 // Owner decision (2026-09-25): Stamina never passively regenerates during
-// a round — it is the long-term wear-down resource (Attack Energy is the
-// fast-recovering offensive one; see AttackEnergyTuning.ts). A Bey always
+// a round — it is the long-term wear-down resource (the Dash is paced by its
+// own cooldown, not a resource: owner, 2026-10-02). A Bey always
 // loses a little Stamina just from continuous spin/combat, on top of
 // extra drain from aggressive movement — structured so additional costs
 // (e.g. per-impact) can be added later without a redesign.

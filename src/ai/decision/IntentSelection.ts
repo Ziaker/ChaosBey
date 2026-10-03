@@ -308,7 +308,7 @@ export function selectIntent(
 
   scores.set(
     AiIntent.AttackDash,
-    inDashRange && !alreadyAttacking && world.own.attackEnergyFraction > 0.25
+    inDashRange && !alreadyAttacking && world.own.dashReadiness >= 1
       ? (0.3 + personality.aggression * 0.5 - personality.patience * 0.2 + punishBonus * PUNISH_DASH_SCORE_BONUS) *
           willingness *
           (1 - collisionReluctance * COLLISION_AVOIDANCE_DASH_DAMPING)

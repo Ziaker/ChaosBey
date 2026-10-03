@@ -24,6 +24,7 @@
 // Observes only: no body, collider, stat, input or camera is written.
 // ============================================================
 
+import { VFX_LIGHT } from './intensityTiers';
 import * as THREE from 'three';
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
@@ -115,6 +116,7 @@ export class HybridVfxSystem implements PresentationSystem {
   private readonly tracks: Record<PresentationSide, BeyTrack>;
   private hitstopActive = false;
   private frames = 0;
+  private dustSpawned = 0;
   private readonly up = new THREE.Vector3();
   private readonly quaternion = new THREE.Quaternion();
   private readonly scale = new THREE.Vector3();
@@ -181,6 +183,7 @@ export class HybridVfxSystem implements PresentationSystem {
         this.flashPeak = intensity * TUNING.flash;
         this.flashT = 1;
       },
+      countDust: (n) => void (this.dustSpawned += n),
       ghost: (slot, material) => {
         const source = this.track(slot).target.visual.group;
         const copy = source.clone(true);
@@ -313,10 +316,14 @@ export class HybridVfxSystem implements PresentationSystem {
       track.lastCharge = bey.dashCharge;
       this.runtime.dashCharge({ pos, progress: bey.dashCharge, m: bey.dashCharge, slot }, dt);
     }
-    if (track.attackState === AttackState.ChargingDash && bey.attackState === AttackState.DashActive) {
+    // Every Dash releases its wind and dust (owner, 2026-10-02): on any edge into DashActive (a slow frame can skip the
+    // charge), never weaker than the lab's Light intensity, so a short Dash still raises visible dust.
+    if (track.attackState !== AttackState.DashActive && bey.attackState === AttackState.DashActive) {
       const dir = this.travelDirection(track, this.dir).clone();
-      this.runtime.dashRelease({ pos, dir, m: track.lastCharge, slot });
-      this.runtime.windBurst({ pos: pos.clone(), dir, m: track.lastCharge, slot });
+      const charge = track.attackState === AttackState.ChargingDash ? track.lastCharge : bey.dashCharge;
+      const m = Math.max(VFX_LIGHT, charge);
+      this.runtime.dashRelease({ pos, dir, m, slot });
+      this.runtime.windBurst({ pos: pos.clone(), dir, m, slot });
     }
     // Circular: the sweep, with its own progress.
     if (bey.attackState === AttackState.CircularActive) {
@@ -363,6 +370,7 @@ export class HybridVfxSystem implements PresentationSystem {
       droppedHitstop: this.dropped.hitstop,
       droppedSlowMotion: this.dropped.slowMotion,
       frames: this.frames,
+      dust: this.dustSpawned,
     };
   }
 

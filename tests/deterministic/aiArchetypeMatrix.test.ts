@@ -118,7 +118,9 @@ describe('AI vs AI archetype matrix', () => {
     const stamina = archetype('stamina-ai-personality');
     const rate = (t: ArchetypeTotals, n: number) => n / t.minutes;
     expect(rate(attack, attack.attacks)).toBeGreaterThan(1.2 * Math.max(rate(defense, defense.attacks), rate(stamina, stamina.attacks)));
-    expect(rate(attack, attack.dashes)).toBeGreaterThan(2 * Math.max(rate(defense, defense.dashes), rate(stamina, stamina.dashes)));
+    // Dash cooldown (owner, 2026-10-02, 1.5 s, no more Attack Energy): Attack now sits near the cooldown's own cap
+    // (~20 Dashes per minute measured, vs a ~26/min ceiling), so its lead is 1.89x the next archetype (was > 2x).
+    expect(rate(attack, attack.dashes)).toBeGreaterThan(1.75 * Math.max(rate(defense, defense.dashes), rate(stamina, stamina.dashes)));
   });
 
   it('Defense counters Dashes far more than Attack and keeps punishing commitment (GDD section 64: uses counter opportunities, punishes commitment)', () => {

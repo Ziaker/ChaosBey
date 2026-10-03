@@ -9,7 +9,6 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { AttackController } from '../../combat/attacks/AttackController';
-import { AttackEnergySystem } from '../attack-energy/AttackEnergySystem';
 import { DodgeController } from '../../dodge/DodgeController';
 import { DriftController } from '../../drift/DriftController';
 import { MovementController } from '../movement/MovementController';
@@ -22,6 +21,7 @@ import { DEFAULT_BEY_DEFINITION, type BeyDefinition } from '../archetype/BeyDefi
 import { resolveBeyStats } from '../archetype/BeyStatsResolution';
 import type { BeyStats } from '../archetype/BeyStats';
 import { motionParams, type MotionParams } from '../motion/MotionPresets';
+import { beyMatchRulesOf, createDefaultMatchConfig, type BeyMatchRules } from '../../config/match/MatchConfig';
 
 export interface Bey {
   readonly definition: BeyDefinition;
@@ -41,7 +41,6 @@ export interface Bey {
   readonly dodge: DodgeController;
   readonly stamina: StaminaSystem;
   readonly stability: StabilitySystem;
-  readonly attackEnergy: AttackEnergySystem;
   readonly attack: AttackController;
   /** M11: the floor profile of the arena this Bey plays on (placement helpers put it on the floor). Not simulation state. */
   readonly arenaFloor: ArenaFloorId;
@@ -55,6 +54,8 @@ export function createBey(
   definition: BeyDefinition = DEFAULT_BEY_DEFINITION,
   arenaFloor: ArenaFloorId = 'flat',
   motion: MotionParams = motionParams(),
+  /** The match's per-Bey rules (MatchConfig); omitted = the defaults. */
+  rules: BeyMatchRules = beyMatchRulesOf(createDefaultMatchConfig()),
 ): Bey {
   const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical, motion);
   const stats = resolveBeyStats(definition.ratings);
@@ -70,8 +71,7 @@ export function createBey(
     dodge: new DodgeController(),
     stamina: new StaminaSystem(stats.stamina),
     stability: new StabilitySystem(),
-    attackEnergy: new AttackEnergySystem(),
-    attack: new AttackController(definition.attack),
+    attack: new AttackController(definition.attack, rules.dashCooldownS),
     arenaFloor,
     motion,
   };

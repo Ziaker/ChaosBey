@@ -60,10 +60,11 @@ export interface DriftVfxInput {
   readonly grounded: boolean;
 }
 
-let softDotTexture: THREE.CanvasTexture | null = null;
-/** The VFX Lab's soft round dot (textures.ts `softDot`), drawn once. */
+let softDotTexture: THREE.Texture | null = null;
+/** The VFX Lab's soft round dot (textures.ts `softDot`), drawn once. Headless (no DOM, e.g. a Node test of a real session): a blank texture. */
 function softDot(): THREE.Texture {
   if (softDotTexture) return softDotTexture;
+  if (typeof document === 'undefined') return (softDotTexture = new THREE.Texture());
   const size = 64;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;

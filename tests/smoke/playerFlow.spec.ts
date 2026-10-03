@@ -63,6 +63,10 @@ test('Character Select and Pregame set up the match that really runs, and Result
   await expect(page.getByTestId('pregame-ring-out-delay-value')).toHaveText('1.50 s');
   await page.getByTestId('pregame-ring-out-delay').fill('0.5');
   await expect(page.getByTestId('pregame-ring-out-delay-value')).toHaveText('0.50 s');
+  // Owner 2026-10-02 (Lote 2): the Dash cooldown slider (0.5-5 s, provisional default 1.5 s).
+  await expect(page.getByTestId('pregame-dash-cooldown-value')).toHaveText('1.50 s');
+  await page.getByTestId('pregame-dash-cooldown').fill('2.5');
+  await expect(page.getByTestId('pregame-dash-cooldown-value')).toHaveText('2.50 s');
   await page.getByTestId('pregame-seed').fill('flow-seed');
   await expect(page.getByTestId('pregame-rules')).toContainText('Fixed seed "flow-seed"');
   await page.getByTestId('pregame-start').click();
@@ -78,6 +82,7 @@ test('Character Select and Pregame set up the match that really runs, and Result
       opponent: session.describeController('second'),
       walls: [session.matchConfig.arenaWallHeightM, session.matchConfig.arenaWallRestitution],
       ringOutDelayS: session.matchConfig.ringOutDelayS,
+      dashCooldownS: session.matchConfig.dashCooldownS,
     };
   });
   // The pick plays first; the default opponent is the next roster entry (no mirror).
@@ -86,6 +91,7 @@ test('Character Select and Pregame set up the match that really runs, and Result
   expect(match.opponent).toBe('AI (archetype, ace)');
   expect(match.walls).toEqual([0.8, 0.4]);
   expect(match.ringOutDelayS).toBe(0.5);
+  expect(match.dashCooldownS).toBe(2.5);
 
   // Play the round for real (F3 shows the overlay the helper reads).
   await page.keyboard.press('F3');

@@ -36,7 +36,7 @@ export interface HudSide {
   readonly stamina: number;
   readonly stability: number;
   readonly broken: boolean;
-  readonly attackEnergy: number;
+  readonly dashReadiness: number;
   /** Dash charge 0..1 while charging, else 0. */
   readonly dashCharge: number;
   /** Short state tag for the card ("DASH", "BROKEN"...), or null. */
@@ -47,7 +47,7 @@ export interface TickSideFacts {
   readonly staminaFraction: number;
   readonly stabilityFraction: number;
   readonly isBroken: boolean;
-  readonly attackEnergyFraction: number;
+  readonly dashReadiness: number;
   readonly dashChargeFraction: number;
   readonly attackState: AttackState;
 }
@@ -65,7 +65,7 @@ export function hudSide(facts: TickSideFacts): HudSide {
     stamina: clamp01(facts.staminaFraction),
     stability: clamp01(facts.stabilityFraction),
     broken: facts.isBroken,
-    attackEnergy: clamp01(facts.attackEnergyFraction),
+    dashReadiness: clamp01(facts.dashReadiness),
     dashCharge: charging ? clamp01(facts.dashChargeFraction) : 0,
     tag,
   };

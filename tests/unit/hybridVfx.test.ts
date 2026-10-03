@@ -85,7 +85,7 @@ function harness(): Harness {
     staminaFraction: 1,
     stabilityFraction: 1,
     isBroken: false,
-    attackEnergyFraction: 1,
+    dashReadiness: 1,
     movement: { speedMps: o.speedMps ?? 0 },
     spin: { spinRateRadPerSec: 22, wobbleEnergy: 0, tiltRad: 0, isTumbling: false },
     ...o,
@@ -205,6 +205,28 @@ describe('HybridVfxSystem', () => {
     h.setState({ first: { attackState: AttackState.DashActive, speedMps: 8 } });
     h.frame();
     expect(h.system.getStats().fx!).toBeGreaterThan(charging + 20); // rings, wake, spiral, dust, debris
+    h.hub.dispose();
+  });
+
+  it('every Dash raises visible dust, a zero-charge one at the lab\'s Light intensity at least (owner, 2026-10-02)', () => {
+    const h = harness();
+    const runtime = (h.system as unknown as { runtime: { windBurst(e: { m: number }): void } }).runtime;
+    const seen: number[] = [];
+    const original = runtime.windBurst.bind(runtime);
+    runtime.windBurst = (e) => {
+      seen.push(e.m);
+      original(e);
+    };
+    // A minimum Dash: no charge at all, and a slow frame that never showed the charge (Neutral straight to DashActive).
+    h.setState({ first: { attackState: AttackState.Neutral } });
+    h.frame();
+    const before = h.system.getStats().dust!;
+    h.beys.first.group.position.x += 0.4;
+    h.setState({ first: { attackState: AttackState.DashActive, dashChargeFraction: 0, speedMps: 8 } });
+    h.frame();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBeGreaterThanOrEqual(0.3);
+    expect(h.system.getStats().dust! - before).toBeGreaterThan(0);
     h.hub.dispose();
   });
 

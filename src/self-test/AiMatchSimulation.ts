@@ -170,7 +170,7 @@ class SideTracker {
     clashActive: boolean,
     radiusM: number,
     opponentOpen: boolean,
-    attackEnergyFraction: number,
+    dashReadiness: number,
     speedMps: number,
   ): void {
     const throttling = actions.held.has(Action.MoveForward) || actions.held.has(Action.MoveBackward);
@@ -191,7 +191,7 @@ class SideTracker {
       !clashActive &&
       attackIntent &&
       attackState === AttackState.Neutral &&
-      attackEnergyFraction > 0.3 &&
+      dashReadiness >= 1 &&
       debug.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M &&
       !actions.held.has(Action.Attack);
     this.stalledAttackStreak = stalled ? this.stalledAttackStreak + 1 : 0;
@@ -400,8 +400,8 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     const b = world.second.body.translation();
     const isOpen = (attackState: AttackState, broken: boolean) =>
       broken || attackState === AttackState.DashRecovery || attackState === AttackState.CircularRecovery;
-    first.record(tick, firstAi, firstActions, result.first.attackState, result.first.dodgeState, clashActive, Math.hypot(a.x, a.z), isOpen(previousSecondAttackState, previousSecondBroken), result.first.attackEnergyFraction, result.first.movement.speedMps);
-    second.record(tick, secondAi, secondActions, result.second.attackState, result.second.dodgeState, clashActive, Math.hypot(b.x, b.z), isOpen(previousFirstAttackState, previousFirstBroken), result.second.attackEnergyFraction, result.second.movement.speedMps);
+    first.record(tick, firstAi, firstActions, result.first.attackState, result.first.dodgeState, clashActive, Math.hypot(a.x, a.z), isOpen(previousSecondAttackState, previousSecondBroken), result.first.dashReadiness, result.first.movement.speedMps);
+    second.record(tick, secondAi, secondActions, result.second.attackState, result.second.dodgeState, clashActive, Math.hypot(b.x, b.z), isOpen(previousFirstAttackState, previousFirstBroken), result.second.dashReadiness, result.second.movement.speedMps);
     previousFirstAttackState = result.first.attackState;
     previousSecondAttackState = result.second.attackState;
     previousFirstBroken = result.first.isBroken;

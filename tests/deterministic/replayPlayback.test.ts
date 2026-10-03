@@ -93,13 +93,13 @@ interface Recording {
 // now only replay-58 (1103 ticks, 110 frozen) and replay-26 (1950 ticks, 104
 // frozen, 449 steering ticks after tick 900) do.
 // Ring-out delay + Perfect Dodge reported once per dodge (owner, 2026-10-02 —
-// the per-tick Perfect Dodge repeats also re-triggered hitstop): fights have
-// fewer freezes, and a sweep of replay-0..599 found 4 that qualify:
-// replay-173 (2577 ticks, 114 frozen) and replay-321 (2194 ticks, 111
-// frozen, 599 steering ticks after tick 900); replay-420 and replay-396 too.
+// the per-tick Perfect Dodge repeats also re-triggered hitstop), then the
+// Dash cooldown replacing Attack Energy (Lote 2): re-swept replay-0..799,
+// 11 qualify; replay-490 (1443 ticks, 126 frozen) and replay-77 (1724 ticks,
+// 115 frozen, 241 steering ticks after tick 900).
 // Most seeds end within a few hundred ticks.
-const LONG_SEED = 'replay-173';
-const MUTATION_SEED = 'replay-321';
+const LONG_SEED = 'replay-490';
+const MUTATION_SEED = 'replay-77';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {

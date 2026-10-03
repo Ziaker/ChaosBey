@@ -50,7 +50,8 @@ export interface BeySnapshot {
   staminaFraction: number;
   stabilityFraction: number;
   isBroken: boolean;
-  attackEnergyFraction: number;
+  /** 0..1: Dash cooldown readiness (AttackController.getDashReadiness(); 1 = a Dash can start charging). Owner, 2026-10-02: replaces Attack Energy. */
+  dashReadiness: number;
   /** True for exactly one tick: this Bey just landed (any cause) — see DriftController. Milestone 4 data, no gameplay effect. */
   justLanded: boolean;
   /** Only meaningful when justLanded is true. */
@@ -117,7 +118,7 @@ function buildFrozenSnapshot(physics: PhysicsWorld, bey: Bey): BeySnapshot {
     staminaFraction: bey.stamina.resource.fraction,
     stabilityFraction: bey.stability.resource.fraction,
     isBroken: bey.stability.isBroken,
-    attackEnergyFraction: bey.attackEnergy.resource.fraction,
+    dashReadiness: bey.attack.getDashReadiness(),
     justLanded: false,
     landingDescentSpeedMps: 0,
     landingIntensity: 0,
@@ -227,7 +228,6 @@ export function tickMatch(
     first.movement.getHeadingRad(),
     positionXZ(first.body),
     positionXZ(second.body),
-    first.attackEnergy.resource.fraction,
     fixedDeltaSeconds,
   );
   const secondAttack = second.attack.tick(
@@ -235,7 +235,6 @@ export function tickMatch(
     second.movement.getHeadingRad(),
     positionXZ(second.body),
     positionXZ(first.body),
-    second.attackEnergy.resource.fraction,
     fixedDeltaSeconds,
   );
 
@@ -266,8 +265,6 @@ export function tickMatch(
   first.spin.tick(first.body, fixedDeltaSeconds, firstCondition, firstGrounded, firstDrift.driftState === DriftState.Drifting ? first.movement.getHeadingRad() : null);
   second.spin.tick(second.body, fixedDeltaSeconds, secondCondition, secondGrounded, secondDrift.driftState === DriftState.Drifting ? second.movement.getHeadingRad() : null);
 
-  first.attackEnergy.tick(firstAttack.isConsumingAttackEnergy, fixedDeltaSeconds);
-  second.attackEnergy.tick(secondAttack.isConsumingAttackEnergy, fixedDeltaSeconds);
 
   physics.step();
 
@@ -461,7 +458,7 @@ export function tickMatch(
       staminaFraction: first.stamina.resource.fraction,
       stabilityFraction: first.stability.resource.fraction,
       isBroken: first.stability.isBroken,
-      attackEnergyFraction: first.attackEnergy.resource.fraction,
+      dashReadiness: first.attack.getDashReadiness(),
       justLanded: firstDrift.justLanded,
       landingDescentSpeedMps: firstDrift.landingDescentSpeedMps,
       landingIntensity: firstDrift.landingIntensity,
@@ -478,7 +475,7 @@ export function tickMatch(
       staminaFraction: second.stamina.resource.fraction,
       stabilityFraction: second.stability.resource.fraction,
       isBroken: second.stability.isBroken,
-      attackEnergyFraction: second.attackEnergy.resource.fraction,
+      dashReadiness: second.attack.getDashReadiness(),
       justLanded: secondDrift.justLanded,
       landingDescentSpeedMps: secondDrift.landingDescentSpeedMps,
       landingIntensity: secondDrift.landingIntensity,

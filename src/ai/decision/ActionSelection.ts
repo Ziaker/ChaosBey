@@ -349,7 +349,7 @@ export class ActionSelector {
         world.own.attackState === AttackState.Buffering ||
         world.own.attackState === AttackState.ChargingDash) &&
       (dashWantsMoreCharge || dashWaitingForLine) &&
-      world.own.attackEnergyFraction > 0
+      (world.own.dashReadiness >= 1 || world.own.attackState === AttackState.ChargingDash)
     ) {
       desiredHeld.add(Action.Attack);
     }
@@ -405,8 +405,7 @@ export class ActionSelector {
     // (DodgeController.registerLaunch arms it for knockbacks/launches
     // only), so a voluntary jump is unaffected: air attacks while jumping
     // stay allowed. Back on the ground the current decision decides
-    // (release = a normal grounded Dash); Attack Energy running out still
-    // ends the charge on its own.
+    // (release = a normal grounded Dash).
     const charging = world.own.attackState === AttackState.ChargingDash;
     const airRecoverOwnsCharge = intent === AiIntent.AirRecover && charging;
     const launchedAirborne = !world.own.grounded && world.own.airRecoveryAvailable;

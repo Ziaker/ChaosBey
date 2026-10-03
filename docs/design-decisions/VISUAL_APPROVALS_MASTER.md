@@ -393,7 +393,7 @@ O GDD exige comunicar claramente durante a luta, entre outras coisas:
 
 - Stamina;
 - Stability;
-- Attack Energy / recurso ofensivo;
+- cooldown do Dash (linha CD; substituiu Attack Energy / recurso ofensivo — owner, 2026-10-02);
 - cooldowns relevantes;
 - feedback de lock-on do Dash;
 - outros recursos/estados de combate necessários.

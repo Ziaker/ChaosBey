@@ -250,7 +250,7 @@ function facts(overrides: Partial<BeyPresentationFacts> = {}): BeyPresentationFa
     staminaFraction: 0.75,
     stabilityFraction: 0.4,
     isBroken: false,
-    attackEnergyFraction: 1,
+    dashReadiness: 1,
     movement: { speedMps: 5.5 },
     spin: { spinRateRadPerSec: 22, wobbleEnergy: 0.3, tiltRad: 0.1, isTumbling: false },
     ...overrides,
@@ -691,7 +691,7 @@ function importsOf(file: string): string[] {
 }
 
 describe('dependency direction', () => {
-  const GAMEPLAY_DIRS = ['combat', 'physics', 'ai', 'dodge', 'drift', 'input', 'replay', 'rng', 'self-test', 'app/simulation', 'bey/movement', 'bey/spin', 'bey/stamina', 'bey/stability', 'bey/attack-energy', 'bey/motion'];
+  const GAMEPLAY_DIRS = ['combat', 'physics', 'ai', 'dodge', 'drift', 'input', 'replay', 'rng', 'self-test', 'app/simulation', 'bey/movement', 'bey/spin', 'bey/stamina', 'bey/stability', 'bey/motion'];
 
   it('scans real files and sees their imports (so a clean result means something)', () => {
     expect(sourceFiles(join(SRC, 'presentation')).length).toBeGreaterThanOrEqual(10);
