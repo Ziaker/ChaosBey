@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
+import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { beyMatchRulesOf, createDefaultMatchConfig, type MatchConfig } from '../../src/config/match/MatchConfig';
 import { Action, type ControllerActions } from '../../src/input/actions/Action';
 import { createDefaultMatchSetup, loadLastSetup, saveLastSetup } from '../../src/app/frontend/matchSetup';
+import { currentRuntimeFingerprint } from '../../src/replay/format/runtimeFingerprint';
+import { playReplayHeadless } from '../../src/replay/playback/replayPlayback';
+import { simulateAiMatch } from '../../src/self-test/AiMatchSimulation';
 import { CombatHarness } from './combatHarness';
 
 const NONE: ControllerActions = { held: new Set(), pressedThisFrame: new Set(), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0 };
@@ -74,4 +78,19 @@ describe('Master §12 speed-limit behavior playtest', () => {
     expect(Math.hypot(v.x, v.z)).toBeGreaterThan(cap * 1.05);
     h.dispose();
   });
+
+  it('records Strict in the deterministic config snapshot and headless playback verifies the same hashes', async () => {
+    const fingerprint = await currentRuntimeFingerprint();
+    const record = await simulateAiMatch({
+      seed: 'strict-speed-cap-replay',
+      firstDefinition: ATTACK_ARCHETYPE,
+      secondDefinition: DEFENSE_ARCHETYPE,
+      maxTicks: 900,
+      matchConfigOverrides: { strictSpeedCap: true },
+      record: { fingerprint, checkpointEvery: 30 },
+    });
+    const replay = record.replay!;
+    expect(replay.config.matchConfig.strictSpeedCap).toBe(true);
+    expect((await playReplayHeadless(replay, fingerprint)).status).toBe('verified');
+  }, 60_000);
 });
