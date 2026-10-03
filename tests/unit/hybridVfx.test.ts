@@ -333,3 +333,26 @@ describe('HybridVfxSystem', () => {
     h.hub.dispose();
   });
 });
+
+
+describe('Lote 7 (owner, 2026-10-02; audit J2/J3) — landings and floor scars', () => {
+  it('Heavy hits and hard launched landings leave a floor scar, capped at 10 at once, faded after their life', () => {
+    const h = harness();
+    h.setState();
+    h.frame();
+    h.emit([hit(0.5)]); // Medium-ish: no scar
+    expect(h.system.getStats().floorScars).toBe(0);
+    h.emit([hit(1)]);
+    expect(h.system.getStats().floorScars).toBe(1);
+    h.emit([{ kind: 'landed', tick: 1, side: 'first', magnitude: 0.8, position: POS, launched: true }]);
+    expect(h.system.getStats().floorScars).toBe(2);
+    h.emit([{ kind: 'landed', tick: 1, side: 'first', magnitude: 0.9, position: POS }]); // own/plain landing: no scar
+    expect(h.system.getStats().floorScars).toBe(2);
+    for (let i = 0; i < 15; i++) h.emit([hit(1)]);
+    expect(h.system.getStats().floorScarsMade).toBe(17);
+    expect(h.system.getStats().floorScars).toBeLessThanOrEqual(10);
+    for (let i = 0; i < 16 * 30; i++) h.frame(1 / 30);
+    expect(h.system.getStats().floorScars).toBe(0);
+    h.hub.dispose();
+  });
+});

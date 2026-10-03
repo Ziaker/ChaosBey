@@ -24,7 +24,8 @@
 // Observes only: no body, collider, stat, input or camera is written.
 // ============================================================
 
-import { VFX_LIGHT } from './intensityTiers';
+import { FLOOR_SCAR_HIT_MIN_M, FLOOR_SCAR_LANDING_MIN_M, VFX_LIGHT } from './intensityTiers';
+import { FloorScars } from './FloorScars';
 import * as THREE from 'three';
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
@@ -107,6 +108,7 @@ export class HybridVfxSystem implements PresentationSystem {
 
   readonly dropped: DroppedRequests = { shake: 0, hitstop: 0, slowMotion: 0 };
   private readonly layer: FxLayer;
+  private readonly scars: FloorScars;
   private readonly sparks: StreakSparks;
   private readonly overlay: ScreenOverlay;
   private readonly flashLight = new THREE.PointLight(0xffffff, 0, 10, 2);
@@ -125,6 +127,7 @@ export class HybridVfxSystem implements PresentationSystem {
   constructor(private readonly options: HybridVfxOptions) {
     const { scene, camera } = options;
     this.layer = new FxLayer(scene, camera);
+    this.scars = new FloorScars(this.layer, options.floorHeightAtR);
     this.sparks = new StreakSparks(SPARK_CAPACITY, options.floorHeightAtR);
     this.overlay = new ScreenOverlay(camera, options.overlayParent);
     scene.add(this.sparks.object, this.flashLight);
@@ -240,6 +243,7 @@ export class HybridVfxSystem implements PresentationSystem {
           if (normal.lengthSq() < 1e-8) normal.set(1, 0, 0);
           normal.normalize().setY(0.2).normalize();
           this.runtime.hit({ pos: contact, normal, m: event.magnitude, attacker: SLOT[attacker.side] });
+          if (event.magnitude >= FLOOR_SCAR_HIT_MIN_M) this.scars.scar(contact, event.magnitude);
           break;
         }
         case 'dodged': {
@@ -265,6 +269,7 @@ export class HybridVfxSystem implements PresentationSystem {
           break;
         case 'landed':
           this.runtime.landing({ pos: this.tracks[event.side].pos.clone(), m: event.magnitude, slot: SLOT[event.side] });
+          if (event.launched && event.magnitude >= FLOOR_SCAR_LANDING_MIN_M) this.scars.scar(this.tracks[event.side].pos.clone(), event.magnitude);
           break;
         case 'ringOut': {
           const track = this.tracks[event.side];
@@ -375,6 +380,8 @@ export class HybridVfxSystem implements PresentationSystem {
       droppedSlowMotion: this.dropped.slowMotion,
       frames: this.frames,
       dust: this.dustSpawned,
+      floorScars: this.scars.count(),
+      floorScarsMade: this.scars.made,
     };
   }
 
