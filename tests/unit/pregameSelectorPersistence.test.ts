@@ -44,4 +44,30 @@ describe('remembered Pregame selectors and arena geometry', () => {
     expect(loaded!.arena.geometry.wallHeightM).toBe(ARENA_WALL_HEIGHT_RANGE.min);
     expect(loaded!.arena.geometry.wallRestitution).toBe(ARENA_WALL_BOUNCE_RANGE.max);
   });
+
+  it('rejects malformed persisted shapes instead of letting wrong types enter a match', () => {
+    const base = createDefaultMatchSetup();
+    const loaded = load({
+      ...base,
+      ai: { tier: null, style: 42 },
+      roundsToWin: 'three',
+      clashImpactMultiplier: 'maximum',
+      arena: {
+        presetId: base.arena.presetId,
+        geometry: {
+          wallHeightM: 'tall',
+          wallRestitution: null,
+          floor: 42,
+        },
+      },
+      motion: 42,
+    });
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.ai).toEqual(base.ai);
+    expect(loaded!.roundsToWin).toBe(base.roundsToWin);
+    expect(loaded!.clashImpactMultiplier).toBe(base.clashImpactMultiplier);
+    expect(loaded!.arena).toEqual(base.arena);
+    expect(loaded!.motion).toBe(base.motion);
+  });
 });
