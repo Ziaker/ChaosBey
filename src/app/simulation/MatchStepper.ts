@@ -85,7 +85,9 @@ function impactMagnitudesForTick(result: MatchTickResult, frozen: boolean, clash
   // Positions don't affect magnitudes; only the magnitudes decide hitstop.
   // Owner, 2026-10-04: "por que fica acontecendo hitpause quando o bey aterrisa? eu NUNCA pedi isso" — a landing never
   // freezes the game (its effects and the camera's own reaction stay; only the hitstop is gone).
+  // Owner audit, 2026-10-04: a wall / rim impact doesn't either — at speed every curve runs up the funnel into the rim,
+  // and each hit froze the game (19 freezes, 2.3 s, in 20 s of a fast lap). Hits, KOs, breaks and Clashes still do.
   return buildImpactEventsForTick(result, ORIGIN, ORIGIN)
-    .filter((event) => event.kind !== 'landing')
+    .filter((event) => event.kind !== 'landing' && event.kind !== 'wallImpact')
     .map((event) => event.magnitude);
 }

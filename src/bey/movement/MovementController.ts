@@ -122,6 +122,9 @@ const NUMERICAL_SPEED_CLAMP_MPS = 60;
 /** × the grip recovery while steering after a knockback (match handling). PROVISIONAL. */
 const STEERED_REGRIP_MULTIPLIER = 4;
 
+/** Match handling: thrust = stick magnitude ^ this (see the thrust curve in applyPreStep). PROVISIONAL. */
+const STICK_THRUST_EXPONENT = 0.35;
+
 /** Self-launched off the terrain (see selfLaunched): air grip × this and air thrust at this share. PROVISIONAL. */
 const SELF_LAUNCHED_AIR_GRIP_MULTIPLIER = 3;
 const SELF_LAUNCHED_AIR_ACCELERATION_FACTOR = 0.5;
@@ -416,7 +419,11 @@ export class MovementController {
     let throttleInput: number;
     let throttleScale = 1;
     if (intent) {
-      const magnitude = intentMagnitude(intent);
+      // Owner audit, 2026-10-04: a light stick couldn't leave the funnel's centre (35% → 0 m/s, 60% → stuck after 2.7 m:
+      // the ×3.6 gravity's pull down the slope beat a linear 35–60% thrust). With the match handling the thrust follows
+      // the stick on a curve that rises fast (35% → 69%, 60% → 84%, full = full); keyboard input is always full.
+      const rawMagnitude = intentMagnitude(intent);
+      const magnitude = this.highSpeedControl > 0 ? rawMagnitude ** STICK_THRUST_EXPONENT : rawMagnitude;
       const alignment = magnitude > 0 ? Math.cos(headingErrorRad(intent, this.headingRad)) : 0;
       // Owner, 2026-10-04 ("curvas não deviam reduzir tanto a velocidade"): with speed kept in turns, a new direction
       // behind the Bey no longer brakes it in reverse — it turns toward it and keeps going (thrust resumes as it faces it).

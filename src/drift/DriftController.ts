@@ -228,10 +228,10 @@ export class DriftController {
     if (!grounded) {
       const v = body.linvel();
       this.lastAirborneHorizontal = { x: v.x, z: v.z };
-      // Keep sampling this every tick while airborne so the last value
-      // recorded (read the tick before landing is detected) is the closest
-      // available proxy for actual pre-impact descent speed.
-      this.lastAirborneVerticalVelocityMps = body.linvel().y;
+      // The fastest descent of this airborne period (owner audit, 2026-10-04): the floor stops the Bey a tick or two
+      // before the ground check confirms the landing, and sampling the last value read those ticks' 0 — a full jump
+      // landed at 15 m/s reported a landing intensity of 0 (no landing effects).
+      this.lastAirborneVerticalVelocityMps = this.wasGrounded ? v.y : Math.min(this.lastAirborneVerticalVelocityMps, v.y);
     }
 
     let justLanded = false;
