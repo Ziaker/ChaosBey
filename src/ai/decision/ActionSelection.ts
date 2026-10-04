@@ -58,6 +58,13 @@ const EDGE_PRESSURE_STANDOFF_M = 2;
 /** Circle keeps its current side unless the other side leads toward the center at least this much (cosine) — and only re-picks at all once some edge risk exists. Without this hysteresis the side flipped every few ticks near the center, and each flip meant turning around. */
 const CIRCLE_SIDE_SWITCH_MIN_DOT = 0.3;
 
+/** BuildSpeed: the lap's radius, as a share of the ring-out radius (wide curves keep the speed, well clear of the edge). PROVISIONAL. */
+const CRUISE_RADIUS_FRACTION = 0.5;
+/** BuildSpeed: how hard the lap steers back to its radius (per unit of relative radius error). */
+const CRUISE_RADIAL_GAIN = 1.2;
+/** BuildSpeed: pull of the lap toward the opponent, × aggression — the laps drift toward the action. */
+const CRUISE_OPPONENT_PULL = 0.4;
+
 /** Evasion: weight of the inward (toward-center) pull added to the sideways escape at full edge risk. Enough that at the edge the escape clearly leads back in, while the sideways part still leaves the attack line. */
 const EVASION_INWARD_PULL_AT_FULL_EDGE_RISK = 1.5;
 /** Circle: weight of the inward pull added to the sideways direction at the ring-out line for centerControl 1, scaled down linearly toward the center. */
@@ -213,12 +220,30 @@ export function circleDirection(world: WorldState, personality: AiPersonality, c
   return normalize(add(sideways, scale(world.own.directionTowardCenter, inwardWeight)));
 }
 
+/**
+ * BuildSpeed (owner, 2026-10-04): a lap of the arena around its center, in the direction the Bey is already moving
+ * (`lapSign`), steering back toward CRUISE_RADIUS_FRACTION of the ring-out radius and drifting toward the opponent.
+ */
+export function cruiseDirection(world: WorldState, personality: AiPersonality, lapSign: 1 | -1): Vec2 {
+  const center = world.own.directionTowardCenter;
+  if (length(center) === 0) return world.distanceToOpponentM > 1e-3 ? perpendicular(world.directionToOpponent) : fromYaw(world.own.headingRad);
+  const ringRadius = ringOutRadiusM();
+  const radius = Math.max(0, ringRadius - world.own.distanceToEdgeM);
+  const target = ringRadius * CRUISE_RADIUS_FRACTION;
+  const radialError = Math.max(-1, Math.min(1, (radius - target) / target));
+  let direction = add(scale(perpendicular(center), lapSign), scale(center, radialError * CRUISE_RADIAL_GAIN));
+  if (world.distanceToOpponentM > 1e-3) direction = add(direction, scale(world.directionToOpponent, CRUISE_OPPONENT_PULL * personality.aggression));
+  const unit = normalize(direction);
+  return length(unit) > 0 ? unit : scale(perpendicular(center), lapSign);
+}
+
 function computeMovePlan(
   intent: AiIntent,
   world: WorldState,
   edgePlan: EdgePressurePlan | null,
   circleSign: 1 | -1,
   personality: AiPersonality,
+  lapSign: 1 | -1 = 1,
 ): MovePlan | null {
   const hasOpponentDirection = world.distanceToOpponentM > 1e-3;
   switch (intent) {
@@ -242,9 +267,13 @@ function computeMovePlan(
     case AiIntent.Circle:
       // Side chosen (with hysteresis) by ActionSelector.updateCircleSign.
       return { direction: circleDirection(world, personality, circleSign), allowReverse: false };
-    case AiIntent.CounterAttack:
+    case AiIntent.BuildSpeed:
     case AiIntent.Wait:
-      return null;
+      // Owner, 2026-10-04 ("não quero ver ela parada independente do tipo"): waiting is a lap, never standing still.
+      return { direction: cruiseDirection(world, personality, lapSign), allowReverse: false };
+    case AiIntent.CounterAttack:
+      // Reading a Dash: keep moving sideways (the tap timing reads distance and closing speed, not standing still).
+      return { direction: circleDirection(world, personality, circleSign), allowReverse: false };
     default:
       return null;
   }
@@ -288,6 +317,8 @@ const AI_DRIFT_MAX_TICKS = 30;
 
 export class ActionSelector {
   private circleSign: 1 | -1 = 1;
+  /** BuildSpeed's lap direction around the arena center (kept while the Bey is already moving that way). */
+  private lapSign: 1 | -1 = 1;
   private currentTick = 0;
   private previousHeld = new Set<Action>();
   /** A Dash charge that was being held when this Bey was launched: held until it is back on the ground (see selectActions). */
@@ -315,8 +346,9 @@ export class ActionSelector {
     const desiredHeld = new Set<Action>();
 
     const edgePlan = intent === AiIntent.PressAdvantage ? edgePressurePlan(world) : null;
-    if (intent === AiIntent.Circle) this.updateCircleSign(world);
-    const movePlan = computeMovePlan(intent, world, edgePlan, this.circleSign, personality);
+    if (intent === AiIntent.Circle || intent === AiIntent.CounterAttack) this.updateCircleSign(world);
+    if (intent === AiIntent.BuildSpeed || intent === AiIntent.Wait) this.updateLapSign(world);
+    const movePlan = computeMovePlan(intent, world, edgePlan, this.circleSign, personality, this.lapSign);
     if (movePlan) addMovementActions(movePlan, world.own.headingRad, desiredHeld);
 
     // PressAdvantage is an attack intent too (GDD section 64: Attack AI
@@ -437,6 +469,13 @@ export class ActionSelector {
     }
 
     return this.commit(desiredHeld, fixedDeltaSeconds);
+  }
+
+  /** The lap follows the way the Bey is already going around the center (no turning around to start one). */
+  private updateLapSign(world: WorldState): void {
+    const tangent = perpendicular(world.own.directionTowardCenter);
+    const along = dot(tangent, world.own.velocityXZ);
+    if (Math.abs(along) > 1) this.lapSign = along >= 0 ? 1 : -1;
   }
 
   /**

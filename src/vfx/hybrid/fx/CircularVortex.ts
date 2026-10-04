@@ -1,72 +1,87 @@
 // ============================================================
-// CIRCULAR TORNADO (owner, 2026-10-04: "o ataque giratório precisa se destacar mais visualmente … um vortex
-// helicoidal 20% maior" → "melhore a animação do ataque giratório, deixe mais bonita, como um tornado").
-// A funnel that is narrow at the Bey and opens upward to 20% wider than the Circular's slash ring (1.72 m):
-// a translucent swirling shell, five helical bands turning at different speeds, and debris spiralling up it.
-// Presentation only: it never reads or writes gameplay.
+// CIRCULAR VORTEX (owner, 2026-10-04)
+// "um vortex helicoidal 20% maior" → "como um tornado" → "o ataque giratório tem que ter seu efeito visual ao redor
+// do bey, não dentro dele […] faça ser uma animação de efeito visual, não só um tornado girando, algo como um vortex
+// que se dissipa".
+// A whirl AROUND the Bey — nothing inside its body (every piece starts outside INNER_RADIUS_M): spiral wind arms that
+// coil in tight as the Circular starts, spin, and shed energy outward the whole time (pulse rings and motes peel off,
+// widen and fade); in the last third the arms unwind, widen and dissolve. Its reach is 20% past the Circular's slash
+// ring (1.72 m). Presentation only: it never reads or writes gameplay.
 // ============================================================
 
 import * as THREE from 'three';
 
-/** The Circular's slash ring radius (anime.ts circularSweep: 1.25 + 0.3 × 0.6) × 1.2 — the funnel's top. */
+/** The Circular's slash ring radius (anime.ts circularSweep: 1.25 + 0.3 × 0.6) × 1.2 — the vortex's outer edge. */
 export const CIRCULAR_VORTEX_RADIUS_M = (1.25 + 0.3 * 0.6) * 1.2;
-const BOTTOM_RADIUS_M = 0.45;
-const HEIGHT_M = 2.6;
-const BANDS = 5;
-const DEBRIS = 90;
-
-/** Funnel radius at height fraction u (0 = floor, 1 = top): opens faster near the top, like a tornado. */
-function funnel(u: number): number {
-  return BOTTOM_RADIUS_M + (CIRCULAR_VORTEX_RADIUS_M - BOTTOM_RADIUS_M) * Math.pow(u, 0.7);
-}
+/** Clear of the Bey's body (its visual radius is ~0.6 m): the effect is around it, never inside. */
+export const CIRCULAR_VORTEX_INNER_RADIUS_M = 0.85;
+const ARMS = 6;
+const PULSES = 4;
+const PULSE_PERIOD_S = 0.32;
+const MOTES = 80;
+const MOTE_LIFE_S = 0.55;
 
 export class CircularVortex {
   readonly object = new THREE.Group();
-  private readonly bands: THREE.Mesh[] = [];
-  private readonly bandMaterials: THREE.MeshBasicMaterial[] = [];
-  private readonly shell: THREE.Mesh;
-  private readonly shellMaterial: THREE.MeshBasicMaterial;
-  private readonly debris: THREE.Points;
-  private readonly debrisMaterial: THREE.PointsMaterial;
-  private readonly debrisU = new Float32Array(DEBRIS);
-  private readonly debrisA = new Float32Array(DEBRIS);
+  private readonly lowerArms = new THREE.Group();
+  private readonly upperArms = new THREE.Group();
+  private readonly armMaterials: THREE.MeshBasicMaterial[] = [];
+  private readonly pulses: THREE.Mesh[] = [];
+  private readonly pulseMaterials: THREE.MeshBasicMaterial[] = [];
+  private readonly motes: THREE.Points;
+  private readonly moteMaterial: THREE.PointsMaterial;
+  private readonly moteAge = new Float32Array(MOTES);
+  private readonly moteAngle = new Float32Array(MOTES);
+  private readonly moteColor: THREE.Color;
   private time = 0;
 
   constructor(color: THREE.Color) {
     const light = color.clone().lerp(new THREE.Color(0xffffff), 0.55);
-    // The shell: an open funnel, faint and swirling.
-    const profile: THREE.Vector2[] = [];
-    for (let i = 0; i <= 24; i++) profile.push(new THREE.Vector2(funnel(i / 24), (i / 24) * HEIGHT_M));
-    this.shellMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
-    this.shell = new THREE.Mesh(new THREE.LatheGeometry(profile, 40), this.shellMaterial);
-    this.object.add(this.shell);
-    // The bands: helices hugging the funnel, alternating colour and thickness.
-    for (let b = 0; b < BANDS; b++) {
-      const phase = (b / BANDS) * Math.PI * 2;
-      const turns = 1.4 + (b % 3) * 0.35;
-      const points: THREE.Vector3[] = [];
-      for (let i = 0; i <= 80; i++) {
-        const u = i / 80;
-        const r = funnel(u) * (0.92 + 0.08 * Math.sin(u * 9 + b));
-        const a = phase + u * turns * Math.PI * 2;
-        points.push(new THREE.Vector3(Math.cos(a) * r, u * HEIGHT_M, Math.sin(a) * r));
+    this.moteColor = light;
+    // Spiral arms: each coils from just outside the Bey out to the edge, with a gentle vertical wave (a 3D whirl,
+    // not a flat decal). Two layers turning at different speeds.
+    const span = CIRCULAR_VORTEX_RADIUS_M - CIRCULAR_VORTEX_INNER_RADIUS_M;
+    for (const [group, layer] of [[this.lowerArms, 0], [this.upperArms, 1]] as const) {
+      for (let a = 0; a < ARMS; a++) {
+        const phase = (a / ARMS) * Math.PI * 2 + layer * 0.5;
+        const points: THREE.Vector3[] = [];
+        for (let i = 0; i <= 40; i++) {
+          const u = i / 40;
+          const r = CIRCULAR_VORTEX_INNER_RADIUS_M + span * u;
+          const angle = phase - u * Math.PI * (1.05 + 0.25 * layer); // trailing back against the spin
+          points.push(new THREE.Vector3(Math.cos(angle) * r, Math.sin(u * Math.PI) * (0.12 + 0.1 * layer), Math.sin(angle) * r));
+        }
+        const material = new THREE.MeshBasicMaterial({ color: (a + layer) % 2 === 0 ? color : light, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+        const arm = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 48, layer === 0 ? 0.05 : 0.032, 5, false), material);
+        this.armMaterials.push(material);
+        group.add(arm);
       }
-      const material = new THREE.MeshBasicMaterial({ color: b % 2 === 0 ? color : light, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-      const band = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 120, b === 0 ? 0.07 : 0.035 + (b % 2) * 0.015, 6, false), material);
-      this.bands.push(band);
-      this.bandMaterials.push(material);
-      this.object.add(band);
     }
-    // Debris spiralling up the funnel.
-    for (let i = 0; i < DEBRIS; i++) {
-      this.debrisU[i] = (i * 0.61803) % 1;
-      this.debrisA[i] = (i * 2.39996) % (Math.PI * 2);
+    this.upperArms.position.y = 0.32;
+    this.upperArms.rotation.x = 0.08;
+    this.object.add(this.lowerArms, this.upperArms);
+    // Pulse rings: a new one peels off the vortex every PULSE_PERIOD_S, widening past the edge and fading.
+    const ringGeometry = new THREE.TorusGeometry(1, 0.03, 6, 72);
+    for (let p = 0; p < PULSES; p++) {
+      const material = new THREE.MeshBasicMaterial({ color: light, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+      const ring = new THREE.Mesh(ringGeometry, material);
+      ring.rotation.x = Math.PI / 2;
+      this.pulses.push(ring);
+      this.pulseMaterials.push(material);
+      this.object.add(ring);
+    }
+    // Motes: born at the inner edge, flung outward along the spin, slowing and fading as they leave (dissipation).
+    for (let i = 0; i < MOTES; i++) {
+      this.moteAge[i] = (i / MOTES) * MOTE_LIFE_S;
+      this.moteAngle[i] = (i * 2.39996) % (Math.PI * 2);
     }
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(DEBRIS * 3), 3));
-    this.debrisMaterial = new THREE.PointsMaterial({ color: light, size: 0.09, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-    this.debris = new THREE.Points(geometry, this.debrisMaterial);
-    this.object.add(this.debris);
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MOTES * 3), 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MOTES * 3), 3));
+    // Additive + vertex colour: a mote fades by darkening toward black.
+    this.moteMaterial = new THREE.PointsMaterial({ size: 0.1, vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.motes = new THREE.Points(geometry, this.moteMaterial);
+    this.object.add(this.motes);
     this.object.visible = false;
     this.object.renderOrder = 5;
   }
@@ -75,45 +90,77 @@ export class CircularVortex {
   update(pos: THREE.Vector3 | null, t: number | null, dt: number): void {
     if (pos === null || t === null) {
       this.object.visible = false;
+      this.time = 0;
       return;
     }
     this.object.visible = true;
     this.time += dt;
     this.object.position.copy(pos);
-    this.object.position.y -= 0.3;
-    // Each band turns at its own speed (the inner ones faster), the shell slower: a twisting funnel.
-    this.bands.forEach((band, i) => (band.rotation.y = this.time * (16 + i * 3)));
-    this.shell.rotation.y = this.time * 9;
-    // Debris climbs and spins faster as it rises (a tornado's suction).
-    const positions = (this.debris.geometry.getAttribute('position') as THREE.BufferAttribute).array as Float32Array;
-    for (let i = 0; i < DEBRIS; i++) {
-      this.debrisU[i] = (this.debrisU[i]! + dt * (0.55 + (i % 5) * 0.08)) % 1;
-      const u = this.debrisU[i]!;
-      this.debrisA[i] = this.debrisA[i]! + dt * (10 + 10 * u);
-      const r = funnel(u) * (0.75 + 0.35 * ((i * 7) % 10) / 10);
-      positions[i * 3] = Math.cos(this.debrisA[i]!) * r;
-      positions[i * 3 + 1] = u * HEIGHT_M;
-      positions[i * 3 + 2] = Math.sin(this.debrisA[i]!) * r;
+    this.object.position.y -= 0.15;
+
+    // Form → spin → dissipate. Forming: the arms coil in from wider and fainter; dissipating (t > 0.65): they
+    // unwind outward, slow down and fade.
+    const form = Math.min(1, t / 0.14);
+    const dissipate = Math.max(0, (t - 0.65) / 0.35);
+    const armAlpha = form * (1 - dissipate * dissipate);
+    const armScale = 1.25 - 0.25 * easeOut(form) + 0.6 * dissipate;
+    const spin = 1 - 0.55 * dissipate;
+    this.lowerArms.rotation.y += dt * 14 * spin;
+    this.upperArms.rotation.y += dt * 19 * spin;
+    this.lowerArms.scale.set(armScale, 1 + 0.8 * dissipate, armScale);
+    this.upperArms.scale.set(armScale * 0.95, 1 + 1.2 * dissipate, armScale * 0.95);
+    this.upperArms.position.y = 0.32 + 0.5 * dissipate;
+    this.armMaterials.forEach((m, i) => (m.opacity = (i < ARMS ? 0.85 : 0.6) * armAlpha));
+
+    // Pulses: shed continuously while the vortex is up; each widens from the inner edge to ~1.5× the reach.
+    for (let p = 0; p < PULSES; p++) {
+      const ring = this.pulses[p]!;
+      const phase = (((this.time / PULSE_PERIOD_S + p / PULSES) % 1) + 1) % 1;
+      const radius = CIRCULAR_VORTEX_INNER_RADIUS_M + (CIRCULAR_VORTEX_RADIUS_M * 1.5 - CIRCULAR_VORTEX_INNER_RADIUS_M) * easeOut(phase);
+      ring.scale.set(radius, radius, radius * (1 - 0.7 * phase));
+      ring.position.y = 0.05 + 0.35 * phase;
+      this.pulseMaterials[p]!.opacity = 0.7 * (1 - phase) * (1 - phase) * form * (1 - dissipate);
     }
-    this.debris.geometry.getAttribute('position').needsUpdate = true;
-    // Rises out of the floor, holds, then lifts off and fades at the end.
-    const grow = Math.min(1, t / 0.15);
-    const alpha = grow * Math.min(1, (1 - t) / 0.22);
-    for (const m of this.bandMaterials) m.opacity = 0.9 * alpha;
-    this.shellMaterial.opacity = 0.16 * alpha;
-    this.debrisMaterial.opacity = 0.95 * alpha;
-    this.object.scale.set(0.8 + 0.2 * grow, 0.35 + 0.65 * grow, 0.8 + 0.2 * grow);
-    if (t > 0.8) this.object.position.y += (t - 0.8) * 2.5;
+
+    // Motes: spiral outward, the angular speed dropping with radius (a real vortex), and fade out.
+    const positions = (this.motes.geometry.getAttribute('position') as THREE.BufferAttribute).array as Float32Array;
+    const colors = (this.motes.geometry.getAttribute('color') as THREE.BufferAttribute).array as Float32Array;
+    for (let i = 0; i < MOTES; i++) {
+      this.moteAge[i] = this.moteAge[i]! + dt;
+      if (this.moteAge[i]! >= MOTE_LIFE_S) {
+        this.moteAge[i] = this.moteAge[i]! - MOTE_LIFE_S;
+        this.moteAngle[i] = this.moteAngle[i]! + 2.39996;
+      }
+      const u = this.moteAge[i]! / MOTE_LIFE_S;
+      const r = CIRCULAR_VORTEX_INNER_RADIUS_M + (CIRCULAR_VORTEX_RADIUS_M * 1.35 - CIRCULAR_VORTEX_INNER_RADIUS_M) * easeOut(u);
+      this.moteAngle[i] = this.moteAngle[i]! + dt * 16 * spin * (CIRCULAR_VORTEX_INNER_RADIUS_M / r);
+      positions[i * 3] = Math.cos(this.moteAngle[i]!) * r;
+      positions[i * 3 + 1] = (((i * 7) % 10) / 10) * 0.45 + u * 0.5;
+      positions[i * 3 + 2] = Math.sin(this.moteAngle[i]!) * r;
+      const fade = (1 - u) * Math.min(1, u * 6);
+      colors[i * 3] = this.moteColor.r * fade;
+      colors[i * 3 + 1] = this.moteColor.g * fade;
+      colors[i * 3 + 2] = this.moteColor.b * fade;
+    }
+    this.motes.geometry.getAttribute('position').needsUpdate = true;
+    this.motes.geometry.getAttribute('color').needsUpdate = true;
+    this.moteMaterial.opacity = form * (1 - dissipate * 0.6);
   }
 
   dispose(): void {
     this.object.removeFromParent();
+    const geometries = new Set<THREE.BufferGeometry>();
     this.object.traverse((o) => {
       const mesh = o as THREE.Mesh;
-      if (mesh.geometry) mesh.geometry.dispose();
+      if (mesh.geometry) geometries.add(mesh.geometry);
     });
-    for (const m of this.bandMaterials) m.dispose();
-    this.shellMaterial.dispose();
-    this.debrisMaterial.dispose();
+    for (const g of geometries) g.dispose();
+    for (const m of this.armMaterials) m.dispose();
+    for (const m of this.pulseMaterials) m.dispose();
+    this.moteMaterial.dispose();
   }
+}
+
+function easeOut(x: number): number {
+  return 1 - (1 - x) * (1 - x);
 }

@@ -106,6 +106,11 @@ export interface MatchConfig {
   spinStaminaDrain: number;
   /** Owner, 2026-10-04: seconds after taking damage during which the (defensive) Circular can't be started. Pregame slider. */
   circularLockAfterHitS: number;
+  /**
+   * Owner, 2026-10-04 ("reduza o timer de perda de controle no chão ao contato contra o bey inimigo sem atacar […]
+   * adicione isso como slider, reduza em 20%"): × the control-loss window of a plain body contact (no attack). Pregame slider.
+   */
+  bodyContactControlLossScale: number;
   /** Owner, 2026-10-04: stage size, × the 36 m floor radius (1 = as designed). Pregame slider. */
   arenaSizeScale: number;
   /** Owner, 2026-10-04 ("qualquer toque devia jogar os beys longe um do outro"): every contact pushes both Beys apart at least this fast (m/s). Pregame slider. */
@@ -144,7 +149,7 @@ export interface MatchConfig {
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -170,6 +175,7 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     knockbackScale: config.knockbackScale,
     spinStaminaDrain: config.spinStaminaDrain,
     circularLockAfterHitS: config.circularLockAfterHitS,
+    bodyContactControlLossScale: config.bodyContactControlLossScale,
     turnSpeedRetention: config.turnSpeedRetention,
     highSpeedControl: config.highSpeedControl,
     topSpeedScale: config.topSpeedScale,
@@ -214,6 +220,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     contactRepelMps: CONTACT_REPEL_DEFAULT_MPS,
     arenaSizeScale: 1,
     circularLockAfterHitS: 0.6,
+    bodyContactControlLossScale: 0.8,
     contactLiftMps: 4,
     knockbackScale: 1,
     spinStaminaDrain: 1,
@@ -295,6 +302,7 @@ export const CONTACT_LIFT_RANGE = { min: 0, max: 20, step: 0.5 } as const;
 export const KNOCKBACK_SCALE_RANGE = { min: 0, max: 4, step: 0.05 } as const;
 export const SPIN_STAMINA_DRAIN_RANGE = { min: 0, max: 20, step: 0.5 } as const;
 export const CIRCULAR_LOCK_RANGE = { min: 0, max: 2, step: 0.05 } as const;
+export const BODY_CONTACT_CONTROL_LOSS_RANGE = { min: 0, max: 2, step: 0.05 } as const;
 export const ARENA_SIZE_SCALE_RANGE = { min: 0.5, max: 2.5, step: 0.05 } as const;
 /** Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade" — share of the speed a turn would scrub off that is kept. PROVISIONAL 0.85. */
 export const TURN_SPEED_RETENTION_DEFAULT = 0.85;

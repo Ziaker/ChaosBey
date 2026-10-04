@@ -53,6 +53,7 @@ import { selectBeyPresentationState, type CameraPresentationSnapshot, type Recen
 import type { PresentationSide } from '../../presentation/events';
 import { collectSceneStats, type SceneStats } from '../../presentation/sceneStats';
 import { ConditionVisualsSystem, normalizeConditionLayers } from '../../vfx/condition/ConditionVisualsSystem';
+import { RecoveryRingEffect } from '../../vfx/RecoveryRing';
 import { HybridVfxSystem } from '../../vfx/hybrid/HybridVfxSystem';
 import { ClashPresentationSystem, clashDustHexFor } from '../../vfx/clash/ClashPresentationSystem';
 import { ArenaVisualsSystem } from '../../arena/visual/ArenaVisualsSystem';
@@ -174,6 +175,8 @@ export class MatchSession {
   private conditionVisuals: ConditionVisualsSystem | null = null;
   /** The approved Hybrid VFX (Cel Cyclone wind), attached only with the `hybridVfx` flag (render only). */
   private hybridVfx: HybridVfxSystem | null = null;
+  /** Owner, 2026-10-04: the expanding ring of an Air Recovery (render only). */
+  private readonly recoveryRings: RecoveryRingEffect;
   private presentationFloorAt: ((x: number, z: number) => number) | null = null;
   /** The approved Clash Overdrive presentation, attached only with the `clashPresentation` flag (render only). */
   private clashPresentation: ClashPresentationSystem | null = null;
@@ -341,6 +344,7 @@ export class MatchSession {
     this.clash = new ClashOrchestration(options.matchConfig, new NullAiMashSource());
 
     options.scene.add(this.root);
+    this.recoveryRings = new RecoveryRingEffect(this.root);
     const presentationFeatures = options.presentationFeatures ?? presentationFeaturesFromLocation();
     this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys, {
       geometry: arenaGeometryOf(options.matchConfig),
@@ -635,6 +639,11 @@ export class MatchSession {
           case 'perfectDodge':
             telemetry.record({ kind: TelemetryEventKind.PerfectDodge, targetIsFirst: combatEvent.targetIsFirst });
             break;
+          case 'airRecovery': {
+            const p = (combatEvent.targetIsFirst ? match.first : match.second).body.translation();
+            this.recoveryRings.spawn(p);
+            break;
+          }
         }
       }
       // A genuine unmodeled physics impact (wall/floor bounce) — distinct
@@ -753,6 +762,7 @@ export class MatchSession {
   renderFrame(frameDeltaSeconds: number, camera: THREE.PerspectiveCamera, view: SessionRenderView = DEFAULT_RENDER_VIEW): void {
     const match = this.match;
     match.syncVisualsToPhysics(this.lastVisual.first, this.lastVisual.second);
+    this.recoveryRings.update(frameDeltaSeconds);
 
     // The player's Bey (the keyboard/pad side) gets the heading arrow.
     const playerSide: Side | null = this.controllerSpecs.first.kind === 'keyboard' ? 'first' : this.controllerSpecs.second.kind === 'keyboard' ? 'second' : null;
@@ -864,6 +874,7 @@ export class MatchSession {
     this.disposed = true;
     this.presentation.dispose();
     this.vfxManager.dispose();
+    this.recoveryRings.dispose();
     this.driftVfx.first.dispose();
     this.driftVfx.second.dispose();
     this.root.removeFromParent();

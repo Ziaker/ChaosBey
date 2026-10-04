@@ -200,10 +200,11 @@ export class MovementController {
    * velocity (a Dash at full speed), so only the upward part of a counter's
    * knockback survived and a countered dasher flew on over the wall.
    */
-  registerKnockback(): void {
+  /** @param controlLossScale × the control-loss window (MatchConfig.bodyContactControlLossScale for a plain body contact). */
+  registerKnockback(controlLossScale = 1): void {
     this.knockedThisJump = true;
     this.knockbackPlaying = true;
-    this.postImpactCooldownRemainingS = POST_IMPACT_GRIP_SUPPRESSION_S;
+    this.postImpactCooldownRemainingS = Math.max(this.postImpactCooldownRemainingS, POST_IMPACT_GRIP_SUPPRESSION_S * controlLossScale);
     this.intendedVelocityThisTick = null;
     this.grip = Math.min(this.grip, this.motion.slipGrip);
   }

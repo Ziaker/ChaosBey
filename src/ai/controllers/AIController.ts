@@ -97,7 +97,7 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     isBroken: bey.stability.isBroken,
     dashReadiness: bey.attack.getDashReadiness(),
     momentum: bey.momentum.value,
-    airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable(),
+    airRecoveryAvailable: bey.dodge.canAirRecoverNow(),
     // Owner, 2026-10-02 (Lote 5): Stamina 0 is a spin-out loss, so the AI keeps a reserve and never dodges itself into one.
     // A free dodge (owner, 2026-10-04: no Stamina cost) needs no reserve either.
     canAffordDodge: bey.stamina.resource.value >= (bey.rules.dodgeStaminaCost ?? DODGE_STAMINA_COST) + ((bey.rules.dodgeStaminaCost ?? DODGE_STAMINA_COST) > 0 ? AI_DODGE_STAMINA_RESERVE : 0),

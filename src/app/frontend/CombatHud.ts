@@ -280,7 +280,7 @@ export class CombatHud {
 
   private updateRecoverAlert(session: MatchSession, camera: THREE.PerspectiveCamera): void {
     const bey = session.getBey('first');
-    const show = session.getLastResult()?.first.grounded === false && bey.dodge.isAirRecoveryAvailable();
+    const show = session.getLastResult()?.first.grounded === false && bey.dodge.canAirRecoverNow();
     this.recoverAlert.classList.toggle('is-on', show);
     if (!show) return;
     this.recoverAlert.textContent = readFirstGamepad(currentGamepads()) !== null ? 'B' : 'C';

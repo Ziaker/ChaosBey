@@ -14,8 +14,10 @@ import * as THREE from 'three';
 import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
 import { PIECE_ORDER } from '../../bey/visual/model/assembleConcept';
 import { FIXED_DELTA_SECONDS } from '../../physics/fixed-step/FixedTimestepLoop';
+import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
 
-export const DEFEAT_PRE_BREAK_TICKS = 60;
+// Owner, 2026-10-04: 60 → 90 ticks (+0.5 s) — see the Bey bounce or fly, and THEN explode.
+export const DEFEAT_PRE_BREAK_TICKS = 90;
 export const DEFEAT_SLOW_MOTION_S = 1.5;
 /** Game time per real second during the slow motion. */
 const SLOW_MOTION_SCALE = 0.3;
@@ -27,6 +29,10 @@ interface Shard {
   readonly object: THREE.Object3D;
   readonly velocity: THREE.Vector3;
   readonly spin: THREE.Vector3;
+  /** How far the piece's lowest point sits below its origin (m), so it rests ON the floor, not through it. */
+  readonly below: number;
+  /** Its horizontal reach from its origin (m), so it stays inside the wall. */
+  readonly reach: number;
 }
 
 export interface DefeatCutsceneOptions {
@@ -90,12 +96,27 @@ export class DefeatCutscene {
     for (const s of this.shards) {
       s.velocity.y -= GRAVITY_MPS2 * gameDt;
       s.object.position.addScaledVector(s.velocity, gameDt);
-      const floor = this.options.floorHeightAt(s.object.position.x, s.object.position.z) + 0.05;
+      // Owner, 2026-10-04 ("as peças estão passando por dentro do stage"): each piece rests on the floor by its own
+      // lowest point (not its origin, the Bey's centre) and bounces off the wall.
+      const floor = this.options.floorHeightAt(s.object.position.x, s.object.position.z) + s.below + 0.02;
       if (s.object.position.y < floor) {
         s.object.position.y = floor;
         s.velocity.y = Math.abs(s.velocity.y) * 0.35;
         s.velocity.x *= 0.7;
         s.velocity.z *= 0.7;
+      }
+      const wall = arenaFloorRadius() - s.reach - 0.1;
+      const r = Math.hypot(s.object.position.x, s.object.position.z);
+      if (r > wall && r > 1e-6) {
+        const nx = s.object.position.x / r;
+        const nz = s.object.position.z / r;
+        s.object.position.x = nx * wall;
+        s.object.position.z = nz * wall;
+        const out = s.velocity.x * nx + s.velocity.z * nz;
+        if (out > 0) {
+          s.velocity.x -= 1.6 * out * nx;
+          s.velocity.z -= 1.6 * out * nz;
+        }
       }
       s.object.rotation.x += s.spin.x * gameDt;
       s.object.rotation.y += s.spin.y * gameDt;
@@ -146,9 +167,14 @@ export class DefeatCutscene {
         if ((o as THREE.Mesh).isMesh) pieces.push(o);
       });
     }
-    const carry = this.flying ? this.velocity.clone().multiplyScalar(0.25) : new THREE.Vector3();
+    // Owner, 2026-10-04 ("é pra continuar voando quando é destruído"): the pieces keep the flight's whole velocity.
+    const carry = this.flying ? this.velocity.clone() : new THREE.Vector3();
     pieces.forEach((piece, i) => {
       root.attach(piece);
+      piece.updateWorldMatrix(true, true);
+      const box = new THREE.Box3().setFromObject(piece);
+      const below = Number.isFinite(box.min.y) ? Math.max(0, piece.position.y - box.min.y) : 0.2;
+      const reach = Number.isFinite(box.min.x) ? Math.max(box.max.x - box.min.x, box.max.z - box.min.z) / 2 : 0.4;
       const a = (i / Math.max(1, pieces.length)) * Math.PI * 2 + 0.6;
       const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
       const speed = 4 + (i % 2) * 1.5;
@@ -156,6 +182,8 @@ export class DefeatCutscene {
         object: piece,
         velocity: new THREE.Vector3(out.x * speed, 6 + i * 1.2, out.z * speed).add(carry),
         spin: new THREE.Vector3(5 + i * 2.5, 8 - i * 2, 4 + i * 1.5),
+        below,
+        reach,
       });
     });
     this.options.onBreak?.();

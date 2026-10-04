@@ -149,7 +149,9 @@ describe('AI vs AI archetype matrix', () => {
     // Lote 5 (spin-out ends rounds, so the patient game is shorter): +0.035 measured (Stamina 0.243 vs Defense 0.208).
     expect(stamina.passiveShare / stamina.sides).toBeGreaterThan(defense.passiveShare / defense.sides + 0.03);
     // Over Attack (was > +0.2): +0.175 measured in Lote 5 (Stamina 0.243 vs Attack 0.068).
-    expect(stamina.passiveShare / stamina.sides).toBeGreaterThan(attack.passiveShare / attack.sides + 0.15);
+    // Owner, 2026-10-04 ("não quero ver ela parada independente do tipo"): every AI laps to build speed (BuildSpeed)
+    // instead of waiting, so the patient share shrank for everyone: +0.12 measured (Stamina 0.166 vs Attack 0.043).
+    expect(stamina.passiveShare / stamina.sides).toBeGreaterThan(attack.passiveShare / attack.sides + 0.1);
     expect(stamina.dashes / stamina.minutes).toBeLessThan(defense.dashes / defense.minutes);
     // Per minute of play: matches are short, so end-of-match Stamina alone
     // barely separates anyone.

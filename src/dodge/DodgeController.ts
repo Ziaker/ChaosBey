@@ -72,6 +72,12 @@ export class DodgeController {
     private readonly staminaCost: number = DODGE_STAMINA_COST,
     /** MatchConfig.dodgeDistanceScale (owner, 2026-10-04): × the burst speed, so × the distance (same duration). */
     private readonly distanceScale: number = 1,
+    /**
+     * Owner, 2026-10-04 ("faça com que o recovery use a barra de dodge e não deixe utilizá-lo caso não tenha dodge
+     * utilizável"): in a match the Air Recovery needs a ready dodge (Idle) and puts it into its cooldown. Bare
+     * constructions keep the old free recovery.
+     */
+    private readonly recoveryUsesDodge: boolean = false,
   ) {}
 
   /** 0..1 for the HUD's dodge line: 1 = a dodge can start now, refilling during the cooldown, 0 while dodging. */
@@ -130,6 +136,11 @@ export class DodgeController {
    * no Stamina cost and no cooldown, so a player who presses C whenever
    * launched gets the same outcome the AI gets from reading this.
    */
+  /** isAirRecoveryAvailable() and, when the recovery uses the dodge bar, a dodge ready right now: a press would recover. */
+  canAirRecoverNow(): boolean {
+    return this.isAirRecoveryAvailable() && (!this.recoveryUsesDodge || this.state === DodgeState.Idle);
+  }
+
   isAirRecoveryAvailable(): boolean {
     // Armed AND already airborne as of the last tick. The armed flag alone
     // survives landing (it is only overwritten inside the next takeoff
@@ -188,9 +199,14 @@ export class DodgeController {
     this.wasGrounded = grounded;
 
     let triggeredAirRecovery = false;
-    if (!grounded && dodgePressed && this.airRecoveryAvailable) {
+    if (!grounded && dodgePressed && this.airRecoveryAvailable && (!this.recoveryUsesDodge || this.state === DodgeState.Idle)) {
       this.airRecoveryAvailable = false;
       triggeredAirRecovery = true;
+      if (this.recoveryUsesDodge) {
+        // It spends the dodge: the dodge bar empties and refills over the normal cooldown.
+        this.state = DodgeState.Cooldown;
+        this.cooldownTimerS = 0;
+      }
     }
 
     // The ground dodge/cooldown state machine keeps advancing on the fixed
