@@ -95,6 +95,7 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     handling: 'build-time config from the Bey definition (replay config snapshot)',
     motion: 'build-time config: the motion direction (MatchConfig.motion, replay config snapshot)',
     airControl: 'build-time config: MatchConfig.airControl (replay config snapshot)',
+    strictSpeedCap: 'build-time config: MatchConfig.strictSpeedCap (replay config snapshot)',
   },
   SpinController: {
     motion: 'build-time config: the motion direction (MatchConfig.motion, replay config snapshot)',
@@ -121,7 +122,11 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
   DodgeController: { cooldownS: 'build-time config: MatchConfig.dodgeCooldownS (replay config snapshot)' },
   StaminaSystem: { staminaStat: 'build-time config (resolved Bey stat)', movementDrainScale: 'build-time config: MatchConfig.movementStaminaDrain (replay config snapshot)' },
   StabilitySystem: {},
-  AttackController: { profile: 'build-time config (attack profile settings, in the replay config snapshot)', dashCooldownS: 'build-time config: MatchConfig.dashCooldownS (replay config snapshot)' },
+  AttackController: {
+    profile: 'build-time config (attack profile settings, in the replay config snapshot)',
+    dashCooldownS: 'build-time config: MatchConfig.dashCooldownS (replay config snapshot)',
+    dashCarriesSpeed: 'build-time config: MatchConfig.dashCarriesSpeed (replay config snapshot)',
+  },
   MomentumSystem: { rules: 'build-time config: MatchConfig momentum values (replay config snapshot)' },
   ClashController: {},
   ClashOrchestration: {
