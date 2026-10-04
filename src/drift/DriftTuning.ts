@@ -168,3 +168,16 @@ export const JUMP_HOLD_FOR_FULL_RANGE = { min: 0.08, max: 0.4, step: 0.01 } as c
 
 /** Owner, 2026-10-04: after a short hop lands, an X press within this window is the drift (tap + hold), never a new jump. PROVISIONAL. */
 export const DRIFT_FOLLOW_UP_WINDOW_S = 0.35;
+
+// ============================================================
+// REWARDING DRIFT (owner, 2026-10-04: "o controle de movimento do drift está completamente defasado comparado com o
+// controle de movimento de agora, corrija ele para ser mais recompensador"): the drift's movement control follows the
+// current handling. Match Beys only (a bare construction keeps
+// the fixed DRIFT_LATERAL_GRIP_PER_S slide above). PROVISIONAL values.
+// ============================================================
+
+/** While drifting the lateral grip is this share of the Bey's own (speed-scaled) grip — it slides, but the arc follows the
+ * stick at any speed (the fixed 1.1 /s was ~10× weaker than the normal grip at the new speeds: the drift barely turned). */
+export const DRIFT_GRIP_FRACTION = 0.35;
+/** The heading turns this much faster while drifting: a drift is the sharp turn. */
+export const DRIFT_TURN_RATE_MULTIPLIER = 1.35;

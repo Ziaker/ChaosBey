@@ -13,6 +13,7 @@
 // model (GDD section 27/85).
 // ============================================================
 
+import { DRIFT_TURN_RATE_MULTIPLIER } from '../../drift/DriftTuning';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { type ControllerActions, Action } from '../../input/actions/Action';
 import { add, dot, fromYaw, length, scale, signedAngleBetween, type Vec2 } from '../../physics/Vec2';
@@ -47,6 +48,10 @@ export interface MovementPreStepInput {
   grounded: boolean;
   /** From DriftController; null means "use normal grip". */
   lateralGripOverridePerS: number | null;
+  /** From DriftController (match Beys, owner 2026-10-04): × the Bey's own grip while drifting / recovering. */
+  driftGripFraction?: number | null;
+  /** The Bey is drifting (DriftState.Drifting): sharper turn, no speed lost in the curve. */
+  drifting?: boolean;
   /** From StaminaSystem's PhysicalCondition; 1 = no penalty. */
   staminaAccelFactor: number;
   /** From MomentumSystem (owner, 2026-10-02): the top speed is the handling's × this. Omitted = 1. */
@@ -338,6 +343,10 @@ export class MovementController {
   /** Call before physics.step(). Reads/writes the body's linear velocity directly (the "hybrid" model GDD section 16 permits). */
   applyPreStep(body: RAPIER.RigidBody, input: MovementPreStepInput): void {
     const { actions, fixedDeltaSeconds, grounded, lateralGripOverridePerS, staminaAccelFactor, dashOverride, dodgeOverride, floorNormal } = input;
+    // Owner, 2026-10-04 ("o drift está completamente defasado … mais recompensador"): with the match handling on, a drift
+    // turns sharper and loses no speed in the curve (the slide comes from the reduced grip, not from braking).
+    const rewardingDrift = input.drifting === true && this.turnSpeedRetention > 0;
+    const driftTurn = rewardingDrift ? DRIFT_TURN_RATE_MULTIPLIER : 1;
     const topSpeedMultiplier = input.topSpeedMultiplier ?? 1;
 
     if (dodgeOverride) {
@@ -364,10 +373,10 @@ export class MovementController {
       if (intent) {
         const error = intentMagnitude(intent) > 0 ? headingErrorRad(intent, this.headingRad) : 0;
         const cap = this.handling.turnRateRadS * DIRECTIONAL_TURN_RATE_MULTIPLIER;
-        targetTurnRate = Math.max(-cap, Math.min(cap, error * DIRECTIONAL_STEER_GAIN_PER_S));
+        targetTurnRate = Math.max(-cap * driftTurn, Math.min(cap * driftTurn, error * DIRECTIONAL_STEER_GAIN_PER_S * driftTurn));
       } else {
         const steerInput = (actions.held.has(Action.SteerRight) ? 1 : 0) - (actions.held.has(Action.SteerLeft) ? 1 : 0);
-        targetTurnRate = steerInput * this.handling.turnRateRadS;
+        targetTurnRate = steerInput * this.handling.turnRateRadS * driftTurn;
       }
       const response = intent ? DIRECTIONAL_STEERING_RESPONSE_PER_S : STEERING_RESPONSE_PER_S;
       this.turnRateRadPerS += (targetTurnRate - this.turnRateRadPerS) * Math.min(1, response * fixedDeltaSeconds);
@@ -474,7 +483,7 @@ export class MovementController {
       const slipFloor = slipFloorBase + (1 - slipFloorBase) * this.highSpeedControl;
       if (this.slipping) this.grip = Math.min(this.grip, Math.max(slipFloor, this.grip - SLIP_GRIP_LOSS_PER_S * fixedDeltaSeconds));
       const speedGrip = 1 + Math.max(0, length(velHoriz) / Math.max(1e-6, this.handling.maxSpeedMps) - 1) * this.highSpeedControl;
-      lateralGripPerS = lateralGripOverridePerS ?? this.handling.lateralGripPerS * this.grip * speedGrip;
+      lateralGripPerS = lateralGripOverridePerS ?? this.handling.lateralGripPerS * this.grip * speedGrip * (input.driftGripFraction ?? 1);
     }
     const newLateral = scale(lateralVec, Math.exp(-lateralGripPerS * fixedDeltaSeconds));
 
@@ -495,9 +504,10 @@ export class MovementController {
         // The thrust gained this tick stays on top (it used to be clipped back to the speed before the tick, so a long
         // curve could only ever lose speed).
         const thrustGain = Math.max(0, newLongitudinalSpeed - longitudinalSpeed);
-        const allowed = before * (1 - (1 - this.turnSpeedRetention) * TURN_LOSS_PER_RAD * turnedRad) + thrustGain;
-        const kept = Math.min(Math.max(after, cap), Math.max(after, allowed));
-        if (kept > after) newVelHoriz = scale(newVelHoriz, kept / after);
+        const kept = rewardingDrift ? 1 : this.turnSpeedRetention;
+        const allowed = before * (1 - (1 - kept) * TURN_LOSS_PER_RAD * turnedRad) + thrustGain;
+        const keptSpeed = Math.min(Math.max(after, cap), Math.max(after, allowed));
+        if (keptSpeed > after) newVelHoriz = scale(newVelHoriz, keptSpeed / after);
       }
     }
     // Numerical safety clamp (motion-approval.md §3), not a gameplay limit.

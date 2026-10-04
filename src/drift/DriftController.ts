@@ -48,6 +48,7 @@ import {
   JUMP_SHORT_HOP_TARGET_APEX_M,
   JUMP_HOLD_FOR_FULL_DEFAULT_S,
   DRIFT_FOLLOW_UP_WINDOW_S,
+  DRIFT_GRIP_FRACTION,
   LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS,
 } from './DriftTuning';
 import type { CanonicalRecord } from '../replay/state/CanonicalValue';
@@ -73,6 +74,8 @@ export interface DriftTickResult {
   landingJumpAssistElapsedS: number;
   /** Lote 9: a hop/jump began this tick (its Stamina cost is charged by the caller). */
   hopBegan: boolean;
+  /** Match Beys (owner, 2026-10-04): × the Bey's own lateral grip while drifting / recovering; null = normal grip. */
+  gripFraction: number | null;
 }
 
 export class DriftController {
@@ -398,7 +401,8 @@ export class DriftController {
     }
 
     return {
-      lateralGripOverridePerS: this.computeLateralGripOverride(),
+      lateralGripOverridePerS: this.legacyLaunch ? this.computeLateralGripOverride() : null,
+      gripFraction: this.legacyLaunch ? null : this.gripFraction(),
       driftState: this.state,
       justLanded,
       landingDescentSpeedMps,
@@ -607,6 +611,16 @@ export class DriftController {
     const heightAlreadyGainedM = this.heightAlreadyGainedM(body, t);
     const remainingM = Math.max(0, DRIFT_HOP_TARGET_APEX_M - heightAlreadyGainedM);
     return Math.sqrt(2 * GRAVITY_MPS2 * remainingM);
+  }
+
+  /** Match Beys: the drift's share of the Bey's own grip, easing back to 1 over the recovery. */
+  private gripFraction(): number | null {
+    if (this.state === DriftState.Drifting) return DRIFT_GRIP_FRACTION;
+    if (this.state === DriftState.Recovering) {
+      const t = Math.min(1, this.recoveryTimerS / DRIFT_GRIP_RECOVERY_DURATION_S);
+      return DRIFT_GRIP_FRACTION + (1 - DRIFT_GRIP_FRACTION) * t;
+    }
+    return null;
   }
 
   private computeLateralGripOverride(): number | null {
