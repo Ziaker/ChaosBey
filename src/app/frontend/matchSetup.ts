@@ -28,6 +28,7 @@ import {
 } from '../../bey/momentum/MomentumTuning';
 import { MOVEMENT_STAMINA_DRAIN_RANGE } from '../../bey/stamina/StaminaTuning';
 import { CIRCULAR_LAUNCH_FORCE_RANGE, DASH_COOLDOWN_RANGE } from '../../combat/attacks/AttackTuning';
+import { SPEED_DAMAGE_GAIN_RANGE } from '../../combat/attacks/SpeedDamage';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import {
   ACCELERATION_SCALE_RANGE,
@@ -54,28 +55,16 @@ export interface MatchSetup {
   readonly opponentBeyId: string;
   readonly ai: { readonly tier: AiDifficultyTierId; readonly style: AiPersonalityChoice };
   readonly roundsToWin: RoundsToWin;
-  /** Arena preset (look + default walls) and the walls actually played (the preset's, or moved sliders). */
   readonly arena: { readonly presetId: ArenaPresetId; readonly geometry: ArenaGeometry };
-  /** Advanced rules (GDD 152): scales the knockback a Clash resolution applies. */
   readonly clashImpactMultiplier: number;
-  /** M11: the motion direction — Motion Lab A / B (default) / C. */
   readonly motion: MotionDirectionId;
-  /** Fixed match seed text, or null for a fresh random seed every match. */
   readonly seedText: string | null;
-  /** Advanced gameplay rules the Pregame exposes as sliders (owner, 2026-10-02), passed straight into MatchConfig. */
   readonly rules: MatchRules;
-  /** Lote 9: visual options (presentation only — not MatchConfig, not the replay). */
   readonly visual: VfxOptions;
 }
 
-/** Range the Pregame slider offers for the Clash impact multiplier. */
 export const CLASH_IMPACT_RANGE = { min: 0.5, max: 2, step: 0.25 } as const;
 
-/**
- * The opponent a player meets by default: the same letter of the next family (Attack A meets Defense A, as in the
- * Debug Lab; Defense B meets Stamina B), so the first match is never a mirror — not even of gameplay, which B and C
- * share with their family for now (Lote 8).
- */
 export function defaultOpponentFor(playerBeyId: string): string {
   const own = conceptBeyFor(playerBeyId);
   if (!own) return BEY_ROSTER[1]!.definition.id;
@@ -99,23 +88,17 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
   };
 }
 
-/** The Pregame-adjustable gameplay rules: a slice of MatchConfig, so each one reaches the match (and its replay) through the one config path. */
 export type MatchRules = Pick<
   MatchConfig,
   'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'
-  | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS'
+  | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'speedDamageGain' | 'dashCarriesSpeed'
 >;
 
-/** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
 export const MATCH_RULE_KEYS = [
   'ringOutDelayS', 'dashCooldownS', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyCollisionDamage', 'momentumLossOnCollision', 'jumpFullHeightM', 'jumpShortHopHeightM', 'movementStaminaDrain', 'dodgeCooldownS', 'circularLaunchForce',
-  'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS',
+  'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS', 'speedDamageGain', 'dashCarriesSpeed',
 ] as const satisfies readonly (keyof MatchRules)[];
 
-/**
- * Lote 9: win conditions stay playable — at least one is on (all three come back on otherwise), and with ring-out off
- * a round needs a time limit (a Bey knocked out of the arena could otherwise never be beaten): 90 s if none was set.
- */
 export const RING_OUT_OFF_TIME_LIMIT_S = 90;
 export function sanitizeMatchRules(rules: MatchRules): MatchRules {
   let r = rules;
@@ -126,11 +109,6 @@ export function sanitizeMatchRules(rules: MatchRules): MatchRules {
 
 const clamp = (value: number, range: { readonly min: number; readonly max: number }): number => Math.min(range.max, Math.max(range.min, value));
 
-/**
- * Persisted Pregame values are untrusted/old UI data. Clamp them against the exact range constants that the current
- * Pregame renders; do not change resolveMatchConfig globally, because replay/backcompat may intentionally carry an old
- * but valid resolved MatchConfig outside today's playtest sliders.
- */
 function clampPersistedMatchRules(rules: MatchRules): MatchRules {
   return {
     ...rules,
@@ -153,6 +131,7 @@ function clampPersistedMatchRules(rules: MatchRules): MatchRules {
     airControl: clamp(rules.airControl, AIR_CONTROL_RANGE),
     jumpStaminaCost: clamp(rules.jumpStaminaCost, JUMP_STAMINA_COST_RANGE),
     jumpCooldownS: clamp(rules.jumpCooldownS, JUMP_COOLDOWN_RANGE),
+    speedDamageGain: clamp(rules.speedDamageGain, SPEED_DAMAGE_GAIN_RANGE),
   };
 }
 
@@ -181,22 +160,21 @@ export function defaultMatchRules(): MatchRules {
     movementStaminaDrain: config.movementStaminaDrain,
     dodgeCooldownS: config.dodgeCooldownS,
     circularLaunchForce: config.circularLaunchForce,
+    speedDamageGain: config.speedDamageGain,
+    dashCarriesSpeed: config.dashCarriesSpeed,
   };
 }
 
-/** The setup with a new player Bey; the opponent follows unless the player had picked one different from the default. */
 export function withPlayerBey(setup: MatchSetup, playerBeyId: string): MatchSetup {
   if (playerBeyId === setup.playerBeyId) return setup;
   const opponentWasDefault = setup.opponentBeyId === defaultOpponentFor(setup.playerBeyId);
   return { ...setup, playerBeyId, opponentBeyId: opponentWasDefault ? defaultOpponentFor(playerBeyId) : setup.opponentBeyId };
 }
 
-/** The Bey definitions the match is built with (player first, opponent second). */
 export function matchBeysFor(setup: MatchSetup): MatchBeys {
   return { first: rosterEntry(setup.playerBeyId).definition, second: rosterEntry(setup.opponentBeyId).definition };
 }
 
-/** The resolved match rules (the one MatchConfig path, GDD 101/166). */
 export function matchConfigFor(setup: MatchSetup): MatchConfig {
   return resolveMatchConfig({
     clashImpactMultiplier: setup.clashImpactMultiplier,
@@ -208,12 +186,10 @@ export function matchConfigFor(setup: MatchSetup): MatchConfig {
   });
 }
 
-/** A new arena preset, with that preset's own walls (slider changes are reset). The floor profile is kept: it is independent of the look. */
 export function withArenaPreset(setup: MatchSetup, presetId: ArenaPresetId): MatchSetup {
   return { ...setup, arena: { presetId, geometry: { ...arenaPreset(presetId).geometry, floor: setup.arena.geometry.floor ?? DEFAULT_ARENA_FLOOR } } };
 }
 
-/** M11 lane 4: the floor profile (flat, or bowl A/B/C for playtest). */
 export function withArenaFloor(setup: MatchSetup, floor: ArenaFloorId): MatchSetup {
   return { ...setup, arena: { ...setup.arena, geometry: { ...setup.arena.geometry, floor } } };
 }
@@ -222,20 +198,16 @@ export function opponentControllerFor(setup: MatchSetup): SideControllerSpec {
   return { kind: 'ai', personality: setup.ai.style, difficulty: setup.ai.tier };
 }
 
-/** A typed seed, trimmed; blank means random. */
 export function normalizeSeedText(text: string): string | null {
   const trimmed = text.trim();
   return trimmed === '' ? null : trimmed;
 }
-
-// --- Matchup summary ---------------------------------------------------
 
 export interface MatchupLine {
   readonly tone: 'good' | 'bad' | 'even';
   readonly text: string;
 }
 
-/** Your Bey against theirs, rating by rating, in the player's words. */
 export function matchupLines(setup: MatchSetup): readonly MatchupLine[] {
   const you = rosterEntry(setup.playerBeyId).definition;
   const them = rosterEntry(setup.opponentBeyId).definition;
@@ -256,11 +228,8 @@ export function matchupLines(setup: MatchSetup): readonly MatchupLine[] {
   return lines;
 }
 
-// --- Remembering the last setup (Lote 9) ----------------------------------
-
 const SETUP_STORAGE_KEY = 'chaosbey.pregame.last.v1';
 
-/** The parts of a setup the Pregame remembers between matches (and reloads): everything but the seed. */
 export function saveLastSetup(setup: MatchSetup, storage: Pick<Storage, 'setItem'> | null = safeStorage()): void {
   try {
     storage?.setItem(SETUP_STORAGE_KEY, JSON.stringify({ ...setup, seedText: null }));
@@ -269,10 +238,6 @@ export function saveLastSetup(setup: MatchSetup, storage: Pick<Storage, 'setItem
   }
 }
 
-/**
- * The last setup used, validated against today's roster, rules and ranges; anything unknown or out of shape falls
- * back to the default, so an old save can never break the Pregame.
- */
 export function loadLastSetup(storage: Pick<Storage, 'getItem'> | null = safeStorage()): MatchSetup | null {
   let raw: unknown;
   try {
@@ -351,7 +316,6 @@ function safeStorage(): Storage | null {
   }
 }
 
-/** Short names and formats of the Pregame rules, for the "What to expect" summary (Lote 9). */
 const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly name: string; readonly format: (v: number | boolean) => string }>> = {
   ringOutDelayS: { name: 'ring-out delay', format: (v) => `${(v as number).toFixed(2)} s` },
   dashCooldownS: { name: 'Dash cooldown', format: (v) => `${(v as number).toFixed(2)} s` },
@@ -375,9 +339,10 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   airControl: { name: 'air control', format: (v) => `×${(v as number).toFixed(2)}` },
   jumpStaminaCost: { name: 'jump stamina cost', format: (v) => `${(v as number).toFixed(0)}` },
   jumpCooldownS: { name: 'jump cooldown', format: (v) => `${(v as number).toFixed(1)} s` },
+  speedDamageGain: { name: 'speed → damage', format: (v) => ((v as number) === 0 ? 'off' : `${Math.round((v as number) * 100)}%`) },
+  dashCarriesSpeed: { name: 'Dash keeps momentum', format: (v) => (v ? 'on' : 'off') },
 };
 
-/** "Dash cooldown 2.00 s", … for every rule that differs from its default (Lote 9: the explanation reflects the values). */
 export function changedRuleLines(setup: MatchSetup): string[] {
   const defaults = defaultMatchRules();
   const rules = setup.rules ?? defaults;
