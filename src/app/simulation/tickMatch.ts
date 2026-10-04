@@ -24,6 +24,9 @@ import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { detectHits, type HitEvent } from '../../combat/hit-detection/HitDetection';
 import { speedDamageMultiplier } from '../../combat/attacks/SpeedDamage';
+
+/** Owner, 2026-10-04: share of a contact push given as lift, so the Beys visibly fly apart. PROVISIONAL. */
+const IMPACT_PUSH_LIFT_FRACTION = 0.25;
 import { applyKnockback, computeKnockback, computeStabilityDamage, type KnockbackComponents } from '../../combat/knockback/Knockback';
 import { CIRCULAR_BASE_KNOCKBACK_FORCE, CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, CIRCULAR_LAUNCH_HORIZONTAL_MPS, CIRCULAR_STABILITY_DAMAGE } from '../../combat/attacks/AttackTuning';
 import {
@@ -390,6 +393,22 @@ export function tickMatch(
     return base * speedDamageMultiplier(speedMps, hit.hitbox.referenceSpeedMps ?? attacker.movement.getMaxSpeedMps(), speedDamageGain);
   }
 
+  // Owner, 2026-10-04: "independente da velocidade, qualquer toque devia causar um impacto forte o suficiente para
+  // jogar os beys longe um do outro, ESPECIALMENTE QUANDO ATACA, o recoil deve ser alto também". At least `minMps` of
+  // horizontal speed away from the other Bey, plus a little lift; the movement controller lets it play out.
+  function pushApart(targetIsFirst: boolean, minMps: number): void {
+    if (minMps <= 0) return;
+    const target = targetIsFirst ? first : second;
+    const dir = normalize(subtract(targetIsFirst ? firstPos : secondPos, targetIsFirst ? secondPos : firstPos));
+    if (dir.x === 0 && dir.z === 0) return;
+    const v = target.body.linvel();
+    const along = v.x * dir.x + v.z * dir.z;
+    if (along >= minMps) return;
+    const add = minMps - along;
+    target.body.setLinvel({ x: v.x + dir.x * add, y: Math.max(v.y, 0) + minMps * IMPACT_PUSH_LIFT_FRACTION, z: v.z + dir.z * add }, true);
+    target.movement.registerKnockback();
+  }
+
   function applyStabilityDamageAndTrackKo(defenderIsFirst: boolean, defender: Bey, amount: number): void {
     const { causedBreak, isQualifyingKoHit } = defender.stability.applyDamage(amount);
     combatEvents.push({ kind: 'stabilityDamage', targetIsFirst: defenderIsFirst, amount });
@@ -523,6 +542,9 @@ export function tickMatch(
       defender,
       attackHitDamage(hit, attacker, defender) * resolved.forceMultiplier,
     );
+    // Owner, 2026-10-04: an attack throws the defender far and the attacker back (recoil).
+    pushApart(defenderIsFirst, first.rules.contactRepelMps * 1.5);
+    pushApart(hit.attackerIsFirst, first.rules.attackRecoilMps);
   }
 
   // Body collision (owner, 2026-10-02, item 9): the Beys touch with no attack connecting this tick.
@@ -548,7 +570,8 @@ export function tickMatch(
     if (
       touched &&
       bodiesOverlapVertically && // audit B3: the bodies' real heights, as the physics contact filter
-      closingSpeed >= BODY_COLLISION_MIN_CLOSING_SPEED_MPS &&
+      // Owner, 2026-10-04 ("independente da velocidade, qualquer toque"): with the contact repel on, any real approach counts.
+      closingSpeed >= ((first.rules.contactRepelMps ?? 0) > 0 ? 0.3 : BODY_COLLISION_MIN_CLOSING_SPEED_MPS) &&
       !first.momentum.isBodyContactLatched &&
       !second.momentum.isBodyContactLatched &&
       first.momentum.collisionCooldownRemainingS === 0 &&
@@ -561,6 +584,9 @@ export function tickMatch(
   function resolveBodyCollision(): void {
     first.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
     second.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
+    // Owner, 2026-10-04: any touch throws both Beys apart, whatever their speeds (dodge i-frames / an active Circular excepted).
+    if (!firstDodge.hasIFrames && firstAttack.state !== AttackState.CircularActive) pushApart(true, first.rules.contactRepelMps ?? 0);
+    if (!secondDodge.hasIFrames && secondAttack.state !== AttackState.CircularActive) pushApart(false, first.rules.contactRepelMps ?? 0);
     // The defensive Circular (item 13): touching an active Circular launches you; its user is unaffected.
     const firstCircular = firstAttack.state === AttackState.CircularActive;
     const secondCircular = secondAttack.state === AttackState.CircularActive;

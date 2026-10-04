@@ -396,6 +396,7 @@ export class MatchSession {
 
   static async create(options: MatchSessionOptions): Promise<MatchSession> {
     const physics = await PhysicsWorld.create();
+    physics.setGravityScale(resolveMatchConfig(options.matchConfig).gravityScale ?? 1);
     return new MatchSession(options, physics);
   }
 

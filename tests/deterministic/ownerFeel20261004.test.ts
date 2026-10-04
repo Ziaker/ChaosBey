@@ -100,19 +100,25 @@ describe('speed feel (owner, 2026-10-04)', () => {
   });
 
   it('a hard turn at speed keeps far more of its speed', async () => {
+    /** Lowest speed during a 40-tick hard turn at speed, as a fraction of the speed going in. */
     async function speedAfterTurn(overrides = {}): Promise<number> {
       const h = await harness(overrides);
-      for (let t = 0; t < 90; t++) h.tick(act([Action.MoveForward]), NONE);
+      for (let t = 0; t < 50; t++) h.tick(act([Action.MoveForward]), NONE);
       const v0 = h.first.body.linvel();
       const s0 = Math.hypot(v0.x, v0.z);
-      for (let t = 0; t < 30; t++) h.tick(act([Action.MoveForward, Action.SteerLeft]), NONE);
-      const v = h.first.body.linvel();
-      return Math.hypot(v.x, v.z) / s0;
+      let low = Infinity;
+      for (let t = 0; t < 40; t++) {
+        h.tick(act([Action.MoveForward, Action.SteerLeft]), NONE);
+        const v = h.first.body.linvel();
+        low = Math.min(low, Math.hypot(v.x, v.z));
+      }
+      return low / s0;
     }
     const kept = await speedAfterTurn();
     const old = await speedAfterTurn({ turnSpeedRetention: 0 });
     expect(kept).toBeGreaterThan(old);
     expect(kept).toBeGreaterThan(0.85);
+    console.log('TURNLOW', kept, old);
   });
 });
 

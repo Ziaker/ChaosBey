@@ -73,14 +73,14 @@ export type MatchRules = Pick<
   MatchConfig,
   'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'
   | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'speedDamageGain' | 'dashCarriesSpeed'
-  | 'turnRateScale' | 'turnSpeedRetention' | 'jumpHoldForFullS'
+  | 'turnRateScale' | 'turnSpeedRetention' | 'jumpHoldForFullS' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps'
 >;
 
 /** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
 export const MATCH_RULE_KEYS = [
   'ringOutDelayS', 'dashCooldownS', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyCollisionDamage', 'momentumLossOnCollision', 'jumpFullHeightM', 'jumpShortHopHeightM', 'movementStaminaDrain', 'dodgeCooldownS', 'circularLaunchForce',
   'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS', 'speedDamageGain', 'dashCarriesSpeed',
-  'turnRateScale', 'turnSpeedRetention', 'jumpHoldForFullS',
+  'turnRateScale', 'turnSpeedRetention', 'jumpHoldForFullS', 'gravityScale', 'contactRepelMps', 'attackRecoilMps',
 ] as const satisfies readonly (keyof MatchRules)[];
 
 /**
@@ -125,6 +125,9 @@ export function defaultMatchRules(): MatchRules {
     turnRateScale: config.turnRateScale,
     turnSpeedRetention: config.turnSpeedRetention,
     jumpHoldForFullS: config.jumpHoldForFullS,
+    gravityScale: config.gravityScale,
+    contactRepelMps: config.contactRepelMps,
+    attackRecoilMps: config.attackRecoilMps,
   };
 }
 
@@ -294,6 +297,9 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   turnRateScale: { name: 'turn rate', format: (v) => `×${(v as number).toFixed(2)}` },
   turnSpeedRetention: { name: 'speed kept in turns', format: (v) => `${Math.round((v as number) * 100)}%` },
   jumpHoldForFullS: { name: 'hold for full jump', format: (v) => `${(v as number).toFixed(2)} s` },
+  gravityScale: { name: 'gravity', format: (v) => `×${(v as number).toFixed(1)}` },
+  contactRepelMps: { name: 'contact repel', format: (v) => `${(v as number).toFixed(1)} m/s` },
+  attackRecoilMps: { name: 'attack recoil', format: (v) => `${(v as number).toFixed(1)} m/s` },
 };
 
 /** "Dash cooldown 2.00 s", … for every rule that differs from its default (Lote 9: the explanation reflects the values). */

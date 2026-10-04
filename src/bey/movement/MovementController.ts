@@ -273,7 +273,10 @@ export class MovementController {
     if (intent) {
       const magnitude = intentMagnitude(intent);
       const alignment = magnitude > 0 ? Math.cos(headingErrorRad(intent, this.headingRad)) : 0;
-      const drive = magnitude * Math.sign(alignment) * Math.abs(alignment) ** DIRECTIONAL_THRUST_ALIGNMENT_POWER;
+      // Owner, 2026-10-04 ("curvas não deviam reduzir tanto a velocidade"): with speed kept in turns, a new direction
+      // behind the Bey no longer brakes it in reverse — it turns toward it and keeps going (thrust resumes as it faces it).
+      const steered = this.turnSpeedRetention > 0 ? Math.max(0, alignment) : alignment;
+      const drive = magnitude * Math.sign(steered) * Math.abs(steered) ** DIRECTIONAL_THRUST_ALIGNMENT_POWER;
       throttleInput = Math.sign(drive);
       throttleScale = Math.abs(drive);
     } else {
@@ -353,7 +356,7 @@ export class MovementController {
     let newVelHoriz = add(scale(headingForward, newLongitudinalSpeed), newLateral);
     // Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade". A driven turn on the ground keeps this share of
     // the speed the heading change and the lateral grip scrub off (never above the top speed, never on a Dash).
-    if (this.turnSpeedRetention > 0 && grounded && !dashOverride && throttleInput > 0 && newLongitudinalSpeed > 0) {
+    if (this.turnSpeedRetention > 0 && grounded && !dashOverride && hasMovementInput && throttleInput >= 0) {
       const before = length(velHoriz);
       const after = length(newVelHoriz);
       const cap = this.handling.maxSpeedMps * topSpeedMultiplier;

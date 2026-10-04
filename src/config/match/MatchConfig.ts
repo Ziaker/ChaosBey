@@ -94,6 +94,12 @@ export interface MatchConfig {
   winBySpinOut: boolean;
   /** Multipliers on every Bey's acceleration, top speed and in-air steering grip (1 = as designed). */
   accelerationScale: number;
+  /** Owner, 2026-10-04 ("qualquer toque devia jogar os beys longe um do outro"): every contact pushes both Beys apart at least this fast (m/s). Pregame slider. */
+  contactRepelMps: number;
+  /** Owner, 2026-10-04 ("o recoil deve ser alto também, que nem na vida real"): an attack that lands throws its attacker back this fast (m/s); the defender at least 1.5× the contact repel. Pregame slider. */
+  attackRecoilMps: number;
+  /** Owner, 2026-10-04: gravity multiplier (×1 = 10.5 m/s²). Jump heights stay the same, they just take less time. Pregame slider. */
+  gravityScale: number;
   /** Owner, 2026-10-04: multiplier on every Bey's turn rate (×1.45 default). Pregame slider. */
   turnRateScale: number;
   /** Owner, 2026-10-04: 0..1 share of the speed a turn would lose that is kept (0 = the old turns). Pregame slider. */
@@ -122,7 +128,7 @@ export interface MatchConfig {
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'turnRateScale' | 'turnSpeedRetention' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'turnRateScale' | 'turnSpeedRetention' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -139,6 +145,9 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     circularLaunchForce: config.circularLaunchForce,
     accelerationScale: config.accelerationScale,
     turnRateScale: config.turnRateScale,
+    gravityScale: config.gravityScale,
+    contactRepelMps: config.contactRepelMps,
+    attackRecoilMps: config.attackRecoilMps,
     turnSpeedRetention: config.turnSpeedRetention,
     topSpeedScale: config.topSpeedScale,
     airControl: config.airControl,
@@ -178,6 +187,9 @@ export function createDefaultMatchConfig(): MatchConfig {
     accelerationScale: SPEED_FEEL_SCALE_DEFAULT,
     topSpeedScale: SPEED_FEEL_SCALE_DEFAULT,
     turnRateScale: SPEED_FEEL_SCALE_DEFAULT,
+    gravityScale: GRAVITY_SCALE_DEFAULT,
+    contactRepelMps: CONTACT_REPEL_DEFAULT_MPS,
+    attackRecoilMps: ATTACK_RECOIL_DEFAULT_MPS,
     turnSpeedRetention: TURN_SPEED_RETENTION_DEFAULT,
     airControl: 1,
     jumpStaminaCost: 0,
@@ -208,6 +220,13 @@ export const TOP_SPEED_SCALE_RANGE = { min: 0.5, max: 3, step: 0.05 } as const;
 /** Owner, 2026-10-04: "no mínimo 45% mais rápidos … isso inclui controle de movimento". Default for top speed, acceleration and turn rate. PROVISIONAL. */
 export const SPEED_FEEL_SCALE_DEFAULT = 1.45;
 export const TURN_RATE_SCALE_RANGE = { min: 0.5, max: 3, step: 0.05 } as const;
+/** Owner, 2026-10-04: "por que a gravidade não é realista?" — ×2.5 (26 m/s²): the full jump's 1.4 s in the air → 0.9 s. PROVISIONAL. */
+export const GRAVITY_SCALE_DEFAULT = 2.5;
+export const GRAVITY_SCALE_RANGE = { min: 1, max: 5, step: 0.1 } as const;
+/** Owner, 2026-10-04: contact repel and attack recoil (m/s). PROVISIONAL. */
+export const CONTACT_REPEL_DEFAULT_MPS = 9;
+export const ATTACK_RECOIL_DEFAULT_MPS = 10;
+export const IMPACT_PUSH_RANGE = { min: 0, max: 25, step: 0.5 } as const;
 /** Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade" — share of the speed a turn would scrub off that is kept. PROVISIONAL 0.85. */
 export const TURN_SPEED_RETENTION_DEFAULT = 0.85;
 export const TURN_SPEED_RETENTION_RANGE = { min: 0, max: 1, step: 0.05 } as const;

@@ -147,6 +147,8 @@ export class DriftController {
   private readonly jumpCooldownS: number;
   /** Owner, 2026-10-04: X still held this long after the press turns the short hop into the full jump (MatchConfig.jumpHoldForFullS). */
   private readonly jumpHoldForFullS: number;
+  /** The match's gravity (m/s², MatchConfig.gravityScale): the jump heights are launched against it. */
+  private readonly gravityMps2: number;
   private jumpCooldownRemainingS = 0;
   private hopBeganThisTick = false;
   /** Lote 9: whether a hop may begin this tick (the caller's Stamina check for the jump's cost). */
@@ -155,13 +157,14 @@ export class DriftController {
   constructor(
     private readonly normalLateralGripPerS: number = LATERAL_GRIP_PER_S,
     /** The match's jump heights (MatchConfig). Omitted = the pre-2026-10-02 jump (LEGACY_JUMP_FULL_HEIGHT_M). */
-    jumpRules?: { readonly jumpFullHeightM: number; readonly jumpShortHopHeightM: number; readonly jumpCooldownS?: number; readonly jumpHoldForFullS?: number },
+    jumpRules?: { readonly jumpFullHeightM: number; readonly jumpShortHopHeightM: number; readonly jumpCooldownS?: number; readonly jumpHoldForFullS?: number; readonly gravityScale?: number },
   ) {
     this.jumpCooldownS = Math.max(0, jumpRules?.jumpCooldownS ?? 0);
     this.jumpHoldForFullS = Math.max(0, jumpRules?.jumpHoldForFullS ?? JUMP_HOLD_FOR_FULL_DEFAULT_S);
+    this.gravityMps2 = GRAVITY_MPS2 * (jumpRules?.gravityScale ?? 1);
     this.legacyLaunch = jumpRules === undefined;
     const jump = jumpRules ?? { jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, jumpShortHopHeightM: JUMP_SHORT_HOP_TARGET_APEX_M };
-    this.launchMps = jumpLaunchVelocityForApexM(jump.jumpFullHeightM);
+    this.launchMps = jumpRules ? Math.sqrt(2 * this.gravityMps2 * jump.jumpFullHeightM) : jumpLaunchVelocityForApexM(jump.jumpFullHeightM);
     // A short hop can never be taller than the full jump.
     this.shortHopApexM = Math.min(jump.jumpShortHopHeightM, jump.jumpFullHeightM);
   }
@@ -489,11 +492,11 @@ export class DriftController {
 
   /** Launch speed of a short hop / a drift hop: their own apex, whatever the full jump is (B6). */
   private get shortHopLaunchMps(): number {
-    return Math.sqrt(2 * GRAVITY_MPS2 * this.shortHopApexM);
+    return Math.sqrt(2 * this.gravityMps2 * this.shortHopApexM);
   }
 
   private get driftHopLaunchMps(): number {
-    return Math.sqrt(2 * GRAVITY_MPS2 * DRIFT_HOP_TARGET_APEX_M);
+    return Math.sqrt(2 * this.gravityMps2 * DRIFT_HOP_TARGET_APEX_M);
   }
 
   /** Height the launch has added so far (above the bowl slope's own motion): measured (B6), or the old analytic arc for legacy constructions. */

@@ -116,6 +116,7 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     shortHopApexM: 'build-time config: MatchConfig.jumpShortHopHeightM (replay config snapshot)',
     jumpCooldownS: 'build-time config: MatchConfig.jumpCooldownS (replay config snapshot)',
     jumpHoldForFullS: 'build-time config: MatchConfig.jumpHoldForFullS (replay config snapshot)',
+    gravityMps2: 'build-time config: MatchConfig.gravityScale (replay config snapshot)',
     hopBeganThisTick: 'per-tick output (reset at the start of every tick)',
     jumpAllowed: 'per-tick input (set at the start of every tick)',
     legacyLaunch: 'build-time config: whether the match supplied jump rules (a bare construction keeps the immediate launch)',

@@ -88,6 +88,14 @@ export class PhysicsWorld {
     this.bumpers.set(collider.handle, { body, halfHeightM: bodyHalfHeightM, y: body.translation().y });
   }
 
+  /**
+   * Owner, 2026-10-04 (MatchConfig.gravityScale): "por que os beys caem em câmera lenta?" — the world is ~25× the
+   * size of a real Bey, so real gravity reads as the Moon. A match multiplies it; bare constructions keep ×1.
+   */
+  setGravityScale(scale: number): void {
+    this.rapierWorld.gravity = { x: 0, y: GRAVITY_Y * scale, z: 0 };
+  }
+
   /** Rapier ships as WebAssembly and must be initialized asynchronously before any RAPIER.* class can be constructed. */
   static async create(): Promise<PhysicsWorld> {
     await RAPIER.init();

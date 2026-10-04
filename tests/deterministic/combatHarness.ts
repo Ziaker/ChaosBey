@@ -33,6 +33,9 @@ export const MECHANISM_BASELINE: Partial<MatchConfig> = {
   turnRateScale: 1,
   turnSpeedRetention: 0,
   momentumGain: 1,
+  gravityScale: 1,
+  contactRepelMps: 0,
+  attackRecoilMps: 0,
   arenaFloor: 'bowl-a',
   arenaBowlDepthM: 2.5,
 };
