@@ -122,6 +122,10 @@ const NUMERICAL_SPEED_CLAMP_MPS = 60;
 /** × the grip recovery while steering after a knockback (match handling). PROVISIONAL. */
 const STEERED_REGRIP_MULTIPLIER = 4;
 
+/** Self-launched off the terrain (see selfLaunched): air grip × this and air thrust at this share. PROVISIONAL. */
+const SELF_LAUNCHED_AIR_GRIP_MULTIPLIER = 3;
+const SELF_LAUNCHED_AIR_ACCELERATION_FACTOR = 0.5;
+
 /** The Clash loser's stun ends at the latest after this long if it never left the ground (s). PROVISIONAL. */
 const CLASH_STUN_MAX_S = 1.5;
 
@@ -219,6 +223,14 @@ export class MovementController {
 
   /** Current heading, live (not lagged behind a snapshot) — for consumers like AttackController's lock-on that need it mid-tick, before this tick's postStep(). */
   /** The handling's top speed (m/s, motion direction included), before momentum. */
+  /**
+   * Owner, 2026-10-04: airborne on its own — off the funnel's slope or rim at speed, not from its own jump and not
+   * thrown by a hit. The arrows keep steering it (it used to barely respond in the air). Match handling only.
+   */
+  private selfLaunched(): boolean {
+    return this.highSpeedControl > 0 && !this.knockbackPlaying && !this.ownJumpFlight;
+  }
+
   /** The Clash loser: locked out of every input but the Air Recovery (see clashStunned). */
   startClashStun(): void {
     this.clashStunned = true;
@@ -440,7 +452,7 @@ export class MovementController {
     } else {
       // Stamina degrades acceleration physically (GDD section 30) — never
       // by making input feel unresponsive, just genuinely weaker thrust.
-      const accelFactor = (grounded ? 1 : AIRBORNE_ACCELERATION_FACTOR) * staminaAccelFactor;
+      const accelFactor = (grounded ? 1 : this.selfLaunched() ? SELF_LAUNCHED_AIR_ACCELERATION_FACTOR : AIRBORNE_ACCELERATION_FACTOR) * staminaAccelFactor;
       const maxSpeed = this.handling.maxSpeedMps * topSpeedMultiplier;
       newLongitudinalSpeed = longitudinalSpeed;
       if (throttleInput > 0) {
@@ -477,7 +489,7 @@ export class MovementController {
       lateralGripPerS = this.handling.lateralGripPerS * 12;
     } else if (!grounded) {
       this.slipping = false;
-      lateralGripPerS = lateralGripOverridePerS ?? this.motion.airGrip * this.airControl;
+      lateralGripPerS = lateralGripOverridePerS ?? this.motion.airGrip * this.airControl * (this.selfLaunched() ? SELF_LAUNCHED_AIR_GRIP_MULTIPLIER : 1);
     } else {
       const lateralSpeed = length(lateralVec);
       // Owner, 2026-10-04: once a knockback is over, a Bey that is being steered gets its grip back fast (it slid on in
@@ -640,10 +652,16 @@ export class MovementController {
       };
       const delta = length(deltaVec);
       if (delta > IMPACT_VELOCITY_DELTA_THRESHOLD_MPS) {
-        this.postImpactCooldownRemainingS = POST_IMPACT_GRIP_SUPPRESSION_S;
+        // Owner, 2026-10-04 ("do nada ele perde o controle e para de responder meus comandos de movimentação pelas
+        // setas quando fica muito rápido"): at speed every curve runs up the funnel into the rim's wall, and each of
+        // those plain impacts took the controls away for 0.35 s and cut the grip to a third (~32% of a fast lap was
+        // spent that way). With the match handling a wall / floor impact no longer does either — the bounce is in the
+        // velocity and the player steers on from it. Hits and launches (knockbackPlaying) keep their own control loss.
+        const environmental = this.highSpeedControl > 0 && !this.knockbackPlaying;
+        if (!environmental) this.postImpactCooldownRemainingS = POST_IMPACT_GRIP_SUPPRESSION_S;
         impactDeltaSpeedMps = delta;
         impactDirection = scale(deltaVec, 1 / delta);
-        this.applyImpactResponse(delta, impactDirection, this.intendedVelocityThisTick);
+        this.applyImpactResponse(delta, impactDirection, this.intendedVelocityThisTick, environmental);
       }
     }
 
@@ -693,10 +711,10 @@ export class MovementController {
    * tumble threshold adds a rodopio on top. The tilt side lives in
    * SpinController.registerImpact.
    */
-  private applyImpactResponse(impactDeltaSpeedMps: number, pushDirection: Vec2, incoming: Vec2): void {
+  private applyImpactResponse(impactDeltaSpeedMps: number, pushDirection: Vec2, incoming: Vec2, keepGrip = false): void {
     const m = this.motion;
     const speedMps = labImpactSpeed(impactDeltaSpeedMps, m);
-    this.grip = Math.min(this.grip, m.slipGrip);
+    if (!keepGrip) this.grip = Math.min(this.grip, m.slipGrip);
     const tangential = (pushDirection.x * incoming.z - pushDirection.z * incoming.x) * IMPACT_TANGENTIAL_TRANSFER;
     this.whirlRadPerS += m.linearToAngular * tangential;
     // The Lab turns a dead-centre hit (tangential 0) to +; here it adds no

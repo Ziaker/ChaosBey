@@ -201,6 +201,10 @@ export class PlayFlow {
               visual: session.match.visuals[loser].visual,
               launchVelocity: { x: v.x, y: v.y, z: v.z },
               knockedOut: true,
+              awayFrom: (() => {
+                const w = session.getBey(loser === 'first' ? 'second' : 'first').body.translation();
+                return { x: w.x, z: w.z };
+              })(),
               gravityScale: matchConfigFor(this.setup).gravityScale ?? 1,
               floorHeightAt: (x, z) => session.floorHeightAt(x, z),
               onBreak: () => this.hud?.flashBreak('BROKEN'),

@@ -32,16 +32,20 @@ const SETTLE_LIMIT_S = 6;
 /** Real gravity (m/s²); × the match's gravity scale. */
 const BASE_GRAVITY_MPS2 = 9.81;
 /** Flight speeds above this are clamped (a knock-out at 40 m/s would leave the screen at once). */
-const MAX_FLIGHT_MPS = 22;
+const MAX_FLIGHT_MPS = 30;
 /** A knock-out without a real throw still pops up this fast, so it bounces instead of sliding into the floor. */
 const MIN_KO_POP_MPS = 6;
+/** Owner, 2026-10-04 ("é pra ele ficar voando, se movendo, quicando até explodir"): a knock-out always flies at least
+ * this fast along the ground, away from the winner. */
+const MIN_KO_FLIGHT_MPS = 12;
 /** Vertical bounce kept on each floor hit; below BOUNCE_STOP_MPS it stops bouncing and rests. */
-const BEY_BOUNCE = 0.45;
+const BEY_BOUNCE = 0.6;
 const PIECE_BOUNCE = 0.35;
 const BOUNCE_STOP_MPS = 1.2;
-/** Horizontal speed kept on a floor hit, and per second while resting/sliding on the floor. */
-const FLOOR_HIT_KEEP = 0.75;
-const FLOOR_FRICTION_PER_S = 1.6;
+/** Speed along the floor kept on each landing (once per landing, never per frame of contact). */
+const FLOOR_HIT_KEEP = 0.93;
+/** While touching the floor between bounces it rolls / slides on with only this much friction (per second). */
+const FLOOR_FRICTION_PER_S = 0.2;
 /** Bounce off the wall: share of the outward speed reflected. */
 const WALL_BOUNCE = 0.6;
 
@@ -49,7 +53,6 @@ interface Shard {
   readonly object: THREE.Object3D;
   readonly velocity: THREE.Vector3;
   readonly spin: THREE.Vector3;
-  resting: boolean;
 }
 
 export interface DefeatCutsceneOptions {
@@ -61,6 +64,8 @@ export interface DefeatCutsceneOptions {
   readonly floorHeightAt: (x: number, z: number) => number;
   /** MatchConfig.gravityScale (1 = real gravity). */
   readonly gravityScale?: number;
+  /** The winner's position: a knock-out without a real throw flies away from it (at least MIN_KO_FLIGHT_MPS). */
+  readonly awayFrom?: { x: number; z: number };
   readonly onBreak?: () => void;
   readonly onDone: () => void;
   readonly seed?: number;
@@ -87,7 +92,6 @@ export class DefeatCutscene {
   private tumble = 0;
   private tumbleRate: number;
   private spinAngle = 0;
-  private resting = false;
 
   constructor(private readonly options: DefeatCutsceneOptions) {
     const { visual } = options;
@@ -106,9 +110,27 @@ export class DefeatCutscene {
     if (v.length() > MAX_FLIGHT_MPS) v.setLength(MAX_FLIGHT_MPS);
     // Back-compatible: no flag = a knock-out when it was really thrown.
     this.knockedOut = options.knockedOut ?? v.length() > 2;
-    // A knock-out always reads as a launch: at least a clear upward pop, even when it was not thrown far.
-    if (this.knockedOut) v.y = Math.max(v.y, v.length() > 2 ? 7 : MIN_KO_POP_MPS);
-    else v.set(0, 0, 0);
+    // A knock-out always reads as a launch: away along the ground at least MIN_KO_FLIGHT_MPS, and a clear upward pop.
+    if (this.knockedOut) {
+      const h = Math.hypot(v.x, v.z);
+      if (h < MIN_KO_FLIGHT_MPS) {
+        let dx = h > 0.5 ? v.x / h : 0;
+        let dz = h > 0.5 ? v.z / h : 0;
+        if (h <= 0.5 && options.awayFrom) {
+          const ax = this.start.x - options.awayFrom.x;
+          const az = this.start.z - options.awayFrom.z;
+          const al = Math.hypot(ax, az);
+          if (al > 1e-3) {
+            dx = ax / al;
+            dz = az / al;
+          }
+        }
+        if (dx === 0 && dz === 0) dx = 1;
+        v.x = dx * MIN_KO_FLIGHT_MPS;
+        v.z = dz * MIN_KO_FLIGHT_MPS;
+      }
+      v.y = Math.max(v.y, 7);
+    } else v.set(0, 0, 0);
     this.velocity = v;
     const h = Math.hypot(v.x, v.z);
     this.tumbleAxis = h > 0.1 ? new THREE.Vector3(v.z / h, 0, -v.x / h) : new THREE.Vector3(1, 0, 0.35).normalize();
@@ -158,16 +180,14 @@ export class DefeatCutscene {
 
   private stepFlight(dt: number): void {
     const spinGroup = this.options.visual.spinGroup;
+    this.velocity.y -= this.gravity * dt;
+    this.position.addScaledVector(this.velocity, dt);
     if (this.knockedOut) {
-      if (!this.resting) this.velocity.y -= this.gravity * dt;
-      this.position.addScaledVector(this.velocity, dt);
       this.tumble += this.tumbleRate * dt;
     } else {
       // Spin-out: the spin dies and it keels over onto its side.
       const u = Math.min(1, this.elapsedS / (DEFEAT_PRE_BREAK_TICKS * FIXED_DELTA_SECONDS * 0.7));
       this.tumble = 1.25 * u * u + 0.1 * Math.sin(this.elapsedS * 18) * (1 - u);
-      this.velocity.y -= this.gravity * dt;
-      this.position.addScaledVector(this.velocity, dt);
     }
     this.spinAngle += (this.knockedOut ? 25 : 30 * (1 - Math.min(1, this.elapsedS)) + 2) * dt;
     this.wallBounce(this.position, this.velocity, this.reach);
@@ -176,28 +196,50 @@ export class DefeatCutscene {
     this.pivot.updateWorldMatrix(true, true);
     box.setFromObject(this.pivot);
     if (!Number.isFinite(box.min.y)) return;
-    const floor = this.options.floorHeightAt(this.position.x, this.position.z);
-    const sink = floor - box.min.y;
-    if (sink > 0) {
-      this.position.y += sink;
-      if (this.velocity.y < 0) {
-        const up = -this.velocity.y * BEY_BOUNCE;
-        this.velocity.y = up > BOUNCE_STOP_MPS ? up : 0;
-        this.velocity.x *= FLOOR_HIT_KEEP;
-        this.velocity.z *= FLOOR_HIT_KEEP;
-        this.tumbleRate *= 0.7;
-        this.resting = this.velocity.y === 0;
+    // The Bey itself bounces off the floor as if it were level: the funnel's slope lifts it but never brakes it, so it
+    // is still flying / bouncing at speed when it breaks (on the slope it slowed to ~3 m/s climbing the funnel).
+    const contact = this.floorContact(this.position, this.velocity, box.min.y, BEY_BOUNCE, dt, false);
+    if (contact === 'bounce') this.tumbleRate *= 0.85;
+    if (contact !== 'none') this.pose(spinGroup);
+  }
+
+  /**
+   * Floor contact for a body whose lowest point is `lowestY` (owner, 2026-10-04: it must keep "voando, se movendo,
+   * quicando até explodir"). Pushed out of the floor; a landing (moving INTO the floor's surface, along its normal —
+   * the funnel's slope included) bounces once with `bounce` of that speed and keeps FLOOR_HIT_KEEP of its speed along
+   * the floor; touching without coming in (the tumbling model grazing it, rolling along it) only follows the surface,
+   * with a light rolling friction. It used to count every frame of contact as a new bounce and take 25% of the
+   * horizontal speed each time — the Bey stopped dead within a fraction of a second of its first landing.
+   */
+  private floorContact(position: THREE.Vector3, velocity: THREE.Vector3, lowestY: number, bounce: number, dt: number, slopeAware = true): 'none' | 'touch' | 'bounce' {
+    const floorY = this.options.floorHeightAt(position.x, position.z);
+    const sink = floorY - lowestY;
+    if (sink <= 0) return 'none';
+    position.y += sink;
+    const n = slopeAware ? this.floorNormal(position.x, position.z) : new THREE.Vector3(0, 1, 0);
+    const into = velocity.dot(n);
+    let result: 'touch' | 'bounce' = 'touch';
+    if (into < 0) {
+      const tangent = velocity.clone().addScaledVector(n, -into);
+      if (-into > BOUNCE_STOP_MPS) {
+        velocity.copy(tangent.multiplyScalar(FLOOR_HIT_KEEP)).addScaledVector(n, -into * bounce);
+        result = 'bounce';
+      } else {
+        velocity.copy(tangent);
       }
-      this.pose(spinGroup);
     }
-    if (this.resting) {
-      const k = Math.exp(-FLOOR_FRICTION_PER_S * dt);
-      this.velocity.x *= k;
-      this.velocity.z *= k;
-      this.tumbleRate *= k;
-      // Stay in contact on the slope as it slides (re-checked next frame).
-      this.velocity.y = -0.5;
-    }
+    // Rolling on along the floor (gravity takes it down the funnel's slope).
+    const along = velocity.clone().addScaledVector(n, -velocity.dot(n));
+    velocity.addScaledVector(along, Math.exp(-FLOOR_FRICTION_PER_S * dt) - 1);
+    return result;
+  }
+
+  private floorNormal(x: number, z: number): THREE.Vector3 {
+    const e = 0.2;
+    const h = this.options.floorHeightAt;
+    const gx = (h(x + e, z) - h(x - e, z)) / (2 * e);
+    const gz = (h(x, z + e) - h(x, z - e)) / (2 * e);
+    return new THREE.Vector3(-gx, 1, -gz).normalize();
   }
 
   private pose(spinGroup: THREE.Object3D): void {
@@ -223,10 +265,9 @@ export class DefeatCutscene {
   }
 
   private stepShards(gameDt: number): void {
-    const g = this.gravity;
     for (const s of this.shards) {
       const o = s.object;
-      if (!s.resting) s.velocity.y -= g * gameDt;
+      s.velocity.y -= this.gravity * gameDt;
       o.position.addScaledVector(s.velocity, gameDt);
       o.rotation.x += s.spin.x * gameDt;
       o.rotation.y += s.spin.y * gameDt;
@@ -237,35 +278,10 @@ export class DefeatCutscene {
       this.wallBounce(o.position, s.velocity, reach);
       if (!Number.isFinite(box.min.y)) continue;
       // Owner, 2026-10-04 ("as peças estão passando por dentro do stage"): each piece rests on the floor by its own
-      // (rotated) lowest point, and bounces.
-      const floor = this.options.floorHeightAt(o.position.x, o.position.z);
-      const sink = floor - box.min.y;
-      if (sink > 0) {
-        o.position.y += sink;
-        if (s.velocity.y < 0) {
-          const up = -s.velocity.y * PIECE_BOUNCE;
-          s.velocity.y = up > BOUNCE_STOP_MPS ? up : 0;
-          s.velocity.x *= FLOOR_HIT_KEEP;
-          s.velocity.z *= FLOOR_HIT_KEEP;
-          s.spin.multiplyScalar(0.6);
-          s.resting = s.velocity.y === 0;
-        }
-      }
-      if (s.resting) {
-        // On the floor: it slides down the funnel's slope (gravity along the slope) against friction, and its tumble
-        // dies out; it keeps hugging the floor.
-        const e = 0.25;
-        const gx = (this.options.floorHeightAt(o.position.x + e, o.position.z) - this.options.floorHeightAt(o.position.x - e, o.position.z)) / (2 * e);
-        const gz = (this.options.floorHeightAt(o.position.x, o.position.z + e) - this.options.floorHeightAt(o.position.x, o.position.z - e)) / (2 * e);
-        const along = g / (1 + gx * gx + gz * gz);
-        s.velocity.x -= gx * along * gameDt;
-        s.velocity.z -= gz * along * gameDt;
-        const k = Math.exp(-FLOOR_FRICTION_PER_S * gameDt);
-        s.velocity.x *= k;
-        s.velocity.z *= k;
-        s.spin.multiplyScalar(Math.exp(-3 * gameDt));
-        s.velocity.y = -0.5;
-      }
+      // (rotated) lowest point, bounces, and rolls / slides on down the funnel.
+      const contact = this.floorContact(o.position, s.velocity, box.min.y, PIECE_BOUNCE, gameDt);
+      if (contact === 'bounce') s.spin.multiplyScalar(0.7);
+      if (contact !== 'none') s.spin.multiplyScalar(Math.exp(-1.5 * gameDt));
     }
   }
 
@@ -283,7 +299,6 @@ export class DefeatCutscene {
     }
     // Owner, 2026-10-04 ("é pra continuar voando quando é destruído"): the pieces keep the flight's velocity.
     const carry = this.velocity.clone();
-    if (this.resting) carry.y = 0;
     pieces.forEach((piece, i) => {
       root.attach(piece);
       const a = (i / Math.max(1, pieces.length)) * Math.PI * 2 + 0.6;
@@ -293,7 +308,6 @@ export class DefeatCutscene {
         object: piece,
         velocity: new THREE.Vector3(out.x * speed, 6 + i * 1.2, out.z * speed).add(carry),
         spin: new THREE.Vector3(5 + i * 2.5, 8 - i * 2, 4 + i * 1.5),
-        resting: false,
       });
     });
     this.options.onBreak?.();
