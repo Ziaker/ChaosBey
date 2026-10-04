@@ -73,12 +73,14 @@ export type MatchRules = Pick<
   MatchConfig,
   'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'
   | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'speedDamageGain' | 'dashCarriesSpeed'
+  | 'turnRateScale' | 'turnSpeedRetention' | 'jumpHoldForFullS'
 >;
 
 /** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
 export const MATCH_RULE_KEYS = [
   'ringOutDelayS', 'dashCooldownS', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyCollisionDamage', 'momentumLossOnCollision', 'jumpFullHeightM', 'jumpShortHopHeightM', 'movementStaminaDrain', 'dodgeCooldownS', 'circularLaunchForce',
   'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS', 'speedDamageGain', 'dashCarriesSpeed',
+  'turnRateScale', 'turnSpeedRetention', 'jumpHoldForFullS',
 ] as const satisfies readonly (keyof MatchRules)[];
 
 /**
@@ -120,6 +122,9 @@ export function defaultMatchRules(): MatchRules {
     circularLaunchForce: config.circularLaunchForce,
     speedDamageGain: config.speedDamageGain,
     dashCarriesSpeed: config.dashCarriesSpeed,
+    turnRateScale: config.turnRateScale,
+    turnSpeedRetention: config.turnSpeedRetention,
+    jumpHoldForFullS: config.jumpHoldForFullS,
   };
 }
 
@@ -197,7 +202,8 @@ export function matchupLines(setup: MatchSetup): readonly MatchupLine[] {
 
 // --- Remembering the last setup (Lote 9) ----------------------------------
 
-const SETUP_STORAGE_KEY = 'chaosbey.pregame.last.v1';
+// v2 (owner, 2026-10-04): new defaults (speed ×1.45, funnel 7 m, jump rule) must not be hidden by a remembered v1 setup.
+const SETUP_STORAGE_KEY = 'chaosbey.pregame.last.v2';
 
 /** The parts of a setup the Pregame remembers between matches (and reloads): everything but the seed. */
 export function saveLastSetup(setup: MatchSetup, storage: Pick<Storage, 'setItem'> | null = safeStorage()): void {
@@ -285,6 +291,9 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   jumpCooldownS: { name: 'jump cooldown', format: (v) => `${(v as number).toFixed(1)} s` },
   speedDamageGain: { name: 'speed → damage', format: (v) => ((v as number) === 0 ? 'off' : `${Math.round((v as number) * 100)}%`) },
   dashCarriesSpeed: { name: 'Dash keeps momentum', format: (v) => (v ? 'on' : 'off') },
+  turnRateScale: { name: 'turn rate', format: (v) => `×${(v as number).toFixed(2)}` },
+  turnSpeedRetention: { name: 'speed kept in turns', format: (v) => `${Math.round((v as number) * 100)}%` },
+  jumpHoldForFullS: { name: 'hold for full jump', format: (v) => `${(v as number).toFixed(2)} s` },
 };
 
 /** "Dash cooldown 2.00 s", … for every rule that differs from its default (Lote 9: the explanation reflects the values). */

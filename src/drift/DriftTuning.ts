@@ -154,3 +154,11 @@ export const JUMP_INPUT_BUFFER_WINDOW_S = 0.1;
 // GDD-approved exact number, just enough range for a bare hop to read as
 // weak and a big jump (or a hard knockback fall) to read as strong.
 export const LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS = 10;
+
+/**
+ * Owner, 2026-10-04: "o jogo tá decidindo quando quer pular alto e quando quer dar short hop". One rule, nothing else:
+ * X always starts a short hop at once; still held this long after the press = it becomes the full jump (fixed height).
+ * Released before = the short hop. Steering never changes the height. Pregame slider; PROVISIONAL 0.12 s.
+ */
+export const JUMP_HOLD_FOR_FULL_DEFAULT_S = 0.12;
+export const JUMP_HOLD_FOR_FULL_RANGE = { min: 0.05, max: 0.3, step: 0.01 } as const;

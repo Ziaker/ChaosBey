@@ -14,7 +14,7 @@
 // ============================================================
 
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
-import { BOWL_DEPTH_M, DEFAULT_ARENA_FLOOR, type ArenaFloor, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import { BOWL_DEPTH_M, DEFAULT_ARENA_FLOOR, MATCH_BOWL_DEPTH_DEFAULT_M, type ArenaFloor, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { STANDARD_ARENA_GEOMETRY, type ArenaGeometry } from '../../arena/presets/ArenaPresets';
 import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import { RING_OUT_DELAY_DEFAULT_S } from '../../arena/ringout/RingOutTuning';
@@ -31,6 +31,7 @@ import { MOVEMENT_STAMINA_DRAIN_DEFAULT } from '../../bey/stamina/StaminaTuning'
 import { DODGE_COOLDOWN_S } from '../../dodge/DodgeTuning';
 import { CIRCULAR_LAUNCH_FORCE_DEFAULT } from '../../combat/attacks/AttackTuning';
 import { SPEED_DAMAGE_GAIN_DEFAULT } from '../../combat/attacks/SpeedDamage';
+import { JUMP_HOLD_FOR_FULL_DEFAULT_S } from '../../drift/DriftTuning';
 
 export interface MatchConfig {
   /** Multiplies the real knockback/Stability consequence a Clash resolution applies (both the FirstWins/SecondWins loser's knockback and a Tie's symmetric repulsion) — GDD section 152's "configurable impact multiplier". */
@@ -93,12 +94,18 @@ export interface MatchConfig {
   winBySpinOut: boolean;
   /** Multipliers on every Bey's acceleration, top speed and in-air steering grip (1 = as designed). */
   accelerationScale: number;
+  /** Owner, 2026-10-04: multiplier on every Bey's turn rate (×1.45 default). Pregame slider. */
+  turnRateScale: number;
+  /** Owner, 2026-10-04: 0..1 share of the speed a turn would lose that is kept (0 = the old turns). Pregame slider. */
+  turnSpeedRetention: number;
   topSpeedScale: number;
   airControl: number;
   /** Stamina a hop/jump costs (0 = free); a Bey without that much can't jump. */
   jumpStaminaCost: number;
   /** Seconds after a hop/jump begins before the next can (0 = none). */
   jumpCooldownS: number;
+  /** Owner, 2026-10-04: X released before this (s) = short hop, still held = full jump. Nothing else picks the height. Pregame slider. */
+  jumpHoldForFullS: number;
   /**
    * Owner, 2026-10-02 (item 13): the Circular is defensive (its user takes nothing; whoever touches it is launched).
    * Always on in a match; false only for bare constructions (createBey without match rules: the Camera Lab), which
@@ -115,7 +122,7 @@ export interface MatchConfig {
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'turnRateScale' | 'turnSpeedRetention' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -131,10 +138,13 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     dodgeCooldownS: config.dodgeCooldownS,
     circularLaunchForce: config.circularLaunchForce,
     accelerationScale: config.accelerationScale,
+    turnRateScale: config.turnRateScale,
+    turnSpeedRetention: config.turnSpeedRetention,
     topSpeedScale: config.topSpeedScale,
     airControl: config.airControl,
     jumpStaminaCost: config.jumpStaminaCost,
     jumpCooldownS: config.jumpCooldownS,
+    jumpHoldForFullS: config.jumpHoldForFullS,
     defensiveCircular: config.defensiveCircular ?? true,
     speedDamageGain: config.speedDamageGain,
     dashCarriesSpeed: config.dashCarriesSpeed,
@@ -160,16 +170,19 @@ export function createDefaultMatchConfig(): MatchConfig {
     movementStaminaDrain: MOVEMENT_STAMINA_DRAIN_DEFAULT,
     dodgeCooldownS: DODGE_COOLDOWN_S,
     circularLaunchForce: CIRCULAR_LAUNCH_FORCE_DEFAULT,
-    arenaBowlDepthM: BOWL_DEPTH_M,
+    arenaBowlDepthM: MATCH_BOWL_DEPTH_DEFAULT_M,
     roundTimeLimitS: 0,
     winByKo: true,
     winByRingOut: true,
     winBySpinOut: true,
-    accelerationScale: 1,
-    topSpeedScale: 1,
+    accelerationScale: SPEED_FEEL_SCALE_DEFAULT,
+    topSpeedScale: SPEED_FEEL_SCALE_DEFAULT,
+    turnRateScale: SPEED_FEEL_SCALE_DEFAULT,
+    turnSpeedRetention: TURN_SPEED_RETENTION_DEFAULT,
     airControl: 1,
     jumpStaminaCost: 0,
     jumpCooldownS: 0,
+    jumpHoldForFullS: JUMP_HOLD_FOR_FULL_DEFAULT_S,
     defensiveCircular: true,
     speedDamageGain: SPEED_DAMAGE_GAIN_DEFAULT,
     dashCarriesSpeed: true,
@@ -188,10 +201,16 @@ export function arenaGeometryOf(config: MatchConfig): ArenaGeometry {
 }
 
 /** Slider ranges for the Lote 9 rules (owner, 2026-10-02). PROVISIONAL. */
-export const ARENA_BOWL_DEPTH_RANGE = { min: 0, max: 5, step: 0.25 } as const;
+export const ARENA_BOWL_DEPTH_RANGE = { min: 0, max: 12, step: 0.25 } as const;
 export const ROUND_TIME_LIMIT_RANGE = { min: 0, max: 180, step: 15 } as const;
-export const ACCELERATION_SCALE_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
-export const TOP_SPEED_SCALE_RANGE = { min: 0.5, max: 1.5, step: 0.05 } as const;
+export const ACCELERATION_SCALE_RANGE = { min: 0.25, max: 3, step: 0.05 } as const;
+export const TOP_SPEED_SCALE_RANGE = { min: 0.5, max: 3, step: 0.05 } as const;
+/** Owner, 2026-10-04: "no mínimo 45% mais rápidos … isso inclui controle de movimento". Default for top speed, acceleration and turn rate. PROVISIONAL. */
+export const SPEED_FEEL_SCALE_DEFAULT = 1.45;
+export const TURN_RATE_SCALE_RANGE = { min: 0.5, max: 3, step: 0.05 } as const;
+/** Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade" — share of the speed a turn would scrub off that is kept. PROVISIONAL 0.85. */
+export const TURN_SPEED_RETENTION_DEFAULT = 0.85;
+export const TURN_SPEED_RETENTION_RANGE = { min: 0, max: 1, step: 0.05 } as const;
 export const AIR_CONTROL_RANGE = { min: 0, max: 3, step: 0.1 } as const;
 export const JUMP_STAMINA_COST_RANGE = { min: 0, max: 20, step: 1 } as const;
 export const JUMP_COOLDOWN_RANGE = { min: 0, max: 3, step: 0.1 } as const;

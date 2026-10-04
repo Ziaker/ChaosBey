@@ -23,6 +23,7 @@ import { MOVEMENT_STAMINA_DRAIN_RANGE } from '../../bey/stamina/StaminaTuning';
 import { DODGE_COOLDOWN_RANGE } from '../../dodge/DodgeTuning';
 import { CIRCULAR_LAUNCH_FORCE_RANGE } from '../../combat/attacks/AttackTuning';
 import { SPEED_DAMAGE_GAIN_RANGE } from '../../combat/attacks/SpeedDamage';
+import { JUMP_HOLD_FOR_FULL_RANGE } from '../../drift/DriftTuning';
 import { AI_DIFFICULTY_TIERS, aiDifficultyTier, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { isEditableEventTarget } from '../../input/devices/EditableTarget';
 import { AI_PERSONALITY_CHOICES, resolveAiPersonality, type AiPersonalityChoice } from '../session/SideControllers';
@@ -33,7 +34,7 @@ import { button, el, ensureFrontendStyle, keyHint } from './frontendStyle';
 import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
 import { CLASH_IMPACT_RANGE, changedRuleLines, defaultMatchRules, matchupLines, normalizeSeedText, RING_OUT_OFF_TIME_LIMIT_S, sanitizeMatchRules, withArenaFloor, withArenaPreset, type MatchRules, type MatchSetup } from './matchSetup';
-import { ACCELERATION_SCALE_RANGE, AIR_CONTROL_RANGE, ARENA_BOWL_DEPTH_RANGE, JUMP_COOLDOWN_RANGE, JUMP_STAMINA_COST_RANGE, ROUND_TIME_LIMIT_RANGE, TOP_SPEED_SCALE_RANGE } from '../../config/match/MatchConfig';
+import { ACCELERATION_SCALE_RANGE, AIR_CONTROL_RANGE, ARENA_BOWL_DEPTH_RANGE, JUMP_COOLDOWN_RANGE, JUMP_STAMINA_COST_RANGE, ROUND_TIME_LIMIT_RANGE, TOP_SPEED_SCALE_RANGE, TURN_RATE_SCALE_RANGE, TURN_SPEED_RETENTION_RANGE } from '../../config/match/MatchConfig';
 import { DEFAULT_VFX_OPTIONS, VFX_DUST_RANGE, VFX_GROUND_WAVES_RANGE, VFX_INTENSITY_RANGE, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
@@ -252,11 +253,13 @@ export class PregameScreen {
         title: 'Movement',
         id: 'movement',
         items: [
-          this.slider({ id: 'acceleration', label: 'Acceleration', range: ACCELERATION_SCALE_RANGE, ...rule('accelerationScale'), format: times, note: 'How fast every Bey gets up to speed (time to top speed). ×1 = as designed. Provisional.' }),
-          this.slider({ id: 'top-speed', label: 'Top speed', range: TOP_SPEED_SCALE_RANGE, ...rule('topSpeedScale'), format: times, note: 'Every Bey\'s top speed before momentum. ×1 = as designed. Provisional.' }),
+          this.slider({ id: 'acceleration', label: 'Acceleration', range: ACCELERATION_SCALE_RANGE, ...rule('accelerationScale'), format: times, note: 'How fast every Bey gets up to speed. Default ×1.45 (owner, 2026-10-04). Provisional.' }),
+          this.slider({ id: 'top-speed', label: 'Top speed', range: TOP_SPEED_SCALE_RANGE, ...rule('topSpeedScale'), format: times, note: 'Every Bey\'s top speed before momentum. Default ×1.45 (owner, 2026-10-04: at least 45% faster). Provisional.' }),
+          this.slider({ id: 'turn-rate', label: 'Turn rate', range: TURN_RATE_SCALE_RANGE, ...rule('turnRateScale'), format: times, note: 'How fast every Bey turns. Default ×1.45 (owner, 2026-10-04: faster control). Provisional.' }),
+          this.slider({ id: 'turn-speed-retention', label: 'Speed kept in turns', range: TURN_SPEED_RETENTION_RANGE, ...rule('turnSpeedRetention'), format: pct, note: 'How much of the speed a turn would scrub off is kept. 0% = the old turns. Default 85%. Provisional.' }),
           this.slider({ id: 'air-control', label: 'Air control', range: AIR_CONTROL_RANGE, ...rule('airControl'), format: times, note: 'How much a Bey can steer while in the air. ×1 = as designed, 0 = none. Provisional.' }),
           this.slider({ id: 'movement-stamina-drain', label: 'Movement stamina drain', range: MOVEMENT_STAMINA_DRAIN_RANGE, ...rule('movementStaminaDrain'), format: pct, note: 'Stamina spent by moving fast (the spin itself always drains a little). 100% = 30% less than before. Stamina 0 loses the round (spin-out).' }),
-          this.slider({ id: 'momentum-gain', label: 'Momentum gain', range: MOMENTUM_GAIN_RANGE, ...rule('momentumGain'), format: (v) => `+${Math.round(v * 100)}%`, note: 'How much full momentum raises the top speed. +100% = twice the top speed.' }),
+          this.slider({ id: 'momentum-gain', label: 'Momentum gain', range: MOMENTUM_GAIN_RANGE, ...rule('momentumGain'), format: (v) => `+${Math.round(v * 100)}%`, note: 'How much full momentum raises the top speed. Default +150% (2.5× the top speed). Provisional.' }),
           this.slider({ id: 'momentum-fill', label: 'Momentum build-up', range: MOMENTUM_FILL_RANGE, ...rule('momentumFillS'), format: (v) => `${v.toFixed(1)} s`, note: 'Seconds of fast, steady movement to fill momentum.' }),
           this.slider({ id: 'momentum-decay', label: 'Momentum decay', range: MOMENTUM_DECAY_RANGE, ...rule('momentumDecayS'), format: sec, note: 'Seconds for full momentum to drain when you brake, turn hard or stop.' }),
         ],
@@ -267,6 +270,7 @@ export class PregameScreen {
         items: [
           this.slider({ id: 'jump-full-height', label: 'Full jump height', range: JUMP_FULL_HEIGHT_RANGE, ...rule('jumpFullHeightM'), format: meters, note: 'How high a held X jump goes. Provisional 2.5 m (the wall is 2 m: a full jump near the rim can clear it).' }),
           this.slider({ id: 'jump-short-hop-height', label: 'Short hop height', range: JUMP_SHORT_HOP_HEIGHT_RANGE, ...rule('jumpShortHopHeightM'), format: meters, note: 'How high a quick X tap hops.' }),
+          this.slider({ id: 'jump-hold-for-full', label: 'Hold X for full jump', range: JUMP_HOLD_FOR_FULL_RANGE, ...rule('jumpHoldForFullS'), format: (v) => `${v.toFixed(2)} s`, note: 'The only rule for the height: X always hops at once; still held after this = the full jump, released before = the short hop. Steering never changes it.' }),
           this.slider({ id: 'jump-stamina-cost', label: 'Jump stamina cost', range: JUMP_STAMINA_COST_RANGE, ...rule('jumpStaminaCost'), format: (v) => (v === 0 ? 'free' : `${v.toFixed(0)}`), note: 'Stamina each hop or jump costs; a Bey without that much can\'t jump. Provisional (free).' }),
           this.slider({ id: 'jump-cooldown', label: 'Jump cooldown', range: JUMP_COOLDOWN_RANGE, ...rule('jumpCooldownS'), format: (v) => (v === 0 ? 'none' : `${v.toFixed(1)} s`), note: 'Time after a jump before the next; a press meanwhile is kept. Provisional (none).' }),
         ],
@@ -289,7 +293,7 @@ export class PregameScreen {
         title: 'Arena',
         id: 'arena',
         items: [
-          this.slider({ id: 'bowl-depth', label: 'Bowl depth (funnel)', range: ARENA_BOWL_DEPTH_RANGE, ...rule('arenaBowlDepthM'), format: meters, note: 'How deep the bowl is (rim above the centre): the floor\'s collider, art, spawns and effects all follow it. 0 = flat. Default 2.5 m.' }),
+          this.slider({ id: 'bowl-depth', label: 'Bowl depth (funnel)', range: ARENA_BOWL_DEPTH_RANGE, ...rule('arenaBowlDepthM'), format: meters, note: 'How deep the bowl is (rim above the centre): the floor\'s collider, art, spawns and effects all follow it. 0 = flat. Default 7 m on the Funnel (owner, 2026-10-04).' }),
           this.slider({ id: 'wall-height', label: 'Wall height', range: ARENA_WALL_HEIGHT_RANGE, read: (s) => s.arena.geometry.wallHeightM, write: (s, v) => ({ ...s, arena: { ...s.arena, geometry: { ...s.arena.geometry, wallHeightM: v } } }), defaultValue: arenaPreset(this.setup.arena.presetId).geometry.wallHeightM, format: (v) => `${v.toFixed(1)} m`, note: 'A low wall lets a launched Bey fly out of the arena; a tall one keeps it in. Default: the arena\'s.' }),
           this.slider({ id: 'wall-bounce', label: 'Wall bounce', range: ARENA_WALL_BOUNCE_RANGE, read: (s) => s.arena.geometry.wallRestitution, write: (s, v) => ({ ...s, arena: { ...s.arena, geometry: { ...s.arena.geometry, wallRestitution: v } } }), defaultValue: arenaPreset(this.setup.arena.presetId).geometry.wallRestitution, format: (v) => v.toFixed(2), note: 'How hard the wall throws a Bey back into the fight. Default: the arena\'s.' }),
         ],

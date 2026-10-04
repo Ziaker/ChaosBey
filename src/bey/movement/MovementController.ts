@@ -141,20 +141,23 @@ export class MovementController {
 
   /** MatchConfig.airControl (Lote 9): scales the grip in the air — how much the Bey can steer its flight. */
   private readonly airControl: number;
+  /** Owner, 2026-10-04 (MatchConfig.turnSpeedRetention): share of the speed a grounded, driven turn would lose that it keeps. */
+  private readonly turnSpeedRetention: number;
 
   constructor(
     handling: BeyHandlingProfile = DEFAULT_HANDLING_PROFILE,
     private readonly motion: MotionParams = motionParams(),
     /** Owner, 2026-10-02 (Lote 9 / GDD 12): the match's acceleration, top speed and air control multipliers (1 = as designed). */
-    scales: { readonly acceleration: number; readonly topSpeed: number; readonly airControl: number } = { acceleration: 1, topSpeed: 1, airControl: 1 },
+    scales: { readonly acceleration: number; readonly topSpeed: number; readonly airControl: number; readonly turnRate?: number; readonly turnSpeedRetention?: number } = { acceleration: 1, topSpeed: 1, airControl: 1 },
   ) {
     this.airControl = scales.airControl;
+    this.turnSpeedRetention = Math.max(0, Math.min(1, scales.turnSpeedRetention ?? 0));
     this.handling = {
       ...handling,
       accelerationMps2: handling.accelerationMps2 * motionRatio(motion, 'accel') * scales.acceleration,
       reverseAccelerationMps2: handling.reverseAccelerationMps2 * scales.acceleration,
       maxSpeedMps: handling.maxSpeedMps * motionRatio(motion, 'maxSpeed') * scales.topSpeed,
-      turnRateRadS: handling.turnRateRadS * motionRatio(motion, 'turnRate'),
+      turnRateRadS: handling.turnRateRadS * motionRatio(motion, 'turnRate') * (scales.turnRate ?? 1),
       lateralGripPerS: handling.lateralGripPerS * motionRatio(motion, 'lateralGrip'),
     };
     this.lastLateralGripPerS = this.handling.lateralGripPerS;
@@ -345,6 +348,17 @@ export class MovementController {
     const newLateral = scale(lateralVec, Math.exp(-lateralGripPerS * fixedDeltaSeconds));
 
     let newVelHoriz = add(scale(headingForward, newLongitudinalSpeed), newLateral);
+    // Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade". A driven turn on the ground keeps this share of
+    // the speed the heading change and the lateral grip scrub off (never above the top speed, never on a Dash).
+    if (this.turnSpeedRetention > 0 && grounded && !dashOverride && throttleInput > 0 && newLongitudinalSpeed > 0) {
+      const before = length(velHoriz);
+      const after = length(newVelHoriz);
+      const cap = this.handling.maxSpeedMps * topSpeedMultiplier;
+      if (after > 1e-6 && after < before) {
+        const kept = Math.min(Math.max(after, cap), after + (before - after) * this.turnSpeedRetention);
+        if (kept > after) newVelHoriz = scale(newVelHoriz, kept / after);
+      }
+    }
     // Numerical safety clamp (motion-approval.md §3), not a gameplay limit.
     const newSpeed = length(newVelHoriz);
     if (newSpeed > this.motion.maxLinearSpeed) newVelHoriz = scale(newVelHoriz, this.motion.maxLinearSpeed / newSpeed);

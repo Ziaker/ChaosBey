@@ -95,8 +95,13 @@ export const ARENA_FLOORS: Readonly<Record<ArenaFloorId, ArenaFloorProfile>> = {
 };
 
 export const ARENA_FLOOR_IDS: readonly ArenaFloorId[] = ['flat', 'bowl-a', 'bowl-b', 'bowl-c'];
-/** The stage is never flat by default: the parabolic dish (smooth everywhere, slope 0 at the centre, steepest at the wall). */
-export const DEFAULT_ARENA_FLOOR: ArenaFloorId = 'bowl-a';
+/** The stage is never flat by default: the funnel (owner, 2026-10-04 — slopes almost all the way to the centre). */
+export const DEFAULT_ARENA_FLOOR: ArenaFloorId = 'bowl-b';
+/**
+ * Owner, 2026-10-04: "cadê o afunilamento dos stages?" — a 2.5 m rim over the 36 m floor radius is a ~4° slope nobody
+ * sees. A match's default is the Funnel profile at 7 m (rim ~14° steep). Pregame slider 0–12 m. PROVISIONAL.
+ */
+export const MATCH_BOWL_DEPTH_DEFAULT_M = 7;
 
 export function isArenaFloorId(value: unknown): value is ArenaFloorId {
   return typeof value === 'string' && (ARENA_FLOOR_IDS as readonly string[]).includes(value);

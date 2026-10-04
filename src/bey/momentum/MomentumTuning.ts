@@ -9,8 +9,9 @@
 // Pregame slider (MatchConfig).
 // ============================================================
 
-export const MOMENTUM_GAIN_DEFAULT = 1;
-export const MOMENTUM_GAIN_RANGE = { min: 0, max: 2, step: 0.1 } as const;
+// Owner, 2026-10-04: "o build-up de velocidade devia ser AINDA maior" — +100% → +150% (PROVISIONAL), slider up to +300%.
+export const MOMENTUM_GAIN_DEFAULT = 1.5;
+export const MOMENTUM_GAIN_RANGE = { min: 0, max: 3, step: 0.1 } as const;
 export const MOMENTUM_FILL_DEFAULT_S = 4;
 export const MOMENTUM_FILL_RANGE = { min: 1, max: 10, step: 0.5 } as const;
 export const MOMENTUM_DECAY_DEFAULT_S = 2;

@@ -108,6 +108,8 @@ export class AttackController {
     private readonly dashCooldownS: number = DASH_COOLDOWN_DEFAULT_S,
     /** MatchConfig.dashCarriesSpeed (item 11): a Dash never runs slower than the Bey was going when it fired. */
     private readonly dashCarriesSpeed: boolean = false,
+    /** MatchConfig.topSpeedScale (owner, 2026-10-04): the Dash speeds up with the Beys, so it is never slower than running. */
+    private readonly dashSpeedScale: number = 1,
   ) {}
 
   getState(): AttackState {
@@ -312,7 +314,7 @@ export class AttackController {
   }
 
   private nominalDashSpeedMps(): number {
-    return lerp(this.profile.dashMinSpeedMps, this.profile.dashMaxSpeedMps, this.dashChargeFraction());
+    return lerp(this.profile.dashMinSpeedMps, this.profile.dashMaxSpeedMps, this.dashChargeFraction()) * this.dashSpeedScale;
   }
 
   private dashChargeFraction(): number {
