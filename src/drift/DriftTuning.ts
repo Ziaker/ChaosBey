@@ -165,3 +165,6 @@ export const LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS = 10;
 // 0.2 s leaves a clear gap between a tap and a deliberate hold. PROVISIONAL.
 export const JUMP_HOLD_FOR_FULL_DEFAULT_S = 0.2;
 export const JUMP_HOLD_FOR_FULL_RANGE = { min: 0.08, max: 0.4, step: 0.01 } as const;
+
+/** Owner, 2026-10-04: after a short hop lands, an X press within this window is the drift (tap + hold), never a new jump. PROVISIONAL. */
+export const DRIFT_FOLLOW_UP_WINDOW_S = 0.35;

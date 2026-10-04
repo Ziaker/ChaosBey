@@ -45,6 +45,42 @@ describe('jump: one rule decides the height (owner, 2026-10-04)', () => {
   });
 });
 
+describe('tap + hold = drift, never a second jump (owner, 2026-10-04)', () => {
+  /** Tap X, then press X again at `secondPressTick` and hold it; moving forward the whole time. */
+  async function tapThenHold(secondPressTick: number): Promise<{ takeoffs: number; drifted: boolean }> {
+    const h = await harness();
+    for (let i = 0; i < 45; i++) h.tick(act([Action.MoveForward]), NONE); // short run-up: at the new speed a longer one reaches the wall
+    const y0 = h.first.body.translation().y;
+    let landed = false;
+    let wasAirborne = false;
+    let heightAfterLanding = 0;
+    let drifted = false;
+    for (let t = 0; t < 60; t++) {
+      const x = t < 2 || t >= secondPressTick ? [Action.JumpDrift] : [];
+      const pressed = t === 0 || t === secondPressTick ? [Action.JumpDrift] : [];
+      const r = h.tick(act([Action.MoveForward, ...x], pressed), NONE);
+      if (!r.first.grounded) wasAirborne = true;
+      else if (wasAirborne) landed = true;
+      if (landed) heightAfterLanding = Math.max(heightAfterLanding, h.first.body.translation().y - y0);
+      if (r.first.driftState === 'Drifting') drifted = true;
+    }
+    // One flight: after the short hop lands, the Bey never leaves the floor again (a second jump would be > 5 cm).
+    return { takeoffs: landed && heightAfterLanding < 0.05 ? 1 : 2, drifted };
+  }
+
+  it('second press while the short hop is still in the air: drift on landing, one jump', async () => {
+    const r = await tapThenHold(6);
+    expect(r.drifted).toBe(true);
+    expect(r.takeoffs).toBe(1);
+  });
+
+  it('second press just after the short hop landed: drift at once, no new jump', async () => {
+    const r = await tapThenHold(30);
+    expect(r.drifted).toBe(true);
+    expect(r.takeoffs).toBe(1);
+  });
+});
+
 describe('speed feel (owner, 2026-10-04)', () => {
   async function topSpeed(overrides = {}): Promise<number> {
     const h = await harness(overrides);

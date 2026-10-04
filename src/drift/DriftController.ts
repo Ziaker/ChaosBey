@@ -47,6 +47,7 @@ import {
   JUMP_RELEASE_WINDOW_S,
   JUMP_SHORT_HOP_TARGET_APEX_M,
   JUMP_HOLD_FOR_FULL_DEFAULT_S,
+  DRIFT_FOLLOW_UP_WINDOW_S,
   LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS,
 } from './DriftTuning';
 import type { CanonicalRecord } from '../replay/state/CanonicalValue';
@@ -135,6 +136,10 @@ export class DriftController {
   private readonly legacyLaunch: boolean;
   /** B6: a press began the hop; its single launch is decided this tick. */
   private launchPending = false;
+  /** Owner, 2026-10-04: the current/last hop was the short hop (its follow-up X press is the drift). */
+  private lastHopShort = false;
+  /** Seconds left, after a short hop landed, in which an X press is the drift instead of a new jump (null = none). */
+  private driftFollowUpS: number | null = null;
   /** B6: the body's height at launch and fixed steps since, for the release cut's height-already-gained (measured, not assumed). */
   private launchY = 0;
   private stepsSinceLaunch = 0;
@@ -195,8 +200,23 @@ export class DriftController {
     if (!jumpDriftHeld) {
       this.holdingSinceHop = false;
       this.driftArmed = false;
-    } else if (this.holdingSinceHop && this.movingAtHop && this.lateralHeld(actions)) {
+    } else if (this.legacyLaunch && this.holdingSinceHop && this.movingAtHop && this.lateralHeld(actions)) {
       this.driftArmed = true;
+    }
+    // Owner, 2026-10-04: "dar um toque + segurar, MESMO SE CAIR NO CHÃO = drift" — and never another jump. A second
+    // X press after a short hop (still in the air, or within DRIFT_FOLLOW_UP_WINDOW_S of landing) is the drift: held,
+    // the Bey drifts (on landing, or at once if already down). It is not buffered as a jump.
+    const driftFollowUp =
+      !this.legacyLaunch &&
+      jumpDriftPressed &&
+      ((this.state === DriftState.Hopping && !this.launchPending && this.lastHopShort) || (this.state === DriftState.Idle && this.driftFollowUpS !== null));
+    if (driftFollowUp) {
+      this.driftArmed = true;
+      this.bufferedJumpElapsedS = null;
+    }
+    if (this.driftFollowUpS !== null && this.state === DriftState.Idle && grounded) {
+      this.driftFollowUpS -= fixedDeltaSeconds;
+      if (this.driftFollowUpS <= 0) this.driftFollowUpS = null;
     }
 
     if (!grounded) {
@@ -232,7 +252,7 @@ export class DriftController {
     // Owner, 2026-10-02 (Lote 4; PR #76's pressDroppedWhileAirborne): a press made in the air — in any state, a hop or
     // a drift included — is kept until the Bey lands and consumed there once. It only ages on the ground, so a flight
     // or a landing settle longer than the window no longer throws it away.
-    if (jumpDriftPressed && !grounded && (this.state === DriftState.Hopping || this.state === DriftState.Drifting)) {
+    if (jumpDriftPressed && !driftFollowUp && !grounded && (this.state === DriftState.Hopping || this.state === DriftState.Drifting)) {
       this.bufferedJumpElapsedS = 0;
     }
     if (this.bufferedJumpElapsedS !== null && grounded) {
@@ -244,7 +264,12 @@ export class DriftController {
 
     switch (this.state) {
       case DriftState.Idle:
-        if (grounded && (jumpDriftPressed || this.bufferedJumpElapsedS !== null)) {
+        if (driftFollowUp) {
+          // The follow-up press after a short hop that already landed: drift right away, no new jump.
+          this.driftFollowUpS = null;
+          this.state = DriftState.Drifting;
+          this.driftAirborneS = 0;
+        } else if (grounded && (jumpDriftPressed || this.bufferedJumpElapsedS !== null)) {
           this.beginHop(body, actions, headingRad);
         } else if (jumpDriftPressed && !grounded) {
           // Can't begin the hop this tick (transiently airborne — a bounce,
@@ -274,6 +299,7 @@ export class DriftController {
               this.hopBaseVerticalMps = body.linvel().y;
               this.hopTimerS = 0;
               const heldS = this.jumpAssistElapsedS;
+              this.lastHopShort = launchMps === this.shortHopLaunchMps;
               this.launch(body, launchMps, true);
               this.jumpAssistElapsedS = heldS; // how long X was held before the launch (landing data reads it)
             }
@@ -405,6 +431,8 @@ export class DriftController {
     this.jumpCooldownRemainingS = this.jumpCooldownS;
     this.hopBeganThisTick = true;
     this.bufferedJumpElapsedS = null;
+    this.driftFollowUpS = null;
+    this.lastHopShort = false;
     this.state = DriftState.Hopping;
     this.driftArmed = false;
     this.holdingSinceHop = true;
@@ -439,6 +467,8 @@ export class DriftController {
 
   /** Landed with JumpDrift still held: drift at once if a turn armed it. The drift keeps the hop's horizontal speed. */
   private landHop(body: RAPIER.RigidBody, jumpDriftHeld: boolean): void {
+    // A short hop that lands opens the window in which a second X press is the drift, not a new jump.
+    if (!this.legacyLaunch && this.lastHopShort && !(jumpDriftHeld && this.driftArmed)) this.driftFollowUpS = DRIFT_FOLLOW_UP_WINDOW_S;
     if (jumpDriftHeld) {
       const v = body.linvel();
       body.setLinvel({ x: this.lastAirborneHorizontal.x, y: v.y, z: this.lastAirborneHorizontal.z }, true);
@@ -609,6 +639,8 @@ export class DriftController {
       driftAirborneS: this.driftAirborneS,
       lastAirborneHorizontal: { x: this.lastAirborneHorizontal.x, z: this.lastAirborneHorizontal.z },
       bufferedJumpElapsedS: this.bufferedJumpElapsedS,
+      lastHopShort: this.lastHopShort,
+      driftFollowUpS: this.driftFollowUpS,
     };
   }
 }
