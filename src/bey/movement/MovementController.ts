@@ -111,6 +111,9 @@ export interface MovementSnapshot {
   impactDirection: Vec2;
 }
 
+/** Numerical safety clamp on horizontal speed (m/s) — not a gameplay limit (owner speed pass, 2026-10-04). */
+const NUMERICAL_SPEED_CLAMP_MPS = 60;
+
 export class MovementController {
   private headingRad = 0;
   private turnRateRadPerS = 0;
@@ -361,7 +364,9 @@ export class MovementController {
     }
     // Numerical safety clamp (motion-approval.md §3), not a gameplay limit.
     const newSpeed = length(newVelHoriz);
-    if (newSpeed > this.motion.maxLinearSpeed) newVelHoriz = scale(newVelHoriz, this.motion.maxLinearSpeed / newSpeed);
+    // Owner, 2026-10-04: the +45% speed and the bigger momentum need room above the Lab's 26 m/s (numerical safety only).
+    const safetyMps = Math.max(this.motion.maxLinearSpeed, NUMERICAL_SPEED_CLAMP_MPS);
+    if (newSpeed > safetyMps) newVelHoriz = scale(newVelHoriz, safetyMps / newSpeed);
 
     this.lastHeadingForward = headingForward;
     this.lastLateralGripPerS = lateralGripPerS;

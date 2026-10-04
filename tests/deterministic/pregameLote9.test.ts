@@ -40,8 +40,9 @@ describe('item 3 — bowl depth (funnel): collider, spawns and floor readers sha
     });
   }
 
-  it('the default depth is the old 2.5 m, and 0 m is flat', () => {
-    expect(resolveMatchConfig().arenaBowlDepthM).toBe(BOWL_DEPTH_M);
+  it('the default depth is 7 m (owner, 2026-10-04: a visible funnel), and 0 m is flat', () => {
+    expect(resolveMatchConfig().arenaBowlDepthM).toBe(7);
+    expect(BOWL_DEPTH_M).toBe(2.5); // the profiles' unit depth
     expect(floorHeightAt({ id: 'bowl-a', depthM: 0 }, 9, 0)).toBe(0);
     expect(floorHeightAt({ id: 'bowl-a', depthM: 5 }, 9, 0)).toBeCloseTo(2 * floorHeightAt('bowl-a', 9, 0), 9);
   });
@@ -111,9 +112,10 @@ describe('item 20 — movement and jump rules', () => {
   }
 
   it('acceleration and top speed scale the real movement', async () => {
-    const base = await drive();
-    const quick = await drive({ accelerationScale: 2 });
-    const fast = await drive({ topSpeedScale: 1.3 });
+    // From ×1 (the defaults are ×1.45 since 2026-10-04): each slider moves the real movement on its own.
+    const base = await drive({ accelerationScale: 1, topSpeedScale: 1 });
+    const quick = await drive({ accelerationScale: 2, topSpeedScale: 1 });
+    const fast = await drive({ accelerationScale: 1, topSpeedScale: 1.3 });
     expect(quick.to8).toBeLessThan(base.to8);
     expect(fast.top).toBeGreaterThan(base.top * 1.2);
   });
@@ -154,9 +156,9 @@ describe('the Pregame remembers the last setup and explains what changed', () =>
     expect(back.visual).toEqual(setup.visual);
     expect(back.seedText).toBeNull();
     expect(matchConfigFor(back)).toMatchObject({ dashCooldownS: 3, arenaBowlDepthM: 4, winBySpinOut: false });
-    store.set('chaosbey.pregame.last.v1', '{not json');
+    store.set('chaosbey.pregame.last.v2', '{not json');
     expect(loadLastSetup(storage)).toBeNull();
-    store.set('chaosbey.pregame.last.v1', JSON.stringify({ playerBeyId: 'nope', rules: { dashCooldownS: 'fast' } }));
+    store.set('chaosbey.pregame.last.v2', JSON.stringify({ playerBeyId: 'nope', rules: { dashCooldownS: 'fast' } }));
     expect(loadLastSetup(storage)).toMatchObject({ playerBeyId: createDefaultMatchSetup().playerBeyId, rules: defaultMatchRules() });
   });
 

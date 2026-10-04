@@ -142,7 +142,6 @@ export class DriftController {
   private readonly jumpCooldownS: number;
   /** Owner, 2026-10-04: X still held this long after the press turns the short hop into the full jump (MatchConfig.jumpHoldForFullS). */
   private readonly jumpHoldForFullS: number;
-  private readonly fullJumpApexM: number;
   private jumpCooldownRemainingS = 0;
   private hopBeganThisTick = false;
   /** Lote 9: whether a hop may begin this tick (the caller's Stamina check for the jump's cost). */
@@ -155,7 +154,6 @@ export class DriftController {
   ) {
     this.jumpCooldownS = Math.max(0, jumpRules?.jumpCooldownS ?? 0);
     this.jumpHoldForFullS = Math.max(0, jumpRules?.jumpHoldForFullS ?? JUMP_HOLD_FOR_FULL_DEFAULT_S);
-    this.fullJumpApexM = jumpRules?.jumpFullHeightM ?? LEGACY_JUMP_FULL_HEIGHT_M;
     this.legacyLaunch = jumpRules === undefined;
     const jump = jumpRules ?? { jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, jumpShortHopHeightM: JUMP_SHORT_HOP_TARGET_APEX_M };
     this.launchMps = jumpLaunchVelocityForApexM(jump.jumpFullHeightM);
@@ -263,23 +261,27 @@ export class DriftController {
 
       case DriftState.Hopping: {
         if (!this.legacyLaunch) {
-          // Owner, 2026-10-04: one rule decides the height, nothing else. The press already launched a short hop; X
-          // released before jumpHoldForFullS keeps it, X still held then turns it into the full jump (a fixed apex).
-          // Steering, drifting or the exact release instant never change the height any more.
+          // Owner, 2026-10-04: two fixed heights, one arc each, decided only by how long X is held. The Bey leaves the
+          // floor once, with the height already decided: X released before jumpHoldForFullS = the short hop (launched
+          // on the release); X still held then = the full jump. Steering never changes the height (a turn only makes the
+          // landing a drift if X is still held); the exact release instant no longer shapes it either.
+          if (this.launchPending) {
+            const decided = !jumpDriftHeld ? this.shortHopLaunchMps : null;
+            this.jumpAssistElapsedS += fixedDeltaSeconds;
+            const launchMps = decided ?? (this.jumpAssistElapsedS >= this.jumpHoldForFullS - 1e-9 ? this.launchMps : null);
+            if (launchMps !== null) {
+              this.launchPending = false;
+              this.hopBaseVerticalMps = body.linvel().y;
+              this.hopTimerS = 0;
+              const heldS = this.jumpAssistElapsedS;
+              this.launch(body, launchMps, true);
+              this.jumpAssistElapsedS = heldS; // how long X was held before the launch (landing data reads it)
+            }
+            break;
+          }
           this.stepsSinceLaunch++;
           this.hopTimerS += fixedDeltaSeconds;
-          if (this.launchPending) {
-            if (!jumpDriftHeld) {
-              this.launchPending = false;
-            } else {
-              this.jumpAssistElapsedS += fixedDeltaSeconds;
-              if (this.jumpAssistElapsedS >= this.jumpHoldForFullS - 1e-9) {
-                this.launchPending = false;
-                this.topUpToFullJump(body);
-              }
-            }
-          }
-          if (!this.launchPending && this.hopTimerS >= HOP_MIN_AIRBORNE_DURATION_S && grounded) this.landHop(body, jumpDriftHeld);
+          if (this.hopTimerS >= HOP_MIN_AIRBORNE_DURATION_S && grounded) this.landHop(body, jumpDriftHeld);
           break;
         }
         this.stepsSinceLaunch++;
@@ -429,17 +431,10 @@ export class DriftController {
     }
     // B6: X with a lateral direction while moving is a drift hop from the first tick: launch it now. Anything else
     // launches next tick, once the input shows a tap or a hold.
-    if (this.movingAtHop && this.lateralHeld(actions)) this.driftArmed = true; // only decides a drift on landing
-    this.launch(body, this.shortHopLaunchMps, false);
-    this.launchPending = true; // owner, 2026-10-04: may still become the full jump (see Hopping)
-  }
-
-  /** The held short hop becomes the full jump: vertical speed so the apex is exactly the full jump's height above the launch. */
-  private topUpToFullJump(body: RAPIER.RigidBody): void {
-    const needM = Math.max(0, this.fullJumpApexM - this.heightAlreadyGainedM(body, 0));
-    const vel = body.linvel();
-    // The slope's own vertical motion (hopBaseVerticalMps) stays; only the launch part is set.
-    body.setLinvel({ x: vel.x, y: this.hopBaseVerticalMps + Math.sqrt(2 * GRAVITY_MPS2 * needM), z: vel.z }, true);
+    // Owner, 2026-10-04: the floor is left once the tap/hold is known (see Hopping). A lateral direction only arms the
+    // drift for the landing; it never changes the height.
+    if (this.movingAtHop && this.lateralHeld(actions)) this.driftArmed = true;
+    this.launchPending = true;
   }
 
   /** Landed with JumpDrift still held: drift at once if a turn armed it. The drift keeps the hop's horizontal speed. */

@@ -118,7 +118,7 @@ describe('match setup rules', () => {
   });
 
   it('feeds momentum and body collision values (owner, 2026-10-02) through MatchConfig', () => {
-    expect(createDefaultMatchSetup().rules).toMatchObject({ momentumGain: 1, momentumFillS: 4, momentumDecayS: 2, bodyCollisionDamage: 1, momentumLossOnCollision: 0.5 });
+    expect(createDefaultMatchSetup().rules).toMatchObject({ momentumGain: 1.5, momentumFillS: 4, momentumDecayS: 2, bodyCollisionDamage: 1, momentumLossOnCollision: 0.5 });
     const rules = { ...createDefaultMatchSetup().rules, momentumGain: 0.5, momentumFillS: 6, momentumDecayS: 1, bodyCollisionDamage: 2, momentumLossOnCollision: 0.25 };
     expect(matchConfigFor({ ...createDefaultMatchSetup(), rules })).toEqual({ ...createDefaultMatchConfig(), ...rules });
   });

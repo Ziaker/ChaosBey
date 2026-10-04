@@ -405,8 +405,9 @@ describe('attacking mid-jump', () => {
     // then tap Circular Attack mid-air without letting go of JumpDrift.
     const attacker = new ScriptedController([
       { fromTick: 0, held: [Action.JumpDrift] },
-      { fromTick: 2, held: [Action.JumpDrift, Action.Attack] },
-      { fromTick: 4, held: [Action.JumpDrift] },
+      // Owner, 2026-10-04: a held X leaves the floor once the hold is known (~tick 7), so the Circular is tapped after.
+      { fromTick: 9, held: [Action.JumpDrift, Action.Attack] },
+      { fromTick: 11, held: [Action.JumpDrift] },
       { fromTick: 16, held: [] },
     ]);
 

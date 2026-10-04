@@ -32,7 +32,7 @@ describe('arena presets', () => {
     expect(STANDARD_ARENA_GEOMETRY).toEqual({ wallHeightM: ARENA_WALL_HEIGHT, wallRestitution: WALL_MATERIAL.restitution });
     expect(FOUNDRY_PIT.geometry).toEqual(STANDARD_ARENA_GEOMETRY);
     // Arena scale pass: the default floor is the bowl (the stage is not flat); flat is only a baseline option.
-    expect(arenaGeometryOf(createDefaultMatchConfig())).toEqual({ ...STANDARD_ARENA_GEOMETRY, floor: DEFAULT_ARENA_FLOOR, floorDepthM: 2.5 }); // Lote 9: the bowl depth
+    expect(arenaGeometryOf(createDefaultMatchConfig())).toEqual({ ...STANDARD_ARENA_GEOMETRY, floor: DEFAULT_ARENA_FLOOR, floorDepthM: 7 }); // the funnel at 7 m (owner, 2026-10-04)
     expect(arenaPreset('rift')).toBe(RIFT_CRATER);
   });
 

@@ -92,7 +92,7 @@ const B: MotionParams = {
   uprightStrength: 60, recoveryDamping: 7, postImpactRecovery: 0.6,
   restitutionBey: 0.55, floorBounce: 0.35, wallBounce: 0.5, wallFriction: 1.2, impactAngularImpulse: 0.12, linearToAngular: 0.5,
   knockbackScale: 1, knockbackLift: 0.18, tumbleStrength: 0.6, tumbleThreshold: 9, angularDamping: 1.6,
-  maxLinearSpeed: 60, maxAngularSpeed: 30, // 26 → 60 (owner, 2026-10-04: +45% speed and a bigger momentum need room; numerical safety only)
+  maxLinearSpeed: 26, maxAngularSpeed: 30,
 };
 
 export const MOTION_DIRECTIONS: Readonly<Record<MotionDirectionId, MotionDirection>> = {

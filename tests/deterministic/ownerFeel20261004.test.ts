@@ -11,7 +11,7 @@ const NONE: ControllerActions = { held: new Set(), pressedThisFrame: new Set(), 
 const act = (held: Action[], pressed: Action[] = []): ControllerActions => ({ ...NONE, held: new Set(held), pressedThisFrame: new Set(pressed) });
 
 async function harness(overrides = {}): Promise<CombatHarness> {
-  const h = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: -20 }, { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 25 }, { arenaFloor: 'flat', ...overrides });
+  const h = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: -20 }, { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 25 }, { ...createDefaultMatchConfig(), arenaFloor: 'flat', ...overrides }); // the shipped defaults, not the harness's mechanism baseline
   for (let i = 0; i < 40; i++) h.tick(NONE, NONE);
   return h;
 }
@@ -37,8 +37,9 @@ describe('jump: one rule decides the height (owner, 2026-10-04)', () => {
     for (const hold of [9, 15, 40]) expect(Math.abs((await jumpApex(hold)) - full)).toBeLessThan(0.15);
   });
 
-  it('steering while moving never turns a held jump into a small hop', async () => {
+  it('steering never changes the height: held = full jump, tap = short hop, moving straight or turning', async () => {
     const full = createDefaultMatchConfig().jumpFullHeightM;
+    expect(Math.abs((await jumpApex(30, [Action.MoveForward], 60)) - full)).toBeLessThan(0.2);
     expect(Math.abs((await jumpApex(30, [Action.MoveForward, Action.SteerLeft], 60)) - full)).toBeLessThan(0.2);
     expect(await jumpApex(3, [Action.MoveForward, Action.SteerLeft], 60)).toBeLessThan(0.4);
   });

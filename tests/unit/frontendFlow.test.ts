@@ -59,11 +59,13 @@ describe('match setup', () => {
       clashImpactMultiplier: 1,
       motion: 'B',
       rules: {
-        ringOutDelayS: 1.5, dashCooldownS: 1.5, momentumGain: 1, momentumFillS: 4, momentumDecayS: 2, bodyCollisionDamage: 1, momentumLossOnCollision: 0.5, jumpFullHeightM: 2.5, jumpShortHopHeightM: 0.1265, movementStaminaDrain: 1, dodgeCooldownS: 3, circularLaunchForce: 1,
+        ringOutDelayS: 1.5, dashCooldownS: 1.5, momentumGain: 1.5, momentumFillS: 4, momentumDecayS: 2, bodyCollisionDamage: 1, momentumLossOnCollision: 0.5, jumpFullHeightM: 2.5, jumpShortHopHeightM: 0.1265, movementStaminaDrain: 1, dodgeCooldownS: 3, circularLaunchForce: 1,
         // Lote 9: the game as it was.
-        arenaBowlDepthM: 2.5, roundTimeLimitS: 0, winByKo: true, winByRingOut: true, winBySpinOut: true, accelerationScale: 1, topSpeedScale: 1, airControl: 1, jumpStaminaCost: 0, jumpCooldownS: 0,
+        arenaBowlDepthM: 7, roundTimeLimitS: 0, winByKo: true, winByRingOut: true, winBySpinOut: true, accelerationScale: 1.45, topSpeedScale: 1.45, airControl: 1, jumpStaminaCost: 0, jumpCooldownS: 0,
         // Item 11 (owner, 2026-10-04): faster = more damage; a Dash keeps its speed.
         speedDamageGain: 0.5, dashCarriesSpeed: true,
+        // Owner, 2026-10-04: 45% faster, turns that keep speed, one jump rule; the funnel 7 m deep (above).
+        turnRateScale: 1.45, turnSpeedRetention: 0.85, jumpHoldForFullS: 0.12,
       },
       visual: { intensity: 1, groundWaves: 1, dust: 1 },
       seedText: null,
