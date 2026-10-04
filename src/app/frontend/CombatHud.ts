@@ -280,9 +280,15 @@ export class CombatHud {
 
   private updateRecoverAlert(session: MatchSession, camera: THREE.PerspectiveCamera): void {
     const bey = session.getBey('first');
-    const show = session.getLastResult()?.first.grounded === false && bey.dodge.canAirRecoverNow();
+    // Owner, 2026-10-04: the recovery spends the dodge. While launched with the dodge still recharging the alert shows
+    // greyed, its border filling as the dodge recharges — pressing then does nothing, and now that reads on screen.
+    const launched = session.getLastResult()?.first.grounded === false && bey.dodge.isAirRecoveryAvailable();
+    const ready = launched && bey.dodge.canAirRecoverNow();
+    const show = launched;
     this.recoverAlert.classList.toggle('is-on', show);
+    this.recoverAlert.classList.toggle('is-wait', show && !ready);
     if (!show) return;
+    this.recoverAlert.style.setProperty('--cb-recover-fill', `${Math.round(bey.dodge.getReadiness() * 100)}%`);
     this.recoverAlert.textContent = readFirstGamepad(currentGamepads()) !== null ? 'B' : 'C';
     const p = bey.body.translation();
     const ndc = this.projected.set(p.x, p.y + 1.6, p.z).project(camera);
@@ -370,6 +376,7 @@ function injectHudStyle(): void {
     @keyframes cb-hud-break { 0% { opacity: 1; background: rgba(255, 255, 255, 0.85); } 12% { background: rgba(255, 255, 255, 0); } 80% { opacity: 1; } 100% { opacity: 0; background: rgba(255, 255, 255, 0); } }
     .cb-hud__recover { position: absolute; transform: translate(-50%, -100%); min-width: 46px; padding: 6px 12px; text-align: center; font: 900 30px/1 var(--cb-font); color: #10131a; background: #ffffff; border-radius: 8px; box-shadow: 0 0 22px rgba(255, 255, 255, 0.85); opacity: 0; pointer-events: none; }
     .cb-hud__recover.is-on { opacity: 1; animation: cb-hud-recover 0.35s ease-in-out infinite alternate; }
+    .cb-hud__recover.is-on.is-wait { animation: none; opacity: 0.75; color: #c9cfdb; background: linear-gradient(90deg, #4a8bd6 var(--cb-recover-fill, 0%), #2a2f3a var(--cb-recover-fill, 0%)); box-shadow: none; }
     @keyframes cb-hud-recover { from { transform: translate(-50%, -100%) scale(1); } to { transform: translate(-50%, -100%) scale(1.18); } }
     .cb-hud__drift { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); font: 900 22px/1 var(--cb-font); letter-spacing: 0.3em; padding: 6px 14px; border-radius: 4px; opacity: 0; transition: opacity 90ms linear; }
     .cb-hud__drift.is-drifting { opacity: 1; color: #1a1206; background: #ffcf4a; box-shadow: 0 0 18px rgba(255, 207, 74, 0.6); }
