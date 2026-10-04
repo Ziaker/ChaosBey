@@ -32,6 +32,7 @@ export const MECHANISM_BASELINE: Partial<MatchConfig> = {
   accelerationScale: 1,
   turnRateScale: 1,
   turnSpeedRetention: 0,
+  highSpeedControl: 0,
   momentumGain: 1,
   gravityScale: 1,
   contactRepelMps: 0,

@@ -102,6 +102,8 @@ export interface MatchConfig {
   gravityScale: number;
   /** Owner, 2026-10-04: multiplier on every Bey's turn rate (×1.45 default). Pregame slider. */
   turnRateScale: number;
+  /** Owner, 2026-10-04: 0..1 — 1 = steering control does not fall as the Bey gets faster (0 = the old slip at speed). Pregame slider. */
+  highSpeedControl: number;
   /** Owner, 2026-10-04: 0..1 share of the speed a turn would lose that is kept (0 = the old turns). Pregame slider. */
   turnSpeedRetention: number;
   topSpeedScale: number;
@@ -128,7 +130,7 @@ export interface MatchConfig {
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'turnRateScale' | 'turnSpeedRetention' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -149,6 +151,7 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     contactRepelMps: config.contactRepelMps,
     attackRecoilMps: config.attackRecoilMps,
     turnSpeedRetention: config.turnSpeedRetention,
+    highSpeedControl: config.highSpeedControl,
     topSpeedScale: config.topSpeedScale,
     airControl: config.airControl,
     jumpStaminaCost: config.jumpStaminaCost,
@@ -191,6 +194,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     contactRepelMps: CONTACT_REPEL_DEFAULT_MPS,
     attackRecoilMps: ATTACK_RECOIL_DEFAULT_MPS,
     turnSpeedRetention: TURN_SPEED_RETENTION_DEFAULT,
+    highSpeedControl: 1,
     airControl: 1,
     jumpStaminaCost: 0,
     jumpCooldownS: 0,
