@@ -94,6 +94,8 @@ export interface MatchConfig {
   winBySpinOut: boolean;
   /** Multipliers on every Bey's acceleration, top speed and in-air steering grip (1 = as designed). */
   accelerationScale: number;
+  /** Owner, 2026-10-04: stage size, × the 36 m floor radius (1 = as designed). Pregame slider. */
+  arenaSizeScale: number;
   /** Owner, 2026-10-04 ("qualquer toque devia jogar os beys longe um do outro"): every contact pushes both Beys apart at least this fast (m/s). Pregame slider. */
   contactRepelMps: number;
   /** Owner, 2026-10-04 ("o recoil deve ser alto também, que nem na vida real"): an attack that lands throws its attacker back this fast (m/s); the defender at least 1.5× the contact repel. Pregame slider. */
@@ -192,6 +194,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     turnRateScale: SPEED_FEEL_SCALE_DEFAULT,
     gravityScale: GRAVITY_SCALE_DEFAULT,
     contactRepelMps: CONTACT_REPEL_DEFAULT_MPS,
+    arenaSizeScale: 1,
     attackRecoilMps: ATTACK_RECOIL_DEFAULT_MPS,
     turnSpeedRetention: TURN_SPEED_RETENTION_DEFAULT,
     highSpeedControl: 1,
@@ -244,7 +247,7 @@ export function resolveMatchConfig(overrides: Partial<MatchConfig> = {}): MatchC
 /** The arena values of a resolved config, in the shape the arena builder takes. */
 export function arenaGeometryOf(config: MatchConfig): ArenaGeometry {
   // A config without a floor predates floors: flat (as MatchSession and replay playback read it too).
-  return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution, floor: config.arenaFloor ?? 'flat', floorDepthM: config.arenaBowlDepthM ?? BOWL_DEPTH_M };
+  return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution, floor: config.arenaFloor ?? 'flat', floorDepthM: config.arenaBowlDepthM ?? BOWL_DEPTH_M, sizeScale: config.arenaSizeScale ?? 1 };
 }
 
 /** Slider ranges for the Lote 9 rules (owner, 2026-10-02). PROVISIONAL. */
@@ -262,6 +265,7 @@ export const GRAVITY_SCALE_RANGE = { min: 1, max: 5, step: 0.1 } as const;
 export const CONTACT_REPEL_DEFAULT_MPS = 9;
 export const ATTACK_RECOIL_DEFAULT_MPS = 10;
 export const IMPACT_PUSH_RANGE = { min: 0, max: 25, step: 0.5 } as const;
+export const ARENA_SIZE_SCALE_RANGE = { min: 0.5, max: 2.5, step: 0.05 } as const;
 /** Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade" — share of the speed a turn would scrub off that is kept. PROVISIONAL 0.85. */
 export const TURN_SPEED_RETENTION_DEFAULT = 0.85;
 export const TURN_SPEED_RETENTION_RANGE = { min: 0, max: 1, step: 0.05 } as const;

@@ -53,6 +53,8 @@ export interface ArenaGeometry {
   readonly floor?: ArenaFloorId;
   /** Lote 9 (item 3): bowl depth (m, rim above centre). Omitted = BOWL_DEPTH_M (2.5 m). */
   readonly floorDepthM?: number;
+  /** Owner, 2026-10-04: stage size, × the 36 m floor radius. Omitted = 1. */
+  readonly sizeScale?: number;
 }
 
 export interface ArenaPreset {

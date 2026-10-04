@@ -1,3 +1,4 @@
+import { ARENA_FLOOR_RADIUS, arenaFloorRadius } from '../colliders/ArenaTuning';
 // ============================================================
 // RING-OUT — GAMEPLAY TUNING
 // GDD section 130: ring-out detection must stay separate from the wall
@@ -39,3 +40,8 @@ export const RING_OUT_DELAY_RANGE = { min: 0, max: 3, step: 0.25 } as const;
 // floor's edge) has fallen off the arena and counts as outside whatever its
 // radius: it can never climb back.
 export const RING_OUT_FALLEN_BELOW_RIM_M = 1;
+
+/** The ring-out radius for the match's stage size: the same margin outside the floor edge at any size. */
+export function ringOutRadiusM(): number {
+  return RINGOUT_RADIUS_M + arenaFloorRadius() - ARENA_FLOOR_RADIUS;
+}

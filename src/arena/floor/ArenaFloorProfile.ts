@@ -27,7 +27,7 @@
 // the rim (approval §2.3).
 // ============================================================
 
-import { ARENA_FLOOR_RADIUS } from '../colliders/ArenaTuning';
+import { ARENA_FLOOR_RADIUS, arenaSizeScale } from '../colliders/ArenaTuning';
 
 export type ArenaFloorId = 'flat' | 'bowl-a' | 'bowl-b' | 'bowl-c';
 
@@ -129,12 +129,13 @@ function depthScale(floor: ArenaFloor): number {
 
 /** Floor height (m) at distance r from the centre, depth included. */
 export function floorHeightAtRadius(floor: ArenaFloor, r: number): number {
-  return ARENA_FLOORS[floorIdOf(floor)].heightAtRadius(r) * depthScale(floor);
+  // Owner, 2026-10-04: the profile is drawn for the 36 m floor; a bigger/smaller stage stretches it to its own radius.
+  return ARENA_FLOORS[floorIdOf(floor)].heightAtRadius(r / arenaSizeScale()) * depthScale(floor);
 }
 
 /** dh/dr at r, depth included. */
 export function floorSlopeAtRadius(floor: ArenaFloor, r: number): number {
-  return ARENA_FLOORS[floorIdOf(floor)].slopeAtRadius(r) * depthScale(floor);
+  return (ARENA_FLOORS[floorIdOf(floor)].slopeAtRadius(r / arenaSizeScale()) / arenaSizeScale()) * depthScale(floor);
 }
 
 /** Floor height under (x, z). Past the floor edge it is the rim height (the wall sits there). */
@@ -144,7 +145,7 @@ export function floorHeightAt(floor: ArenaFloor, x: number, z: number): number {
 
 /** Height of the rim (the floor at its edge) above the centre: 0 flat, the depth (2.5 m default) for a bowl. */
 export function floorRimHeight(floor: ArenaFloor): number {
-  return floorHeightAtRadius(floor, R);
+  return floorHeightAtRadius(floor, R * arenaSizeScale());
 }
 
 /** Unit floor normal under (x, z) (points up and toward the centre on a slope). */

@@ -24,7 +24,7 @@ import { DodgeState } from '../../dodge/DodgeController';
 import { DriftState } from '../../drift/DriftController';
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { add, dot, fromYaw, length, normalize, perpendicular, scale, signedAngleBetween, subtract, type Vec2 } from '../../physics/Vec2';
-import { RINGOUT_RADIUS_M } from '../../arena/ringout/RingOutTuning';
+import { ringOutRadiusM } from '../../arena/ringout/RingOutTuning';
 import type { AiPersonality } from '../personalities/AiPersonality';
 import { AI_CIRCULAR_ATTACK_RANGE_M, AI_COUNTER_MAX_LEAD_S, AI_COUNTER_MIN_CLOSING_SPEED_MPS, AI_DASH_ATTACK_MAX_RANGE_M } from './AiCombatRanges';
 import { AiIntent } from './Intent';
@@ -207,7 +207,7 @@ function edgePressurePlan(world: WorldState): EdgePressurePlan | null {
  */
 export function circleDirection(world: WorldState, personality: AiPersonality, circleSign: 1 | -1): Vec2 {
   const sideways = scale(perpendicular(world.directionToOpponent), circleSign);
-  const radiusFraction = Math.max(0, Math.min(1, 1 - world.own.distanceToEdgeM / RINGOUT_RADIUS_M));
+  const radiusFraction = Math.max(0, Math.min(1, 1 - world.own.distanceToEdgeM / ringOutRadiusM()));
   const inwardWeight = personality.centerControl * radiusFraction * CIRCLE_CENTER_PULL;
   if (inwardWeight <= 0 || length(sideways) === 0) return sideways;
   return normalize(add(sideways, scale(world.own.directionTowardCenter, inwardWeight)));

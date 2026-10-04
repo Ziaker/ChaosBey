@@ -56,7 +56,7 @@ import { ConditionVisualsSystem, normalizeConditionLayers } from '../../vfx/cond
 import { HybridVfxSystem } from '../../vfx/hybrid/HybridVfxSystem';
 import { ClashPresentationSystem, clashDustHexFor } from '../../vfx/clash/ClashPresentationSystem';
 import { ArenaVisualsSystem } from '../../arena/visual/ArenaVisualsSystem';
-import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
+import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
 import type { LanguageId } from '../../vfx/condition/types';
 import { HeadingArrow } from '../../vfx/HeadingArrow';
 import { DriftVfx } from '../../vfx/DriftVfx';
@@ -389,7 +389,7 @@ export class MatchSession {
         },
         floorHeightAtR: (r) => floorAt(r, 0),
         arenaSparks: [theme.sparkHotHex, theme.sparkCoolHex],
-        arenaRadiusM: ARENA_FLOOR_RADIUS,
+        arenaRadiusM: arenaFloorRadius(),
         vfx: options.vfx,
       });
       this.presentation.attach(this.hybridVfx);
