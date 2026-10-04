@@ -33,7 +33,7 @@ import { BEY_ROSTER, rosterEntry } from './beyRoster';
 import { button, el, ensureFrontendStyle, keyHint } from './frontendStyle';
 import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
-import { CLASH_IMPACT_RANGE, changedRuleLines, defaultMatchRules, matchupLines, normalizeSeedText, RING_OUT_OFF_TIME_LIMIT_S, sanitizeMatchRules, withArenaFloor, withArenaPreset, type MatchRules, type MatchSetup } from './matchSetup';
+import { CLASH_IMPACT_RANGE, changedRuleLines, deleteRuleConfig, loadRuleConfigs, saveRuleConfig, withRuleConfig, defaultMatchRules, matchupLines, normalizeSeedText, RING_OUT_OFF_TIME_LIMIT_S, sanitizeMatchRules, withArenaFloor, withArenaPreset, type MatchRules, type MatchSetup } from './matchSetup';
 import { ACCELERATION_SCALE_RANGE, AIR_CONTROL_RANGE, ARENA_BOWL_DEPTH_RANGE, JUMP_COOLDOWN_RANGE, JUMP_STAMINA_COST_RANGE, ROUND_TIME_LIMIT_RANGE, TOP_SPEED_SCALE_RANGE, GRAVITY_SCALE_RANGE, IMPACT_PUSH_RANGE, TURN_RATE_SCALE_RANGE, TURN_SPEED_RETENTION_RANGE } from '../../config/match/MatchConfig';
 import { DEFAULT_VFX_OPTIONS, VFX_DUST_RANGE, VFX_GROUND_WAVES_RANGE, VFX_INTENSITY_RANGE, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
@@ -345,11 +345,47 @@ export class PregameScreen {
     const seedNote = el('p', 'cb-hint');
     seedNote.textContent = 'Same seed, same inputs, same match. Leave blank for a new one every time.';
 
-    details.append(seedRow, seedNote, reset);
+    details.append(seedRow, seedNote, reset, this.savedConfigsRow());
     return details;
   }
 
   /** Lote 9: every advanced rule, the arena's walls, Clash impact and the visual options back to their defaults (Bey, AI, arena look, floor profile, rounds and seed stay). */
+  /** Owner, 2026-10-04: save the Advanced rules under a name, and load or delete a saved one. */
+  private savedConfigsRow(): HTMLElement {
+    const row = el('div', 'cb-pregame__row cb-pregame__saved', 'pregame-saved-configs');
+    const label = el('span', 'cb-field-label');
+    label.textContent = 'Saved rules';
+    const select = el('select', 'cb-pregame__select', 'pregame-saved-select');
+    const refill = (selected?: string): void => {
+      const names = Object.keys(loadRuleConfigs()).sort();
+      select.replaceChildren(...(names.length ? names : ['(none saved)']).map((n) => {
+        const option = el('option');
+        option.value = names.length ? n : '';
+        option.textContent = n;
+        return option;
+      }));
+      if (selected) select.value = selected;
+    };
+    const save = button('Save…', '', 'pregame-save-config', () => {
+      const name = window.prompt('Name for these rules:', select.value || 'My rules')?.trim();
+      if (!name) return;
+      saveRuleConfig(name, this.setup);
+      refill(name);
+    });
+    const load = button('Load', '', 'pregame-load-config', () => {
+      const saved = loadRuleConfigs()[select.value];
+      if (saved) this.update(withRuleConfig(this.setup, saved));
+    });
+    const remove = button('Delete', '', 'pregame-delete-config', () => {
+      if (!select.value) return;
+      deleteRuleConfig(select.value);
+      refill();
+    });
+    refill();
+    row.append(label, select, save, load, remove);
+    return row;
+  }
+
   private resetAdvanced(): void {
     const preset = arenaPreset(this.setup.arena.presetId).geometry;
     this.update({

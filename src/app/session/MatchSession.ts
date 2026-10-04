@@ -149,6 +149,12 @@ const DEFAULT_RENDER_VIEW: SessionRenderView = { cameraView: 'game', cameraEffec
 const OVERVIEW_CAMERA_POSITION_M = { x: 0, y: 30, z: 20 } as const;
 const OVERVIEW_CAMERA_FOV_DEG = 55;
 
+/** Owner, 2026-10-04: air tumble tuning (visual only). PROVISIONAL. */
+const TUMBLE_MIN_LAUNCH_UP_MPS = 5;
+const TUMBLE_BASE_RATE_RAD_S = 8;
+const TUMBLE_MAX_RATE_RAD_S = 22;
+const TUMBLE_AXIS_SWING_RAD_S = 2.4;
+
 export class MatchSession {
   readonly matchId: string;
   readonly seedText: string;
@@ -279,6 +285,40 @@ export class MatchSession {
   private lastVelocity: Record<Side, { x: number; y: number; z: number }>;
   private lastAcceleration: Record<Side, { x: number; y: number; z: number }> = { first: zero3(), second: zero3() };
   private lastVisual: Record<Side, BeyVisualPose> = { first: REST_VISUAL_POSE, second: REST_VISUAL_POSE };
+  /** Owner, 2026-10-04: air tumble per Bey (presentation only, never read by gameplay). */
+  private readonly tumble: Record<Side, { active: boolean; angle: number; axis: { x: number; z: number }; rate: number }> = {
+    first: { active: false, angle: 0, axis: { x: 1, z: 0 }, rate: 0 },
+    second: { active: false, angle: 0, axis: { x: 1, z: 0 }, rate: 0 },
+  };
+
+  /**
+   * Owner, 2026-10-04: "faça os beys rotacionarem em múltiplos ângulos quando são lançados muito alto". A launch (Air
+   * Recovery open) with a strong upward speed starts a tumble about a horizontal axis that itself swings round, so the
+   * Bey turns over on several angles; it stops on landing and eases back upright. Visual only.
+   */
+  private stepTumble(side: Side, grounded: boolean): { angle: number; axis: { x: number; z: number } } {
+    const t = this.tumble[side];
+    const bey = this.getBey(side);
+    const v = bey.body.linvel();
+    const dt = FIXED_DELTA_SECONDS;
+    if (!t.active && !grounded && v.y > TUMBLE_MIN_LAUNCH_UP_MPS && bey.dodge.isAirRecoveryAvailable()) {
+      const h = Math.hypot(v.x, v.z);
+      t.active = true;
+      t.axis = h > 0.5 ? { x: v.z / h, z: -v.x / h } : { x: 1, z: 0 };
+      t.rate = Math.min(TUMBLE_MAX_RATE_RAD_S, TUMBLE_BASE_RATE_RAD_S + Math.hypot(v.x, v.y, v.z) * 0.35);
+    }
+    if (t.active && !grounded) {
+      t.angle += t.rate * dt;
+      const swing = TUMBLE_AXIS_SWING_RAD_S * dt;
+      t.axis = { x: t.axis.x * Math.cos(swing) - t.axis.z * Math.sin(swing), z: t.axis.x * Math.sin(swing) + t.axis.z * Math.cos(swing) };
+    } else {
+      t.active = false;
+      // Back upright: the nearest full turn, quickly.
+      const wrapped = Math.atan2(Math.sin(t.angle), Math.cos(t.angle));
+      t.angle = Math.abs(wrapped) < 0.01 ? 0 : wrapped * 0.6;
+    }
+    return { angle: t.angle, axis: t.axis };
+  }
   private disposed = false;
 
   private constructor(options: MatchSessionOptions, physics: PhysicsWorld) {
@@ -665,8 +705,8 @@ export class MatchSession {
     }
 
     this.lastVisual = {
-      first: { spin: result.first.spin.visualSpinAngleRad, wobble: result.first.spin.wobbleOffsetRad, lean: result.first.spin.lean },
-      second: { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad, lean: result.second.spin.lean },
+      first: { spin: result.first.spin.visualSpinAngleRad, wobble: result.first.spin.wobbleOffsetRad, lean: result.first.spin.lean, tumble: this.stepTumble('first', result.first.grounded) },
+      second: { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad, lean: result.second.spin.lean, tumble: this.stepTumble('second', result.second.grounded) },
     };
 
     this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents.clashStarted);

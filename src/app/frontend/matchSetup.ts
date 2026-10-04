@@ -310,3 +310,70 @@ export function changedRuleLines(setup: MatchSetup): string[] {
   const rules = setup.rules ?? defaults;
   return MATCH_RULE_KEYS.filter((key) => rules[key] !== defaults[key]).map((key) => `${RULE_SUMMARY[key].name} ${RULE_SUMMARY[key].format(rules[key])}`);
 }
+
+// ============================================================
+// Saved rule configurations (owner, 2026-10-04: "adicione a opção de salvar configuração de regras avançadas").
+// Named snapshots of the Advanced rules (gameplay rules, walls, Clash impact, visual options), kept in this browser.
+// Loading one runs it through the same checks as the remembered setup, so an old save can't break the Pregame.
+// ============================================================
+
+const RULE_PRESETS_KEY = 'chaosbey.pregame.rulePresets.v1';
+
+export interface SavedRuleConfig {
+  readonly rules: MatchRules;
+  readonly visual: VfxOptions;
+  readonly clashImpactMultiplier: number;
+  readonly walls: { readonly wallHeightM: number; readonly wallRestitution: number };
+}
+
+export function loadRuleConfigs(storage: Pick<Storage, 'getItem'> | null = safeStorage()): Record<string, SavedRuleConfig> {
+  try {
+    const text = storage?.getItem(RULE_PRESETS_KEY);
+    const raw = text ? (JSON.parse(text) as unknown) : null;
+    return raw && typeof raw === 'object' ? (raw as Record<string, SavedRuleConfig>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveRuleConfig(name: string, setup: MatchSetup, storage: Pick<Storage, 'getItem' | 'setItem'> | null = safeStorage()): void {
+  const all = loadRuleConfigs(storage);
+  all[name] = { rules: setup.rules, visual: setup.visual, clashImpactMultiplier: setup.clashImpactMultiplier, walls: { wallHeightM: setup.arena.geometry.wallHeightM, wallRestitution: setup.arena.geometry.wallRestitution } };
+  try {
+    storage?.setItem(RULE_PRESETS_KEY, JSON.stringify(all));
+  } catch {
+    // Storage blocked: nothing is saved.
+  }
+}
+
+export function deleteRuleConfig(name: string, storage: Pick<Storage, 'getItem' | 'setItem'> | null = safeStorage()): void {
+  const all = loadRuleConfigs(storage);
+  delete all[name];
+  try {
+    storage?.setItem(RULE_PRESETS_KEY, JSON.stringify(all));
+  } catch {
+    // Storage blocked.
+  }
+}
+
+/** The setup with a saved configuration applied (validated field by field against today's rules). */
+export function withRuleConfig(setup: MatchSetup, saved: SavedRuleConfig): MatchSetup {
+  const rules: Record<string, unknown> = { ...defaultMatchRules() };
+  for (const key of MATCH_RULE_KEYS) {
+    const value = (saved.rules as Record<string, unknown> | undefined)?.[key];
+    if (typeof value === typeof rules[key] && (typeof value !== 'number' || Number.isFinite(value))) rules[key] = value;
+  }
+  const visual: Record<string, unknown> = { ...DEFAULT_VFX_OPTIONS };
+  for (const key of Object.keys(DEFAULT_VFX_OPTIONS)) {
+    const value = (saved.visual as unknown as Record<string, unknown> | undefined)?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) visual[key] = value;
+  }
+  const num = (v: unknown, fallback: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+  return {
+    ...setup,
+    rules: sanitizeMatchRules(rules as unknown as MatchRules),
+    visual: visual as unknown as VfxOptions,
+    clashImpactMultiplier: num(saved.clashImpactMultiplier, setup.clashImpactMultiplier),
+    arena: { ...setup.arena, geometry: { ...setup.arena.geometry, wallHeightM: num(saved.walls?.wallHeightM, setup.arena.geometry.wallHeightM), wallRestitution: num(saved.walls?.wallRestitution, setup.arena.geometry.wallRestitution) } },
+  };
+}
