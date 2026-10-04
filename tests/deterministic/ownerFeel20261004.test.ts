@@ -33,8 +33,8 @@ async function jumpApex(holdTicks: number, extra: Action[] = [], runUpTicks = 0)
 describe('jump: one rule decides the height (owner, 2026-10-04)', () => {
   it('a tap is always the short hop and a hold is always the full jump, whatever the exact timing', async () => {
     const full = createDefaultMatchConfig().jumpFullHeightM;
-    for (const tap of [1, 3, 6]) expect(await jumpApex(tap)).toBeLessThan(0.4);
-    for (const hold of [9, 15, 40]) expect(Math.abs((await jumpApex(hold)) - full)).toBeLessThan(0.15);
+    for (const tap of [1, 3, 6, 9]) expect(await jumpApex(tap)).toBeLessThan(0.4); // up to 150 ms: a normal key tap
+    for (const hold of [13, 20, 40]) expect(Math.abs((await jumpApex(hold)) - full)).toBeLessThan(0.15);
   });
 
   it('steering never changes the height: held = full jump, tap = short hop, moving straight or turning', async () => {

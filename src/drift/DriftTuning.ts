@@ -160,5 +160,8 @@ export const LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS = 10;
  * X always starts a short hop at once; still held this long after the press = it becomes the full jump (fixed height).
  * Released before = the short hop. Steering never changes the height. Pregame slider; PROVISIONAL 0.12 s.
  */
-export const JUMP_HOLD_FOR_FULL_DEFAULT_S = 0.12;
-export const JUMP_HOLD_FOR_FULL_RANGE = { min: 0.05, max: 0.3, step: 0.01 } as const;
+// 0.12 → 0.2 s (owner, 2026-10-04, after playtesting 0.27.0: "nunca vai ajeitar o problema dos pulos"): a normal key
+// tap lasts ~80–150 ms, right across 0.12 s, so the same gesture came out a hop one time and a full jump the next.
+// 0.2 s leaves a clear gap between a tap and a deliberate hold. PROVISIONAL.
+export const JUMP_HOLD_FOR_FULL_DEFAULT_S = 0.2;
+export const JUMP_HOLD_FOR_FULL_RANGE = { min: 0.08, max: 0.4, step: 0.01 } as const;
