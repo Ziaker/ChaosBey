@@ -6,6 +6,9 @@
 // reaches into another system's internals through it.
 // ============================================================
 
+import { BEY_MATERIAL, FLOOR_MATERIAL } from '../../physics/materials/PhysicsMaterials';
+import { GRAVITY_Y } from '../../physics/world/PhysicsWorld';
+import type { ThrustCalibration } from '../movement/MovementController';
 import { JUMP_SHORT_HOP_TARGET_APEX_M } from '../../drift/DriftTuning';
 import { DODGE_STAMINA_COST } from '../../dodge/DodgeTuning';
 import type RAPIER from '@dimforge/rapier3d-compat';
@@ -71,7 +74,7 @@ export function createBey(
     momentumDecayS: 2, momentumLossOnCollision: 0.5, jumpShortHopHeightM: JUMP_SHORT_HOP_TARGET_APEX_M, movementStaminaDrain: 1, dodgeCooldownS: 3, airControl: 1, dodgeStaminaCost: DODGE_STAMINA_COST, dodgeDistanceScale: 1, contactLiftMps: 0, knockbackScale: 1, spinStaminaDrain: 1, circularLockAfterHitS: 0, bodyContactControlLossScale: 1 };
   const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical, motion);
   const stats = resolveBeyStats(definition.ratings);
-  const movement = new MovementController(definition.handling, motion, { acceleration: rules.accelerationScale ?? 1, topSpeed: rules.topSpeedScale ?? 1, airControl: rules.airControl ?? 1, turnRate: rules.turnRateScale ?? 1, turnSpeedRetention: rules.turnSpeedRetention ?? 0, highSpeedControl: rules.highSpeedControl ?? 0 });
+  const movement = new MovementController(definition.handling, motion, { acceleration: rules.accelerationScale ?? 1, topSpeed: rules.topSpeedScale ?? 1, airControl: rules.airControl ?? 1, turnRate: rules.turnRateScale ?? 1, turnSpeedRetention: rules.turnSpeedRetention ?? 0, highSpeedControl: rules.highSpeedControl ?? 0, thrustCalibration: thrustCalibrationFor(matchRules) });
   return {
     definition,
     stats,
@@ -90,4 +93,15 @@ export function createBey(
     arenaFloor,
     motion,
   };
+}
+
+/** Owner, 2026-10-04: the floor friction's share of a match Bey's thrust (see ThrustCalibration). +20% net. */
+const THRUST_NET_BOOST = 1.2;
+
+function thrustCalibrationFor(matchRules: BeyMatchRules | undefined): ThrustCalibration | undefined {
+  const gravityScale = matchRules?.gravityScale ?? 1;
+  if (!(gravityScale > 1)) return undefined;
+  // Rapier averages the two coefficients (Bey, floor); friction deceleration = μ × g.
+  const brakeAtX1 = ((BEY_MATERIAL.friction + FLOOR_MATERIAL.friction) / 2) * Math.abs(GRAVITY_Y);
+  return { oldBrakeMps2: brakeAtX1 * gravityScale, newBrakeMps2: brakeAtX1, netBoost: THRUST_NET_BOOST };
 }

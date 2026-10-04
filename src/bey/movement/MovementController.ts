@@ -115,7 +115,23 @@ export interface MovementSnapshot {
 const NUMERICAL_SPEED_CLAMP_MPS = 60;
 
 /** Speed lost per radian of curve at 0% kept (× (1 − turnSpeedRetention)). PROVISIONAL. */
-const TURN_LOSS_PER_RAD = 0.5;
+const TURN_LOSS_PER_RAD = 0.15;
+
+/**
+ * Owner, 2026-10-04. The ×3.6 gravity had also multiplied the floor friction: a hidden brake every Bey's thrust was
+ * tuned against (Acceleration ×1.9 felt the way it did because ~19 m/s² of it was being eaten), and that bled the
+ * speed in every curve. The friction is now as at ×1 (PhysicsWorld.frictionScale); this keeps the straight-line
+ * acceleration the owner tuned — the thrust minus the old brake, ×`netBoost` (+20%: "no mínimo 20% mais rápido") —
+ * while a curve no longer pays the brake. Grounded only (the air never had floor friction).
+ */
+export interface ThrustCalibration {
+  /** The floor friction deceleration the old tuning included (m/s²). */
+  readonly oldBrakeMps2: number;
+  /** The floor friction deceleration that remains (m/s²). */
+  readonly newBrakeMps2: number;
+  /** × the old net straight-line acceleration. */
+  readonly netBoost: number;
+}
 
 export class MovementController {
   private headingRad = 0;
@@ -151,16 +167,18 @@ export class MovementController {
   private readonly turnSpeedRetention: number;
   /** Owner, 2026-10-04 (MatchConfig.highSpeedControl): 1 = control does not fall with speed (no slip loss, grip scales with speed). */
   private readonly highSpeedControl: number;
+  private readonly thrustCalibration: ThrustCalibration | null;
 
   constructor(
     handling: BeyHandlingProfile = DEFAULT_HANDLING_PROFILE,
     private readonly motion: MotionParams = motionParams(),
     /** Owner, 2026-10-02 (Lote 9 / GDD 12): the match's acceleration, top speed and air control multipliers (1 = as designed). */
-    scales: { readonly acceleration: number; readonly topSpeed: number; readonly airControl: number; readonly turnRate?: number; readonly turnSpeedRetention?: number; readonly highSpeedControl?: number } = { acceleration: 1, topSpeed: 1, airControl: 1 },
+    scales: { readonly acceleration: number; readonly topSpeed: number; readonly airControl: number; readonly turnRate?: number; readonly turnSpeedRetention?: number; readonly highSpeedControl?: number; readonly thrustCalibration?: ThrustCalibration } = { acceleration: 1, topSpeed: 1, airControl: 1 },
   ) {
     this.airControl = scales.airControl;
     this.turnSpeedRetention = Math.max(0, Math.min(1, scales.turnSpeedRetention ?? 0));
     this.highSpeedControl = Math.max(0, Math.min(1, scales.highSpeedControl ?? 0));
+    this.thrustCalibration = scales.thrustCalibration ?? null;
     this.handling = {
       ...handling,
       accelerationMps2: handling.accelerationMps2 * motionRatio(motion, 'accel') * scales.acceleration,
@@ -180,6 +198,13 @@ export class MovementController {
 
   /** Current heading, live (not lagged behind a snapshot) — for consumers like AttackController's lock-on that need it mid-tick, before this tick's postStep(). */
   /** The handling's top speed (m/s, motion direction included), before momentum. */
+  /** Forward thrust (m/s²) after the friction calibration (see ThrustCalibration); never below a quarter of the raw. */
+  private groundThrust(rawMps2: number, grounded: boolean): number {
+    const c = this.thrustCalibration;
+    if (!c || !grounded) return rawMps2;
+    return Math.max(0.25 * rawMps2, (rawMps2 - c.oldBrakeMps2) * c.netBoost + c.newBrakeMps2);
+  }
+
   getMaxSpeedMps(): number {
     return this.handling.maxSpeedMps;
   }
@@ -337,7 +362,7 @@ export class MovementController {
       newLongitudinalSpeed = longitudinalSpeed;
       if (throttleInput > 0) {
         if (newLongitudinalSpeed < maxSpeed) {
-          newLongitudinalSpeed = Math.min(maxSpeed, newLongitudinalSpeed + this.handling.accelerationMps2 * accelFactor * fixedDeltaSeconds * throttleScale);
+          newLongitudinalSpeed = Math.min(maxSpeed, newLongitudinalSpeed + this.groundThrust(this.handling.accelerationMps2 * accelFactor, grounded) * fixedDeltaSeconds * throttleScale);
         }
       } else if (throttleInput < 0) {
         newLongitudinalSpeed -= this.handling.reverseAccelerationMps2 * accelFactor * fixedDeltaSeconds * throttleScale;
@@ -394,7 +419,7 @@ export class MovementController {
     // Owner, 2026-10-04 ("está impossível buildar momentum com o bey perdendo velocidade a cada toquezinho que você dá
     // pra curvar"): it used to keep 90% of each TICK's loss, which compounds — a steady curve lost ~11 m/s per second.
     // Now the loss is per radian the velocity actually turns: (1 − kept) × TURN_LOSS_PER_RAD of the speed per radian
-    // (at 90%: ~8% over a 90° curve, ~16% over a U-turn), nothing at 100%.
+    // (at 90%: ~2.4% over a 90° curve, ~4.7% over a U-turn), nothing at 100%.
     if (this.turnSpeedRetention > 0 && grounded && !dashOverride && hasMovementInput) {
       const before = length(velHoriz);
       const after = length(newVelHoriz);
@@ -402,7 +427,10 @@ export class MovementController {
       if (after > 1e-6 && before > 1e-6 && after < before) {
         const cos = Math.max(-1, Math.min(1, dot(velHoriz, newVelHoriz) / (before * after)));
         const turnedRad = Math.acos(cos);
-        const allowed = before * (1 - (1 - this.turnSpeedRetention) * TURN_LOSS_PER_RAD * turnedRad);
+        // The thrust gained this tick stays on top (it used to be clipped back to the speed before the tick, so a long
+        // curve could only ever lose speed).
+        const thrustGain = Math.max(0, newLongitudinalSpeed - longitudinalSpeed);
+        const allowed = before * (1 - (1 - this.turnSpeedRetention) * TURN_LOSS_PER_RAD * turnedRad) + thrustGain;
         const kept = Math.min(Math.max(after, cap), Math.max(after, allowed));
         if (kept > after) newVelHoriz = scale(newVelHoriz, kept / after);
       }
