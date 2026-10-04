@@ -36,6 +36,9 @@ const NO_ACTIONS: ControllerActions = {
 // movement prototype it sits on top of.
 const CLOSE_FIRST_SPAWN = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: -0.75 };
 const CLOSE_SECOND_SPAWN = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0.75 };
+// These tests count hits at each attack's own damage (Break / KO bookkeeping), not how speed scales it: item 11's
+// speed → damage is off here (a Circular from a standstill would deal half, under the KO-qualifying minimum).
+const FLAT_ATTACK_DAMAGE = { speedDamageGain: 0 };
 
 function settle(harness: CombatHarness, ticks = 15): void {
   for (let i = 0; i < ticks; i++) {
@@ -144,7 +147,7 @@ describe('Dash Attack', () => {
 
 describe('Stability Break (Model C)', () => {
   it('falls with repeated hits, breaks, and only a later qualifying hit while Broken causes a KO', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN, FLAT_ATTACK_DAMAGE);
     settle(harness);
 
     // Enough taps (well beyond STABILITY_MAX / CIRCULAR_STABILITY_DAMAGE)
@@ -478,7 +481,7 @@ describe('Circular Attack catches Dash Attack', () => {
   });
 
   it('still causes a KO when the caught defender was already Broken (a qualifying hit is a qualifying hit)', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN, FLAT_ATTACK_DAMAGE);
     settle(harness);
 
     // Pre-break the defender directly (a pure system-level operation — it

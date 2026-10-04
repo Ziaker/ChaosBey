@@ -10,7 +10,7 @@
 // ============================================================
 
 import { describe, expect, it } from 'vitest';
-import { AIController } from '../../src/ai/controllers/AIController';
+import { AI_DODGE_STAMINA_RESERVE, AIController } from '../../src/ai/controllers/AIController';
 import { AiIntent } from '../../src/ai/decision/Intent';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../src/ai/difficulty/AiDifficultyProfile';
 import type { AiPersonality } from '../../src/ai/personalities/AiPersonality';
@@ -18,6 +18,8 @@ import { DEFENSE_AI_PERSONALITY } from '../../src/ai/personalities/AiArchetypePe
 import { ScriptedController } from '../../src/automation/scripted-scenarios/ScriptedController';
 import { NullAiMashSource } from '../../src/combat/clash/ClashMash';
 import { DodgeState } from '../../src/dodge/DodgeController';
+import { DODGE_STAMINA_COST } from '../../src/dodge/DodgeTuning';
+
 import { Action } from '../../src/input/actions/Action';
 import { isGrounded } from '../../src/physics/collision/GroundCheck';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
@@ -35,6 +37,8 @@ interface TickRecord {
   held: Set<Action>;
   ownDodgeState: DodgeState;
   ownGrounded: boolean;
+  /** Enough Stamina for the AI to dodge (AIController's canAffordDodge: the cost plus its reserve). */
+  ownCanAffordDodge: boolean;
   /** Launched airborne with an air-recovery window this tick — AIController drops a late reaction then (the launch is a new situation). */
   ownLaunched: boolean;
   /** Edge risk behind the decision currently in effect (AiDebugState.edgeRiskFraction). */
@@ -80,6 +84,7 @@ async function run(personality: AiPersonality, seed: string): Promise<TickRecord
       held: new Set(secondActions.held),
       ownDodgeState,
       ownGrounded,
+      ownCanAffordDodge: harness.second.stamina.resource.value >= DODGE_STAMINA_COST + AI_DODGE_STAMINA_RESERVE,
       ownLaunched,
       decisionEdgeRisk: debug.edgeRiskFraction,
     });
@@ -131,12 +136,14 @@ describe('AI "slow to react" deliberate error', () => {
       for (let t = i; t < records.length && records[t]!.activeIntent === AiIntent.DodgeThreat; t++) {
         const at = records[t]!;
         if (at.ownDodgeState !== DodgeState.Idle) break;
-        if (at.ownGrounded) {
+        if (at.ownGrounded && at.ownCanAffordDodge) {
           expect(at.pressed.has(Action.Dodge)).toBe(true);
           checked++;
           break;
         }
         expect(at.pressed.has(Action.Dodge)).toBe(false);
+        // Grounded but short of Stamina (the cost + the AI's reserve): no dodge can start here — not a late reaction.
+        if (at.ownGrounded) break;
       }
     }
     expect(checked).toBeGreaterThan(0);

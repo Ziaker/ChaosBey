@@ -23,6 +23,7 @@ import { floorNormalAt } from '../../arena/floor/ArenaFloorProfile';
 import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { detectHits, type HitEvent } from '../../combat/hit-detection/HitDetection';
+import { speedDamageMultiplier } from '../../combat/attacks/SpeedDamage';
 import { applyKnockback, computeKnockback, computeStabilityDamage, type KnockbackComponents } from '../../combat/knockback/Knockback';
 import { CIRCULAR_BASE_KNOCKBACK_FORCE, CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, CIRCULAR_LAUNCH_HORIZONTAL_MPS, CIRCULAR_STABILITY_DAMAGE } from '../../combat/attacks/AttackTuning';
 import {
@@ -253,6 +254,7 @@ export function tickMatch(
     positionXZ(first.body),
     positionXZ(second.body),
     fixedDeltaSeconds,
+    length(horizontalVelocity(first.body)),
   );
   const secondAttack = second.attack.tick(
     secondActions,
@@ -260,6 +262,7 @@ export function tickMatch(
     positionXZ(second.body),
     positionXZ(first.body),
     fixedDeltaSeconds,
+    length(horizontalVelocity(second.body)),
   );
 
   const firstCondition = first.stamina.getPhysicalCondition();
@@ -378,6 +381,15 @@ export function tickMatch(
   // firstKoed/secondKoed, so a Circular Attack catching a Dash Attack could
   // deal qualifying Stability damage to an already-Broken defender without
   // ever actually ending the round.
+  // Item 11 (owner, 2026-10-04): "quanto mais rápido, mais dano" — an attack hit's damage follows the attacker's speed
+  // going into the contact (before the solver slows it), relative to the speed the hit was tuned for.
+  const speedDamageGain = first.rules.speedDamageGain ?? 0;
+  function attackHitDamage(hit: HitEvent, attacker: Bey, defender: Bey): number {
+    const base = computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense);
+    const speedMps = length(hit.attackerIsFirst ? firstVelBefore : secondVelBefore);
+    return base * speedDamageMultiplier(speedMps, hit.hitbox.referenceSpeedMps ?? attacker.movement.getMaxSpeedMps(), speedDamageGain);
+  }
+
   function applyStabilityDamageAndTrackKo(defenderIsFirst: boolean, defender: Bey, amount: number): void {
     const { causedBreak, isQualifyingKoHit } = defender.stability.applyDamage(amount);
     combatEvents.push({ kind: 'stabilityDamage', targetIsFirst: defenderIsFirst, amount });
@@ -465,7 +477,7 @@ export function tickMatch(
       defender.body.setLinvel({ x: vel.x * keep, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z * keep }, true);
       defender.movement.registerKnockback();
       defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
-      applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense));
+      applyStabilityDamageAndTrackKo(defenderIsFirst, defender, attackHitDamage(hit, attacker, defender));
       continue;
     }
 
@@ -476,7 +488,7 @@ export function tickMatch(
       applyStabilityDamageAndTrackKo(
         defenderIsFirst,
         defender,
-        computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense),
+        attackHitDamage(hit, attacker, defender),
       );
       continue;
     }
@@ -509,13 +521,20 @@ export function tickMatch(
     applyStabilityDamageAndTrackKo(
       defenderIsFirst,
       defender,
-      computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense) * resolved.forceMultiplier,
+      attackHitDamage(hit, attacker, defender) * resolved.forceMultiplier,
     );
   }
 
   // Body collision (owner, 2026-10-02, item 9): the Beys touch with no attack connecting this tick.
   const bodyContactReach = first.definition.physical.colliderRadiusM + second.definition.physical.colliderRadiusM + BODY_COLLISION_CONTACT_SLOP_M;
   const bodiesOverlapVertically = beyBodiesOverlapVertically(firstYM, first.definition.physical.colliderHalfHeightM, secondYM, second.definition.physical.colliderHalfHeightM);
+  // Audit B5 (one collision per contact): a contact that landed as an attack hit is that contact's collision — it must
+  // not also score a body collision on the next ticks while the attacker (item 11: possibly still at full speed) keeps
+  // touching. Latched like a body collision; a real separation re-arms it below.
+  if (hitEvents.length > 0) {
+    first.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
+    second.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
+  }
   // Audit B5: a real separation (or one Bey clear above the other) re-arms the pair's next collision.
   if (!bodiesOverlapVertically || length(subtract(secondPos, firstPos)) > bodyContactReach + BODY_COLLISION_RELEASE_GAP_M) {
     first.momentum.releaseBodyContact();

@@ -47,6 +47,8 @@ export interface ActiveHitbox {
   radiusM: number;
   knockbackForce: number;
   stabilityDamage: number;
+  /** Item 11 (owner, 2026-10-04): the speed this hit's damage is tuned for (a Dash's speed for its charge); absent = the attacker's top speed. */
+  referenceSpeedMps?: number;
 }
 
 export interface AttackTickResult {
@@ -97,11 +99,15 @@ export class AttackController {
    * Dash is allowed.
    */
   private heldSinceRecoveryPressS: number | null = null;
+  /** Item 11: the Bey's speed when the current Dash fired (0 unless dashCarriesSpeed). */
+  private dashEntrySpeedMps = 0;
 
   constructor(
     private readonly profile: BeyAttackProfile = DEFAULT_ATTACK_PROFILE,
     /** MatchConfig.dashCooldownS. */
     private readonly dashCooldownS: number = DASH_COOLDOWN_DEFAULT_S,
+    /** MatchConfig.dashCarriesSpeed (item 11): a Dash never runs slower than the Bey was going when it fired. */
+    private readonly dashCarriesSpeed: boolean = false,
   ) {}
 
   getState(): AttackState {
@@ -174,6 +180,8 @@ export class AttackController {
     ownPositionXZ: Vec2,
     opponentPositionXZ: Vec2,
     fixedDeltaSeconds: number,
+    /** The Bey's horizontal speed this tick (m/s), for dashCarriesSpeed. */
+    ownSpeedMps = 0,
   ): AttackTickResult {
     const attackHeld = actions.held.has(Action.Attack);
     let dashOverride: MovementPreStepInput['dashOverride'] = null;
@@ -207,12 +215,14 @@ export class AttackController {
           this.state = AttackState.DashActive;
           this.activeTimerS = 0;
           this.activationCount++;
+          this.dashEntrySpeedMps = this.dashCarriesSpeed ? Math.max(0, ownSpeedMps) : 0;
         }
         break;
 
       case AttackState.DashActive: {
         this.activeTimerS += fixedDeltaSeconds;
-        const speed = lerp(this.profile.dashMinSpeedMps, this.profile.dashMaxSpeedMps, this.dashChargeFraction());
+        // Item 11: the speed built up before the Dash (momentum) is kept, never thrown away.
+        const speed = Math.max(this.nominalDashSpeedMps(), this.dashEntrySpeedMps);
         const desiredHeading = headingRadToward(ownPositionXZ, opponentPositionXZ);
         const guidedHeading = turnTowardRad(ownHeadingRad, desiredHeading, DASH_LOCK_ON_MAX_TURN_RATE_RAD_S * fixedDeltaSeconds);
         dashOverride = { headingRad: guidedHeading, longitudinalSpeedMps: speed };
@@ -301,6 +311,10 @@ export class AttackController {
     }
   }
 
+  private nominalDashSpeedMps(): number {
+    return lerp(this.profile.dashMinSpeedMps, this.profile.dashMaxSpeedMps, this.dashChargeFraction());
+  }
+
   private dashChargeFraction(): number {
     return clamp01((this.chargeTimerS - DASH_MIN_CHARGE_S) / (DASH_MAX_CHARGE_S - DASH_MIN_CHARGE_S));
   }
@@ -321,6 +335,7 @@ export class AttackController {
         radiusM: this.profile.dashHitboxRadiusM,
         knockbackForce: lerp(DASH_MIN_KNOCKBACK_FORCE, DASH_MAX_KNOCKBACK_FORCE, t),
         stabilityDamage: lerp(DASH_MIN_STABILITY_DAMAGE, DASH_MAX_STABILITY_DAMAGE, t),
+        referenceSpeedMps: this.nominalDashSpeedMps(),
       };
     }
     return null;
@@ -338,6 +353,7 @@ export class AttackController {
       dashCooldownRemainingS: this.dashCooldownRemainingS,
       waitingForDash: this.waitingForDash,
       heldSinceRecoveryPressS: this.heldSinceRecoveryPressS,
+      dashEntrySpeedMps: this.dashEntrySpeedMps,
     };
   }
 }

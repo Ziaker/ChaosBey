@@ -19,6 +19,7 @@ import { STANDARD_ARENA_GEOMETRY, type ArenaGeometry } from '../../arena/presets
 import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import { RING_OUT_DELAY_DEFAULT_S } from '../../arena/ringout/RingOutTuning';
 import { DASH_COOLDOWN_DEFAULT_S } from '../../combat/attacks/AttackTuning';
+import { SPEED_DAMAGE_GAIN_DEFAULT } from '../../combat/attacks/SpeedDamage';
 import {
   BODY_COLLISION_DAMAGE_DEFAULT,
   MOMENTUM_DECAY_DEFAULT_S,
@@ -105,10 +106,17 @@ export interface MatchConfig {
    * reserved for bare Camera-Lab/prototype constructions that need the pre-2026-10-02 behavior.
    */
   defensiveCircular: boolean;
+  /**
+   * Owner, 2026-10-04 (item 11): "quanto mais rápido, mais dano". How strongly an attack hit's Stability damage follows
+   * the attacker's speed relative to the speed the hit was tuned for. 0 = off. PROVISIONAL default 0.5. Pregame slider.
+   */
+  speedDamageGain: number;
+  /** Owner, 2026-10-04 (item 11): a Dash keeps built-up entry speed instead of slowing to its nominal Dash speed. PROVISIONAL on. */
+  dashCarriesSpeed: boolean;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'defensiveCircular'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -130,6 +138,8 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     jumpCooldownS: config.jumpCooldownS,
     // Item 13 is a gameplay invariant, not a hidden config switch. Bare createBey() supplies its own legacy false rules.
     defensiveCircular: true,
+    speedDamageGain: config.speedDamageGain ?? 0,
+    dashCarriesSpeed: config.dashCarriesSpeed ?? false,
   };
 }
 
@@ -163,6 +173,8 @@ export function createDefaultMatchConfig(): MatchConfig {
     jumpStaminaCost: 0,
     jumpCooldownS: 0,
     defensiveCircular: true,
+    speedDamageGain: SPEED_DAMAGE_GAIN_DEFAULT,
+    dashCarriesSpeed: true,
   };
 }
 
