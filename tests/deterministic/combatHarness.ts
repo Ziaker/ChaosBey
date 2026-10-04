@@ -49,6 +49,7 @@ export const MECHANISM_BASELINE: Partial<MatchConfig> = {
   jumpHoldForFullS: 0.2,
   arenaFloor: 'bowl-a',
   arenaBowlDepthM: 2.5,
+  clashLaunchMps: 0,
 };
 
 export class CombatHarness extends SelfTestMatchWorld {

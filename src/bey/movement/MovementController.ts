@@ -114,6 +114,9 @@ export interface MovementSnapshot {
 /** Numerical safety clamp on horizontal speed (m/s) — not a gameplay limit (owner speed pass, 2026-10-04). */
 const NUMERICAL_SPEED_CLAMP_MPS = 60;
 
+/** The Clash loser's stun ends at the latest after this long if it never left the ground (s). PROVISIONAL. */
+const CLASH_STUN_MAX_S = 1.5;
+
 /** Speed lost per radian of curve at 0% kept (× (1 − turnSpeedRetention)). PROVISIONAL. */
 const TURN_LOSS_PER_RAD = 0.15;
 
@@ -168,6 +171,16 @@ export class MovementController {
   /** Owner, 2026-10-04 (MatchConfig.highSpeedControl): 1 = control does not fall with speed (no slip loss, grip scales with speed). */
   private readonly highSpeedControl: number;
   private readonly thrustCalibration: ThrustCalibration | null;
+  /**
+   * Owner, 2026-10-04 ("não é pra ser possível realizar nenhum movimento (no caso do perdedor) até se recuperar no
+   * ar"): the Clash loser takes no input at all — the only thing it can do is the Air Recovery — until it recovers in
+   * the air or lands again (or CLASH_STUN_MAX_S passes if it never left the ground).
+   */
+  private clashStunned = false;
+  private clashStunElapsedS = 0;
+  private clashStunLeftGround = false;
+  /** Seconds during which Attack, Dodge and Jump are ignored (the Clash winner's / a tie's recovery). */
+  private actionLockS = 0;
 
   constructor(
     handling: BeyHandlingProfile = DEFAULT_HANDLING_PROFILE,
@@ -198,6 +211,58 @@ export class MovementController {
 
   /** Current heading, live (not lagged behind a snapshot) — for consumers like AttackController's lock-on that need it mid-tick, before this tick's postStep(). */
   /** The handling's top speed (m/s, motion direction included), before momentum. */
+  /** The Clash loser: locked out of every input but the Air Recovery (see clashStunned). */
+  startClashStun(): void {
+    this.clashStunned = true;
+    this.clashStunElapsedS = 0;
+    this.clashStunLeftGround = false;
+  }
+
+  /** An Air Recovery (or anything that hands control back) ends the Clash stun. */
+  endClashStun(): void {
+    this.clashStunned = false;
+  }
+
+  isClashStunned(): boolean {
+    return this.clashStunned;
+  }
+
+  /** Attack, Dodge and Jump are ignored for `seconds` (movement still works). */
+  lockActionsFor(seconds: number): void {
+    this.actionLockS = Math.max(this.actionLockS, seconds);
+  }
+
+  /** This tick's input after the post-Clash locks (call once per normal tick, before anything reads the input). */
+  filterPostClashActions(actions: ControllerActions, grounded: boolean, fixedDeltaSeconds: number): ControllerActions {
+    if (this.clashStunned) {
+      this.clashStunElapsedS += fixedDeltaSeconds;
+      if (!grounded) this.clashStunLeftGround = true;
+      else if (this.clashStunLeftGround || this.clashStunElapsedS >= CLASH_STUN_MAX_S) this.clashStunned = false;
+    }
+    this.actionLockS = Math.max(0, this.actionLockS - fixedDeltaSeconds);
+    if (this.clashStunned) {
+      // Airborne, the Dodge button is the Air Recovery — the one way out. Nothing else reaches the Bey.
+      const recover = !grounded && actions.held.has(Action.Dodge);
+      return {
+        held: new Set(recover ? [Action.Dodge] : []),
+        pressedThisFrame: new Set(recover && actions.pressedThisFrame.has(Action.Dodge) ? [Action.Dodge] : []),
+        attackHoldDurationSeconds: 0,
+        jumpDriftHoldDurationSeconds: 0,
+      };
+    }
+    if (this.actionLockS > 0) {
+      const blocked = (a: Action): boolean => a === Action.Attack || a === Action.Dodge || a === Action.JumpDrift;
+      return {
+        ...actions,
+        held: new Set([...actions.held].filter((a) => !blocked(a))),
+        pressedThisFrame: new Set([...actions.pressedThisFrame].filter((a) => !blocked(a))),
+        attackHoldDurationSeconds: 0,
+        jumpDriftHoldDurationSeconds: 0,
+      };
+    }
+    return actions;
+  }
+
   /** Forward thrust (m/s²) after the friction calibration (see ThrustCalibration); never below a quarter of the raw. */
   private groundThrust(rawMps2: number, grounded: boolean): number {
     const c = this.thrustCalibration;
@@ -675,6 +740,10 @@ export class MovementController {
       grip: this.grip,
       slipping: this.slipping,
       whirlRadPerS: this.whirlRadPerS,
+      clashStunned: this.clashStunned,
+      clashStunElapsedS: this.clashStunElapsedS,
+      clashStunLeftGround: this.clashStunLeftGround,
+      actionLockS: this.actionLockS,
     };
   }
 }

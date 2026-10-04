@@ -119,6 +119,9 @@ function order(a: HitSnapshotInput, b: HitSnapshotInput): ClashPair {
   return a.hit.attackerIsFirst ? { firstAttackerHit: a, secondAttackerHit: b } : { firstAttackerHit: b, secondAttackerHit: a };
 }
 
+/** Share of MatchConfig.clashLaunchMps the Clash loser gets upward (owner, 2026-10-04). PROVISIONAL. */
+const CLASH_LAUNCH_UP_FRACTION = 0.45;
+
 export class ClashOrchestration {
   readonly controller = new ClashController();
   private activeClashLocalTickIndex = 0;
@@ -284,6 +287,17 @@ export class ClashOrchestration {
       impactDirectionXZ: normalize(subtract(winningHit.defenderPositionXZ, winningHit.attackerPositionXZ)),
     });
     applyKnockback(loser.body, winningHit.attackerPositionXZ, winningHit.defenderPositionXZ, knockback, loser.motion);
+    // Owner, 2026-10-04 ("a força do knockback aplicado ao inimigo ao ganhar um clash devia ser MUITO maior"): the loser
+    // is launched — at least clashLaunchMps away from the winner and up into the air, where only the Air Recovery helps.
+    const launch = (this.matchConfig.clashLaunchMps ?? 0) * (this.matchConfig.knockbackScale ?? 1);
+    if (launch > 0) {
+      const away = normalize(subtract(winningHit.defenderPositionXZ, winningHit.attackerPositionXZ));
+      const dir = away.x === 0 && away.z === 0 ? { x: 0, z: 1 } : away;
+      const v = loser.body.linvel();
+      const along = v.x * dir.x + v.z * dir.z;
+      const add = Math.max(0, launch - along);
+      loser.body.setLinvel({ x: v.x + dir.x * add, y: Math.max(v.y, launch * CLASH_LAUNCH_UP_FRACTION), z: v.z + dir.z * add }, true);
+    }
     loser.movement.registerKnockback();
     loser.dodge.registerLaunch(!isGrounded(physics, loser.collider));
 

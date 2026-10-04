@@ -128,6 +128,18 @@ export class AttackController {
     return this.activationCount;
   }
 
+  /** A Clash ended the attack (owner, 2026-10-04): back to Neutral, nothing buffered, held or charging carries on. */
+  interruptByClash(): void {
+    this.state = AttackState.Neutral;
+    this.bufferTimerS = 0;
+    this.chargeTimerS = 0;
+    this.activeTimerS = 0;
+    this.recoveryTimerS = 0;
+    this.waitingForDash = false;
+    this.heldSinceRecoveryPressS = null;
+    this.dashHeadingRad = null;
+  }
+
   /** Debug Lab "reset cooldowns" only: the Dash is ready at once. */
   debugResetDashCooldown(): void {
     this.dashCooldownRemainingS = 0;

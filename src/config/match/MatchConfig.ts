@@ -36,6 +36,12 @@ import { JUMP_HOLD_FOR_FULL_DEFAULT_S } from '../../drift/DriftTuning';
 export interface MatchConfig {
   /** Multiplies the real knockback/Stability consequence a Clash resolution applies (both the FirstWins/SecondWins loser's knockback and a Tie's symmetric repulsion) — GDD section 152's "configurable impact multiplier". */
   clashImpactMultiplier: number;
+  /**
+   * Owner, 2026-10-04 ("a força do knockback aplicado ao inimigo ao ganhar um clash devia ser MUITO maior"): the Clash
+   * loser is launched at least this fast (m/s, × knockbackScale) away from the winner, with ~45% of it upward. 0 = the
+   * hit's own knockback only. Pregame slider.
+   */
+  clashLaunchMps: number;
   /** Height of the arena's boundary wall (m). M10 arena slider (GDD 36); a lower wall lets a launched Bey fly out. */
   arenaWallHeightM: number;
   /** Restitution of the boundary wall's colliders. M10 arena slider (GDD 36): how hard a wall hit bounces back. */
@@ -198,6 +204,7 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
 export function createDefaultMatchConfig(): MatchConfig {
   return withOwnerBaseRules({
     clashImpactMultiplier: CLASH_IMPACT_MULTIPLIER_DEFAULT,
+    clashLaunchMps: 28,
     arenaWallHeightM: STANDARD_ARENA_GEOMETRY.wallHeightM,
     arenaWallRestitution: STANDARD_ARENA_GEOMETRY.wallRestitution,
     arenaFloor: DEFAULT_ARENA_FLOOR,
@@ -312,6 +319,7 @@ export const CIRCULAR_LOCK_RANGE = { min: 0, max: 2, step: 0.05 } as const;
 export const BODY_CONTACT_CONTROL_LOSS_RANGE = { min: 0, max: 2, step: 0.05 } as const;
 export const ARENA_SIZE_SCALE_RANGE = { min: 0.5, max: 2.5, step: 0.05 } as const;
 export const GAME_SPEED_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
+export const CLASH_LAUNCH_RANGE = { min: 0, max: 60, step: 1 } as const;
 /** Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade" — share of the speed a turn would scrub off that is kept. PROVISIONAL 0.85. */
 export const TURN_SPEED_RETENTION_DEFAULT = 0.85;
 export const TURN_SPEED_RETENTION_RANGE = { min: 0, max: 1, step: 0.05 } as const;

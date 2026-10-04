@@ -32,6 +32,8 @@ const IMPACT_PUSH_LIFT_FRACTION = 0.25;
 const AIR_RECOVERY_KEEP_HORIZONTAL = 0.2;
 /** Owner, 2026-10-04: no Circular right after a Clash ends (the mash presses must not turn into one). PROVISIONAL. */
 export const CIRCULAR_LOCK_AFTER_CLASH_S = 1;
+/** Owner, 2026-10-04: after a Clash the winner (both, on a tie) can't attack, dodge or jump for this long. PROVISIONAL. */
+export const CLASH_WINNER_RECOVERY_S = 0.4;
 const AIR_RECOVERY_DROP_MPS = 12;
 import { applyKnockback, computeKnockback, computeStabilityDamage, type KnockbackComponents } from '../../combat/knockback/Knockback';
 import { CIRCULAR_BASE_KNOCKBACK_FORCE, CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, CIRCULAR_LAUNCH_HORIZONTAL_MPS, CIRCULAR_STABILITY_DAMAGE } from '../../combat/attacks/AttackTuning';
@@ -201,6 +203,18 @@ export function tickMatch(
       const applied = clash.applyResolution(resolution, physics, first, second);
       first.attack.blockCircularFor(CIRCULAR_LOCK_AFTER_CLASH_S);
       second.attack.blockCircularFor(CIRCULAR_LOCK_AFTER_CLASH_S);
+      // Owner, 2026-10-04: "ambos jogadores podem realizar dodges, ataques, pulos e ataque giratório 1 milésimo após o
+      // fim de um clash, isso tá INACEITAVELMENTE ERRADO". The Clash ends both attacks; the loser is stunned (no input
+      // but the Air Recovery) until it recovers in the air or lands; the winner — both, on a tie — recovers briefly.
+      first.attack.interruptByClash();
+      second.attack.interruptByClash();
+      if (applied.loserIsFirst !== undefined) {
+        (applied.loserIsFirst ? first : second).movement.startClashStun();
+        (applied.loserIsFirst ? second : first).movement.lockActionsFor(CLASH_WINNER_RECOVERY_S);
+      } else {
+        first.movement.lockActionsFor(CLASH_WINNER_RECOVERY_S);
+        second.movement.lockActionsFor(CLASH_WINNER_RECOVERY_S);
+      }
       if (applied.loserIsFirst !== undefined) {
         combatEvents.push({ kind: 'knockback', targetIsFirst: applied.loserIsFirst, force: applied.knockbackForce! });
         combatEvents.push({ kind: 'stabilityDamage', targetIsFirst: applied.loserIsFirst, amount: applied.stabilityDamageAmount! });
@@ -232,6 +246,9 @@ export function tickMatch(
 
   const firstGrounded = isGrounded(physics, first.collider);
   const secondGrounded = isGrounded(physics, second.collider);
+  // The post-Clash locks (owner, 2026-10-04): what the Beys may still do this tick.
+  firstActions = first.movement.filterPostClashActions(firstActions, firstGrounded, fixedDeltaSeconds);
+  secondActions = second.movement.filterPostClashActions(secondActions, secondGrounded, fixedDeltaSeconds);
 
   // Lote 9 (GDD 12): a jump's Stamina cost — a Bey that can't pay it can't jump; paid when the hop begins.
   const canPayJump = (bey: Bey): boolean => (bey.rules.jumpStaminaCost ?? 0) <= 0 || bey.stamina.resource.value > bey.rules.jumpStaminaCost;
@@ -266,6 +283,7 @@ export function tickMatch(
     const v = bey.body.linvel();
     bey.body.setLinvel({ x: v.x * AIR_RECOVERY_KEEP_HORIZONTAL, y: Math.min(v.y, 0) - AIR_RECOVERY_DROP_MPS, z: v.z * AIR_RECOVERY_KEEP_HORIZONTAL }, true);
     bey.movement.endKnockback();
+    bey.movement.endClashStun();
   };
   if (firstDodge.triggeredAirRecovery) airRecover(first);
   if (secondDodge.triggeredAirRecovery) airRecover(second);
