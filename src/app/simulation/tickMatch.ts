@@ -258,6 +258,7 @@ export function tickMatch(
     positionXZ(second.body),
     fixedDeltaSeconds,
     length(horizontalVelocity(first.body)),
+    horizontalVelocity(second.body),
   );
   const secondAttack = second.attack.tick(
     secondActions,
@@ -266,6 +267,7 @@ export function tickMatch(
     positionXZ(first.body),
     fixedDeltaSeconds,
     length(horizontalVelocity(second.body)),
+    horizontalVelocity(first.body),
   );
 
   const firstCondition = first.stamina.getPhysicalCondition();

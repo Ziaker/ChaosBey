@@ -238,6 +238,10 @@ export class MovementController {
       return;
     }
 
+    // Owner, 2026-10-04: a Dash fired right after a wall bounce takes over at once — the post-impact "let the bounce
+    // play out" window used to swallow it, so the Bey kept flying the way the wall sent it (the opposite way).
+    // A real knockback (a hit, a Circular's launch) still plays out.
+    if (dashOverride && !this.knockbackPlaying) this.postImpactCooldownRemainingS = 0;
     const intent = actions.moveIntent;
     let headingForward: Vec2;
     if (dashOverride) {
@@ -306,7 +310,7 @@ export class MovementController {
     // air model applies (15% thrust, no rolling drag), so a countered
     // dasher is not pushed on over the wall at Dash speed.
     let newLongitudinalSpeed: number;
-    if (dashOverride && grounded) {
+    if (dashOverride && (grounded || !this.knockbackPlaying)) {
       newLongitudinalSpeed = dashOverride.longitudinalSpeedMps;
     } else {
       // Stamina degrades acceleration physically (GDD section 30) — never
@@ -340,8 +344,9 @@ export class MovementController {
     // grip comes back at gripRecovery. A Dash Attack commits fully to its
     // locked-on line; a drift substitutes its own low grip.
     let lateralGripPerS: number;
-    if (dashOverride && grounded) {
-      lateralGripPerS = this.handling.lateralGripPerS * 4;
+    if (dashOverride && (grounded || !this.knockbackPlaying)) {
+      // Owner, 2026-10-04: the Dash commits to its line at once (no curved slide from the speed it had before).
+      lateralGripPerS = this.handling.lateralGripPerS * 12;
     } else if (!grounded) {
       this.slipping = false;
       lateralGripPerS = lateralGripOverridePerS ?? this.motion.airGrip * this.airControl;

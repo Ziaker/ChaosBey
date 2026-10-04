@@ -72,6 +72,9 @@ function headingRadToward(from: Vec2, to: Vec2): number {
 }
 
 /** Eases `current` toward `target` (radians) by at most `maxDeltaRad`, taking the shortest way around. */
+/** Owner, 2026-10-04: how far ahead (s) the Dash aims at a moving opponent. PROVISIONAL. */
+const DASH_LEAD_MAX_S = 0.4;
+
 function turnTowardRad(current: number, target: number, maxDeltaRad: number): number {
   let diff = (target - current) % (Math.PI * 2);
   if (diff > Math.PI) diff -= Math.PI * 2;
@@ -101,6 +104,8 @@ export class AttackController {
   private heldSinceRecoveryPressS: number | null = null;
   /** Item 11: the Bey's speed when the current Dash fired (0 unless dashCarriesSpeed). */
   private dashEntrySpeedMps = 0;
+  /** The current Dash's own line (null outside a Dash). */
+  private dashHeadingRad: number | null = null;
 
   constructor(
     private readonly profile: BeyAttackProfile = DEFAULT_ATTACK_PROFILE,
@@ -184,6 +189,8 @@ export class AttackController {
     fixedDeltaSeconds: number,
     /** The Bey's horizontal speed this tick (m/s), for dashCarriesSpeed. */
     ownSpeedMps = 0,
+    /** The opponent's horizontal velocity, to aim the Dash where the opponent is going (owner, 2026-10-04). */
+    opponentVelocityXZ: Vec2 = { x: 0, z: 0 },
   ): AttackTickResult {
     const attackHeld = actions.held.has(Action.Attack);
     let dashOverride: MovementPreStepInput['dashOverride'] = null;
@@ -218,6 +225,9 @@ export class AttackController {
           this.activeTimerS = 0;
           this.activationCount++;
           this.dashEntrySpeedMps = this.dashCarriesSpeed ? Math.max(0, ownSpeedMps) : 0;
+          // Owner, 2026-10-04 ("às vezes ele vai pra direção oposta depois que bate numa parede"): the Dash locks onto
+          // the opponent the instant it fires, whatever way a wall bounce left the Bey facing.
+          this.dashHeadingRad = headingRadToward(ownPositionXZ, this.leadTarget(ownPositionXZ, opponentPositionXZ, opponentVelocityXZ));
         }
         break;
 
@@ -225,11 +235,14 @@ export class AttackController {
         this.activeTimerS += fixedDeltaSeconds;
         // Item 11: the speed built up before the Dash (momentum) is kept, never thrown away.
         const speed = Math.max(this.nominalDashSpeedMps(), this.dashEntrySpeedMps);
-        const desiredHeading = headingRadToward(ownPositionXZ, opponentPositionXZ);
-        const guidedHeading = turnTowardRad(ownHeadingRad, desiredHeading, DASH_LOCK_ON_MAX_TURN_RATE_RAD_S * fixedDeltaSeconds);
-        dashOverride = { headingRad: guidedHeading, longitudinalSpeedMps: speed };
+        // Tracks from the Dash's own line (not the Bey's heading, which an impact can whirl), toward where the
+        // opponent is going.
+        const desiredHeading = headingRadToward(ownPositionXZ, this.leadTarget(ownPositionXZ, opponentPositionXZ, opponentVelocityXZ));
+        this.dashHeadingRad = turnTowardRad(this.dashHeadingRad ?? ownHeadingRad, desiredHeading, DASH_LOCK_ON_MAX_TURN_RATE_RAD_S * fixedDeltaSeconds);
+        dashOverride = { headingRad: this.dashHeadingRad, longitudinalSpeedMps: speed };
         if (this.activeTimerS >= DASH_ACTIVE_DURATION_S) {
           this.state = AttackState.DashRecovery;
+          this.dashHeadingRad = null;
           this.recoveryTimerS = 0;
           this.dashCooldownRemainingS = this.dashCooldownS;
         }
@@ -305,12 +318,20 @@ export class AttackController {
   /** Called by the hit-detection module the tick this attack lands on the opponent — ends the active window promptly instead of lingering/whiff-recovering. */
   registerHitConfirmed(): void {
     if (this.state === AttackState.DashActive) {
+      this.dashHeadingRad = null;
       this.state = AttackState.Neutral;
       this.dashCooldownRemainingS = this.dashCooldownS;
     } else if (this.state === AttackState.CircularActive) {
       this.state = AttackState.CircularRecovery;
       this.recoveryTimerS = 0;
     }
+  }
+
+  /** Where the opponent will be when the Dash gets there (its velocity × the time to cover the gap, at most 0.4 s). */
+  private leadTarget(own: Vec2, opponent: Vec2, opponentVelocity: Vec2): Vec2 {
+    const gap = Math.hypot(opponent.x - own.x, opponent.z - own.z);
+    const t = Math.min(DASH_LEAD_MAX_S, gap / Math.max(1, this.nominalDashSpeedMps()));
+    return { x: opponent.x + opponentVelocity.x * t, z: opponent.z + opponentVelocity.z * t };
   }
 
   private nominalDashSpeedMps(): number {
@@ -356,6 +377,7 @@ export class AttackController {
       waitingForDash: this.waitingForDash,
       heldSinceRecoveryPressS: this.heldSinceRecoveryPressS,
       dashEntrySpeedMps: this.dashEntrySpeedMps,
+      dashHeadingRad: this.dashHeadingRad,
     };
   }
 }

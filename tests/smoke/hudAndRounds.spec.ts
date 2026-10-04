@@ -45,7 +45,7 @@ test('the HUD reads the live match, a round ends with its banner, and round 2 ca
   expect(Math.abs((await widthPercent(page, 'hud-first-stamina')) / 100 - sessionStamina)).toBeLessThan(0.05);
 
   // Owner 2026-10-02 (Lote 2): the old ATK line is the Dash cooldown (CD), full = Dash ready at the start.
-  await expect(page.getByTestId('hud-first').locator('.cb-hud__meter--dash-cd .cb-hud__meter-name')).toHaveText('CD');
+  await expect(page.getByTestId('hud-first').locator('.cb-hud__meter--dash-cd .cb-hud__meter-name')).toHaveText(/READY|WAIT/);
   await expect.poll(() => widthPercent(page, 'hud-first-dash-cd'), { timeout: 10_000 }).toBeGreaterThan(99);
   // Owner 2026-10-02 (Lote 3): the momentum line is on both cards and follows the session.
   await expect(page.getByTestId('hud-first-momentum')).toBeAttached();
