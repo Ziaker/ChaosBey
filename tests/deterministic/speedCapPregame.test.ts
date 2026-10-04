@@ -3,6 +3,8 @@ import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { beyMatchRulesOf, createDefaultMatchConfig, type MatchConfig } from '../../src/config/match/MatchConfig';
 import { Action, type ControllerActions } from '../../src/input/actions/Action';
+import { AttackState } from '../../src/combat/attacks/AttackController';
+import { DodgeState } from '../../src/dodge/DodgeController';
 import { createDefaultMatchSetup, loadLastSetup, saveLastSetup } from '../../src/app/frontend/matchSetup';
 import { currentRuntimeFingerprint } from '../../src/replay/format/runtimeFingerprint';
 import { playReplayHeadless } from '../../src/replay/playback/replayPlayback';
@@ -11,6 +13,17 @@ import { CombatHarness } from './combatHarness';
 
 const NONE: ControllerActions = { held: new Set(), pressedThisFrame: new Set(), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0 };
 const FORWARD: ControllerActions = { ...NONE, held: new Set([Action.MoveForward]) };
+const attackInput = (pressed: boolean, holdS: number): ControllerActions => ({
+  ...NONE,
+  held: new Set([Action.Attack]),
+  pressedThisFrame: pressed ? new Set([Action.Attack]) : new Set(),
+  attackHoldDurationSeconds: holdS,
+});
+const DODGE_PRESS: ControllerActions = {
+  ...NONE,
+  held: new Set([Action.Dodge]),
+  pressedThisFrame: new Set([Action.Dodge]),
+};
 
 async function settledHarness(strictSpeedCap: boolean): Promise<CombatHarness> {
   const h = await CombatHarness.create(
@@ -18,14 +31,17 @@ async function settledHarness(strictSpeedCap: boolean): Promise<CombatHarness> {
     { x: 20, y: BEY_SPAWN_HEIGHT_M, z: 20 },
     { arenaFloor: 'flat', momentumGain: 0, movementStaminaDrain: 0, strictSpeedCap },
   );
-  let grounded = 0;
-  for (let i = 0; i < 180 && grounded < 5; i++) {
+  // A newly-spawned Bey opens MovementController's generic post-impact window when it first lands. Strict intentionally
+  // exempts that window (the same mechanism protects a real wall bounce/knockback), so this fixture must wait for
+  // ordinary grounded locomotion rather than merely five grounded samples inside the landing window.
+  let ordinaryGrounded = 0;
+  for (let i = 0; i < 240 && ordinaryGrounded < 5; i++) {
     const r = h.tick(NONE, NONE);
-    grounded = r.first.grounded ? grounded + 1 : 0;
+    ordinaryGrounded = r.first.grounded && !r.first.movement.isPostImpactCooldown ? ordinaryGrounded + 1 : 0;
   }
-  if (grounded < 5) {
+  if (ordinaryGrounded < 5) {
     h.dispose();
-    throw new Error('speed-cap fixture never settled');
+    throw new Error('speed-cap fixture never reached ordinary grounded locomotion');
   }
   return h;
 }
@@ -75,6 +91,28 @@ describe('Master §12 speed-limit behavior playtest', () => {
     h.first.body.setLinvel({ x: 0, y: h.first.body.linvel().y, z: cap * 1.5 }, true);
     h.tick(FORWARD, NONE);
     const v = h.first.body.linvel();
+    expect(Math.hypot(v.x, v.z)).toBeGreaterThan(cap * 1.05);
+    h.dispose();
+  });
+
+  it('Strict never clips an active Dash override even when Dash speed is above the ordinary cap', async () => {
+    const h = await settledHarness(true);
+    const cap = h.first.movement.getMaxSpeedMps();
+    h.tick(attackInput(true, 0), NONE);
+    for (let i = 0; i < 90; i++) h.tick(attackInput(false, (i + 1) / 60), NONE);
+    const release = h.tick(NONE, NONE);
+    const v = h.first.body.linvel();
+    expect(release.first.attackState).toBe(AttackState.DashActive);
+    expect(Math.hypot(v.x, v.z)).toBeGreaterThan(cap * 1.05);
+    h.dispose();
+  });
+
+  it('Strict never clips the grounded Dodge override', async () => {
+    const h = await settledHarness(true);
+    const cap = h.first.movement.getMaxSpeedMps();
+    const dodge = h.tick(DODGE_PRESS, NONE);
+    const v = h.first.body.linvel();
+    expect(dodge.first.dodgeState).toBe(DodgeState.Dodging);
     expect(Math.hypot(v.x, v.z)).toBeGreaterThan(cap * 1.05);
     h.dispose();
   });
