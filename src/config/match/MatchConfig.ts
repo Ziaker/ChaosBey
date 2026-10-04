@@ -98,6 +98,12 @@ export interface MatchConfig {
   dodgeStaminaCost: number;
   /** Owner, 2026-10-04 ("cadê o slider de o quão longe ele vai?"): × the dodge's distance (its burst speed; same duration). Pregame slider. */
   dodgeDistanceScale: number;
+  /** Owner, 2026-10-04 ("slider de força de impulsão vertical causada ao contato"): upward speed (m/s) a contact push adds. Pregame slider. */
+  contactLiftMps: number;
+  /** Owner, 2026-10-04 ("slider de força de knockback no geral"): × every knockback (hits, collisions, Circular launch, repel, recoil). Pregame slider. */
+  knockbackScale: number;
+  /** Owner, 2026-10-04: × the base spin Stamina drain (Stamina 0 = spin-out). Pregame slider. */
+  spinStaminaDrain: number;
   /** Owner, 2026-10-04: stage size, × the 36 m floor radius (1 = as designed). Pregame slider. */
   arenaSizeScale: number;
   /** Owner, 2026-10-04 ("qualquer toque devia jogar os beys longe um do outro"): every contact pushes both Beys apart at least this fast (m/s). Pregame slider. */
@@ -136,7 +142,7 @@ export interface MatchConfig {
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -158,6 +164,9 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     attackRecoilMps: config.attackRecoilMps,
     dodgeStaminaCost: config.dodgeStaminaCost,
     dodgeDistanceScale: config.dodgeDistanceScale,
+    contactLiftMps: config.contactLiftMps,
+    knockbackScale: config.knockbackScale,
+    spinStaminaDrain: config.spinStaminaDrain,
     turnSpeedRetention: config.turnSpeedRetention,
     highSpeedControl: config.highSpeedControl,
     topSpeedScale: config.topSpeedScale,
@@ -201,6 +210,9 @@ export function createDefaultMatchConfig(): MatchConfig {
     gravityScale: GRAVITY_SCALE_DEFAULT,
     contactRepelMps: CONTACT_REPEL_DEFAULT_MPS,
     arenaSizeScale: 1,
+    contactLiftMps: 4,
+    knockbackScale: 1,
+    spinStaminaDrain: 1,
     dodgeStaminaCost: 0,
     dodgeDistanceScale: 1,
     attackRecoilMps: ATTACK_RECOIL_DEFAULT_MPS,
@@ -275,6 +287,9 @@ export const ATTACK_RECOIL_DEFAULT_MPS = 10;
 export const IMPACT_PUSH_RANGE = { min: 0, max: 25, step: 0.5 } as const;
 export const DODGE_STAMINA_COST_RANGE = { min: 0, max: 40, step: 1 } as const;
 export const DODGE_DISTANCE_SCALE_RANGE = { min: 0.5, max: 3, step: 0.05 } as const;
+export const CONTACT_LIFT_RANGE = { min: 0, max: 20, step: 0.5 } as const;
+export const KNOCKBACK_SCALE_RANGE = { min: 0, max: 4, step: 0.05 } as const;
+export const SPIN_STAMINA_DRAIN_RANGE = { min: 0, max: 20, step: 0.5 } as const;
 export const ARENA_SIZE_SCALE_RANGE = { min: 0.5, max: 2.5, step: 0.05 } as const;
 /** Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade" — share of the speed a turn would scrub off that is kept. PROVISIONAL 0.85. */
 export const TURN_SPEED_RETENTION_DEFAULT = 0.85;

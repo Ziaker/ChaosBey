@@ -7,6 +7,7 @@
 // and tests can read where the player is.
 // ============================================================
 
+import { DefeatCutscene } from './DefeatCutscene';
 import type { AppRenderer } from '../bootstrap/createRenderer';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
 import { appModeHref } from '../modes/appMode';
@@ -91,6 +92,8 @@ export class PlayFlow {
   private readonly padMenu = new GamepadMenuKeys();
   private runner: MatchRunner | null = null;
   private resultsTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Owner, 2026-10-04: the defeated Bey's break, before the winner is announced (null when none is playing). */
+  private defeatCutscene: DefeatCutscene | null = null;
   private score: MatchScore = EMPTY_SCORE;
   private matchSeed: string | null = null;
   /** Bumped on every screen change, so a round that finishes loading after the player left is dropped. */
@@ -180,10 +183,30 @@ export class PlayFlow {
       },
       {
         onRoundOver: (outcome) => {
+          // Owner, 2026-10-04: a knock-out or a spin-out plays the defeat cutscene first (1 s, then 1.5 s of slow
+          // motion as the Bey breaks); the winner is announced after it. A ring-out or a draw reads at once.
+          const loser = String(outcome).startsWith('FirstWins') ? 'second' : String(outcome).startsWith('SecondWins') ? 'first' : null;
+          const session = this.runner?.session;
+          if (loser && session && !String(outcome).includes('RingOut')) {
+            const generation = this.generation;
+            this.defeatCutscene = new DefeatCutscene(session.match.visuals[loser].visual, {
+              onBreak: () => this.hud?.flashBreak(String(outcome).includes('SpinOut') ? 'SPIN OUT' : 'BROKEN'),
+              onDone: () => {
+                if (generation !== this.generation) return;
+                this.defeatCutscene = null;
+                this.hud?.showBanner(roundEndBanner(outcome) ?? '');
+                this.scheduleRoundResult(outcome);
+              },
+            }, this.score.rounds + 1);
+            return;
+          }
           this.hud?.showBanner(roundEndBanner(outcome) ?? '');
           this.scheduleRoundResult(outcome);
         },
-        onFrame: (session, frameDeltaSeconds) => this.hud?.update(session, this.deps.appRenderer.camera, frameDeltaSeconds),
+        onFrame: (session, frameDeltaSeconds) => {
+          this.hud?.update(session, this.deps.appRenderer.camera, frameDeltaSeconds);
+          this.defeatCutscene?.update(frameDeltaSeconds);
+        },
         onTick: (session, firstActions) => {
           if (firstActions.pressedThisFrame.has(Action.Pause) && !session.roundState.isOver) queueMicrotask(() => this.openPause());
         },

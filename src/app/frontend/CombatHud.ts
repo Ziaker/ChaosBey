@@ -65,6 +65,7 @@ export class CombatHud {
   private readonly driftTag = el('div', 'cb-hud__drift', 'hud-drift');
   /** Owner, 2026-10-04: thrown into the air with Air Recovery open — just the button to press, over the player's Bey. */
   private readonly recoverAlert = el('div', 'cb-hud__recover', 'hud-recover');
+  private readonly breakFlash = el('div', 'cb-hud__break', 'hud-break');
   private readonly clashBar = el('div', 'cb-hud__clash', 'hud-clash-bar');
   private readonly clashFirst = el('div', 'cb-hud__clash-half cb-hud__clash-half--first');
   private readonly clashSecond = el('div', 'cb-hud__clash-half cb-hud__clash-half--second');
@@ -102,7 +103,7 @@ export class CombatHud {
 
     this.hintsOn = options.controlHints;
     this.hints.hidden = !options.controlHints;
-    this.root.append(this.cards.first.root, center, this.cards.second.root, this.clashBar, this.banner, this.hints, this.driftTag, this.recoverAlert);
+    this.root.append(this.cards.first.root, center, this.cards.second.root, this.clashBar, this.banner, this.hints, this.driftTag, this.recoverAlert, this.breakFlash);
     mount.append(this.root);
     this.refreshHints();
     this.showBanner(`ROUND ${options.roundNumber}`, 'FIGHT!', START_BANNER_MS);
@@ -125,6 +126,14 @@ export class CombatHud {
     this.fillDodge(this.cards.first, session.getBey('first').dodge.getReadiness());
     this.fillDodge(this.cards.second, session.getBey('second').dodge.getReadiness());
     if (this.hintsOn) this.refreshHints();
+  }
+
+  /** Owner, 2026-10-04: the defeat cutscene's break — a white flash and one big word. */
+  flashBreak(word: string): void {
+    this.breakFlash.textContent = word;
+    this.breakFlash.classList.remove('is-on');
+    void this.breakFlash.offsetWidth; // restart the animation
+    this.breakFlash.classList.add('is-on');
   }
 
   /** A big centred banner, e.g. "RING OUT!" at the end of the round. `durationMs` null = until disposed. */
@@ -356,6 +365,9 @@ function injectHudStyle(): void {
     .cb-hud__banner-sub { margin-top: 4px; font-size: clamp(16px, 3vw, 26px); font-weight: 800; letter-spacing: 0.4em; color: var(--cb-warn); }
     .cb-hud__hints { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--cb-text-dim); background: rgba(8, 10, 16, 0.5); padding: 6px 12px; border-radius: 5px; max-width: calc(100vw - 32px); box-sizing: border-box; }
     .cb-hud__hints[hidden] { display: none; }
+    .cb-hud__break { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 900 72px/1 var(--cb-font); letter-spacing: 0.2em; color: #ffffff; text-shadow: 0 0 30px rgba(255, 80, 80, 0.9); opacity: 0; pointer-events: none; }
+    .cb-hud__break.is-on { animation: cb-hud-break 1.5s ease-out forwards; }
+    @keyframes cb-hud-break { 0% { opacity: 1; background: rgba(255, 255, 255, 0.85); } 12% { background: rgba(255, 255, 255, 0); } 80% { opacity: 1; } 100% { opacity: 0; background: rgba(255, 255, 255, 0); } }
     .cb-hud__recover { position: absolute; transform: translate(-50%, -100%); min-width: 46px; padding: 6px 12px; text-align: center; font: 900 30px/1 var(--cb-font); color: #10131a; background: #ffffff; border-radius: 8px; box-shadow: 0 0 22px rgba(255, 255, 255, 0.85); opacity: 0; pointer-events: none; }
     .cb-hud__recover.is-on { opacity: 1; animation: cb-hud-recover 0.35s ease-in-out infinite alternate; }
     @keyframes cb-hud-recover { from { transform: translate(-50%, -100%) scale(1); } to { transform: translate(-50%, -100%) scale(1.18); } }

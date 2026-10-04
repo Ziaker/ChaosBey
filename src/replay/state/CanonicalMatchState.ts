@@ -123,7 +123,7 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     legacyLaunch: 'build-time config: whether the match supplied jump rules (a bare construction keeps the immediate launch)',
   },
   DodgeController: { cooldownS: 'build-time config: MatchConfig.dodgeCooldownS (replay config snapshot)', staminaCost: 'build-time config: MatchConfig.dodgeStaminaCost (replay config snapshot)', distanceScale: 'build-time config: MatchConfig.dodgeDistanceScale (replay config snapshot)' },
-  StaminaSystem: { staminaStat: 'build-time config (resolved Bey stat)', movementDrainScale: 'build-time config: MatchConfig.movementStaminaDrain (replay config snapshot)' },
+  StaminaSystem: { staminaStat: 'build-time config (resolved Bey stat)', movementDrainScale: 'build-time config: MatchConfig.movementStaminaDrain (replay config snapshot)', spinDrainScale: 'build-time config: MatchConfig.spinStaminaDrain (replay config snapshot)' },
   StabilitySystem: {},
   AttackController: { profile: 'build-time config (attack profile settings, in the replay config snapshot)', dashCooldownS: 'build-time config: MatchConfig.dashCooldownS (replay config snapshot)', dashCarriesSpeed: 'build-time config: MatchConfig.dashCarriesSpeed (replay config snapshot)', dashSpeedScale: 'build-time config: MatchConfig.topSpeedScale (replay config snapshot)' },
   MomentumSystem: { rules: 'build-time config: MatchConfig momentum values (replay config snapshot)' },

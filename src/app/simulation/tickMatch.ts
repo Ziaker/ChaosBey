@@ -396,6 +396,9 @@ export function tickMatch(
   // Item 11 (owner, 2026-10-04): "quanto mais rápido, mais dano" — an attack hit's damage follows the attacker's speed
   // going into the contact (before the solver slows it), relative to the speed the hit was tuned for.
   const speedDamageGain = first.rules.speedDamageGain ?? 0;
+  // Owner, 2026-10-04 ("um slider de força de knockback no geral"): scales every knockback — hits, body collisions,
+  // the Circular's launch, the contact repel and the attack recoil.
+  const knockbackScale = first.rules.knockbackScale ?? 1;
   function attackHitDamage(hit: HitEvent, attacker: Bey, defender: Bey): number {
     const base = computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense);
     const speedMps = length(hit.attackerIsFirst ? firstVelBefore : secondVelBefore);
@@ -405,7 +408,8 @@ export function tickMatch(
   // Owner, 2026-10-04: "independente da velocidade, qualquer toque devia causar um impacto forte o suficiente para
   // jogar os beys longe um do outro, ESPECIALMENTE QUANDO ATACA, o recoil deve ser alto também". At least `minMps` of
   // horizontal speed away from the other Bey, plus a little lift; the movement controller lets it play out.
-  function pushApart(targetIsFirst: boolean, minMps: number): void {
+  function pushApart(targetIsFirst: boolean, minMpsBase: number): void {
+    const minMps = minMpsBase * knockbackScale;
     if (minMps <= 0) return;
     const target = targetIsFirst ? first : second;
     const dir = normalize(subtract(targetIsFirst ? firstPos : secondPos, targetIsFirst ? secondPos : firstPos));
@@ -414,7 +418,7 @@ export function tickMatch(
     const along = v.x * dir.x + v.z * dir.z;
     if (along >= minMps) return;
     const add = minMps - along;
-    target.body.setLinvel({ x: v.x + dir.x * add, y: Math.max(v.y, 0) + minMps * IMPACT_PUSH_LIFT_FRACTION, z: v.z + dir.z * add }, true);
+    target.body.setLinvel({ x: v.x + dir.x * add, y: Math.max(v.y, 0) + (first.rules.contactLiftMps ?? minMps * IMPACT_PUSH_LIFT_FRACTION), z: v.z + dir.z * add }, true);
     target.movement.registerKnockback();
   }
 
@@ -473,7 +477,7 @@ export function tickMatch(
     if (launchedThisTick[key]) return;
     launchedThisTick[key] = true;
     const target = targetIsFirst ? first : second;
-    const force = first.rules.circularLaunchForce;
+    const force = first.rules.circularLaunchForce * knockbackScale;
     const dir = normalize(subtract(targetIsFirst ? firstPos : secondPos, targetIsFirst ? secondPos : firstPos));
     const vel = target.body.linvel();
     target.body.setLinvel({ x: dir.x * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force, y: Math.max(0, vel.y) + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS * force, z: dir.z * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force }, true);
@@ -523,7 +527,7 @@ export function tickMatch(
 
 
     const knockback = computeKnockback({
-      baseForce: hit.hitbox.knockbackForce * resolved.forceMultiplier,
+      baseForce: hit.hitbox.knockbackForce * resolved.forceMultiplier * knockbackScale,
       attackerSpeedMps: resolved.attackerSpeedMps,
       defenderSpeedMps: resolved.defenderSpeedMps,
       defenderStabilityFraction: resolved.defenderStabilityFraction,
@@ -636,7 +640,7 @@ export function tickMatch(
         const fasterPos = firstIsSlower ? secondPos : firstPos;
         const slowerPos = firstIsSlower ? firstPos : secondPos;
         const knockback = computeKnockback({
-          baseForce: (CIRCULAR_BASE_KNOCKBACK_FORCE * diff * scaleDamage) / BODY_COLLISION_REFERENCE_SPEED_DIFF_MPS,
+          baseForce: ((CIRCULAR_BASE_KNOCKBACK_FORCE * diff * scaleDamage) / BODY_COLLISION_REFERENCE_SPEED_DIFF_MPS) * knockbackScale,
           attackerSpeedMps: firstIsSlower ? secondSpeed : firstSpeed,
           defenderSpeedMps: firstIsSlower ? firstSpeed : secondSpeed,
           defenderStabilityFraction: slower.stability.resource.fraction,
