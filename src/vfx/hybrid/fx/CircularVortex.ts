@@ -1,166 +1,271 @@
 // ============================================================
-// CIRCULAR VORTEX (owner, 2026-10-04)
-// "um vortex helicoidal 20% maior" → "como um tornado" → "o ataque giratório tem que ter seu efeito visual ao redor
-// do bey, não dentro dele […] faça ser uma animação de efeito visual, não só um tornado girando, algo como um vortex
-// que se dissipa".
-// A whirl AROUND the Bey — nothing inside its body (every piece starts outside INNER_RADIUS_M): spiral wind arms that
-// coil in tight as the Circular starts, spin, and shed energy outward the whole time (pulse rings and motes peel off,
-// widen and fade); in the last third the arms unwind, widen and dissolve. Its reach is 20% past the Circular's slash
-// ring (1.72 m). Presentation only: it never reads or writes gameplay.
+// CIRCULAR VORTEX — rebuilt from scratch (owner, 2026-10-04: "a animação do ataque giratório está INCOMPLETA e MAL
+// FEITA, refaz do zero"; before: "tem que ter seu efeito visual ao redor do bey, não dentro dele […] algo como um
+// vortex que se dissipa").
+//
+// Why the last one read as incomplete: it was driven by the attack's own progress, and a Circular is only 0.25 s
+// active — the effect was cut the instant the attack ended, mid-animation. This one is its own timed animation,
+// started by trigger() on the attack's first frame and always played to the end (~0.9 s):
+//   FORM     (0–0.1 s)   the swirl pulls in around the Bey from a wider, fainter ring;
+//   SPIN     (to 0.32 s) a full whirl of wind around the Bey — a spiral disc on the floor and a ring wall of wind
+//                        streaks, both turning fast; nothing inside the Bey's body (inner radius 0.75 m);
+//   DISSIPATE(to 0.9 s)  it unwinds outward to ~2× its size, rises, slows and fades, shedding motes.
+// Drawn with two small shaders (spiral bands with noise breakup) instead of a few tubes, so the wind is continuous.
+// Presentation only: it never reads or writes gameplay.
 // ============================================================
 
 import * as THREE from 'three';
 
-/** The Circular's slash ring radius (anime.ts circularSweep: 1.25 + 0.3 × 0.6) × 1.2 — the vortex's outer edge. */
+/** The Circular's slash ring radius (1.25 + 0.3 × 0.6) × 1.2 — the vortex's outer edge at full spin. */
 export const CIRCULAR_VORTEX_RADIUS_M = (1.25 + 0.3 * 0.6) * 1.2;
 /** Clear of the Bey's body (its visual radius is ~0.6 m): the effect is around it, never inside. */
-export const CIRCULAR_VORTEX_INNER_RADIUS_M = 0.85;
-const ARMS = 6;
-const PULSES = 4;
-const PULSE_PERIOD_S = 0.32;
-const MOTES = 80;
-const MOTE_LIFE_S = 0.55;
+export const CIRCULAR_VORTEX_INNER_RADIUS_M = 0.75;
+export const CIRCULAR_VORTEX_FORM_S = 0.1;
+export const CIRCULAR_VORTEX_SPIN_END_S = 0.32;
+export const CIRCULAR_VORTEX_LIFE_S = 0.9;
+const WALL_RADIUS_M = 1.05;
+const WALL_HEIGHT_M = 1.0;
+const MOTES = 70;
 
-export class CircularVortex {
-  readonly object = new THREE.Group();
-  private readonly lowerArms = new THREE.Group();
-  private readonly upperArms = new THREE.Group();
-  private readonly armMaterials: THREE.MeshBasicMaterial[] = [];
-  private readonly pulses: THREE.Mesh[] = [];
-  private readonly pulseMaterials: THREE.MeshBasicMaterial[] = [];
-  private readonly motes: THREE.Points;
-  private readonly moteMaterial: THREE.PointsMaterial;
-  private readonly moteAge = new Float32Array(MOTES);
-  private readonly moteAngle = new Float32Array(MOTES);
-  private readonly moteColor: THREE.Color;
-  private time = 0;
-
-  constructor(color: THREE.Color) {
-    const light = color.clone().lerp(new THREE.Color(0xffffff), 0.55);
-    this.moteColor = light;
-    // Spiral arms: each coils from just outside the Bey out to the edge, with a gentle vertical wave (a 3D whirl,
-    // not a flat decal). Two layers turning at different speeds.
-    const span = CIRCULAR_VORTEX_RADIUS_M - CIRCULAR_VORTEX_INNER_RADIUS_M;
-    for (const [group, layer] of [[this.lowerArms, 0], [this.upperArms, 1]] as const) {
-      for (let a = 0; a < ARMS; a++) {
-        const phase = (a / ARMS) * Math.PI * 2 + layer * 0.5;
-        const points: THREE.Vector3[] = [];
-        for (let i = 0; i <= 40; i++) {
-          const u = i / 40;
-          const r = CIRCULAR_VORTEX_INNER_RADIUS_M + span * u;
-          const angle = phase - u * Math.PI * (1.05 + 0.25 * layer); // trailing back against the spin
-          points.push(new THREE.Vector3(Math.cos(angle) * r, Math.sin(u * Math.PI) * (0.12 + 0.1 * layer), Math.sin(angle) * r));
-        }
-        const material = new THREE.MeshBasicMaterial({ color: (a + layer) % 2 === 0 ? color : light, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-        const arm = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 48, layer === 0 ? 0.05 : 0.032, 5, false), material);
-        this.armMaterials.push(material);
-        group.add(arm);
-      }
-    }
-    this.upperArms.position.y = 0.32;
-    this.upperArms.rotation.x = 0.08;
-    this.object.add(this.lowerArms, this.upperArms);
-    // Pulse rings: a new one peels off the vortex every PULSE_PERIOD_S, widening past the edge and fading.
-    const ringGeometry = new THREE.TorusGeometry(1, 0.03, 6, 72);
-    for (let p = 0; p < PULSES; p++) {
-      const material = new THREE.MeshBasicMaterial({ color: light, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-      const ring = new THREE.Mesh(ringGeometry, material);
-      ring.rotation.x = Math.PI / 2;
-      this.pulses.push(ring);
-      this.pulseMaterials.push(material);
-      this.object.add(ring);
-    }
-    // Motes: born at the inner edge, flung outward along the spin, slowing and fading as they leave (dissipation).
-    for (let i = 0; i < MOTES; i++) {
-      this.moteAge[i] = (i / MOTES) * MOTE_LIFE_S;
-      this.moteAngle[i] = (i * 2.39996) % (Math.PI * 2);
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MOTES * 3), 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MOTES * 3), 3));
-    // Additive + vertex colour: a mote fades by darkening toward black.
-    this.moteMaterial = new THREE.PointsMaterial({ size: 0.1, vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-    this.motes = new THREE.Points(geometry, this.moteMaterial);
-    this.object.add(this.motes);
-    this.object.visible = false;
-    this.object.renderOrder = 5;
+const NOISE_GLSL = /* glsl */ `
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
   }
+`;
 
-  /** `t` 0..1 through the Circular; null hides it. */
-  update(pos: THREE.Vector3 | null, t: number | null, dt: number): void {
-    if (pos === null || t === null) {
-      this.object.visible = false;
-      this.time = 0;
-      return;
-    }
-    this.object.visible = true;
-    this.time += dt;
-    this.object.position.copy(pos);
-    this.object.position.y -= 0.15;
-
-    // Form → spin → dissipate. Forming: the arms coil in from wider and fainter; dissipating (t > 0.65): they
-    // unwind outward, slow down and fade.
-    const form = Math.min(1, t / 0.14);
-    const dissipate = Math.max(0, (t - 0.65) / 0.35);
-    const armAlpha = form * (1 - dissipate * dissipate);
-    const armScale = 1.25 - 0.25 * easeOut(form) + 0.6 * dissipate;
-    const spin = 1 - 0.55 * dissipate;
-    this.lowerArms.rotation.y += dt * 14 * spin;
-    this.upperArms.rotation.y += dt * 19 * spin;
-    this.lowerArms.scale.set(armScale, 1 + 0.8 * dissipate, armScale);
-    this.upperArms.scale.set(armScale * 0.95, 1 + 1.2 * dissipate, armScale * 0.95);
-    this.upperArms.position.y = 0.32 + 0.5 * dissipate;
-    this.armMaterials.forEach((m, i) => (m.opacity = (i < ARMS ? 0.85 : 0.6) * armAlpha));
-
-    // Pulses: shed continuously while the vortex is up; each widens from the inner edge to ~1.5× the reach.
-    for (let p = 0; p < PULSES; p++) {
-      const ring = this.pulses[p]!;
-      const phase = (((this.time / PULSE_PERIOD_S + p / PULSES) % 1) + 1) % 1;
-      const radius = CIRCULAR_VORTEX_INNER_RADIUS_M + (CIRCULAR_VORTEX_RADIUS_M * 1.5 - CIRCULAR_VORTEX_INNER_RADIUS_M) * easeOut(phase);
-      ring.scale.set(radius, radius, radius * (1 - 0.7 * phase));
-      ring.position.y = 0.05 + 0.35 * phase;
-      this.pulseMaterials[p]!.opacity = 0.7 * (1 - phase) * (1 - phase) * form * (1 - dissipate);
-    }
-
-    // Motes: spiral outward, the angular speed dropping with radius (a real vortex), and fade out.
-    const positions = (this.motes.geometry.getAttribute('position') as THREE.BufferAttribute).array as Float32Array;
-    const colors = (this.motes.geometry.getAttribute('color') as THREE.BufferAttribute).array as Float32Array;
-    for (let i = 0; i < MOTES; i++) {
-      this.moteAge[i] = this.moteAge[i]! + dt;
-      if (this.moteAge[i]! >= MOTE_LIFE_S) {
-        this.moteAge[i] = this.moteAge[i]! - MOTE_LIFE_S;
-        this.moteAngle[i] = this.moteAngle[i]! + 2.39996;
-      }
-      const u = this.moteAge[i]! / MOTE_LIFE_S;
-      const r = CIRCULAR_VORTEX_INNER_RADIUS_M + (CIRCULAR_VORTEX_RADIUS_M * 1.35 - CIRCULAR_VORTEX_INNER_RADIUS_M) * easeOut(u);
-      this.moteAngle[i] = this.moteAngle[i]! + dt * 16 * spin * (CIRCULAR_VORTEX_INNER_RADIUS_M / r);
-      positions[i * 3] = Math.cos(this.moteAngle[i]!) * r;
-      positions[i * 3 + 1] = (((i * 7) % 10) / 10) * 0.45 + u * 0.5;
-      positions[i * 3 + 2] = Math.sin(this.moteAngle[i]!) * r;
-      const fade = (1 - u) * Math.min(1, u * 6);
-      colors[i * 3] = this.moteColor.r * fade;
-      colors[i * 3 + 1] = this.moteColor.g * fade;
-      colors[i * 3 + 2] = this.moteColor.b * fade;
-    }
-    this.motes.geometry.getAttribute('position').needsUpdate = true;
-    this.motes.geometry.getAttribute('color').needsUpdate = true;
-    this.moteMaterial.opacity = form * (1 - dissipate * 0.6);
+/** The floor disc: spiral wind bands in an annulus, brightest on a ring that drifts outward as it dissipates. */
+const DISC_FRAGMENT = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uTime;
+  uniform float uAlpha;
+  uniform float uSpread;
+  varying vec2 vPos;
+  ${NOISE_GLSL}
+  void main() {
+    float r = length(vPos);
+    float inner = ${CIRCULAR_VORTEX_INNER_RADIUS_M.toFixed(3)};
+    float outer = ${(CIRCULAR_VORTEX_RADIUS_M * 1.15).toFixed(3)};
+    float u = (r - inner) / (outer - inner);
+    if (u < 0.0 || u > 1.0) discard;
+    float theta = atan(vPos.y, vPos.x);
+    // Logarithmic spiral bands, swept by time (the wind turning), broken up by noise.
+    float s = theta * 5.0 + log(r) * 9.0 - uTime * 26.0;
+    float bands = pow(0.5 + 0.5 * sin(s), 5.0);
+    float n = noise(vec2(theta * 4.0 - uTime * 10.0, r * 5.0));
+    bands *= 0.45 + 0.9 * n;
+    // Radial envelope: a ring that moves outward as the vortex dissipates; soft at both edges.
+    float centre = mix(0.32, 0.85, uSpread);
+    float env = exp(-pow((u - centre) / 0.28, 2.0)) * smoothstep(0.0, 0.08, u) * smoothstep(1.0, 0.85, u);
+    float a = clamp(bands * env * uAlpha, 0.0, 0.85);
+    vec3 col = mix(uColor, vec3(1.0), 0.3 + 0.6 * clamp(bands, 0.0, 1.0));
+    gl_FragColor = vec4(col, a);
   }
+`;
 
-  dispose(): void {
-    this.object.removeFromParent();
-    const geometries = new Set<THREE.BufferGeometry>();
-    this.object.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (mesh.geometry) geometries.add(mesh.geometry);
-    });
-    for (const g of geometries) g.dispose();
-    for (const m of this.armMaterials) m.dispose();
-    for (const m of this.pulseMaterials) m.dispose();
-    this.moteMaterial.dispose();
+/** The wind wall: a ring of diagonal streaks around the Bey, fading at its top and bottom. */
+const WALL_FRAGMENT = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uTime;
+  uniform float uAlpha;
+  varying vec2 vUv;
+  ${NOISE_GLSL}
+  void main() {
+    float theta = vUv.x * 6.2831853;
+    float s = theta * 4.0 + vUv.y * 5.0 - uTime * 30.0;
+    float streak = pow(0.5 + 0.5 * sin(s), 8.0);
+    float n = noise(vec2(vUv.x * 18.0 - uTime * 14.0, vUv.y * 3.0 + uTime * 2.0));
+    streak *= 0.35 + 1.0 * n;
+    float fade = sin(3.14159265 * vUv.y);
+    fade *= fade;
+    float a = streak * fade * uAlpha;
+    vec3 col = mix(uColor, vec3(1.0), clamp(streak, 0.0, 1.0) * 0.7);
+    gl_FragColor = vec4(col * a, a);
   }
+`;
+
+const DISC_VERTEX = /* glsl */ `
+  varying vec2 vPos;
+  void main() {
+    vPos = position.xy;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const WALL_VERTEX = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+function shaderMaterial(fragmentShader: string, vertexShader: string, color: THREE.Color, blending: THREE.Blending): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: color.clone() }, uTime: { value: 0 }, uAlpha: { value: 0 }, uSpread: { value: 0 } },
+    vertexShader,
+    fragmentShader,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    // The disc blends normally (additive washed out on a light floor); the wall is additive (premultiplied) glow.
+    blending,
+  });
+}
+
+/** A soft round dot (no DOM needed), so the motes are glowing specks, not squares. */
+let softDotTexture: THREE.DataTexture | null = null;
+function softDot(): THREE.DataTexture {
+  if (softDotTexture) return softDotTexture;
+  const size = 32;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x + 0.5 - size / 2, y + 0.5 - size / 2) / (size / 2);
+      const a = Math.max(0, 1 - d);
+      const i = (y * size + x) * 4;
+      data[i] = data[i + 1] = data[i + 2] = 255;
+      data[i + 3] = Math.round(255 * a * a);
+    }
+  }
+  softDotTexture = new THREE.DataTexture(data, size, size);
+  softDotTexture.needsUpdate = true;
+  return softDotTexture;
 }
 
 function easeOut(x: number): number {
   return 1 - (1 - x) * (1 - x);
+}
+
+export class CircularVortex {
+  readonly object = new THREE.Group();
+  private readonly disc: THREE.Mesh;
+  private readonly discMaterial: THREE.ShaderMaterial;
+  private readonly wall: THREE.Mesh;
+  private readonly wallMaterial: THREE.ShaderMaterial;
+  private readonly motes: THREE.Points;
+  private readonly moteMaterial: THREE.PointsMaterial;
+  private readonly motePos = new Float32Array(MOTES * 3);
+  private readonly moteVel = new Float32Array(MOTES * 3);
+  private readonly moteColor: THREE.Color;
+  /** Seconds since trigger(); null = not playing. */
+  private age: number | null = null;
+  private time = 0;
+  private readonly anchor = new THREE.Vector3();
+
+  constructor(color: THREE.Color) {
+    this.moteColor = color.clone().lerp(new THREE.Color(0xffffff), 0.5);
+    this.discMaterial = shaderMaterial(DISC_FRAGMENT, DISC_VERTEX, color, THREE.NormalBlending);
+    const outer = CIRCULAR_VORTEX_RADIUS_M * 1.15;
+    this.disc = new THREE.Mesh(new THREE.RingGeometry(CIRCULAR_VORTEX_INNER_RADIUS_M, outer, 96, 4), this.discMaterial);
+    this.disc.rotation.x = -Math.PI / 2;
+    this.wallMaterial = shaderMaterial(WALL_FRAGMENT, WALL_VERTEX, color, THREE.AdditiveBlending);
+    this.wall = new THREE.Mesh(new THREE.CylinderGeometry(WALL_RADIUS_M, WALL_RADIUS_M * 1.25, WALL_HEIGHT_M, 64, 1, true), this.wallMaterial);
+    this.wall.position.y = WALL_HEIGHT_M / 2 - 0.2;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(this.motePos, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MOTES * 3), 3));
+    this.moteMaterial = new THREE.PointsMaterial({ size: 0.16, map: softDot(), vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    this.motes = new THREE.Points(geometry, this.moteMaterial);
+    this.motes.frustumCulled = false;
+    this.object.add(this.disc, this.wall, this.motes);
+    this.object.visible = false;
+    this.object.renderOrder = 5;
+  }
+
+  /** True while the animation plays (tests). */
+  get isPlaying(): boolean {
+    return this.age !== null;
+  }
+
+  /** Starts (or restarts) the full animation at the Bey's position. */
+  trigger(pos: THREE.Vector3): void {
+    this.age = 0;
+    this.anchor.copy(pos);
+    // Motes start on a ring just outside the Bey with a tangential (spin) + outward velocity.
+    for (let i = 0; i < MOTES; i++) {
+      const a = (i / MOTES) * Math.PI * 2 + (i % 3) * 0.7;
+      const r = CIRCULAR_VORTEX_INNER_RADIUS_M + ((i * 7) % 10) * 0.05;
+      this.motePos[i * 3] = Math.cos(a) * r;
+      this.motePos[i * 3 + 1] = ((i * 13) % 10) * 0.07;
+      this.motePos[i * 3 + 2] = Math.sin(a) * r;
+      const tangential = 6 + (i % 5) * 0.6;
+      const outward = 1.2 + (i % 4) * 0.6;
+      this.moteVel[i * 3] = -Math.sin(a) * tangential + Math.cos(a) * outward;
+      this.moteVel[i * 3 + 1] = 0.6 + (i % 3) * 0.5;
+      this.moteVel[i * 3 + 2] = Math.cos(a) * tangential + Math.sin(a) * outward;
+    }
+  }
+
+  /** Stops at once (a destroyed Bey keeps no effects). */
+  stop(): void {
+    this.age = null;
+    this.object.visible = false;
+  }
+
+  /** Every frame. `pos` is the Bey's position (null = unknown: the vortex stays where it is). */
+  update(pos: THREE.Vector3 | null, dt: number): void {
+    if (this.age === null) return;
+    this.age += dt;
+    this.time += dt;
+    const age = this.age;
+    if (age >= CIRCULAR_VORTEX_LIFE_S) {
+      this.stop();
+      return;
+    }
+    this.object.visible = true;
+    const form = Math.min(1, age / CIRCULAR_VORTEX_FORM_S);
+    const dissipate = Math.max(0, (age - CIRCULAR_VORTEX_SPIN_END_S) / (CIRCULAR_VORTEX_LIFE_S - CIRCULAR_VORTEX_SPIN_END_S));
+    // Follows the Bey while it spins, then lets go progressively as it dissipates.
+    if (pos) this.anchor.lerp(pos, 1 - dissipate);
+    this.object.position.set(this.anchor.x, this.anchor.y - 0.15, this.anchor.z);
+
+    const alpha = easeOut(form) * Math.pow(1 - dissipate, 1.4);
+    // Forms inward (from 1.35× to 1×), then widens to ~2× as it dissipates.
+    const scale = (1.35 - 0.35 * easeOut(form)) * (1 + 0.95 * easeOut(dissipate));
+    // The wind slows as it dies; the shader time integrates that speed so the bands never jump.
+    const spinRate = 1 - 0.6 * dissipate;
+    const shaderTime = this.time * spinRate;
+
+    this.disc.scale.setScalar(scale);
+    this.discMaterial.uniforms.uTime!.value = shaderTime;
+    this.discMaterial.uniforms.uAlpha!.value = 2.4 * alpha;
+    this.discMaterial.uniforms.uSpread!.value = dissipate;
+
+    this.wall.scale.set(scale, 1 + 0.9 * dissipate, scale);
+    this.wall.position.y = WALL_HEIGHT_M / 2 - 0.2 + 0.6 * dissipate;
+    this.wallMaterial.uniforms.uTime!.value = shaderTime;
+    this.wallMaterial.uniforms.uAlpha!.value = 1.3 * alpha * (1 - 0.4 * dissipate);
+
+    // Motes: carried round by the spin, flung outward, rising, fading with the vortex.
+    const colors = (this.motes.geometry.getAttribute('color') as THREE.BufferAttribute).array as Float32Array;
+    const drag = Math.exp(-3 * dt);
+    for (let i = 0; i < MOTES; i++) {
+      const k = i * 3;
+      this.motePos[k] = this.motePos[k]! + this.moteVel[k]! * dt;
+      this.motePos[k + 1] = this.motePos[k + 1]! + this.moteVel[k + 1]! * dt;
+      this.motePos[k + 2] = this.motePos[k + 2]! + this.moteVel[k + 2]! * dt;
+      this.moteVel[k] = this.moteVel[k]! * drag;
+      this.moteVel[k + 2] = this.moteVel[k + 2]! * drag;
+      const fade = alpha * (0.5 + 0.5 * ((i * 5) % 7) / 7);
+      colors[k] = this.moteColor.r * fade;
+      colors[k + 1] = this.moteColor.g * fade;
+      colors[k + 2] = this.moteColor.b * fade;
+    }
+    this.motes.geometry.getAttribute('position').needsUpdate = true;
+    this.motes.geometry.getAttribute('color').needsUpdate = true;
+  }
+
+  dispose(): void {
+    this.object.removeFromParent();
+    this.disc.geometry.dispose();
+    this.wall.geometry.dispose();
+    this.motes.geometry.dispose();
+    this.discMaterial.dispose();
+    this.wallMaterial.dispose();
+    this.moteMaterial.dispose();
+  }
 }

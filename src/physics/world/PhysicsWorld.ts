@@ -94,6 +94,20 @@ export class PhysicsWorld {
    */
   setGravityScale(scale: number): void {
     this.rapierWorld.gravity = { x: 0, y: GRAVITY_Y * scale, z: 0 };
+    this.gravityScaleValue = scale > 0 ? scale : 1;
+  }
+
+  private gravityScaleValue = 1;
+
+  /**
+   * × every Bey and floor friction coefficient (owner, 2026-10-04: "está impossível buildar momentum com o bey perdendo
+   * velocidade a cada toquezinho"). Rapier's floor friction is μ·m·g, so the ×3.6 gravity made it a ×3.6 hidden brake
+   * (~17 m/s² of sliding drag that only the throttle could hide — every curve, where the thrust drops, bled speed).
+   * Dividing μ by the gravity scale keeps the friction force what it was at ×1 (the game's grip lives in
+   * MovementController). Set the gravity scale before creating colliders.
+   */
+  get frictionScale(): number {
+    return 1 / this.gravityScaleValue;
   }
 
   /** Rapier ships as WebAssembly and must be initialized asynchronously before any RAPIER.* class can be constructed. */

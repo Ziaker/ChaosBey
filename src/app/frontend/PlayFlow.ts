@@ -169,6 +169,7 @@ export class PlayFlow {
     const generation = this.generation;
     this.screen = 'loading';
     this.deps.stateMachine.transitionTo(GameState.MatchLoading);
+    this.defeatCutscene = null;
     const runner = await MatchRunner.start(
       this.deps,
       {
@@ -198,12 +199,14 @@ export class PlayFlow {
               onBreak: () => this.hud?.flashBreak(String(outcome).includes('SpinOut') ? 'SPIN OUT' : 'BROKEN'),
               onDone: () => {
                 if (generation !== this.generation) return;
-                this.defeatCutscene = null;
+                // The cutscene keeps running (its pieces fall and settle, the camera stays on them) until the next round.
                 this.hud?.showBanner(roundEndBanner(outcome) ?? '');
                 this.scheduleRoundResult(outcome);
               },
               seed: this.score.rounds + 1,
             });
+            const cutscene = this.defeatCutscene;
+            session.setCutsceneFocus(() => cutscene.focusPoint());
             return;
           }
           this.hud?.showBanner(roundEndBanner(outcome) ?? '');

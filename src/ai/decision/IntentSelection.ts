@@ -47,6 +47,13 @@ const BUILD_SPEED_SCORE_BASE = 0.35;
 const BUILD_SPEED_SCORE_AGGRESSION = 0.45;
 /** × patience taken off BuildSpeed: a patient personality circles its opponent more (still moving), an aggressive one laps. */
 const BUILD_SPEED_PATIENCE_DAMPING = 0.4;
+/**
+ * Owner, 2026-10-04 ("o inimigo NÃO ESTÁ se movimentando mais pelo cenário"): hit and run — for this long after
+ * starting an attack, BuildSpeed gets up to this bonus (fading out), so the AI rides off on a lap and comes back with
+ * speed instead of hovering around the opponent. PROVISIONAL.
+ */
+const HIT_AND_RUN_S = 2.2;
+const HIT_AND_RUN_BONUS = 0.45;
 /** In Circular range there is no room for a lap: BuildSpeed keeps this share of its score. */
 const BUILD_SPEED_IN_CIRCULAR_RANGE = 0.4;
 const EDGE_RISK_OVERRIDE_THRESHOLD = 0.55;
@@ -137,6 +144,8 @@ export interface DecisionContext {
   readonly counterDash: boolean;
   /** Seconds since this AI last started an attack (or since the match began) — drives the anti-passivity tempo. */
   readonly secondsSinceOwnAttack: number;
+  /** Seconds since this AI last started an attack; absent until its first attack (drives the hit-and-run lap). */
+  readonly secondsSinceAttackStarted?: number;
   /** Whether the previous fresh decision was part of an edge recovery (IntentDecision.edgeRecovery) — selects the lower release threshold (hysteresis). */
   readonly recoveringFromEdge: boolean;
 }
@@ -369,7 +378,10 @@ export function selectIntent(
       : (1 - own) *
           (BUILD_SPEED_SCORE_BASE + personality.aggression * BUILD_SPEED_SCORE_AGGRESSION) *
           (1 - personality.patience * BUILD_SPEED_PATIENCE_DAMPING) *
-          (inCircularRange ? BUILD_SPEED_IN_CIRCULAR_RANGE : 1),
+          (inCircularRange ? BUILD_SPEED_IN_CIRCULAR_RANGE : 1) +
+        (context.secondsSinceAttackStarted !== undefined && context.secondsSinceAttackStarted < HIT_AND_RUN_S
+          ? HIT_AND_RUN_BONUS * (1 - context.secondsSinceAttackStarted / HIT_AND_RUN_S)
+          : 0),
   );
 
   // Below the hard override threshold, a milder threat with Dodge already

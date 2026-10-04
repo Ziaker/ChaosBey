@@ -253,19 +253,20 @@ describe('HybridVfxSystem', () => {
   });
 
   it('wobbles and grinds while broken, drives the circular sweep, and shows dodge afterimages', () => {
-    const fxAfter = (first: Partial<Facts>): number => {
+    const fxAfter = (first: Partial<Facts>, frames = 90): number => {
       const h = harness();
-      for (let i = 0; i < 90; i++) {
+      for (let i = 0; i < frames; i++) {
         h.setState({ first });
         h.frame();
       }
       const stats = h.system.getStats();
       h.hub.dispose();
-      return stats.fx! + stats.sparks!;
+      return stats.fx! + stats.sparks! + stats.vortices!;
     };
     const idle = fxAfter({});
     expect(fxAfter({ isBroken: true, stabilityFraction: 0 })).toBeGreaterThan(idle);
-    expect(fxAfter({ attackState: AttackState.CircularActive })).toBeGreaterThan(idle);
+    // The Circular's vortex (rebuilt 2026-10-04) is its own ~0.9 s animation, counted while it plays.
+    expect(fxAfter({ attackState: AttackState.CircularActive }, 20)).toBeGreaterThan(fxAfter({}, 20));
     expect(fxAfter({ dodgeState: DodgeState.Dodging })).toBeGreaterThan(idle);
   });
 

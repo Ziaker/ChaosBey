@@ -11,6 +11,12 @@ export interface MomentumRules {
   readonly momentumFillS: number;
   readonly momentumDecayS: number;
   readonly momentumLossOnCollision: number;
+  /**
+   * MatchConfig.turnSpeedRetention (owner, 2026-10-04: "está impossível buildar momentum com o bey perdendo velocidade
+   * a cada toquezinho que você dá pra curvar"): a turn only counts as sharp (draining momentum) above
+   * MOMENTUM_SHARP_TURN_RAD_PER_S / (1 − this) — at 90% kept a normal turn keeps building; at 100% no turn drains.
+   */
+  readonly turnSpeedRetention?: number;
 }
 
 export class MomentumSystem {
@@ -52,7 +58,8 @@ export class MomentumSystem {
     }
     this.lastHeadingRad = headingRad;
     const fastEnough = speedMps >= MOMENTUM_BUILD_MIN_SPEED_FRACTION * topSpeedMps;
-    const straightEnough = turnRate <= MOMENTUM_SHARP_TURN_RAD_PER_S;
+    const keep = Math.max(0, Math.min(1, this.rules.turnSpeedRetention ?? 0));
+    const straightEnough = keep >= 1 || turnRate <= MOMENTUM_SHARP_TURN_RAD_PER_S / (1 - keep);
     // In the air momentum holds: a hop is not a brake.
     if (!grounded) return;
     if (fastEnough && straightEnough) this.momentum = Math.min(1, this.momentum + fixedDeltaSeconds / Math.max(1e-6, this.rules.momentumFillS));

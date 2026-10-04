@@ -38,7 +38,15 @@ export class FixedTimestepLoop {
   private rafHandle: number | null = null;
   private running = false;
 
-  constructor(private readonly callbacks: FixedTimestepCallbacks) {}
+  constructor(
+    private readonly callbacks: FixedTimestepCallbacks,
+    /**
+     * Owner, 2026-10-04 (MatchConfig.gameSpeed): game seconds per real second. The fixed tick stays the same (the
+     * physics never sees a bigger step); more ticks run per real second, and the render frame's time is scaled too,
+     * so effects keep pace.
+     */
+    private readonly timeScale = 1,
+  ) {}
 
   start(): void {
     if (this.running) return;
@@ -70,7 +78,7 @@ export class FixedTimestepLoop {
   private tick = (nowMs: number): void => {
     if (!this.running) return;
 
-    const frameDeltaSeconds = this.lastFrameTimeMs === null ? 0 : (nowMs - this.lastFrameTimeMs) / 1000;
+    const frameDeltaSeconds = (this.lastFrameTimeMs === null ? 0 : (nowMs - this.lastFrameTimeMs) / 1000) * this.timeScale;
     this.lastFrameTimeMs = nowMs;
 
     this.accumulatorSeconds = Math.min(this.accumulatorSeconds + frameDeltaSeconds, MAX_CATCHUP_SECONDS);

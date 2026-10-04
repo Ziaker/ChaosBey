@@ -19,8 +19,11 @@ import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
 // Owner, 2026-10-04: 60 → 90 ticks (+0.5 s) — see the Bey bounce or fly, and THEN explode.
 export const DEFEAT_PRE_BREAK_TICKS = 90;
 export const DEFEAT_SLOW_MOTION_S = 1.5;
-/** Game time per real second during the slow motion. */
-const SLOW_MOTION_SCALE = 0.3;
+/** Game time per real second during the slow motion (0.3 left the pieces hanging in the air: 0.45 s of fall in 1.5 s). */
+const SLOW_MOTION_SCALE = 0.45;
+/** After the slow motion the pieces keep falling and bouncing at normal speed until they settle (owner, 2026-10-04: "a
+ * animação das peças se espalhando ainda fica travada no ar"). */
+const SETTLE_LIMIT_S = 4;
 const GRAVITY_MPS2 = 26;
 /** Flight speeds above this are clamped (a knock-out at 40 m/s would leave the screen at once). */
 const MAX_FLIGHT_MPS = 22;
@@ -48,6 +51,9 @@ export interface DefeatCutsceneOptions {
 export class DefeatCutscene {
   private elapsedS = 0;
   private phase: 'flight' | 'break' | 'done' = 'flight';
+  /** Real seconds the pieces have kept falling after the slow motion. */
+  private settleS = 0;
+  private readonly focus = new THREE.Vector3();
   private readonly pivot = new THREE.Group();
   private readonly shards: Shard[] = [];
   private readonly start = new THREE.Vector3();
@@ -82,9 +88,28 @@ export class DefeatCutscene {
     return this.phase === 'done';
   }
 
+  /**
+   * Where the camera should look (world space): the flying Bey, then the middle of its scattering pieces. Owner,
+   * 2026-10-04: "o bey sai da câmera quando é derrotado e explode […] é pra câmera seguir o bey sendo destruído".
+   */
+  focusPoint(): THREE.Vector3 {
+    if (this.shards.length === 0) return this.focus.copy(this.position);
+    this.focus.set(0, 0, 0);
+    const p = new THREE.Vector3();
+    for (const s of this.shards) this.focus.add(s.object.getWorldPosition(p));
+    return this.focus.multiplyScalar(1 / this.shards.length);
+  }
+
   update(realDtS: number): void {
-    if (this.phase === 'done') return;
     const dt = Math.min(0.1, Math.max(0, realDtS));
+    if (this.phase === 'done') {
+      // The winner is announced; the pieces keep falling at normal speed until they settle (never frozen mid-air).
+      if (this.settleS < SETTLE_LIMIT_S) {
+        this.settleS += dt;
+        this.stepShards(dt);
+      }
+      return;
+    }
     this.elapsedS += dt;
     if (this.phase === 'flight') {
       this.stepFlight(dt);
@@ -92,7 +117,14 @@ export class DefeatCutscene {
       return;
     }
     // Slow motion: the four pieces fly apart and fall.
-    const gameDt = dt * SLOW_MOTION_SCALE;
+    this.stepShards(dt * SLOW_MOTION_SCALE);
+    if (this.elapsedS >= DEFEAT_PRE_BREAK_TICKS * FIXED_DELTA_SECONDS + DEFEAT_SLOW_MOTION_S) {
+      this.phase = 'done';
+      this.options.onDone();
+    }
+  }
+
+  private stepShards(gameDt: number): void {
     for (const s of this.shards) {
       s.velocity.y -= GRAVITY_MPS2 * gameDt;
       s.object.position.addScaledVector(s.velocity, gameDt);
@@ -102,6 +134,7 @@ export class DefeatCutscene {
       if (s.object.position.y < floor) {
         s.object.position.y = floor;
         s.velocity.y = Math.abs(s.velocity.y) * 0.35;
+        if (s.velocity.y < 0.8) s.velocity.y = 0; // settled: no endless micro-bounces
         s.velocity.x *= 0.7;
         s.velocity.z *= 0.7;
       }
@@ -121,10 +154,8 @@ export class DefeatCutscene {
       s.object.rotation.x += s.spin.x * gameDt;
       s.object.rotation.y += s.spin.y * gameDt;
       s.object.rotation.z += s.spin.z * gameDt;
-    }
-    if (this.elapsedS >= DEFEAT_PRE_BREAK_TICKS * FIXED_DELTA_SECONDS + DEFEAT_SLOW_MOTION_S) {
-      this.phase = 'done';
-      this.options.onDone();
+      // Resting on the floor: the spin dies out too.
+      if (s.object.position.y <= floor + 0.01 && Math.abs(s.velocity.y) < 1) s.spin.multiplyScalar(Math.exp(-3 * gameDt));
     }
   }
 

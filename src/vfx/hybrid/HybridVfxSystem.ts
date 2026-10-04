@@ -32,7 +32,6 @@ import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
 import { getConceptVisualModel } from '../../bey/visual/conceptBeyVisual';
 import { AttackState } from '../../combat/attacks/AttackController';
-import { CIRCULAR_ACTIVE_DURATION_S } from '../../combat/attacks/AttackTuning';
 import { DodgeState } from '../../dodge/DodgeController';
 import type { PresentationEvent, PresentationSide } from '../../presentation/events';
 import type { PresentationFrame, PresentationSystem } from '../../presentation/hub';
@@ -172,7 +171,7 @@ export class HybridVfxSystem implements PresentationSystem {
   /** Owner, 2026-10-04: a destroyed Bey raises no more effects of its own (vortex, trails, dust, sparks). */
   setDefeated(side: PresentationSide): void {
     this.defeated.add(side);
-    this.tracks[side].vortex.update(null, null, 0);
+    this.tracks[side].vortex.stop();
   }
 
   /** The language runtime (tests and visual checks drive its handlers directly). */
@@ -355,16 +354,10 @@ export class HybridVfxSystem implements PresentationSystem {
       this.runtime.dashRelease({ pos, dir, m, slot });
       this.runtime.windBurst({ pos: pos.clone(), dir, m, slot });
     }
-    // Circular: the sweep, with its own progress.
-    if (bey.attackState === AttackState.CircularActive) {
-      if (track.attackState !== AttackState.CircularActive) track.circularElapsed = 0;
-      const t = Math.min(1, track.circularElapsed / CIRCULAR_ACTIVE_DURATION_S);
-      track.circularElapsed += dt;
-      this.runtime.circularSweep({ pos, m: 0.6, slot }, t, dt);
-      track.vortex.update(pos, t, dt);
-    } else {
-      track.vortex.update(null, null, dt);
-    }
+    // Circular (owner, 2026-10-04: rebuilt from scratch): the vortex is its own ~0.9 s animation, started on the
+    // attack's first frame and always played to the end — the attack itself is only 0.25 s active.
+    if (bey.attackState === AttackState.CircularActive && track.attackState !== AttackState.CircularActive) track.vortex.trigger(pos);
+    track.vortex.update(pos, dt);
     track.attackState = bey.attackState;
     // Dodge: every dodge raises the Cel Cyclone wind and dust as it starts (owner, 2026-10-02; it used to show only
     // on an evaded hit, strongly only on a Perfect Dodge), at the lab's Light intensity; afterimages while dodging.
@@ -393,7 +386,7 @@ export class HybridVfxSystem implements PresentationSystem {
       t.dodgeState = DodgeState.Idle;
       t.lastCharge = 0;
       t.circularElapsed = 0;
-      t.vortex.update(null, null, 0);
+      t.vortex.stop();
     }
   }
 
@@ -402,6 +395,7 @@ export class HybridVfxSystem implements PresentationSystem {
     return {
       fx: this.layer.count(),
       sparks: this.sparks.count(),
+      vortices: SIDES.filter((side) => this.tracks[side].vortex.isPlaying).length,
       focusLines: screen.focusLines,
       impactFrame: screen.impactFrame,
       droppedShake: this.dropped.shake,

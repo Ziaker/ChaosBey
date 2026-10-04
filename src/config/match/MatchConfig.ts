@@ -113,6 +113,12 @@ export interface MatchConfig {
   bodyContactControlLossScale: number;
   /** Owner, 2026-10-04: stage size, × the 36 m floor radius (1 = as designed). Pregame slider. */
   arenaSizeScale: number;
+  /**
+   * Owner, 2026-10-04 ("o feeling de velocidade do jogo ainda está MUITO baixo, deixe tudo no mínimo 20% mais rápido e
+   * faça isso ser um slider"): the whole match runs this much faster than real time — movement, attacks, gravity,
+   * effects, timers. Same ticks (replays and determinism unchanged), just more of them per real second. Pregame slider.
+   */
+  gameSpeed: number;
   /** Owner, 2026-10-04 ("qualquer toque devia jogar os beys longe um do outro"): every contact pushes both Beys apart at least this fast (m/s). Pregame slider. */
   contactRepelMps: number;
   /** Owner, 2026-10-04 ("o recoil deve ser alto também, que nem na vida real"): an attack that lands throws its attacker back this fast (m/s); the defender at least 1.5× the contact repel. Pregame slider. */
@@ -219,6 +225,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     gravityScale: GRAVITY_SCALE_DEFAULT,
     contactRepelMps: CONTACT_REPEL_DEFAULT_MPS,
     arenaSizeScale: 1,
+    gameSpeed: 1.2,
     circularLockAfterHitS: 0.6,
     bodyContactControlLossScale: 0.8,
     contactLiftMps: 4,
@@ -304,6 +311,7 @@ export const SPIN_STAMINA_DRAIN_RANGE = { min: 0, max: 20, step: 0.5 } as const;
 export const CIRCULAR_LOCK_RANGE = { min: 0, max: 2, step: 0.05 } as const;
 export const BODY_CONTACT_CONTROL_LOSS_RANGE = { min: 0, max: 2, step: 0.05 } as const;
 export const ARENA_SIZE_SCALE_RANGE = { min: 0.5, max: 2.5, step: 0.05 } as const;
+export const GAME_SPEED_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
 /** Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade" — share of the speed a turn would scrub off that is kept. PROVISIONAL 0.85. */
 export const TURN_SPEED_RETENTION_DEFAULT = 0.85;
 export const TURN_SPEED_RETENTION_RANGE = { min: 0, max: 1, step: 0.05 } as const;

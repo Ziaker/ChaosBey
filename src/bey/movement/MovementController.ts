@@ -114,6 +114,9 @@ export interface MovementSnapshot {
 /** Numerical safety clamp on horizontal speed (m/s) — not a gameplay limit (owner speed pass, 2026-10-04). */
 const NUMERICAL_SPEED_CLAMP_MPS = 60;
 
+/** Speed lost per radian of curve at 0% kept (× (1 − turnSpeedRetention)). PROVISIONAL. */
+const TURN_LOSS_PER_RAD = 0.5;
+
 export class MovementController {
   private headingRad = 0;
   private turnRateRadPerS = 0;
@@ -340,7 +343,10 @@ export class MovementController {
         newLongitudinalSpeed -= this.handling.reverseAccelerationMps2 * accelFactor * fixedDeltaSeconds * throttleScale;
       }
       if (grounded) {
-        if (throttleInput === 0) newLongitudinalSpeed *= Math.exp(-this.motion.longitudinalGrip * fixedDeltaSeconds);
+        // Owner, 2026-10-04: with speed kept in turns, pointing the stick sideways (or behind) to curve is steering, not
+        // letting go — no coasting drag while a direction is held.
+        const steeringOnly = this.turnSpeedRetention > 0 && hasMovementInput && throttleInput === 0;
+        if (throttleInput === 0 && !steeringOnly) newLongitudinalSpeed *= Math.exp(-this.motion.longitudinalGrip * fixedDeltaSeconds);
         // No movement input at all: the Bey settles instead of gliding on
         // (owner playtest: "it moves by itself"). Only on the ground and
         // outside an impact's window, so hits and bounces still play out.
@@ -385,12 +391,19 @@ export class MovementController {
     let newVelHoriz = add(scale(headingForward, newLongitudinalSpeed), newLateral);
     // Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade". A driven turn on the ground keeps this share of
     // the speed the heading change and the lateral grip scrub off (never above the top speed, never on a Dash).
-    if (this.turnSpeedRetention > 0 && grounded && !dashOverride && hasMovementInput && throttleInput >= 0) {
+    // Owner, 2026-10-04 ("está impossível buildar momentum com o bey perdendo velocidade a cada toquezinho que você dá
+    // pra curvar"): it used to keep 90% of each TICK's loss, which compounds — a steady curve lost ~11 m/s per second.
+    // Now the loss is per radian the velocity actually turns: (1 − kept) × TURN_LOSS_PER_RAD of the speed per radian
+    // (at 90%: ~8% over a 90° curve, ~16% over a U-turn), nothing at 100%.
+    if (this.turnSpeedRetention > 0 && grounded && !dashOverride && hasMovementInput) {
       const before = length(velHoriz);
       const after = length(newVelHoriz);
       const cap = this.handling.maxSpeedMps * topSpeedMultiplier;
-      if (after > 1e-6 && after < before) {
-        const kept = Math.min(Math.max(after, cap), after + (before - after) * this.turnSpeedRetention);
+      if (after > 1e-6 && before > 1e-6 && after < before) {
+        const cos = Math.max(-1, Math.min(1, dot(velHoriz, newVelHoriz) / (before * after)));
+        const turnedRad = Math.acos(cos);
+        const allowed = before * (1 - (1 - this.turnSpeedRetention) * TURN_LOSS_PER_RAD * turnedRad);
+        const kept = Math.min(Math.max(after, cap), Math.max(after, allowed));
         if (kept > after) newVelHoriz = scale(newVelHoriz, kept / after);
       }
     }

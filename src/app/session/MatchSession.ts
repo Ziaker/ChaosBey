@@ -177,6 +177,8 @@ export class MatchSession {
   private hybridVfx: HybridVfxSystem | null = null;
   /** Owner, 2026-10-04: the expanding ring of an Air Recovery (render only). */
   private readonly recoveryRings: RecoveryRingEffect;
+  private cutsceneFocus: (() => { x: number; y: number; z: number }) | null = null;
+  private cutsceneCamera: { eye: THREE.Vector3; focus: THREE.Vector3 } | null = null;
   private presentationFloorAt: ((x: number, z: number) => number) | null = null;
   /** The approved Clash Overdrive presentation, attached only with the `clashPresentation` flag (render only). */
   private clashPresentation: ClashPresentationSystem | null = null;
@@ -450,6 +452,15 @@ export class MatchSession {
   setBeyDefeated(side: Side): void {
     this.conditionVisuals?.setDefeated(side);
     this.hybridVfx?.setDefeated(side);
+  }
+
+  /**
+   * Owner, 2026-10-04 ("é pra câmera seguir o bey sendo destruído"): while set, the camera leaves the (frozen) fight
+   * director and follows this point — the defeated Bey's flight, then its pieces. Render only. Null hands it back.
+   */
+  setCutsceneFocus(focus: (() => { x: number; y: number; z: number }) | null): void {
+    this.cutsceneFocus = focus;
+    this.cutsceneCamera = null;
   }
 
   /** The arena floor height under (x, z) for presentation (the defeat cutscene's flight). */
@@ -758,6 +769,27 @@ export class MatchSession {
     return { tickIndex, firstActions, secondActions, result, simulationAdvanced: !isFrozenByHitstop };
   }
 
+  /** The defeat cutscene's chase camera: keeps the current viewing side, ~8 m back and 4 m up, catching up smoothly. */
+  private followCutscene(camera: THREE.PerspectiveCamera, frameDeltaSeconds: number): void {
+    const p = this.cutsceneFocus!();
+    const target = new THREE.Vector3(p.x, p.y, p.z);
+    if (!this.cutsceneCamera) {
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      this.cutsceneCamera = { eye: camera.position.clone(), focus: camera.position.clone().addScaledVector(forward, camera.position.distanceTo(target)) };
+    }
+    const cam = this.cutsceneCamera;
+    const back = new THREE.Vector3(cam.eye.x - target.x, 0, cam.eye.z - target.z);
+    if (back.lengthSq() < 1e-4) back.set(0, 0, 1);
+    back.setLength(8);
+    const desiredEye = target.clone().add(back).add(new THREE.Vector3(0, 4, 0));
+    const k = 1 - Math.exp(-5 * Math.max(0, frameDeltaSeconds));
+    cam.focus.lerp(target, Math.min(1, k * 1.6));
+    cam.eye.lerp(desiredEye, k);
+    camera.position.copy(cam.eye);
+    camera.lookAt(cam.focus);
+  }
+
   /** Syncs visuals, camera and frame-rate VFX to the current state. Call once per rendered frame, before renderer.render(). */
   renderFrame(frameDeltaSeconds: number, camera: THREE.PerspectiveCamera, view: SessionRenderView = DEFAULT_RENDER_VIEW): void {
     const match = this.match;
@@ -789,6 +821,7 @@ export class MatchSession {
       camera.fov = view.cameraEffects ? cameraOutput.fovDeg : cameraOutput.fovDeg - cameraOutput.fovPunchDeg;
       camera.updateProjectionMatrix();
     }
+    if (this.cutsceneFocus && view.cameraView !== 'overview') this.followCutscene(camera, frameDeltaSeconds);
 
     this.vfxManager.onRenderFrame(
       frameDeltaSeconds,

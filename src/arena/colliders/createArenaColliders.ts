@@ -59,7 +59,7 @@ export function createArenaColliders(
   // has always played — the Lab built B from the game's values, and the
   // owner's playtest note was that the Bey must not move by itself. The
   // long glide is an open option (docs/design-decisions/motion-approval.md §16).
-  const floorMaterial = (desc: RAPIER.ColliderDesc) => desc.setRestitution(floorRestitution).setFriction(FLOOR_MATERIAL.friction).setCollisionGroups(ARENA_COLLISION_GROUPS);
+  const floorMaterial = (desc: RAPIER.ColliderDesc) => desc.setRestitution(floorRestitution).setFriction(FLOOR_MATERIAL.friction * physics.frictionScale).setCollisionGroups(ARENA_COLLISION_GROUPS);
   // Lote 9 (item 3): the profile at the match's depth — the same h(r) as everything else that reads the floor.
   setArenaSizeScale(geometry.sizeScale ?? 1); // owner, 2026-10-04: the stage size slider
   const floor: ArenaFloor = { id: geometry.floor ?? 'flat', depthM: geometry.floorDepthM ?? BOWL_DEPTH_M };

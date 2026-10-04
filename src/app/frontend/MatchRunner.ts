@@ -93,6 +93,8 @@ export class MatchRunner {
     private readonly directional: DirectionalController,
     private readonly deps: MatchRunnerDeps,
     private readonly events: MatchRunnerEvents,
+    /** MatchConfig.gameSpeed (owner, 2026-10-04): game seconds per real second. */
+    gameSpeed = 1,
   ) {
     const { appRenderer, debugOverlay, attackProfileSettingsPanel, stateMachine, telemetry } = deps;
     this.loop = new FixedTimestepLoop({
@@ -128,7 +130,7 @@ export class MatchRunner {
         console.error(`ChaosBey simulation halted at tick ${tickIndex}:`, error);
         debugOverlay.showFatalError(`SIMULATION HALTED at tick ${tickIndex}: ${error instanceof Error ? error.message : String(error)}`);
       },
-    });
+    }, gameSpeed);
   }
 
   static async start(deps: MatchRunnerDeps, start: MatchRunnerStart, events: MatchRunnerEvents = {}): Promise<MatchRunner> {
@@ -178,7 +180,7 @@ export class MatchRunner {
     sessionForJumpBuffer = session;
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
     deps.stateMachine.transitionTo(GameState.Combat);
-    const runner = new MatchRunner(session, keyboard, gamepad, directional, deps, events);
+    const runner = new MatchRunner(session, keyboard, gamepad, directional, deps, events, start.matchConfig.gameSpeed ?? 1);
     // The arena's sky: the scene's clear color while this match owns the renderer (restored on stop).
     if (start.arenaTheme) {
       runner.savedBackground = deps.appRenderer.scene.background;

@@ -143,6 +143,7 @@ export class AIController implements CombatController {
   private counterRollForOpponentDash: boolean | null = null;
   /** Simulated time this AI last started an attack (own attackState left Neutral) — feeds the anti-passivity tempo (see IntentSelection.passivityTempo). */
   private lastOwnAttackStartS = 0;
+  private hasAttacked = false;
   private lastOwnAttackState: AttackState = AttackState.Neutral;
   /**
    * "Slow to react" deliberate error (IntentionalError.ts): a fresh
@@ -216,6 +217,7 @@ export class AIController implements CombatController {
 
     if (this.lastOwnAttackState === AttackState.Neutral && ownRaw.attackState !== AttackState.Neutral) {
       this.lastOwnAttackStartS = this.nowS;
+      this.hasAttacked = true;
     }
     this.lastOwnAttackState = ownRaw.attackState;
 
@@ -320,6 +322,7 @@ export class AIController implements CombatController {
     const ideal = selectIntent(world, adjustedPersonality, risk, {
       counterDash: this.counterRollForOpponentDash === true,
       secondsSinceOwnAttack: world.nowS - this.lastOwnAttackStartS,
+      secondsSinceAttackStarted: this.hasAttacked ? world.nowS - this.lastOwnAttackStartS : undefined,
       // From the IDEAL decision: a deliberate hesitation must not make the
       // AI forget it was mid-recovery (the lower release threshold would
       // otherwise be lost and recovery restarted from the entry threshold).
