@@ -174,6 +174,7 @@ export class MatchSession {
   private conditionVisuals: ConditionVisualsSystem | null = null;
   /** The approved Hybrid VFX (Cel Cyclone wind), attached only with the `hybridVfx` flag (render only). */
   private hybridVfx: HybridVfxSystem | null = null;
+  private presentationFloorAt: ((x: number, z: number) => number) | null = null;
   /** The approved Clash Overdrive presentation, attached only with the `clashPresentation` flag (render only). */
   private clashPresentation: ClashPresentationSystem | null = null;
   /** The approved arena art, attached only with the `arenaVisuals` flag (render only; colliders untouched). */
@@ -364,6 +365,7 @@ export class MatchSession {
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
     const theme = options.arenaTheme ?? FOUNDRY_PIT.theme;
     const floorAt = (x: number, z: number): number => floorHeightAt(arenaFloor, x, z);
+    this.presentationFloorAt = floorAt;
     this.driftVfx = { first: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt), second: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt) };
     this.root.add(this.driftVfx.first.object3D, this.driftVfx.second.object3D);
     if (presentationFeatures.conditionVisuals) {
@@ -438,6 +440,17 @@ export class MatchSession {
     const physics = await PhysicsWorld.create();
     physics.setGravityScale(resolveMatchConfig(options.matchConfig).gravityScale ?? 1);
     return new MatchSession(options, physics);
+  }
+
+  /** Owner, 2026-10-04: the defeated Bey of a KO / spin-out shows none of its own effects any more (presentation only). */
+  setBeyDefeated(side: Side): void {
+    this.conditionVisuals?.setDefeated(side);
+    this.hybridVfx?.setDefeated(side);
+  }
+
+  /** The arena floor height under (x, z) for presentation (the defeat cutscene's flight). */
+  floorHeightAt(x: number, z: number): number {
+    return this.presentationFloorAt ? this.presentationFloorAt(x, z) : 0;
   }
 
   getTickIndex(): number {

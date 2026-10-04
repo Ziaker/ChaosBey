@@ -104,6 +104,8 @@ export class AttackController {
   private heldSinceRecoveryPressS: number | null = null;
   /** Item 11: the Bey's speed when the current Dash fired (0 unless dashCarriesSpeed). */
   private dashEntrySpeedMps = 0;
+  /** Owner, 2026-10-04: seconds during which a tap can't start the Circular (after taking a hit / while knocked back). */
+  private circularLockS = 0;
   /** The current Dash's own line (null outside a Dash). */
   private dashHeadingRad: number | null = null;
 
@@ -129,6 +131,14 @@ export class AttackController {
   /** Debug Lab "reset cooldowns" only: the Dash is ready at once. */
   debugResetDashCooldown(): void {
     this.dashCooldownRemainingS = 0;
+  }
+
+  /**
+   * Owner, 2026-10-04 ("os beys tão podendo realizar [o giratório] APÓS levarem dano, isso tá inaceitavelmente errado,
+   * é pra ser um golpe defensivo que NÃO DEVE ser possível de ser realizado ao levar dano"): no Circular for `seconds`.
+   */
+  blockCircularFor(seconds: number): void {
+    this.circularLockS = Math.max(this.circularLockS, seconds);
   }
 
   /** Seconds until the next Dash is ready (0 = ready). */
@@ -193,6 +203,7 @@ export class AttackController {
     opponentVelocityXZ: Vec2 = { x: 0, z: 0 },
   ): AttackTickResult {
     const attackHeld = actions.held.has(Action.Attack);
+    this.circularLockS = Math.max(0, this.circularLockS - fixedDeltaSeconds);
     let dashOverride: MovementPreStepInput['dashOverride'] = null;
     // B1: a press during a recovery is kept while it stays held.
     const inRecovery = this.state === AttackState.DashActive || this.state === AttackState.DashRecovery || this.state === AttackState.CircularRecovery || this.state === AttackState.CircularActive;
@@ -283,6 +294,9 @@ export class AttackController {
         // A hold that waited for the Dash cooldown, released before it ran out: no Dash, and not a tap either.
         this.state = AttackState.Neutral;
         this.waitingForDash = false;
+      } else if (this.circularLockS > 0) {
+        // Owner, 2026-10-04: the Circular is a defensive move that can't be thrown while taking a hit.
+        this.state = AttackState.Neutral;
       } else {
         this.state = AttackState.CircularActive;
         this.activeTimerS = 0;
@@ -378,6 +392,7 @@ export class AttackController {
       heldSinceRecoveryPressS: this.heldSinceRecoveryPressS,
       dashEntrySpeedMps: this.dashEntrySpeedMps,
       dashHeadingRad: this.dashHeadingRad,
+      circularLockS: this.circularLockS,
     };
   }
 }

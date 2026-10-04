@@ -27,6 +27,9 @@ import { speedDamageMultiplier } from '../../combat/attacks/SpeedDamage';
 
 /** Owner, 2026-10-04: share of a contact push given as lift, so the Beys visibly fly apart. PROVISIONAL. */
 const IMPACT_PUSH_LIFT_FRACTION = 0.25;
+/** Owner, 2026-10-04: an Air Recovery keeps this share of the horizontal flight and drops the Bey at this speed. PROVISIONAL. */
+const AIR_RECOVERY_KEEP_HORIZONTAL = 0.2;
+const AIR_RECOVERY_DROP_MPS = 12;
 import { applyKnockback, computeKnockback, computeStabilityDamage, type KnockbackComponents } from '../../combat/knockback/Knockback';
 import { CIRCULAR_BASE_KNOCKBACK_FORCE, CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, CIRCULAR_LAUNCH_HORIZONTAL_MPS, CIRCULAR_STABILITY_DAMAGE } from '../../combat/attacks/AttackTuning';
 import {
@@ -248,9 +251,21 @@ export function tickMatch(
   );
   if (firstDodge.staminaCostThisTick > 0) first.stamina.resource.subtract(firstDodge.staminaCostThisTick);
   if (secondDodge.staminaCostThisTick > 0) second.stamina.resource.subtract(secondDodge.staminaCostThisTick);
-  if (firstDodge.triggeredAirRecovery) first.spin.applyAirRecovery(first.body);
-  if (secondDodge.triggeredAirRecovery) second.spin.applyAirRecovery(second.body);
+  // Owner, 2026-10-04 ("apertar C e não apertar pra dar o recovery é a mesma coisa, simplesmente NÃO funciona"): the
+  // Air Recovery used to only straighten the Bey's (visual) attitude — the flight went on exactly the same. Now it
+  // ends the launch: the outward flight is cut, the Bey drops back to the floor, and control returns at once.
+  const airRecover = (bey: Bey): void => {
+    bey.spin.applyAirRecovery(bey.body);
+    const v = bey.body.linvel();
+    bey.body.setLinvel({ x: v.x * AIR_RECOVERY_KEEP_HORIZONTAL, y: Math.min(v.y, 0) - AIR_RECOVERY_DROP_MPS, z: v.z * AIR_RECOVERY_KEEP_HORIZONTAL }, true);
+    bey.movement.endKnockback();
+  };
+  if (firstDodge.triggeredAirRecovery) airRecover(first);
+  if (secondDodge.triggeredAirRecovery) airRecover(second);
 
+  // Owner, 2026-10-04: no defensive Circular while being knocked around.
+  if (first.movement.isKnockbackPlaying()) first.attack.blockCircularFor(fixedDeltaSeconds * 2);
+  if (second.movement.isKnockbackPlaying()) second.attack.blockCircularFor(fixedDeltaSeconds * 2);
   const firstAttack = first.attack.tick(
     firstActions,
     first.movement.getHeadingRad(),
@@ -424,6 +439,7 @@ export function tickMatch(
 
   function applyStabilityDamageAndTrackKo(defenderIsFirst: boolean, defender: Bey, amount: number): void {
     const { causedBreak, isQualifyingKoHit } = defender.stability.applyDamage(amount);
+    if (amount > 0) defender.attack.blockCircularFor(defender.rules.circularLockAfterHitS ?? 0); // owner, 2026-10-04
     combatEvents.push({ kind: 'stabilityDamage', targetIsFirst: defenderIsFirst, amount });
     if (causedBreak) combatEvents.push({ kind: 'stabilityBreak', targetIsFirst: defenderIsFirst });
     if (isQualifyingKoHit) {

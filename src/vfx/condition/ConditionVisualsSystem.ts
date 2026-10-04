@@ -196,7 +196,18 @@ export class ConditionVisualsSystem implements PresentationSystem {
     this.soft.update(dt);
   }
 
+  private readonly defeated = new Set<PresentationSide>();
+
+  /** Owner, 2026-10-04: a destroyed Bey keeps none of its condition effects (spin blur, auras, floor instrument). */
+  setDefeated(side: PresentationSide): void {
+    this.defeated.add(side);
+    const entry = this.entries[side];
+    entry.rig.root.visible = false;
+    this.dispatch(entry, { kind: 'reset' });
+  }
+
   private updateBey(entry: BeyEntry, bey: BeyPresentationState, dt: number): void {
+    if (this.defeated.has(entry.side)) return;
     const group = entry.target.visual.group;
     group.updateWorldMatrix(true, false);
     group.matrixWorld.decompose(this.worldPosition, this.worldQuaternion, this.other.set(1, 1, 1));

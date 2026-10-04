@@ -208,6 +208,19 @@ export class MovementController {
     this.grip = Math.min(this.grip, this.motion.slipGrip);
   }
 
+  /** True while a knockback (a hit, a launch) is playing out. */
+  isKnockbackPlaying(): boolean {
+    return this.knockbackPlaying;
+  }
+
+  /** Owner, 2026-10-04: an Air Recovery ends the launch — the knockback stops playing and control comes back at once. */
+  endKnockback(): void {
+    this.postImpactCooldownRemainingS = 0;
+    this.knockbackPlaying = false;
+    this.grip = 1;
+    this.slipping = false;
+  }
+
   /** Debug Lab "reset cooldowns" (GDD section 70) — explicit mutation, never called by gameplay. */
   debugResetCooldown(): void {
     this.postImpactCooldownRemainingS = 0;

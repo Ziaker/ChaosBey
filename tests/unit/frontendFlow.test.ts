@@ -65,7 +65,7 @@ describe('match setup', () => {
         // Item 11 (owner, 2026-10-04): faster = more damage; a Dash keeps its speed.
         speedDamageGain: 0.5, dashCarriesSpeed: true,
         // Owner, 2026-10-04: 45% faster, turns that keep speed, one jump rule; the funnel 7 m deep (above).
-        turnRateScale: 1.45, turnSpeedRetention: 0.85, jumpHoldForFullS: 0.2, gravityScale: 2.5, contactRepelMps: 9, attackRecoilMps: 10, highSpeedControl: 1, arenaSizeScale: 1, dodgeStaminaCost: 0, dodgeDistanceScale: 1, contactLiftMps: 4, knockbackScale: 1, spinStaminaDrain: 1,
+        turnRateScale: 1.45, turnSpeedRetention: 0.85, jumpHoldForFullS: 0.2, gravityScale: 2.5, contactRepelMps: 9, attackRecoilMps: 10, highSpeedControl: 1, arenaSizeScale: 1, dodgeStaminaCost: 0, dodgeDistanceScale: 1, contactLiftMps: 4, knockbackScale: 1, spinStaminaDrain: 1, circularLockAfterHitS: 0.6,
       },
       visual: { intensity: 1, groundWaves: 1, dust: 1 },
       seedText: null,

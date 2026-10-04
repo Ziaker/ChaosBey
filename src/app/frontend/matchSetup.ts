@@ -73,14 +73,14 @@ export type MatchRules = Pick<
   MatchConfig,
   'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'
   | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'speedDamageGain' | 'dashCarriesSpeed'
-  | 'turnRateScale' | 'turnSpeedRetention' | 'jumpHoldForFullS' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'highSpeedControl' | 'arenaSizeScale' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain'
+  | 'turnRateScale' | 'turnSpeedRetention' | 'jumpHoldForFullS' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'highSpeedControl' | 'arenaSizeScale' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS'
 >;
 
 /** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
 export const MATCH_RULE_KEYS = [
   'ringOutDelayS', 'dashCooldownS', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyCollisionDamage', 'momentumLossOnCollision', 'jumpFullHeightM', 'jumpShortHopHeightM', 'movementStaminaDrain', 'dodgeCooldownS', 'circularLaunchForce',
   'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS', 'speedDamageGain', 'dashCarriesSpeed',
-  'turnRateScale', 'turnSpeedRetention', 'jumpHoldForFullS', 'gravityScale', 'contactRepelMps', 'attackRecoilMps', 'highSpeedControl', 'arenaSizeScale', 'dodgeStaminaCost', 'dodgeDistanceScale', 'contactLiftMps', 'knockbackScale', 'spinStaminaDrain',
+  'turnRateScale', 'turnSpeedRetention', 'jumpHoldForFullS', 'gravityScale', 'contactRepelMps', 'attackRecoilMps', 'highSpeedControl', 'arenaSizeScale', 'dodgeStaminaCost', 'dodgeDistanceScale', 'contactLiftMps', 'knockbackScale', 'spinStaminaDrain', 'circularLockAfterHitS',
 ] as const satisfies readonly (keyof MatchRules)[];
 
 /**
@@ -135,6 +135,7 @@ export function defaultMatchRules(): MatchRules {
     contactLiftMps: config.contactLiftMps,
     knockbackScale: config.knockbackScale,
     spinStaminaDrain: config.spinStaminaDrain,
+    circularLockAfterHitS: config.circularLockAfterHitS,
   };
 }
 
@@ -312,6 +313,7 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   contactLiftMps: { name: 'contact lift', format: (v) => `${(v as number).toFixed(1)} m/s` },
   knockbackScale: { name: 'knockback', format: (v) => `×${(v as number).toFixed(2)}` },
   spinStaminaDrain: { name: 'spin stamina drain', format: (v) => `×${(v as number).toFixed(1)}` },
+  circularLockAfterHitS: { name: 'Circular lockout after a hit', format: (v) => `${(v as number).toFixed(2)} s` },
   arenaSizeScale: { name: 'stage size', format: (v) => `×${(v as number).toFixed(2)}` },
   highSpeedControl: { name: 'control at speed', format: (v) => `${Math.round((v as number) * 100)}%` },
 };

@@ -189,7 +189,12 @@ export class PlayFlow {
           const session = this.runner?.session;
           if (loser && session && !String(outcome).includes('RingOut')) {
             const generation = this.generation;
-            this.defeatCutscene = new DefeatCutscene(session.match.visuals[loser].visual, {
+            session.setBeyDefeated(loser);
+            const v = session.getBey(loser).body.linvel();
+            this.defeatCutscene = new DefeatCutscene({
+              visual: session.match.visuals[loser].visual,
+              launchVelocity: String(outcome).includes('SpinOut') ? { x: 0, y: 0, z: 0 } : { x: v.x, y: v.y, z: v.z },
+              floorHeightAt: (x, z) => session.floorHeightAt(x, z),
               onBreak: () => this.hud?.flashBreak(String(outcome).includes('SpinOut') ? 'SPIN OUT' : 'BROKEN'),
               onDone: () => {
                 if (generation !== this.generation) return;
@@ -197,7 +202,8 @@ export class PlayFlow {
                 this.hud?.showBanner(roundEndBanner(outcome) ?? '');
                 this.scheduleRoundResult(outcome);
               },
-            }, this.score.rounds + 1);
+              seed: this.score.rounds + 1,
+            });
             return;
           }
           this.hud?.showBanner(roundEndBanner(outcome) ?? '');

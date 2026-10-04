@@ -167,6 +167,14 @@ export class HybridVfxSystem implements PresentationSystem {
     return vortex;
   }
 
+  private readonly defeated = new Set<PresentationSide>();
+
+  /** Owner, 2026-10-04: a destroyed Bey raises no more effects of its own (vortex, trails, dust, sparks). */
+  setDefeated(side: PresentationSide): void {
+    this.defeated.add(side);
+    this.tracks[side].vortex.update(null, null, 0);
+  }
+
   /** The language runtime (tests and visual checks drive its handlers directly). */
   getRuntime(): LanguageRuntime {
     return this.runtime;
@@ -318,7 +326,7 @@ export class HybridVfxSystem implements PresentationSystem {
     for (const side of SIDES) this.measure(this.tracks[side], rawDt);
     if (state) {
       this.hitstopActive = state.camera?.hitstopActive ?? false;
-      for (const side of SIDES) this.driveContinuous(this.tracks[side], state[side], rawDt);
+      for (const side of SIDES) if (!this.defeated.has(side)) this.driveContinuous(this.tracks[side], state[side], rawDt);
     }
     // The language's own hitstop is dropped (HitstopClock owns it), but while the game is frozen the effects slow like the lab's.
     const fxDt = this.hitstopActive ? rawDt * HITSTOP_FX_RATE : rawDt;
