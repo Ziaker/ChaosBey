@@ -28,6 +28,7 @@ import {
 } from '../../bey/momentum/MomentumTuning';
 import { MOVEMENT_STAMINA_DRAIN_RANGE } from '../../bey/stamina/StaminaTuning';
 import { CIRCULAR_LAUNCH_FORCE_RANGE, DASH_COOLDOWN_RANGE } from '../../combat/attacks/AttackTuning';
+import { SPEED_DAMAGE_GAIN_RANGE } from '../../combat/attacks/SpeedDamage';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import {
   ACCELERATION_SCALE_RANGE,
@@ -103,13 +104,13 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
 export type MatchRules = Pick<
   MatchConfig,
   'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'
-  | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS'
+  | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'speedDamageGain' | 'dashCarriesSpeed'
 >;
 
 /** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
 export const MATCH_RULE_KEYS = [
   'ringOutDelayS', 'dashCooldownS', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyCollisionDamage', 'momentumLossOnCollision', 'jumpFullHeightM', 'jumpShortHopHeightM', 'movementStaminaDrain', 'dodgeCooldownS', 'circularLaunchForce',
-  'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS',
+  'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS', 'speedDamageGain', 'dashCarriesSpeed',
 ] as const satisfies readonly (keyof MatchRules)[];
 
 /**
@@ -126,11 +127,7 @@ export function sanitizeMatchRules(rules: MatchRules): MatchRules {
 
 const clamp = (value: number, range: { readonly min: number; readonly max: number }): number => Math.min(range.max, Math.max(range.min, value));
 
-/**
- * Persisted Pregame values are untrusted/old UI data. Clamp them against the exact range constants that the current
- * Pregame renders; do not change resolveMatchConfig globally, because replay/backcompat may intentionally carry an old
- * but valid resolved MatchConfig outside today's playtest sliders.
- */
+/** Persisted Pregame data is clamped to the same ranges the current UI exposes; replay/backcompat is left untouched. */
 function clampPersistedMatchRules(rules: MatchRules): MatchRules {
   return {
     ...rules,
@@ -153,6 +150,7 @@ function clampPersistedMatchRules(rules: MatchRules): MatchRules {
     airControl: clamp(rules.airControl, AIR_CONTROL_RANGE),
     jumpStaminaCost: clamp(rules.jumpStaminaCost, JUMP_STAMINA_COST_RANGE),
     jumpCooldownS: clamp(rules.jumpCooldownS, JUMP_COOLDOWN_RANGE),
+    speedDamageGain: clamp(rules.speedDamageGain, SPEED_DAMAGE_GAIN_RANGE),
   };
 }
 
@@ -181,6 +179,8 @@ export function defaultMatchRules(): MatchRules {
     movementStaminaDrain: config.movementStaminaDrain,
     dodgeCooldownS: config.dodgeCooldownS,
     circularLaunchForce: config.circularLaunchForce,
+    speedDamageGain: config.speedDamageGain,
+    dashCarriesSpeed: config.dashCarriesSpeed,
   };
 }
 
@@ -228,8 +228,6 @@ export function normalizeSeedText(text: string): string | null {
   return trimmed === '' ? null : trimmed;
 }
 
-// --- Matchup summary ---------------------------------------------------
-
 export interface MatchupLine {
   readonly tone: 'good' | 'bad' | 'even';
   readonly text: string;
@@ -256,8 +254,6 @@ export function matchupLines(setup: MatchSetup): readonly MatchupLine[] {
   return lines;
 }
 
-// --- Remembering the last setup (Lote 9) ----------------------------------
-
 const SETUP_STORAGE_KEY = 'chaosbey.pregame.last.v1';
 
 /** The parts of a setup the Pregame remembers between matches (and reloads): everything but the seed. */
@@ -269,10 +265,7 @@ export function saveLastSetup(setup: MatchSetup, storage: Pick<Storage, 'setItem
   }
 }
 
-/**
- * The last setup used, validated against today's roster, rules and ranges; anything unknown or out of shape falls
- * back to the default, so an old save can never break the Pregame.
- */
+/** The last setup used, validated against today's roster, rules and ranges. */
 export function loadLastSetup(storage: Pick<Storage, 'getItem'> | null = safeStorage()): MatchSetup | null {
   let raw: unknown;
   try {
@@ -351,7 +344,7 @@ function safeStorage(): Storage | null {
   }
 }
 
-/** Short names and formats of the Pregame rules, for the "What to expect" summary (Lote 9). */
+/** Short names and formats of the Pregame rules, for the "What to expect" summary. */
 const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly name: string; readonly format: (v: number | boolean) => string }>> = {
   ringOutDelayS: { name: 'ring-out delay', format: (v) => `${(v as number).toFixed(2)} s` },
   dashCooldownS: { name: 'Dash cooldown', format: (v) => `${(v as number).toFixed(2)} s` },
@@ -375,9 +368,11 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   airControl: { name: 'air control', format: (v) => `×${(v as number).toFixed(2)}` },
   jumpStaminaCost: { name: 'jump stamina cost', format: (v) => `${(v as number).toFixed(0)}` },
   jumpCooldownS: { name: 'jump cooldown', format: (v) => `${(v as number).toFixed(1)} s` },
+  speedDamageGain: { name: 'speed → damage', format: (v) => ((v as number) === 0 ? 'off' : `${Math.round((v as number) * 100)}%`) },
+  dashCarriesSpeed: { name: 'Dash keeps momentum', format: (v) => (v ? 'on' : 'off') },
 };
 
-/** "Dash cooldown 2.00 s", … for every rule that differs from its default (Lote 9: the explanation reflects the values). */
+/** "Dash cooldown 2.00 s", … for every rule that differs from its default. */
 export function changedRuleLines(setup: MatchSetup): string[] {
   const defaults = defaultMatchRules();
   const rules = setup.rules ?? defaults;

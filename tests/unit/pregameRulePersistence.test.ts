@@ -9,6 +9,7 @@ import {
 } from '../../src/bey/momentum/MomentumTuning';
 import { MOVEMENT_STAMINA_DRAIN_RANGE } from '../../src/bey/stamina/StaminaTuning';
 import { CIRCULAR_LAUNCH_FORCE_RANGE, DASH_COOLDOWN_RANGE } from '../../src/combat/attacks/AttackTuning';
+import { SPEED_DAMAGE_GAIN_RANGE } from '../../src/combat/attacks/SpeedDamage';
 import {
   ACCELERATION_SCALE_RANGE,
   AIR_CONTROL_RANGE,
@@ -42,6 +43,7 @@ const outside = {
   airControl: -999,
   jumpStaminaCost: 999,
   jumpCooldownS: 999,
+  speedDamageGain: 999,
 } as const;
 
 describe('remembered Pregame gameplay rules', () => {
@@ -71,5 +73,13 @@ describe('remembered Pregame gameplay rules', () => {
     expect(r.airControl).toBe(AIR_CONTROL_RANGE.min);
     expect(r.jumpStaminaCost).toBe(JUMP_STAMINA_COST_RANGE.max);
     expect(r.jumpCooldownS).toBe(JUMP_COOLDOWN_RANGE.max);
+    expect(r.speedDamageGain).toBe(SPEED_DAMAGE_GAIN_RANGE.max);
+  });
+
+  it('persists the Dash speed-carry toggle as a boolean rule', () => {
+    const base = createDefaultMatchSetup();
+    const raw = JSON.stringify({ ...base, rules: { ...base.rules, dashCarriesSpeed: false } });
+    const loaded = loadLastSetup({ getItem: () => raw });
+    expect(loaded?.rules.dashCarriesSpeed).toBe(false);
   });
 });
