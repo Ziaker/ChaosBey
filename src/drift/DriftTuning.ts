@@ -71,7 +71,7 @@ export const LEGACY_JUMP_FULL_HEIGHT_M = (5 * 5) / (2 * GRAVITY_MPS2);
 // pass's own measured baseline apex (0.177 m) x1.15.
 export const JUMP_SHORT_HOP_TARGET_APEX_M = 0.1265;
 // Owner, 2026-10-02 (Lote 4): Pregame "Short hop height", default the value above, 0.05-0.5 m.
-export const JUMP_SHORT_HOP_HEIGHT_RANGE = { min: 0.05, max: 0.5, step: 0.01 } as const;
+export const JUMP_SHORT_HOP_HEIGHT_RANGE = { min: 0.05, max: 2, step: 0.01 } as const; // owner, 2026-10-04: up to 2 m
 // How long, from the press, a release still shapes the jump's height at
 // all: release before this and computeJumpReleaseCapMps's ramp (fixed
 // target, then smoothly toward the natural arc) applies; hold at least

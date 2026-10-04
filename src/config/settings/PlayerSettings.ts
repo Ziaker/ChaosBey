@@ -51,7 +51,8 @@ export const CONDITION_LAYER_SETTINGS: readonly ConditionLayerSetting[] = ['A', 
  * PROVISIONAL implementation default, not an owner choice between A/B/C (ASK FIRST): the first-time default for new players
  * is the owner's to pick. A alone is a neutral placeholder; Reset to defaults returns here.
  */
-export const DEFAULT_CONDITION_LAYERS: readonly ConditionLayerSetting[] = ['A'];
+/** Owner, 2026-10-04: all three on in the base game. */
+export const DEFAULT_CONDITION_LAYERS: readonly ConditionLayerSetting[] = ['A', 'B', 'C'];
 
 /** Turns one condition layer on or off. The last layer on cannot be turned off: at least one always shows. */
 export function toggleConditionLayer(layers: readonly ConditionLayerSetting[], id: ConditionLayerSetting, on: boolean): readonly ConditionLayerSetting[] {
@@ -78,9 +79,11 @@ export interface PlayerSettings {
 export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   quality: DEFAULT_QUALITY_PRESET,
   // B until the owner picks the first-time default (camera-approval.md 10.1 recommends B).
-  cameraPreset: 'B',
+  // Owner, 2026-10-04: Arena Fighter is the game's base camera.
+  cameraPreset: 'A',
   // New installs start on a camera-independent scheme. All four remain selectable.
-  controlScheme: 'opponent',
+  // Owner, 2026-10-04: Screen (reads camera) is the game's one control scheme; the others and the option are gone.
+  controlScheme: 'screen',
   cameraEffects: true,
   pauseOnFocusLoss: true,
   controlHints: true,
@@ -111,10 +114,8 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
   // once-per-gesture camera reference. Preserve that saved behaviour by
   // migrating it explicitly to `screen`; new/missing settings still use
   // the camera-independent default above.
-  const controlScheme: ControlScheme =
-    input.controlScheme === 'directional'
-      ? 'screen'
-      : (CONTROL_SCHEMES.find((c) => c === input.controlScheme) ?? DEFAULT_PLAYER_SETTINGS.controlScheme);
+  // Owner, 2026-10-04: only Screen (reads camera) — any saved scheme becomes it.
+  const controlScheme: ControlScheme = 'screen';
   const cameraPreset = CAMERA_PRESET_SETTINGS.find((c) => c === input.cameraPreset) ?? DEFAULT_PLAYER_SETTINGS.cameraPreset;
   const picked = Array.isArray(input.conditionLayers) ? CONDITION_LAYER_SETTINGS.filter((id) => (input.conditionLayers as unknown[]).includes(id)) : [];
   const conditionLayers = picked.length > 0 ? picked : DEFAULT_CONDITION_LAYERS;
@@ -130,7 +131,8 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
   };
 }
 
-const STORAGE_KEY = 'chaosbey.settings.player.v1';
+const STORAGE_KEY = 'chaosbey.settings.player.v2';
+const LEGACY_STORAGE_KEY = 'chaosbey.settings.player.v1';
 
 function getStorage(): Storage | null {
   try {
@@ -145,7 +147,12 @@ export function loadPlayerSettings(): PlayerSettings {
   if (!storage) return DEFAULT_PLAYER_SETTINGS;
   try {
     const raw = storage.getItem(STORAGE_KEY);
-    return raw ? sanitizePlayerSettings(JSON.parse(raw)) : DEFAULT_PLAYER_SETTINGS;
+    if (raw) return sanitizePlayerSettings(JSON.parse(raw));
+    // Owner, 2026-10-04: settings saved before the new base (v1) keep their quality/toggles, but start on the new
+    // base camera (Arena Fighter) with every condition layer on.
+    const old = storage.getItem(LEGACY_STORAGE_KEY);
+    if (!old) return DEFAULT_PLAYER_SETTINGS;
+    return sanitizePlayerSettings({ ...JSON.parse(old), cameraPreset: DEFAULT_PLAYER_SETTINGS.cameraPreset, conditionLayers: DEFAULT_PLAYER_SETTINGS.conditionLayers });
   } catch {
     return DEFAULT_PLAYER_SETTINGS;
   }

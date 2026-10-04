@@ -297,7 +297,7 @@ export class PregameScreen {
         title: 'Arena',
         id: 'arena',
         items: [
-          this.slider({ id: 'bowl-depth', label: 'Bowl depth (funnel)', range: ARENA_BOWL_DEPTH_RANGE, ...rule('arenaBowlDepthM'), format: meters, note: 'How deep the bowl is (rim above the centre): the floor\'s collider, art, spawns and effects all follow it. 0 = flat. Default 7 m on the Funnel (owner, 2026-10-04).' }),
+          this.slider({ id: 'bowl-depth', label: 'Bowl depth (funnel)', range: ARENA_BOWL_DEPTH_RANGE, ...rule('arenaBowlDepthM'), format: meters, note: 'How deep the bowl is (rim above the centre): the floor\'s collider, art, spawns and effects all follow it. 0 = flat. Default 8.5 m on the Funnel (owner base rules, 2026-10-04).' }),
           this.slider({ id: 'wall-height', label: 'Wall height', range: ARENA_WALL_HEIGHT_RANGE, read: (s) => s.arena.geometry.wallHeightM, write: (s, v) => ({ ...s, arena: { ...s.arena, geometry: { ...s.arena.geometry, wallHeightM: v } } }), defaultValue: arenaPreset(this.setup.arena.presetId).geometry.wallHeightM, format: (v) => `${v.toFixed(1)} m`, note: 'A low wall lets a launched Bey fly out of the arena; a tall one keeps it in. Default: the arena\'s.' }),
           this.slider({ id: 'wall-bounce', label: 'Wall bounce', range: ARENA_WALL_BOUNCE_RANGE, read: (s) => s.arena.geometry.wallRestitution, write: (s, v) => ({ ...s, arena: { ...s.arena, geometry: { ...s.arena.geometry, wallRestitution: v } } }), defaultValue: arenaPreset(this.setup.arena.presetId).geometry.wallRestitution, format: (v) => v.toFixed(2), note: 'How hard the wall throws a Bey back into the fight. Default: the arena\'s.' }),
         ],
@@ -508,7 +508,7 @@ export class PregameScreen {
     const r = setup.rules;
     const ways = [r.winByKo ? 'a knock-out (a hit while broken)' : null, r.winByRingOut ? 'a ring-out' : null, r.winBySpinOut ? 'a spin-out (Stamina 0)' : null].filter((w): w is string => w !== null);
     addRule(`A round ends on ${ways.join(', ')}${r.roundTimeLimitS > 0 ? `, or a draw after ${r.roundTimeLimitS.toFixed(0)} s` : ''}. A draw scores nobody.`);
-    if (r.arenaBowlDepthM !== defaultMatchRules().arenaBowlDepthM && walls.floor !== 'flat') addRule(r.arenaBowlDepthM === 0 ? 'Bowl depth 0 m: the floor is flat' : `Bowl depth ${r.arenaBowlDepthM.toFixed(2)} m (default 2.5 m)`);
+    if (r.arenaBowlDepthM !== defaultMatchRules().arenaBowlDepthM && walls.floor !== 'flat') addRule(r.arenaBowlDepthM === 0 ? 'Bowl depth 0 m: the floor is flat' : `Bowl depth ${r.arenaBowlDepthM.toFixed(2)} m (default ${defaultMatchRules().arenaBowlDepthM.toFixed(2)} m)`);
     // Item 11 (owner, 2026-10-04): speed decides how hard you hit.
     if (r.speedDamageGain > 0) addRule(`Speed is power: the faster a hit lands, the more damage it deals${r.dashCarriesSpeed ? ', and a Dash keeps the speed you built up' : ''}. Build momentum by moving fast and straight.`);
     const changed = changedRuleLines(setup);

@@ -65,14 +65,14 @@ export const ARENA_FLOORS: Readonly<Record<ArenaFloorId, ArenaFloorProfile>> = {
   'bowl-a': {
     id: 'bowl-a',
     label: 'Bowl A — Parabolic dish',
-    description: 'Gentle centre, slope growing toward the wall (2.5 m rim).',
+    description: 'Gentle centre, slope growing toward the wall. The depth is the Bowl depth slider.',
     heightAtRadius: (r) => D * (clampR(r) / R) ** 2,
     slopeAtRadius: (r) => (2 * D * clampR(r)) / (R * R),
   },
   'bowl-b': {
     id: 'bowl-b',
     label: 'Bowl B — Funnel',
-    description: 'Slopes almost all the way to the centre (2.5 m rim).',
+    description: 'Slopes almost all the way to the centre. The depth is the Bowl depth slider.',
     heightAtRadius: (r) => D * (clampR(r) / R) ** 1.3,
     slopeAtRadius: (r) => {
       const x = clampR(r);
@@ -82,7 +82,7 @@ export const ARENA_FLOORS: Readonly<Record<ArenaFloorId, ArenaFloorProfile>> = {
   'bowl-c': {
     id: 'bowl-c',
     label: 'Bowl C — Central plateau',
-    description: 'A flat 7.8 m plateau in the middle, then a curve up to the wall (2.5 m rim).',
+    description: 'A flat 7.8 m plateau in the middle, then a curve up to the wall. The depth is the Bowl depth slider.',
     heightAtRadius: (r) => {
       const x = clampR(r);
       return x <= P ? 0 : D * ((x - P) / (R - P)) ** 1.4;

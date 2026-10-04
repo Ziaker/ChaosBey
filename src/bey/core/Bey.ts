@@ -6,6 +6,7 @@
 // reaches into another system's internals through it.
 // ============================================================
 
+import { JUMP_SHORT_HOP_TARGET_APEX_M } from '../../drift/DriftTuning';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { AttackController } from '../../combat/attacks/AttackController';
@@ -65,7 +66,8 @@ export function createBey(
 ): Bey {
   const rules: BeyMatchRules = matchRules ?? { ...beyMatchRulesOf(createDefaultMatchConfig()), jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, defensiveCircular: false, speedDamageGain: 0, dashCarriesSpeed: false,
     // Owner, 2026-10-04 speed pass: match-only. Bare constructions (the Camera Lab: camera frozen) keep the old handling.
-    accelerationScale: 1, topSpeedScale: 1, turnRateScale: 1, turnSpeedRetention: 0, highSpeedControl: 0, momentumGain: 1, gravityScale: 1, contactRepelMps: 0, attackRecoilMps: 0 };
+    accelerationScale: 1, topSpeedScale: 1, turnRateScale: 1, turnSpeedRetention: 0, highSpeedControl: 0, momentumGain: 1, gravityScale: 1, contactRepelMps: 0, attackRecoilMps: 0,
+    momentumDecayS: 2, momentumLossOnCollision: 0.5, jumpShortHopHeightM: JUMP_SHORT_HOP_TARGET_APEX_M, movementStaminaDrain: 1, dodgeCooldownS: 3, airControl: 1 };
   const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical, motion);
   const stats = resolveBeyStats(definition.ratings);
   const movement = new MovementController(definition.handling, motion, { acceleration: rules.accelerationScale ?? 1, topSpeed: rules.topSpeedScale ?? 1, airControl: rules.airControl ?? 1, turnRate: rules.turnRateScale ?? 1, turnSpeedRetention: rules.turnSpeedRetention ?? 0, highSpeedControl: rules.highSpeedControl ?? 0 });

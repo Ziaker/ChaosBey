@@ -164,7 +164,7 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
 }
 
 export function createDefaultMatchConfig(): MatchConfig {
-  return {
+  return withOwnerBaseRules({
     clashImpactMultiplier: CLASH_IMPACT_MULTIPLIER_DEFAULT,
     arenaWallHeightM: STANDARD_ARENA_GEOMETRY.wallHeightM,
     arenaWallRestitution: STANDARD_ARENA_GEOMETRY.wallRestitution,
@@ -202,7 +202,38 @@ export function createDefaultMatchConfig(): MatchConfig {
     defensiveCircular: true,
     speedDamageGain: SPEED_DAMAGE_GAIN_DEFAULT,
     dashCarriesSpeed: true,
-  };
+  });
+}
+
+/**
+ * Owner, 2026-10-04: "a partir de agora use estas regras como base do jogo" — the rules the owner playtested and
+ * approved (the Pregame's "Changed from the defaults" list) are now the defaults. Every one stays a Pregame slider.
+ */
+export const OWNER_BASE_RULES_2026_10_04 = {
+  arenaWallHeightM: 2,
+  arenaWallRestitution: 0.8,
+  arenaFloor: 'bowl-b',
+  arenaBowlDepthM: 8.5,
+  momentumGain: 1.7,
+  momentumDecayS: 2.5,
+  momentumLossOnCollision: 0.1,
+  jumpFullHeightM: 3.25,
+  jumpShortHopHeightM: 0.5,
+  movementStaminaDrain: 0.2,
+  dodgeCooldownS: 2.5,
+  accelerationScale: 1.9,
+  topSpeedScale: 2.8,
+  airControl: 1.5,
+  turnRateScale: 1.75,
+  turnSpeedRetention: 0.9,
+  jumpHoldForFullS: 0.15,
+  gravityScale: 3.6,
+  contactRepelMps: 16.5,
+  attackRecoilMps: 15.5,
+} as const satisfies Partial<MatchConfig>;
+
+function withOwnerBaseRules(config: MatchConfig): MatchConfig {
+  return { ...config, ...OWNER_BASE_RULES_2026_10_04 };
 }
 
 /** Merges a pre-match override on top of the defaults, producing the single resolved MatchConfig the rest of the app consumes. */
