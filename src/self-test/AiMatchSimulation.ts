@@ -56,6 +56,9 @@ export interface AiSideStats {
   counterHits: number;
   /** Mean horizontal distance (m) from the arena center, outside an Active Clash. */
   meanRadiusM: number;
+  /** Owner audit G2 (2026-10-03): mean horizontal speed (m/s) outside Clash, and at the start of each Circular. */
+  meanSpeedMps: number;
+  meanCircularStartSpeedMps: number;
   dodges: number;
   jumps: number;
   hitsLanded: number;
@@ -135,6 +138,9 @@ class SideTracker {
   private stalledAttackStreak = 0;
   private wedgedStreak = 0;
   private radiusSum = 0;
+  private speedSum = 0;
+  private circularSpeedSum = 0;
+  private previousSpeedMps = 0;
   private radiusSamples = 0;
 
   constructor(personalityId: string) {
@@ -146,6 +152,8 @@ class SideTracker {
       punishAttacks: 0,
       counterHits: 0,
       meanRadiusM: 0,
+      meanSpeedMps: 0,
+      meanCircularStartSpeedMps: 0,
       dodges: 0,
       jumps: 0,
       hitsLanded: 0,
@@ -215,6 +223,8 @@ class SideTracker {
       this.radiusSum += radiusM;
       this.radiusSamples++;
       this.stats.meanRadiusM = this.radiusSum / this.radiusSamples;
+      this.speedSum += speedMps;
+      this.stats.meanSpeedMps = this.speedSum / this.radiusSamples;
     }
     const windowTicks = Math.round(1 / FIXED_DELTA_SECONDS);
     while (this.pressTicks.length > 0 && this.pressTicks[0]! <= tick - windowTicks) this.pressTicks.shift();
@@ -222,7 +232,12 @@ class SideTracker {
 
     const startedCircular = attackState === AttackState.CircularActive && this.previousAttackState !== AttackState.CircularActive;
     const startedDash = attackState === AttackState.DashActive && this.previousAttackState !== AttackState.DashActive;
-    if (startedCircular) this.stats.circularAttacks++;
+    if (startedCircular) {
+      this.stats.circularAttacks++;
+      this.circularSpeedSum += this.previousSpeedMps; // the speed it was moving at when it chose to tap
+      this.stats.meanCircularStartSpeedMps = this.circularSpeedSum / this.stats.circularAttacks;
+    }
+    this.previousSpeedMps = speedMps;
     if (startedDash) this.stats.dashAttacks++;
     if ((startedCircular || startedDash) && opponentOpen) this.stats.punishAttacks++;
     if (dodgeState === DodgeState.Dodging && this.previousDodgeState !== DodgeState.Dodging) this.stats.dodges++;

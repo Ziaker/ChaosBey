@@ -108,7 +108,7 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
  * 15 left Ace losing 18 of 72 tier rounds by spin-out (Rookie 2) — it dodged itself empty while winning the fights
  * (31 KOs to 17); at 45, Ace's spin-outs drop to 5 and it wins 45-25, still dodging 1.6× as often as Rookie.
  */
-const AI_DODGE_STAMINA_RESERVE = 45;
+export const AI_DODGE_STAMINA_RESERVE = 45;
 
 const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, punishWindow: false, edgePressure: 0 };
 
