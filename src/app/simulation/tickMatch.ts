@@ -19,7 +19,8 @@
 // ended, rather than letting the fight silently continue in the background.
 // ============================================================
 
-import { floorNormalAt } from '../../arena/floor/ArenaFloorProfile';
+import { floorHeightAt, floorNormalAt } from '../../arena/floor/ArenaFloorProfile';
+import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
 import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { detectHits, type HitEvent } from '../../combat/hit-detection/HitDetection';
@@ -327,6 +328,8 @@ export function tickMatch(
   const secondVelBefore = horizontalVelocity(second.body);
   const gapBefore = length(subtract(positionXZ(second.body), positionXZ(first.body)));
   physics.step();
+  keepAboveFloor(first);
+  keepAboveFloor(second);
 
   // The defensive Circular (owner, 2026-10-02, item 13): the other Bey's contact must not push its user either —
   // the solver's push is undone (horizontal velocity back to what it carried into the step) before the movement
@@ -768,6 +771,25 @@ function keepHorizontalVelocity(bey: Bey, velocity: Vec2): void {
 function horizontalVelocity(body: Bey['body']): Vec2 {
   const v = body.linvel();
   return { x: v.x, z: v.z };
+}
+
+/**
+ * Owner, 2026-10-04 ("tem vezes que o bey atravessa o chão do estádio"): at the new speeds a Bey on a steep part of
+ * the floor could end a step inside the floor's heightfield and fall through (AI-vs-AI on the bowl-a funnel: 3 of 18
+ * matches; the cylinder-vs-heightfield contact is not reliably swept). Inside the wall, a Bey whose centre ends a step
+ * more than FLOOR_PENETRATION_TOLERANCE_M below its resting height is put back on the floor with no downward speed.
+ * Deterministic; past the wall (falling off the rim toward a ring-out) is left alone.
+ */
+const FLOOR_PENETRATION_TOLERANCE_M = 0.12;
+function keepAboveFloor(bey: Bey): void {
+  const p = bey.body.translation();
+  const r = Math.hypot(p.x, p.z);
+  if (r > arenaFloorRadius() - bey.definition.physical.colliderRadiusM) return;
+  const rest = floorHeightAt(bey.arenaFloor, p.x, p.z) + bey.definition.physical.colliderHalfHeightM;
+  if (p.y >= rest - FLOOR_PENETRATION_TOLERANCE_M) return;
+  bey.body.setTranslation({ x: p.x, y: rest, z: p.z }, true);
+  const v = bey.body.linvel();
+  if (v.y < 0) bey.body.setLinvel({ x: v.x, y: 0, z: v.z }, true);
 }
 
 /** Momentum bookkeeping after the physics step (owner, 2026-10-02, Lote 3; see bey/momentum/). */

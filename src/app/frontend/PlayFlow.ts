@@ -187,22 +187,23 @@ export class PlayFlow {
       },
       {
         onRoundOver: (outcome) => {
-          // Owner, 2026-10-04: a knock-out or a spin-out plays the defeat cutscene first (1 s, then 1.5 s of slow
-          // motion as the Bey breaks); the winner is announced after it. A ring-out or a draw reads at once.
+          // Owner, 2026-10-04: a Stability knock-out plays the defeat cutscene first (the Bey flies / bounces, then breaks
+          // in 1.5 s of slow motion); the winner is announced after it.
           const loser = String(outcome).startsWith('FirstWins') ? 'second' : String(outcome).startsWith('SecondWins') ? 'first' : null;
           const session = this.runner?.session;
-          if (loser && session && !String(outcome).includes('RingOut')) {
+          // Owner, 2026-10-04 ("a câmera de abate anda surgindo em partidas onde a derrota por estabilidade não está
+          // habilitada"): only a Stability knock-out plays it — a spin-out or a ring-out reads at once.
+          if (loser && session && String(outcome).endsWith('ByKo')) {
             const generation = this.generation;
             session.setBeyDefeated(loser);
             const v = session.getBey(loser).body.linvel();
-            const spunOut = String(outcome).includes('SpinOut');
             this.defeatCutscene = new DefeatCutscene({
               visual: session.match.visuals[loser].visual,
-              launchVelocity: spunOut ? { x: 0, y: 0, z: 0 } : { x: v.x, y: v.y, z: v.z },
-              knockedOut: !spunOut,
+              launchVelocity: { x: v.x, y: v.y, z: v.z },
+              knockedOut: true,
               gravityScale: matchConfigFor(this.setup).gravityScale ?? 1,
               floorHeightAt: (x, z) => session.floorHeightAt(x, z),
-              onBreak: () => this.hud?.flashBreak(String(outcome).includes('SpinOut') ? 'SPIN OUT' : 'BROKEN'),
+              onBreak: () => this.hud?.flashBreak('BROKEN'),
               onDone: () => {
                 if (generation !== this.generation) return;
                 // The cutscene keeps running (its pieces fall and settle, the camera stays on them) until the next round.
