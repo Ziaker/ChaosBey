@@ -64,7 +64,8 @@ describe('the player never ends up with no layer', () => {
     expect(sanitizePlayerSettings({ conditionLayers: 'ABC' }).conditionLayers).toEqual(DEFAULT_CONDITION_LAYERS);
     expect(sanitizePlayerSettings({ conditionLayers: ['C', 'x', 'B'] }).conditionLayers).toEqual(['B', 'C']);
     const before = sanitizePlayerSettings({ quality: 'High', cameraPreset: 'C', controlScheme: 'classic' });
-    expect(before).toMatchObject({ quality: 'High', cameraPreset: 'C', controlScheme: 'classic' });
+    // Owner, 2026-10-04: Screen (reads camera) is the only control scheme; an old saved scheme reads as Screen.
+    expect(before).toMatchObject({ quality: 'High', cameraPreset: 'C', controlScheme: 'screen' });
     expect(CONDITION_LAYER_SETTINGS).toEqual(['A', 'B', 'C']);
   });
 

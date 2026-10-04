@@ -40,8 +40,8 @@ describe('item 3 — bowl depth (funnel): collider, spawns and floor readers sha
     });
   }
 
-  it('the default depth is 7 m (owner, 2026-10-04: a visible funnel), and 0 m is flat', () => {
-    expect(resolveMatchConfig().arenaBowlDepthM).toBe(7);
+  it('the default depth is 8.5 m (owner base rules, 2026-10-04: a visible funnel), and 0 m is flat', () => {
+    expect(resolveMatchConfig().arenaBowlDepthM).toBe(8.5);
     expect(BOWL_DEPTH_M).toBe(2.5); // the profiles' unit depth
     expect(floorHeightAt({ id: 'bowl-a', depthM: 0 }, 9, 0)).toBe(0);
     expect(floorHeightAt({ id: 'bowl-a', depthM: 5 }, 9, 0)).toBeCloseTo(2 * floorHeightAt('bowl-a', 9, 0), 9);

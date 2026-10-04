@@ -14,8 +14,8 @@ function run(m: MomentumSystem, seconds: number, speed: number, top: number, hea
 }
 
 describe('MomentumSystem (owner, 2026-10-02)', () => {
-  it('MatchConfig defaults: +150% gain (owner, 2026-10-04; was +100%), 4 s fill, 2 s decay, collision damage ×1, 50% loss', () => {
-    expect(createDefaultMatchConfig()).toMatchObject({ momentumGain: 1.5, momentumFillS: 4, momentumDecayS: 2, bodyCollisionDamage: 1, momentumLossOnCollision: 0.5 });
+  it('MatchConfig defaults (owner base rules, 2026-10-04): +170% gain, 4 s fill, 2.5 s decay, collision damage ×1, 10% loss', () => {
+    expect(createDefaultMatchConfig()).toMatchObject({ momentumGain: 1.7, momentumFillS: 4, momentumDecayS: 2.5, bodyCollisionDamage: 1, momentumLossOnCollision: 0.1 });
   });
 
   it('fills in 4 s of fast straight movement, doubling the top speed, then drains in 2 s when stopped', () => {

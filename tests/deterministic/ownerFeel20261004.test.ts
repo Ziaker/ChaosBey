@@ -123,7 +123,7 @@ describe('speed feel (owner, 2026-10-04)', () => {
 });
 
 describe('funnel stage by default (owner, 2026-10-04)', () => {
-  it('a match is the Funnel at 7 m by default', () => {
-    expect(createDefaultMatchConfig()).toMatchObject({ arenaFloor: 'bowl-b', arenaBowlDepthM: 7 });
+  it('a match is the Funnel at 8.5 m by default (owner base rules)', () => {
+    expect(createDefaultMatchConfig()).toMatchObject({ arenaFloor: 'bowl-b', arenaBowlDepthM: 8.5 });
   });
 });
