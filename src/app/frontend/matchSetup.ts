@@ -73,14 +73,14 @@ export type MatchRules = Pick<
   MatchConfig,
   'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'
   | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'speedDamageGain' | 'dashCarriesSpeed'
-  | 'turnRateScale' | 'turnSpeedRetention' | 'jumpHoldForFullS' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'highSpeedControl' | 'arenaSizeScale'
+  | 'turnRateScale' | 'turnSpeedRetention' | 'jumpHoldForFullS' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'highSpeedControl' | 'arenaSizeScale' | 'dodgeStaminaCost' | 'dodgeDistanceScale'
 >;
 
 /** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
 export const MATCH_RULE_KEYS = [
   'ringOutDelayS', 'dashCooldownS', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyCollisionDamage', 'momentumLossOnCollision', 'jumpFullHeightM', 'jumpShortHopHeightM', 'movementStaminaDrain', 'dodgeCooldownS', 'circularLaunchForce',
   'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS', 'speedDamageGain', 'dashCarriesSpeed',
-  'turnRateScale', 'turnSpeedRetention', 'jumpHoldForFullS', 'gravityScale', 'contactRepelMps', 'attackRecoilMps', 'highSpeedControl', 'arenaSizeScale',
+  'turnRateScale', 'turnSpeedRetention', 'jumpHoldForFullS', 'gravityScale', 'contactRepelMps', 'attackRecoilMps', 'highSpeedControl', 'arenaSizeScale', 'dodgeStaminaCost', 'dodgeDistanceScale',
 ] as const satisfies readonly (keyof MatchRules)[];
 
 /**
@@ -130,6 +130,8 @@ export function defaultMatchRules(): MatchRules {
     attackRecoilMps: config.attackRecoilMps,
     highSpeedControl: config.highSpeedControl,
     arenaSizeScale: config.arenaSizeScale,
+    dodgeStaminaCost: config.dodgeStaminaCost,
+    dodgeDistanceScale: config.dodgeDistanceScale,
   };
 }
 
@@ -302,6 +304,8 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   gravityScale: { name: 'gravity', format: (v) => `×${(v as number).toFixed(1)}` },
   contactRepelMps: { name: 'contact repel', format: (v) => `${(v as number).toFixed(1)} m/s` },
   attackRecoilMps: { name: 'attack recoil', format: (v) => `${(v as number).toFixed(1)} m/s` },
+  dodgeStaminaCost: { name: 'dodge stamina cost', format: (v) => ((v as number) === 0 ? 'free' : `${(v as number).toFixed(0)}`) },
+  dodgeDistanceScale: { name: 'dodge distance', format: (v) => `×${(v as number).toFixed(2)}` },
   arenaSizeScale: { name: 'stage size', format: (v) => `×${(v as number).toFixed(2)}` },
   highSpeedControl: { name: 'control at speed', format: (v) => `${Math.round((v as number) * 100)}%` },
 };

@@ -45,7 +45,7 @@ import { WALL_IMPACT_STABILITY_DAMAGE_PER_MPS } from '../../bey/stability/Stabil
 import type { MovementSnapshot } from '../../bey/movement/MovementController';
 import type { SpinSnapshot } from '../../bey/spin/SpinController';
 import { DriftState } from '../../drift/DriftController';
-import type { DodgeState } from '../../dodge/DodgeController';
+import { DodgeState } from '../../dodge/DodgeController';
 import { isGrounded } from '../../physics/collision/GroundCheck';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { beyBodiesOverlapVertically } from '../../physics/world/PhysicsWorld';
@@ -340,8 +340,11 @@ export function tickMatch(
   // movement Stamina at all — the speed drain made the fastest move in the game the most expensive one. The base spin
   // drain still runs.
   const dashing = (state: AttackState): boolean => state === AttackState.DashActive || state === AttackState.DashRecovery;
-  first.stamina.tick(dashing(firstAttack.state) ? 0 : firstMovement.speedMps, fixedDeltaSeconds);
-  second.stamina.tick(dashing(secondAttack.state) ? 0 : secondMovement.speedMps, fixedDeltaSeconds);
+  // Owner, 2026-10-04: the dodge costs no Stamina either — no movement drain while it runs.
+  const firstFree = dashing(firstAttack.state) || first.dodge.getState() === DodgeState.Dodging;
+  const secondFree = dashing(secondAttack.state) || second.dodge.getState() === DodgeState.Dodging;
+  first.stamina.tick(firstFree ? 0 : firstMovement.speedMps, fixedDeltaSeconds);
+  second.stamina.tick(secondFree ? 0 : secondMovement.speedMps, fixedDeltaSeconds);
   // Momentum (owner, 2026-10-02): builds with sustained fast, straight movement; a wall impact costs part of it.
   tickMomentum(first, firstMovement, firstGrounded, fixedDeltaSeconds);
   tickMomentum(second, secondMovement, secondGrounded, fixedDeltaSeconds);

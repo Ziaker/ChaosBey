@@ -44,6 +44,7 @@ export const MECHANISM_BASELINE: Partial<MatchConfig> = {
   movementStaminaDrain: 1,
   dodgeCooldownS: 3,
   airControl: 1,
+  dodgeStaminaCost: 20,
   arenaWallRestitution: 0.55,
   jumpHoldForFullS: 0.2,
   arenaFloor: 'bowl-a',

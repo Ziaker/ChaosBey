@@ -27,6 +27,7 @@
 import { FLOOR_SCAR_HIT_MIN_M, FLOOR_SCAR_LANDING_MIN_M, VFX_LIGHT, type VfxOptions } from './intensityTiers';
 import { FloorScars } from './FloorScars';
 import * as THREE from 'three';
+import { CircularVortex } from './fx/CircularVortex';
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
 import { getConceptVisualModel } from '../../bey/visual/conceptBeyVisual';
@@ -103,6 +104,8 @@ interface BeyTrack {
   dodgeState: DodgeState;
   lastCharge: number;
   circularElapsed: number;
+  /** Owner, 2026-10-04: the Circular's helical vortex. */
+  readonly vortex: CircularVortex;
 }
 
 export class HybridVfxSystem implements PresentationSystem {
@@ -154,7 +157,14 @@ export class HybridVfxSystem implements PresentationSystem {
       dodgeState: DodgeState.Idle,
       lastCharge: 0,
       circularElapsed: 0,
+      vortex: this.addVortex(new THREE.Color(palette?.glow ?? target.gameplay.particle.sparkTintHex)),
     };
+  }
+
+  private addVortex(color: THREE.Color): CircularVortex {
+    const vortex = new CircularVortex(color);
+    this.options.scene.add(vortex.object);
+    return vortex;
   }
 
   /** The language runtime (tests and visual checks drive its handlers directly). */
@@ -343,6 +353,9 @@ export class HybridVfxSystem implements PresentationSystem {
       const t = Math.min(1, track.circularElapsed / CIRCULAR_ACTIVE_DURATION_S);
       track.circularElapsed += dt;
       this.runtime.circularSweep({ pos, m: 0.6, slot }, t, dt);
+      track.vortex.update(pos, t, dt);
+    } else {
+      track.vortex.update(null, null, dt);
     }
     track.attackState = bey.attackState;
     // Dodge: every dodge raises the Cel Cyclone wind and dust as it starts (owner, 2026-10-02; it used to show only
@@ -372,6 +385,7 @@ export class HybridVfxSystem implements PresentationSystem {
       t.dodgeState = DodgeState.Idle;
       t.lastCharge = 0;
       t.circularElapsed = 0;
+      t.vortex.update(null, null, 0);
     }
   }
 
@@ -396,6 +410,7 @@ export class HybridVfxSystem implements PresentationSystem {
     this.layer.clear();
     this.sparks.clear();
     this.sparks.object.removeFromParent();
+    for (const side of SIDES) this.tracks[side].vortex.dispose();
     this.sparks.object.geometry.dispose();
     (this.sparks.object.material as THREE.Material).dispose();
     this.flashLight.removeFromParent();

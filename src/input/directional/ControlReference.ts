@@ -33,7 +33,7 @@ export interface ControlReference {
    * while any direction is held, so a reference may keep one value for the
    * whole gesture.
    */
-  yawRad(gestureActive: boolean): number;
+  yawRad(gestureActive: boolean, screen?: { readonly x: number; readonly y: number }): number;
 }
 
 /** The fixed arena frame: up = world −Z (away from the default viewpoint), right = +X. Constant for the whole match. */
@@ -68,18 +68,43 @@ export function createOpponentReference(ends: () => BearingEnds | null): Control
   };
 }
 
-/** Reads `read()` once when a gesture starts and keeps that value until every direction is released. */
+/**
+ * Reads `read()` when a gesture starts and keeps it steady while directions stay held — but (owner, 2026-10-04: "o
+ * controle às vezes perde o próprio controle dependendo do ângulo da câmera … quando se bate numa parede e quando o
+ * jogo começa com a câmera atrás do oponente") it is no longer frozen for the whole gesture:
+ * - a new direction (the held direction turns by more than 30°) re-reads it at once, so a new arrow always means
+ *   the screen as it is now;
+ * - while the same direction stays held, it follows a camera that really turns, at most FOLLOW_RATE (≈ 90°/s), so a
+ *   quick shake or wobble never jerks the controls but a camera that swings round (after a wall hit, at the start
+ *   of a match) no longer leaves the arrows pointing the old way.
+ */
 export function createLatchedReference(read: () => number): ControlReference {
   let latched: number | null = null;
+  let lastDirection: number | null = null;
   return {
     kind: 'latched',
-    yawRad: (gestureActive) => {
+    yawRad: (gestureActive, screen) => {
       if (!gestureActive) {
         latched = null;
+        lastDirection = null;
         return 0;
       }
-      latched ??= read();
+      const direction = screen && (screen.x !== 0 || screen.y !== 0) ? Math.atan2(screen.x, screen.y) : null;
+      const turned = direction !== null && lastDirection !== null && Math.abs(Math.atan2(Math.sin(direction - lastDirection), Math.cos(direction - lastDirection))) > NEW_DIRECTION_RAD;
+      if (direction !== null) lastDirection = direction;
+      if (latched === null || turned) {
+        latched = read();
+        return latched;
+      }
+      const target = read();
+      const diff = Math.atan2(Math.sin(target - latched), Math.cos(target - latched));
+      latched += Math.max(-FOLLOW_STEP_RAD, Math.min(FOLLOW_STEP_RAD, diff));
       return latched;
     },
   };
 }
+
+/** A held direction turning by more than this is a new direction: the reference is re-read at once. */
+const NEW_DIRECTION_RAD = Math.PI / 6;
+/** How fast a held direction follows a turning camera (rad per 60 Hz tick ≈ 1.57 rad/s ≈ 90°/s). PROVISIONAL. */
+const FOLLOW_STEP_RAD = (Math.PI / 2) / 60;
