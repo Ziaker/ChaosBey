@@ -22,6 +22,7 @@ import { JUMP_FULL_HEIGHT_RANGE, JUMP_SHORT_HOP_HEIGHT_RANGE } from '../../drift
 import { MOVEMENT_STAMINA_DRAIN_RANGE } from '../../bey/stamina/StaminaTuning';
 import { DODGE_COOLDOWN_RANGE } from '../../dodge/DodgeTuning';
 import { CIRCULAR_LAUNCH_FORCE_RANGE } from '../../combat/attacks/AttackTuning';
+import { SPEED_DAMAGE_GAIN_RANGE } from '../../combat/attacks/SpeedDamage';
 import { AI_DIFFICULTY_TIERS, aiDifficultyTier, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { isEditableEventTarget } from '../../input/devices/EditableTarget';
 import { AI_PERSONALITY_CHOICES, resolveAiPersonality, type AiPersonalityChoice } from '../session/SideControllers';
@@ -130,7 +131,7 @@ export class PregameScreen {
   private readonly root = el('div', 'cb-screen cb-screen--opaque cb-pregame', 'pregame');
   private readonly rowButtons: HTMLButtonElement[][] = [];
   private readonly explanation = el('div', 'cb-pregame__explain', 'pregame-explanation');
-  private readonly toggles: { readonly input: HTMLInputElement; readonly key: 'winByKo' | 'winByRingOut' | 'winBySpinOut' }[] = [];
+  private readonly toggles: { readonly input: HTMLInputElement; readonly key: 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'dashCarriesSpeed' }[] = [];
   private readonly sliders: { readonly input: HTMLInputElement; readonly output: HTMLOutputElement; readonly read: (setup: MatchSetup) => number; readonly format: (value: number) => string }[] = [];
   private readonly seedInput = el('input', 'cb-pregame__seed', 'pregame-seed');
   private setup: MatchSetup;
@@ -275,6 +276,8 @@ export class PregameScreen {
         id: 'combat',
         items: [
           this.slider({ id: 'dash-cooldown', label: 'Dash cooldown', range: DASH_COOLDOWN_RANGE, ...rule('dashCooldownS'), format: sec, note: 'Time after a Dash before the next can charge, for you and the AI (the CD line refills; full = ready). Provisional.' }),
+          this.slider({ id: 'speed-damage', label: 'Speed → damage', range: SPEED_DAMAGE_GAIN_RANGE, ...rule('speedDamageGain'), format: (v) => (v === 0 ? 'off' : `${Math.round(v * 100)}%`), note: 'Faster hits hurt more: at a Bey\'s own top speed (a Dash: its own speed) the damage is as designed; full momentum (twice as fast) at 50% deals ×1.5, a hit from a standstill ×0.5. 0 = off. Provisional.' }),
+          this.toggle({ id: 'dash-carries-speed', label: 'Dash keeps momentum', key: 'dashCarriesSpeed', note: 'A Dash never runs slower than you were going when you fired it: the speed you built up hits harder. Provisional (on).' }),
           this.slider({ id: 'dodge-cooldown', label: 'Dodge cooldown', range: DODGE_COOLDOWN_RANGE, ...rule('dodgeCooldownS'), format: sec, note: 'Time between dodges.' }),
           this.slider({ id: 'circular-launch-force', label: 'Circular launch force', range: CIRCULAR_LAUNCH_FORCE_RANGE, ...rule('circularLaunchForce'), format: (v) => `×${v.toFixed(1)}`, note: 'How hard an active Circular (tap Z) throws whoever touches it. Provisional.' }),
           this.slider({ id: 'body-collision-damage', label: 'Body collision damage', range: BODY_COLLISION_DAMAGE_RANGE, ...rule('bodyCollisionDamage'), format: (v) => `×${v.toFixed(1)}`, note: 'Stability damage the slower Bey takes when the Beys collide without attacking. ×1 = a Circular Attack at a 10 m/s difference. Provisional.' }),
@@ -350,7 +353,7 @@ export class PregameScreen {
     });
   }
 
-  private toggle(spec: { id: string; label: string; key: 'winByKo' | 'winByRingOut' | 'winBySpinOut'; note: string }): DocumentFragment {
+  private toggle(spec: { id: string; label: string; key: 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'dashCarriesSpeed'; note: string }): DocumentFragment {
     const fragment = document.createDocumentFragment();
     const wrapper = el('label', 'cb-pregame__row cb-pregame__row--toggle');
     const input = el('input', 'cb-pregame__toggle', `pregame-${spec.id}`);
@@ -498,6 +501,8 @@ export class PregameScreen {
     const ways = [r.winByKo ? 'a knock-out (a hit while broken)' : null, r.winByRingOut ? 'a ring-out' : null, r.winBySpinOut ? 'a spin-out (Stamina 0)' : null].filter((w): w is string => w !== null);
     addRule(`A round ends on ${ways.join(', ')}${r.roundTimeLimitS > 0 ? `, or a draw after ${r.roundTimeLimitS.toFixed(0)} s` : ''}. A draw scores nobody.`);
     if (r.arenaBowlDepthM !== defaultMatchRules().arenaBowlDepthM && walls.floor !== 'flat') addRule(r.arenaBowlDepthM === 0 ? 'Bowl depth 0 m: the floor is flat' : `Bowl depth ${r.arenaBowlDepthM.toFixed(2)} m (default 2.5 m)`);
+    // Item 11 (owner, 2026-10-04): speed decides how hard you hit.
+    if (r.speedDamageGain > 0) addRule(`Speed is power: the faster a hit lands, the more damage it deals${r.dashCarriesSpeed ? ', and a Dash keeps the speed you built up' : ''}. Build momentum by moving fast and straight.`);
     const changed = changedRuleLines(setup);
     if (changed.length > 0) addRule(`Changed from the defaults: ${changed.join('; ')}.`);
     addRule(setup.clashImpactMultiplier === 1 ? 'Standard Clash impact' : `Clash impact ×${setup.clashImpactMultiplier.toFixed(2)}`);

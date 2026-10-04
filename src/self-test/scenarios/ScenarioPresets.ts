@@ -331,13 +331,14 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
   {
     id: 'stability-break',
     label: 'Test Stability Break',
-    description: 'Defender at 5% Stability takes a Circular hit and Breaks.',
+    description: 'Defender at 3% Stability takes a Circular hit and Breaks.',
     supported: true,
     durationTicks: 2 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
       placeBey(first, 0, -0.7, 0);
       placeBey(second, 0, 0.7, Math.PI);
-      second.stability.debugSetValue(5);
+      // 3, not 5: a Circular from a standstill deals half its damage (4) since speed → damage (owner, 2026-10-04, item 11).
+      second.stability.debugSetValue(3);
     },
     first: script(hold(Action.Attack, 0, TAP_TICKS)),
     second: idle,

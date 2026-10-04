@@ -35,10 +35,16 @@ test('Pregame advanced rules: groups, defaults, reset, into the match, remembere
   // Move two values again and play: they reach the match.
   await page.getByTestId('pregame-bowl-depth').fill('4');
   await page.getByTestId('pregame-jump-cooldown').fill('1');
+  // Item 11 (owner, 2026-10-04): speed → damage and "Dash keeps momentum" are Combat options too.
+  await expect(page.getByTestId('pregame-speed-damage-value')).toHaveText('50%');
+  await expect(page.getByTestId('pregame-dash-carries-speed')).toBeChecked();
+  await page.getByTestId('pregame-speed-damage').fill('1');
+  await page.getByTestId('pregame-dash-carries-speed').uncheck();
+  await expect(page.getByTestId('pregame-rules')).toContainText('speed → damage 100%');
   await page.getByTestId('pregame-start').click();
   await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getScreen()), { timeout: 20_000 }).toBe('match');
   const config = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.matchConfig);
-  expect(config).toMatchObject({ arenaBowlDepthM: 4, jumpCooldownS: 1 });
+  expect(config).toMatchObject({ arenaBowlDepthM: 4, jumpCooldownS: 1, speedDamageGain: 1, dashCarriesSpeed: false });
 
   // Reload: the Pregame remembers them.
   await page.goto(baselineUrl('/ChaosBey/?mode=play'));

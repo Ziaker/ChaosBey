@@ -101,8 +101,11 @@ interface Recording {
 // every AI fight from its first jump or contact on. Swept replay-0..239 with the same criteria: 16 qualify;
 // replay-198 (2668 ticks, 151 frozen) and replay-18 (2666 ticks, 119 frozen, 717 steering ticks after 900).
 // Most seeds end within a few hundred ticks.
-const LONG_SEED = 'replay-198';
-const MUTATION_SEED = 'replay-18';
+// Seeds re-picked for item 11 (owner, 2026-10-04): faster hits deal more damage, so 'replay-198' now ends at tick 966
+// and 'replay-18' at ~70 hitstop ticks — under expectSubstantial. These two are long-enough matches under the
+// new rule with a comfortable margin (seed scan replay-0..59: 2448 / 2406 ticks, 137 / 141 hitstop ticks). The checks themselves are unchanged.
+const LONG_SEED = 'replay-25';
+const MUTATION_SEED = 'replay-39';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {
