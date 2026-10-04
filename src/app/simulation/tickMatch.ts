@@ -334,8 +334,12 @@ export function tickMatch(
     second.stability.applyDamage(secondMovement.impactDeltaSpeedMps * WALL_IMPACT_STABILITY_DAMAGE_PER_MPS);
   }
 
-  first.stamina.tick(firstMovement.speedMps, fixedDeltaSeconds);
-  second.stamina.tick(secondMovement.speedMps, fixedDeltaSeconds);
+  // Owner, 2026-10-04: "o dash NÃO DEVIA NEM GASTAR STAMINA". A Dash (and its recovery, still at Dash speed) costs no
+  // movement Stamina at all — the speed drain made the fastest move in the game the most expensive one. The base spin
+  // drain still runs.
+  const dashing = (state: AttackState): boolean => state === AttackState.DashActive || state === AttackState.DashRecovery;
+  first.stamina.tick(dashing(firstAttack.state) ? 0 : firstMovement.speedMps, fixedDeltaSeconds);
+  second.stamina.tick(dashing(secondAttack.state) ? 0 : secondMovement.speedMps, fixedDeltaSeconds);
   // Momentum (owner, 2026-10-02): builds with sustained fast, straight movement; a wall impact costs part of it.
   tickMomentum(first, firstMovement, firstGrounded, fixedDeltaSeconds);
   tickMomentum(second, secondMovement, secondGrounded, fixedDeltaSeconds);
