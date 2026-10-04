@@ -28,13 +28,6 @@ import { beyMatchRulesOf, createDefaultMatchConfig, type BeyMatchRules } from '.
 
 export interface Bey {
   readonly definition: BeyDefinition;
-  /**
-   * Resolved once at creation from definition.ratings (see
-   * BeyStatsResolution.ts) — the only Attack/Defense/Stamina numbers any
-   * physics/combat system may read. Never read definition.ratings
-   * directly from outside this file; that 1-10 scale is player-facing
-   * only (GDD section 6/31).
-   */
   readonly stats: BeyStats;
   readonly body: RAPIER.RigidBody;
   readonly collider: RAPIER.Collider;
@@ -45,13 +38,9 @@ export interface Bey {
   readonly stamina: StaminaSystem;
   readonly stability: StabilitySystem;
   readonly attack: AttackController;
-  /** Owner, 2026-10-02 (Lote 3): speed build-up (see bey/momentum/). */
   readonly momentum: MomentumSystem;
-  /** The match's per-Bey rules (MatchConfig): build-time config, in the replay config snapshot. */
   readonly rules: BeyMatchRules;
-  /** M11: the floor profile of the arena this Bey plays on (placement helpers put it on the floor). Not simulation state. */
   readonly arenaFloor: ArenaFloor;
-  /** M11: the motion direction's parameters (Motion Lab A/B/C, from MatchConfig.motion) — gameplay, shared by every system that reads it. */
   readonly motion: MotionParams;
 }
 
@@ -61,10 +50,16 @@ export function createBey(
   definition: BeyDefinition = DEFAULT_BEY_DEFINITION,
   arenaFloor: ArenaFloor = 'flat',
   motion: MotionParams = motionParams(),
-  /** The match's per-Bey rules (MatchConfig); omitted = the defaults, with the pre-2026-10-02 jump (see LEGACY_JUMP_FULL_HEIGHT_M). */
   matchRules?: BeyMatchRules,
 ): Bey {
-  const rules: BeyMatchRules = matchRules ?? { ...beyMatchRulesOf(createDefaultMatchConfig()), jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, defensiveCircular: false };
+  // Bare constructions keep legacy/prototype behavior: old jump, non-defensive Circular, no speed-to-damage or Dash carry.
+  const rules: BeyMatchRules = matchRules ?? {
+    ...beyMatchRulesOf(createDefaultMatchConfig()),
+    jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M,
+    defensiveCircular: false,
+    speedDamageGain: 0,
+    dashCarriesSpeed: false,
+  };
   const { body, collider } = createBeyRigidBody(physics, spawnPosition, definition.physical, motion);
   const stats = resolveBeyStats(definition.ratings);
   const movement = new MatchMovementController(
@@ -80,12 +75,11 @@ export function createBey(
     collider,
     movement,
     spin: new SpinController(motion),
-    // Bare constructions (no match rules: the Camera Lab, physics-only tests) keep the old immediate full-jump launch.
     drift: new DriftController(movement.getLateralGripPerS(), matchRules),
     dodge: new DodgeController(rules.dodgeCooldownS),
     stamina: new StaminaSystem(stats.stamina, rules.movementStaminaDrain),
     stability: new StabilitySystem(),
-    attack: new AttackController(definition.attack, rules.dashCooldownS),
+    attack: new AttackController(definition.attack, rules.dashCooldownS, rules.dashCarriesSpeed ?? false),
     momentum: new MomentumSystem(rules),
     rules,
     arenaFloor,
