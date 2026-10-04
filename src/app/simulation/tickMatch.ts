@@ -345,9 +345,11 @@ export function tickMatch(
   const firstVelBefore = horizontalVelocity(first.body);
   const secondVelBefore = horizontalVelocity(second.body);
   const gapBefore = length(subtract(positionXZ(second.body), positionXZ(first.body)));
+  const firstWasAboveFloor = isAboveFloor(first);
+  const secondWasAboveFloor = isAboveFloor(second);
   physics.step();
-  keepAboveFloor(first);
-  keepAboveFloor(second);
+  if (firstWasAboveFloor) keepAboveFloor(first);
+  if (secondWasAboveFloor) keepAboveFloor(second);
 
   // The defensive Circular (owner, 2026-10-02, item 13): the other Bey's contact must not push its user either —
   // the solver's push is undone (horizontal velocity back to what it carried into the step) before the movement
@@ -799,6 +801,12 @@ function horizontalVelocity(body: Bey['body']): Vec2 {
  * Deterministic; past the wall (falling off the rim toward a ring-out) is left alone.
  */
 const FLOOR_PENETRATION_TOLERANCE_M = 0.12;
+/** Only a Bey that was on/above the floor before the step can have gone through it (one already under the bowl —
+ * fallen off the rim — is left to the ring-out rule). */
+function isAboveFloor(bey: Bey): boolean {
+  const p = bey.body.translation();
+  return p.y >= floorHeightAt(bey.arenaFloor, p.x, p.z) + bey.definition.physical.colliderHalfHeightM - FLOOR_PENETRATION_TOLERANCE_M;
+}
 function keepAboveFloor(bey: Bey): void {
   const p = bey.body.translation();
   const r = Math.hypot(p.x, p.z);

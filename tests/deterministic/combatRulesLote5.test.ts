@@ -113,7 +113,7 @@ describe('13 — the Circular is defensive (owner, 2026-10-02)', () => {
 describe('14 — movement Stamina drain 30% lower, with a slider (owner, 2026-10-02)', () => {
   it('3 -> 2.1 per second at full speed; the slider scales only the movement part', () => {
     expect(STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED).toBeCloseTo(2.1, 9);
-    expect(createDefaultMatchConfig().movementStaminaDrain).toBe(1);
+    expect(createDefaultMatchConfig().movementStaminaDrain).toBe(0.2); // owner base rules (2026-10-04): 20%
     const drained = (scale: number, speed: number): number => {
       const s = new StaminaSystem(1, scale);
       const before = s.resource.value;

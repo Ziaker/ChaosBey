@@ -63,7 +63,7 @@ describe('match setup', () => {
         ringOutDelayS: 1.5, dashCooldownS: 1.5, momentumGain: 1.7, momentumFillS: 4, momentumDecayS: 2.5, bodyCollisionDamage: 1, momentumLossOnCollision: 0.1, jumpFullHeightM: 3.25, jumpShortHopHeightM: 0.5, movementStaminaDrain: 0.2, dodgeCooldownS: 2.5, circularLaunchForce: 1,
         arenaBowlDepthM: 8.5, roundTimeLimitS: 0, winByKo: true, winByRingOut: true, winBySpinOut: true, accelerationScale: 1.9, topSpeedScale: 2.8, airControl: 1.5, jumpStaminaCost: 0, jumpCooldownS: 0,
         speedDamageGain: 0.5, dashCarriesSpeed: true,
-        turnRateScale: 1.75, turnSpeedRetention: 0.9, jumpHoldForFullS: 0.15, gravityScale: 3.6, contactRepelMps: 16.5, attackRecoilMps: 15.5, highSpeedControl: 1, arenaSizeScale: 1, gameSpeed: 1.2, dodgeStaminaCost: 0, dodgeDistanceScale: 1, contactLiftMps: 4, knockbackScale: 1, spinStaminaDrain: 1, circularLockAfterHitS: 0.6, bodyContactControlLossScale: 0.8,
+        turnRateScale: 1.75, turnSpeedRetention: 0.9, jumpHoldForFullS: 0.15, gravityScale: 3.6, contactRepelMps: 16.5, attackRecoilMps: 15.5, highSpeedControl: 1, arenaSizeScale: 1, gameSpeed: 1.2, clashLaunchMps: 28, dodgeStaminaCost: 0, dodgeDistanceScale: 1, contactLiftMps: 4, knockbackScale: 1, spinStaminaDrain: 1, circularLockAfterHitS: 0.6, bodyContactControlLossScale: 0.8,
       },
       visual: { intensity: 1, groundWaves: 1, dust: 1 },
       seedText: null,

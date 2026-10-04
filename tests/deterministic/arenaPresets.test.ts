@@ -29,10 +29,13 @@ describe('arena presets', () => {
   it('are the three approved directions; Foundry Pit, the default, is the arena every earlier milestone played', () => {
     expect(ARENA_PRESETS.map((p) => p.label)).toEqual(['Foundry Pit', 'Rift Crater', 'Tournament Stadium']);
     expect(DEFAULT_ARENA_PRESET).toBe('foundry');
-    expect(STANDARD_ARENA_GEOMETRY).toEqual({ wallHeightM: ARENA_WALL_HEIGHT, wallRestitution: WALL_MATERIAL.restitution });
+    // Owner base rules (2026-10-04): the standard walls bounce at 0.80 (the wall material's own restitution was 0.55).
+    expect(STANDARD_ARENA_GEOMETRY).toEqual({ wallHeightM: ARENA_WALL_HEIGHT, wallRestitution: 0.8 });
+    expect(WALL_MATERIAL.restitution).toBe(0.55);
     expect(FOUNDRY_PIT.geometry).toEqual(STANDARD_ARENA_GEOMETRY);
     // Arena scale pass: the default floor is the bowl (the stage is not flat); flat is only a baseline option.
-    expect(arenaGeometryOf(createDefaultMatchConfig())).toEqual({ ...STANDARD_ARENA_GEOMETRY, floor: DEFAULT_ARENA_FLOOR, floorDepthM: 7 }); // the funnel at 7 m (owner, 2026-10-04)
+    // Owner base rules (2026-10-04): walls 2 m / 0.80 bounce, the funnel 8.5 m deep, stage size ×1.
+    expect(arenaGeometryOf(createDefaultMatchConfig())).toEqual({ wallHeightM: 2, wallRestitution: 0.8, floor: DEFAULT_ARENA_FLOOR, floorDepthM: 8.5, sizeScale: 1 });
     expect(arenaPreset('rift')).toBe(RIFT_CRATER);
   });
 
