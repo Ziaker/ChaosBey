@@ -93,6 +93,13 @@ export interface MatchConfig {
   /** Multipliers on every Bey's acceleration, top speed and in-air steering grip (1 = as designed). */
   accelerationScale: number;
   topSpeedScale: number;
+  /**
+   * Master §12 speed-limit playtest. False (default) keeps the approved permissive model: self-thrust stops at the
+   * current top speed while external overspeed bleeds back gradually. True hard-caps ordinary locomotion to the current
+   * top-speed ceiling after movement input, but deliberately does not clip Dash, Dodge or a live post-impact impulse.
+   * PROVISIONAL playtest behavior; recorded in replays because it changes simulation outcomes.
+   */
+  strictSpeedCap: boolean;
   airControl: number;
   /** Stamina a hop/jump costs (0 = free); a Bey without that much can't jump. */
   jumpStaminaCost: number;
@@ -108,7 +115,7 @@ export interface MatchConfig {
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'defensiveCircular'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'topSpeedScale' | 'strictSpeedCap' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'defensiveCircular'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -125,6 +132,8 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     circularLaunchForce: config.circularLaunchForce,
     accelerationScale: config.accelerationScale,
     topSpeedScale: config.topSpeedScale,
+    // Replays from before Lote 12 have no field: they are the old permissive behavior.
+    strictSpeedCap: config.strictSpeedCap ?? false,
     airControl: config.airControl,
     jumpStaminaCost: config.jumpStaminaCost,
     jumpCooldownS: config.jumpCooldownS,
@@ -159,6 +168,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     winBySpinOut: true,
     accelerationScale: 1,
     topSpeedScale: 1,
+    strictSpeedCap: false,
     airControl: 1,
     jumpStaminaCost: 0,
     jumpCooldownS: 0,
