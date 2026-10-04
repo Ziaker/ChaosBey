@@ -95,6 +95,7 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     handling: 'build-time config from the Bey definition (replay config snapshot)',
     motion: 'build-time config: the motion direction (MatchConfig.motion, replay config snapshot)',
     airControl: 'build-time config: MatchConfig.airControl (replay config snapshot)',
+    strictSpeedCap: 'build-time config: MatchConfig.strictSpeedCap (replay config snapshot)',
   },
   SpinController: {
     motion: 'build-time config: the motion direction (MatchConfig.motion, replay config snapshot)',
