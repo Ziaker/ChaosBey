@@ -22,6 +22,8 @@ import { JUMP_FULL_HEIGHT_RANGE, JUMP_SHORT_HOP_HEIGHT_RANGE } from '../../drift
 import { MOVEMENT_STAMINA_DRAIN_RANGE } from '../../bey/stamina/StaminaTuning';
 import { DODGE_COOLDOWN_RANGE } from '../../dodge/DodgeTuning';
 import { CIRCULAR_LAUNCH_FORCE_RANGE } from '../../combat/attacks/AttackTuning';
+import { SPEED_DAMAGE_GAIN_RANGE } from '../../combat/attacks/SpeedDamage';
+import { JUMP_HOLD_FOR_FULL_RANGE } from '../../drift/DriftTuning';
 import { AI_DIFFICULTY_TIERS, aiDifficultyTier, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
 import { isEditableEventTarget } from '../../input/devices/EditableTarget';
 import { AI_PERSONALITY_CHOICES, resolveAiPersonality, type AiPersonalityChoice } from '../session/SideControllers';
@@ -31,8 +33,8 @@ import { BEY_ROSTER, rosterEntry } from './beyRoster';
 import { button, el, ensureFrontendStyle, keyHint } from './frontendStyle';
 import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
-import { CLASH_IMPACT_RANGE, changedRuleLines, defaultMatchRules, matchupLines, normalizeSeedText, RING_OUT_OFF_TIME_LIMIT_S, sanitizeMatchRules, withArenaFloor, withArenaPreset, type MatchRules, type MatchSetup } from './matchSetup';
-import { ACCELERATION_SCALE_RANGE, AIR_CONTROL_RANGE, ARENA_BOWL_DEPTH_RANGE, JUMP_COOLDOWN_RANGE, JUMP_STAMINA_COST_RANGE, ROUND_TIME_LIMIT_RANGE, TOP_SPEED_SCALE_RANGE } from '../../config/match/MatchConfig';
+import { CLASH_IMPACT_RANGE, changedRuleLines, deleteRuleConfig, loadRuleConfigs, saveRuleConfig, withRuleConfig, defaultMatchRules, matchupLines, normalizeSeedText, RING_OUT_OFF_TIME_LIMIT_S, sanitizeMatchRules, withArenaFloor, withArenaPreset, type MatchRules, type MatchSetup } from './matchSetup';
+import { ACCELERATION_SCALE_RANGE, AIR_CONTROL_RANGE, ARENA_BOWL_DEPTH_RANGE, JUMP_COOLDOWN_RANGE, JUMP_STAMINA_COST_RANGE, ROUND_TIME_LIMIT_RANGE, TOP_SPEED_SCALE_RANGE, GRAVITY_SCALE_RANGE, IMPACT_PUSH_RANGE, ARENA_SIZE_SCALE_RANGE, DODGE_DISTANCE_SCALE_RANGE, DODGE_STAMINA_COST_RANGE, CONTACT_LIFT_RANGE, KNOCKBACK_SCALE_RANGE, SPIN_STAMINA_DRAIN_RANGE, CIRCULAR_LOCK_RANGE, BODY_CONTACT_CONTROL_LOSS_RANGE, TURN_RATE_SCALE_RANGE, TURN_SPEED_RETENTION_RANGE } from '../../config/match/MatchConfig';
 import { DEFAULT_VFX_OPTIONS, VFX_DUST_RANGE, VFX_GROUND_WAVES_RANGE, VFX_INTENSITY_RANGE, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
@@ -130,7 +132,7 @@ export class PregameScreen {
   private readonly root = el('div', 'cb-screen cb-screen--opaque cb-pregame', 'pregame');
   private readonly rowButtons: HTMLButtonElement[][] = [];
   private readonly explanation = el('div', 'cb-pregame__explain', 'pregame-explanation');
-  private readonly toggles: { readonly input: HTMLInputElement; readonly key: 'winByKo' | 'winByRingOut' | 'winBySpinOut' }[] = [];
+  private readonly toggles: { readonly input: HTMLInputElement; readonly key: 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'dashCarriesSpeed' }[] = [];
   private readonly sliders: { readonly input: HTMLInputElement; readonly output: HTMLOutputElement; readonly read: (setup: MatchSetup) => number; readonly format: (value: number) => string }[] = [];
   private readonly seedInput = el('input', 'cb-pregame__seed', 'pregame-seed');
   private setup: MatchSetup;
@@ -251,11 +253,16 @@ export class PregameScreen {
         title: 'Movement',
         id: 'movement',
         items: [
-          this.slider({ id: 'acceleration', label: 'Acceleration', range: ACCELERATION_SCALE_RANGE, ...rule('accelerationScale'), format: times, note: 'How fast every Bey gets up to speed (time to top speed). ×1 = as designed. Provisional.' }),
-          this.slider({ id: 'top-speed', label: 'Top speed', range: TOP_SPEED_SCALE_RANGE, ...rule('topSpeedScale'), format: times, note: 'Every Bey\'s top speed before momentum. ×1 = as designed. Provisional.' }),
+          this.slider({ id: 'acceleration', label: 'Acceleration', range: ACCELERATION_SCALE_RANGE, ...rule('accelerationScale'), format: times, note: 'How fast every Bey gets up to speed. Default ×1.45 (owner, 2026-10-04). Provisional.' }),
+          this.slider({ id: 'top-speed', label: 'Top speed', range: TOP_SPEED_SCALE_RANGE, ...rule('topSpeedScale'), format: times, note: 'Every Bey\'s top speed before momentum. Default ×1.45 (owner, 2026-10-04: at least 45% faster). Provisional.' }),
+          this.slider({ id: 'turn-rate', label: 'Turn rate', range: TURN_RATE_SCALE_RANGE, ...rule('turnRateScale'), format: times, note: 'How fast every Bey turns. Default ×1.45 (owner, 2026-10-04: faster control). Provisional.' }),
+          this.slider({ id: 'turn-speed-retention', label: 'Speed kept in turns', range: TURN_SPEED_RETENTION_RANGE, ...rule('turnSpeedRetention'), format: pct, note: 'How much of the speed a turn would scrub off is kept. 0% = the old turns. Default 85%. Provisional.' }),
+          this.slider({ id: 'high-speed-control', label: 'Control at speed', range: TURN_SPEED_RETENTION_RANGE, ...rule('highSpeedControl'), format: pct, note: 'How much steering control the Bey keeps as it gets faster. 100% = as much as when slow (no slide at speed). 0% = the old slip. Provisional.' }),
+          this.slider({ id: 'gravity', label: 'Gravity', range: GRAVITY_SCALE_RANGE, ...rule('gravityScale'), format: (v) => `×${v.toFixed(1)}`, note: 'How fast Beys fall. Jump heights stay the same; they just take less time. ×1 = 10.5 m/s² (reads as slow motion at this scale). Default ×2.5. Provisional.' }),
           this.slider({ id: 'air-control', label: 'Air control', range: AIR_CONTROL_RANGE, ...rule('airControl'), format: times, note: 'How much a Bey can steer while in the air. ×1 = as designed, 0 = none. Provisional.' }),
+          this.slider({ id: 'spin-stamina-drain', label: 'Spin stamina drain', range: SPIN_STAMINA_DRAIN_RANGE, ...rule('spinStaminaDrain'), format: (v) => `×${v.toFixed(1)}`, note: 'The Stamina every Bey loses just by spinning. ×1 = 0.4/s (Stamina 0 = spin-out, which at ×1 takes minutes). Raise it for spin-outs. Provisional.' }),
           this.slider({ id: 'movement-stamina-drain', label: 'Movement stamina drain', range: MOVEMENT_STAMINA_DRAIN_RANGE, ...rule('movementStaminaDrain'), format: pct, note: 'Stamina spent by moving fast (the spin itself always drains a little). 100% = 30% less than before. Stamina 0 loses the round (spin-out).' }),
-          this.slider({ id: 'momentum-gain', label: 'Momentum gain', range: MOMENTUM_GAIN_RANGE, ...rule('momentumGain'), format: (v) => `+${Math.round(v * 100)}%`, note: 'How much full momentum raises the top speed. +100% = twice the top speed.' }),
+          this.slider({ id: 'momentum-gain', label: 'Momentum gain', range: MOMENTUM_GAIN_RANGE, ...rule('momentumGain'), format: (v) => `+${Math.round(v * 100)}%`, note: 'How much full momentum raises the top speed. Default +150% (2.5× the top speed). Provisional.' }),
           this.slider({ id: 'momentum-fill', label: 'Momentum build-up', range: MOMENTUM_FILL_RANGE, ...rule('momentumFillS'), format: (v) => `${v.toFixed(1)} s`, note: 'Seconds of fast, steady movement to fill momentum.' }),
           this.slider({ id: 'momentum-decay', label: 'Momentum decay', range: MOMENTUM_DECAY_RANGE, ...rule('momentumDecayS'), format: sec, note: 'Seconds for full momentum to drain when you brake, turn hard or stop.' }),
         ],
@@ -266,6 +273,7 @@ export class PregameScreen {
         items: [
           this.slider({ id: 'jump-full-height', label: 'Full jump height', range: JUMP_FULL_HEIGHT_RANGE, ...rule('jumpFullHeightM'), format: meters, note: 'How high a held X jump goes. Provisional 2.5 m (the wall is 2 m: a full jump near the rim can clear it).' }),
           this.slider({ id: 'jump-short-hop-height', label: 'Short hop height', range: JUMP_SHORT_HOP_HEIGHT_RANGE, ...rule('jumpShortHopHeightM'), format: meters, note: 'How high a quick X tap hops.' }),
+          this.slider({ id: 'jump-hold-for-full', label: 'Hold X for full jump', range: JUMP_HOLD_FOR_FULL_RANGE, ...rule('jumpHoldForFullS'), format: (v) => `${v.toFixed(2)} s`, note: 'The only rule for the height: released before this = the short hop, still held = the full jump (it leaves the floor then). Steering never changes it. Default 0.2 s.' }),
           this.slider({ id: 'jump-stamina-cost', label: 'Jump stamina cost', range: JUMP_STAMINA_COST_RANGE, ...rule('jumpStaminaCost'), format: (v) => (v === 0 ? 'free' : `${v.toFixed(0)}`), note: 'Stamina each hop or jump costs; a Bey without that much can\'t jump. Provisional (free).' }),
           this.slider({ id: 'jump-cooldown', label: 'Jump cooldown', range: JUMP_COOLDOWN_RANGE, ...rule('jumpCooldownS'), format: (v) => (v === 0 ? 'none' : `${v.toFixed(1)} s`), note: 'Time after a jump before the next; a press meanwhile is kept. Provisional (none).' }),
         ],
@@ -275,7 +283,17 @@ export class PregameScreen {
         id: 'combat',
         items: [
           this.slider({ id: 'dash-cooldown', label: 'Dash cooldown', range: DASH_COOLDOWN_RANGE, ...rule('dashCooldownS'), format: sec, note: 'Time after a Dash before the next can charge, for you and the AI (the CD line refills; full = ready). Provisional.' }),
+          this.slider({ id: 'speed-damage', label: 'Speed → damage', range: SPEED_DAMAGE_GAIN_RANGE, ...rule('speedDamageGain'), format: (v) => (v === 0 ? 'off' : `${Math.round(v * 100)}%`), note: 'Faster hits hurt more: at a Bey\'s own top speed (a Dash: its own speed) the damage is as designed; full momentum (twice as fast) at 50% deals ×1.5, a hit from a standstill ×0.5. 0 = off. Provisional.' }),
+          this.toggle({ id: 'dash-carries-speed', label: 'Dash keeps momentum', key: 'dashCarriesSpeed', note: 'A Dash never runs slower than you were going when you fired it: the speed you built up hits harder. Provisional (on).' }),
+          this.slider({ id: 'dodge-distance', label: 'Dodge distance', range: DODGE_DISTANCE_SCALE_RANGE, ...rule('dodgeDistanceScale'), format: (v) => `×${v.toFixed(2)}`, note: 'How far a dodge goes (same duration and i-frames, faster). ×1 = 12.6 m/s. Provisional.' }),
+          this.slider({ id: 'dodge-stamina-cost', label: 'Dodge stamina cost', range: DODGE_STAMINA_COST_RANGE, ...rule('dodgeStaminaCost'), format: (v) => (v === 0 ? 'free' : `${v.toFixed(0)}`), note: 'Stamina a dodge costs. Free by default (owner, 2026-10-04); a dodge never drains movement Stamina either.' }),
           this.slider({ id: 'dodge-cooldown', label: 'Dodge cooldown', range: DODGE_COOLDOWN_RANGE, ...rule('dodgeCooldownS'), format: sec, note: 'Time between dodges.' }),
+          this.slider({ id: 'contact-repel', label: 'Contact repel', range: IMPACT_PUSH_RANGE, ...rule('contactRepelMps'), format: (v) => `${v.toFixed(1)} m/s`, note: 'Any touch throws both Beys apart at least this fast, whatever their speeds; an attack throws the defender 1.5× this. 0 = off. Provisional.' }),
+          this.slider({ id: 'contact-lift', label: 'Contact lift', range: CONTACT_LIFT_RANGE, ...rule('contactLiftMps'), format: (v) => `${v.toFixed(1)} m/s`, note: 'Upward push a contact gives (with the contact repel / attack recoil). 0 = none. Provisional.' }),
+          this.slider({ id: 'knockback', label: 'Knockback', range: KNOCKBACK_SCALE_RANGE, ...rule('knockbackScale'), format: (v) => `×${v.toFixed(2)}`, note: 'Scales every knockback: hits, collisions, the Circular launch, contact repel and recoil. Provisional.' }),
+          this.slider({ id: 'attack-recoil', label: 'Attack recoil', range: IMPACT_PUSH_RANGE, ...rule('attackRecoilMps'), format: (v) => `${v.toFixed(1)} m/s`, note: 'How hard a landed attack throws the attacker back. 0 = off. Provisional.' }),
+          this.slider({ id: 'circular-lock', label: 'Circular lockout after a hit', range: CIRCULAR_LOCK_RANGE, ...rule('circularLockAfterHitS'), format: (v) => `${v.toFixed(2)} s`, note: 'The Circular is defensive: it can\'t be started while knocked back, nor for this long after taking damage. Provisional.' }),
+          this.slider({ id: 'body-contact-control-loss', label: 'Control loss on body contact', range: BODY_CONTACT_CONTROL_LOSS_RANGE, ...rule('bodyContactControlLossScale'), format: (v) => `×${v.toFixed(2)}`, note: 'How long a plain Bey-to-Bey touch (no attack) takes away ground control, × the base. 0.8 = 20% shorter (owner). Provisional.' }),
           this.slider({ id: 'circular-launch-force', label: 'Circular launch force', range: CIRCULAR_LAUNCH_FORCE_RANGE, ...rule('circularLaunchForce'), format: (v) => `×${v.toFixed(1)}`, note: 'How hard an active Circular (tap Z) throws whoever touches it. Provisional.' }),
           this.slider({ id: 'body-collision-damage', label: 'Body collision damage', range: BODY_COLLISION_DAMAGE_RANGE, ...rule('bodyCollisionDamage'), format: (v) => `×${v.toFixed(1)}`, note: 'Stability damage the slower Bey takes when the Beys collide without attacking. ×1 = a Circular Attack at a 10 m/s difference. Provisional.' }),
           this.slider({ id: 'momentum-loss', label: 'Momentum loss on collision', range: MOMENTUM_LOSS_ON_COLLISION_RANGE, ...rule('momentumLossOnCollision'), format: pct, note: 'Share of momentum the faster Bey loses in a collision (also on a hit taken or a wall impact). Provisional.' }),
@@ -286,7 +304,8 @@ export class PregameScreen {
         title: 'Arena',
         id: 'arena',
         items: [
-          this.slider({ id: 'bowl-depth', label: 'Bowl depth (funnel)', range: ARENA_BOWL_DEPTH_RANGE, ...rule('arenaBowlDepthM'), format: meters, note: 'How deep the bowl is (rim above the centre): the floor\'s collider, art, spawns and effects all follow it. 0 = flat. Default 2.5 m.' }),
+          this.slider({ id: 'stage-size', label: 'Stage size', range: ARENA_SIZE_SCALE_RANGE, ...rule('arenaSizeScale'), format: (v) => `×${v.toFixed(2)} (${Math.round(36 * v)} m radius)`, note: 'How big the stage is. ×1 = 36 m radius. The floor, walls, ring-out line, art and camera all follow it. Provisional.' }),
+          this.slider({ id: 'bowl-depth', label: 'Bowl depth (funnel)', range: ARENA_BOWL_DEPTH_RANGE, ...rule('arenaBowlDepthM'), format: meters, note: 'How deep the bowl is (rim above the centre): the floor\'s collider, art, spawns and effects all follow it. 0 = flat. Default 8.5 m on the Funnel (owner base rules, 2026-10-04).' }),
           this.slider({ id: 'wall-height', label: 'Wall height', range: ARENA_WALL_HEIGHT_RANGE, read: (s) => s.arena.geometry.wallHeightM, write: (s, v) => ({ ...s, arena: { ...s.arena, geometry: { ...s.arena.geometry, wallHeightM: v } } }), defaultValue: arenaPreset(this.setup.arena.presetId).geometry.wallHeightM, format: (v) => `${v.toFixed(1)} m`, note: 'A low wall lets a launched Bey fly out of the arena; a tall one keeps it in. Default: the arena\'s.' }),
           this.slider({ id: 'wall-bounce', label: 'Wall bounce', range: ARENA_WALL_BOUNCE_RANGE, read: (s) => s.arena.geometry.wallRestitution, write: (s, v) => ({ ...s, arena: { ...s.arena, geometry: { ...s.arena.geometry, wallRestitution: v } } }), defaultValue: arenaPreset(this.setup.arena.presetId).geometry.wallRestitution, format: (v) => v.toFixed(2), note: 'How hard the wall throws a Bey back into the fight. Default: the arena\'s.' }),
         ],
@@ -334,11 +353,47 @@ export class PregameScreen {
     const seedNote = el('p', 'cb-hint');
     seedNote.textContent = 'Same seed, same inputs, same match. Leave blank for a new one every time.';
 
-    details.append(seedRow, seedNote, reset);
+    details.append(seedRow, seedNote, reset, this.savedConfigsRow());
     return details;
   }
 
   /** Lote 9: every advanced rule, the arena's walls, Clash impact and the visual options back to their defaults (Bey, AI, arena look, floor profile, rounds and seed stay). */
+  /** Owner, 2026-10-04: save the Advanced rules under a name, and load or delete a saved one. */
+  private savedConfigsRow(): HTMLElement {
+    const row = el('div', 'cb-pregame__row cb-pregame__saved', 'pregame-saved-configs');
+    const label = el('span', 'cb-field-label');
+    label.textContent = 'Saved rules';
+    const select = el('select', 'cb-pregame__select', 'pregame-saved-select');
+    const refill = (selected?: string): void => {
+      const names = Object.keys(loadRuleConfigs()).sort();
+      select.replaceChildren(...(names.length ? names : ['(none saved)']).map((n) => {
+        const option = el('option');
+        option.value = names.length ? n : '';
+        option.textContent = n;
+        return option;
+      }));
+      if (selected) select.value = selected;
+    };
+    const save = button('Save…', '', 'pregame-save-config', () => {
+      const name = window.prompt('Name for these rules:', select.value || 'My rules')?.trim();
+      if (!name) return;
+      saveRuleConfig(name, this.setup);
+      refill(name);
+    });
+    const load = button('Load', '', 'pregame-load-config', () => {
+      const saved = loadRuleConfigs()[select.value];
+      if (saved) this.update(withRuleConfig(this.setup, saved));
+    });
+    const remove = button('Delete', '', 'pregame-delete-config', () => {
+      if (!select.value) return;
+      deleteRuleConfig(select.value);
+      refill();
+    });
+    refill();
+    row.append(label, select, save, load, remove);
+    return row;
+  }
+
   private resetAdvanced(): void {
     const preset = arenaPreset(this.setup.arena.presetId).geometry;
     this.update({
@@ -350,7 +405,7 @@ export class PregameScreen {
     });
   }
 
-  private toggle(spec: { id: string; label: string; key: 'winByKo' | 'winByRingOut' | 'winBySpinOut'; note: string }): DocumentFragment {
+  private toggle(spec: { id: string; label: string; key: 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'dashCarriesSpeed'; note: string }): DocumentFragment {
     const fragment = document.createDocumentFragment();
     const wrapper = el('label', 'cb-pregame__row cb-pregame__row--toggle');
     const input = el('input', 'cb-pregame__toggle', `pregame-${spec.id}`);
@@ -497,7 +552,9 @@ export class PregameScreen {
     const r = setup.rules;
     const ways = [r.winByKo ? 'a knock-out (a hit while broken)' : null, r.winByRingOut ? 'a ring-out' : null, r.winBySpinOut ? 'a spin-out (Stamina 0)' : null].filter((w): w is string => w !== null);
     addRule(`A round ends on ${ways.join(', ')}${r.roundTimeLimitS > 0 ? `, or a draw after ${r.roundTimeLimitS.toFixed(0)} s` : ''}. A draw scores nobody.`);
-    if (r.arenaBowlDepthM !== defaultMatchRules().arenaBowlDepthM && walls.floor !== 'flat') addRule(r.arenaBowlDepthM === 0 ? 'Bowl depth 0 m: the floor is flat' : `Bowl depth ${r.arenaBowlDepthM.toFixed(2)} m (default 2.5 m)`);
+    if (r.arenaBowlDepthM !== defaultMatchRules().arenaBowlDepthM && walls.floor !== 'flat') addRule(r.arenaBowlDepthM === 0 ? 'Bowl depth 0 m: the floor is flat' : `Bowl depth ${r.arenaBowlDepthM.toFixed(2)} m (default ${defaultMatchRules().arenaBowlDepthM.toFixed(2)} m)`);
+    // Item 11 (owner, 2026-10-04): speed decides how hard you hit.
+    if (r.speedDamageGain > 0) addRule(`Speed is power: the faster a hit lands, the more damage it deals${r.dashCarriesSpeed ? ', and a Dash keeps the speed you built up' : ''}. Build momentum by moving fast and straight.`);
     const changed = changedRuleLines(setup);
     if (changed.length > 0) addRule(`Changed from the defaults: ${changed.join('; ')}.`);
     addRule(setup.clashImpactMultiplier === 1 ? 'Standard Clash impact' : `Clash impact ×${setup.clashImpactMultiplier.toFixed(2)}`);

@@ -18,6 +18,8 @@ import {
   CAMERA_CONTAIN_RADIUS_M,
   CAMERA_EDGE_MARGIN_M,
   CAMERA_RINGOUT_WATCH_RADIUS_M,
+  cameraContainRadiusM,
+  cameraRingOutWatchRadiusM,
 } from './CameraArenaScale';
 import { InertialDuelDirector } from './InertialDuelDirector';
 import { cloneParams, PRESETS, PRESET_IDS, type CameraParams, type PresetId } from './CameraParams';
@@ -64,7 +66,7 @@ export function arenaParamsFor(id: PresetId): CameraParams {
 
 /** Options used by the base director inside the game wrapper. */
 export function rigDirectorOptions(_id: PresetId, floorHeightAt?: (x: number, z: number) => number): DirectorOptions {
-  return { ...RIG_DIRECTOR_OPTIONS, floorHeightAt };
+  return { ...RIG_DIRECTOR_OPTIONS, arena: { containRadiusM: cameraContainRadiusM() }, floorHeightAt };
 }
 
 /** The preset the Clash always uses (owner decision 2026-09-28). */
@@ -119,9 +121,9 @@ export class CameraRig {
   constructor(preset: PresetId, aspect = 16 / 9, floorHeightAt?: (x: number, z: number) => number) {
     const options = (id: PresetId) => rigDirectorOptions(id, floorHeightAt);
     this.directors = {
-      A: new InertialDuelDirector('A', arenaParamsFor('A'), aspect, options('A'), CAMERA_RINGOUT_WATCH_RADIUS_M),
-      B: new InertialDuelDirector('B', arenaParamsFor('B'), aspect, options('B'), CAMERA_RINGOUT_WATCH_RADIUS_M),
-      C: new InertialDuelDirector('C', arenaParamsFor('C'), aspect, options('C'), CAMERA_RINGOUT_WATCH_RADIUS_M),
+      A: new InertialDuelDirector('A', arenaParamsFor('A'), aspect, options('A'), cameraRingOutWatchRadiusM()),
+      B: new InertialDuelDirector('B', arenaParamsFor('B'), aspect, options('B'), cameraRingOutWatchRadiusM()),
+      C: new InertialDuelDirector('C', arenaParamsFor('C'), aspect, options('C'), cameraRingOutWatchRadiusM()),
     };
     this.preset = preset;
     this.fromPreset = preset;

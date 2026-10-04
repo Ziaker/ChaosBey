@@ -24,16 +24,20 @@ async function flight(kind: Kind, jumpFullHeightM: number) {
   let was = isGrounded(h.physics, h.first.collider);
   let prevVy = h.first.body.linvel().y;
   let drifted = false;
+  let takeoffTick = Infinity; // owner, 2026-10-04: the full jump leaves the floor once the hold is known (tick ~7), not on tick 1
   for (let t = 0; t < 200; t++) {
     const holdX = kind === 'full jump' ? t < 40 : kind === 'drift hop' ? t < 60 : t < 1;
     const held = new Set<Action>([...(holdX ? [Action.JumpDrift] : []), ...(moving ? [Action.MoveForward, Action.SteerRight] : [])]);
     const r = h.tick({ ...NONE, held, pressedThisFrame: new Set(t === 0 ? [Action.JumpDrift] : []) }, NONE);
     if (r.first.driftState === DriftState.Drifting) drifted = true;
     const g = isGrounded(h.physics, h.first.collider);
-    if (was && !g) takeoffs++;
+    if (was && !g) {
+      takeoffs++;
+      takeoffTick = t;
+    }
     was = g;
     const vy = h.first.body.linvel().y;
-    if (t > 1 && !g && vy > prevVy + 0.05) upwardKicks++; // re-acceleration in flight
+    if (t > takeoffTick && !g && vy > prevVy + 0.05) upwardKicks++; // re-acceleration in flight
     prevVy = vy;
     apex = Math.max(apex, h.first.body.translation().y);
   }

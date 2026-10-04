@@ -71,7 +71,7 @@ export const LEGACY_JUMP_FULL_HEIGHT_M = (5 * 5) / (2 * GRAVITY_MPS2);
 // pass's own measured baseline apex (0.177 m) x1.15.
 export const JUMP_SHORT_HOP_TARGET_APEX_M = 0.1265;
 // Owner, 2026-10-02 (Lote 4): Pregame "Short hop height", default the value above, 0.05-0.5 m.
-export const JUMP_SHORT_HOP_HEIGHT_RANGE = { min: 0.05, max: 0.5, step: 0.01 } as const;
+export const JUMP_SHORT_HOP_HEIGHT_RANGE = { min: 0.05, max: 2, step: 0.01 } as const; // owner, 2026-10-04: up to 2 m
 // How long, from the press, a release still shapes the jump's height at
 // all: release before this and computeJumpReleaseCapMps's ramp (fixed
 // target, then smoothly toward the natural arc) applies; hold at least
@@ -154,3 +154,17 @@ export const JUMP_INPUT_BUFFER_WINDOW_S = 0.1;
 // GDD-approved exact number, just enough range for a bare hop to read as
 // weak and a big jump (or a hard knockback fall) to read as strong.
 export const LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS = 10;
+
+/**
+ * Owner, 2026-10-04: "o jogo tá decidindo quando quer pular alto e quando quer dar short hop". One rule, nothing else:
+ * X always starts a short hop at once; still held this long after the press = it becomes the full jump (fixed height).
+ * Released before = the short hop. Steering never changes the height. Pregame slider; PROVISIONAL 0.12 s.
+ */
+// 0.12 → 0.2 s (owner, 2026-10-04, after playtesting 0.27.0: "nunca vai ajeitar o problema dos pulos"): a normal key
+// tap lasts ~80–150 ms, right across 0.12 s, so the same gesture came out a hop one time and a full jump the next.
+// 0.2 s leaves a clear gap between a tap and a deliberate hold. PROVISIONAL.
+export const JUMP_HOLD_FOR_FULL_DEFAULT_S = 0.2;
+export const JUMP_HOLD_FOR_FULL_RANGE = { min: 0.08, max: 0.4, step: 0.01 } as const;
+
+/** Owner, 2026-10-04: after a short hop lands, an X press within this window is the drift (tap + hold), never a new jump. PROVISIONAL. */
+export const DRIFT_FOLLOW_UP_WINDOW_S = 0.35;

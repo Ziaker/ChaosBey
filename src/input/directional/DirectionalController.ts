@@ -80,7 +80,7 @@ export class DirectionalController implements CombatController {
             actions.held.has(Action.SteerLeft),
             actions.held.has(Action.SteerRight),
           );
-    const referenceYawRad = this.reference.yawRad(screenLength(screen) > 0);
+    const referenceYawRad = this.reference.yawRad(screenLength(screen) > 0, screen);
     const world = screenToWorld(screen, referenceYawRad);
     this.last = { screen, world, referenceYawRad };
     const held = new Set(actions.held);

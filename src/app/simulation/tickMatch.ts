@@ -23,6 +23,15 @@ import { floorNormalAt } from '../../arena/floor/ArenaFloorProfile';
 import type { Bey } from '../../bey/core/Bey';
 import { AttackState } from '../../combat/attacks/AttackController';
 import { detectHits, type HitEvent } from '../../combat/hit-detection/HitDetection';
+import { speedDamageMultiplier } from '../../combat/attacks/SpeedDamage';
+
+/** Owner, 2026-10-04: share of a contact push given as lift, so the Beys visibly fly apart. PROVISIONAL. */
+const IMPACT_PUSH_LIFT_FRACTION = 0.25;
+/** Owner, 2026-10-04: an Air Recovery keeps this share of the horizontal flight and drops the Bey at this speed. PROVISIONAL. */
+const AIR_RECOVERY_KEEP_HORIZONTAL = 0.2;
+/** Owner, 2026-10-04: no Circular right after a Clash ends (the mash presses must not turn into one). PROVISIONAL. */
+export const CIRCULAR_LOCK_AFTER_CLASH_S = 1;
+const AIR_RECOVERY_DROP_MPS = 12;
 import { applyKnockback, computeKnockback, computeStabilityDamage, type KnockbackComponents } from '../../combat/knockback/Knockback';
 import { CIRCULAR_BASE_KNOCKBACK_FORCE, CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP, CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, CIRCULAR_LAUNCH_HORIZONTAL_MPS, CIRCULAR_STABILITY_DAMAGE } from '../../combat/attacks/AttackTuning';
 import {
@@ -41,7 +50,7 @@ import { WALL_IMPACT_STABILITY_DAMAGE_PER_MPS } from '../../bey/stability/Stabil
 import type { MovementSnapshot } from '../../bey/movement/MovementController';
 import type { SpinSnapshot } from '../../bey/spin/SpinController';
 import { DriftState } from '../../drift/DriftController';
-import type { DodgeState } from '../../dodge/DodgeController';
+import { DodgeState } from '../../dodge/DodgeController';
 import { isGrounded } from '../../physics/collision/GroundCheck';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { beyBodiesOverlapVertically } from '../../physics/world/PhysicsWorld';
@@ -101,6 +110,8 @@ export type CombatEvent =
   | { kind: 'dodged'; targetIsFirst: boolean }
   /** A dodged hit whose i-frames were within the tighter "perfect" sub-window. Detection only — no gameplay reward is implemented yet, per the GDD's explicit approval gate on Perfect Dodge's reward. */
   | { kind: 'perfectDodge'; targetIsFirst: boolean }
+  /** Owner, 2026-10-04: an Air Recovery was used (presentation: the expanding ring). */
+  | { kind: 'airRecovery'; targetIsFirst: boolean }
   /**
    * Owner, 2026-10-02 (Lote 3): the Beys touched without an attack. targetIsFirst = the slower one (the one that took
    * the speed-difference damage); damage = the larger of the two Stability damages dealt (presentation magnitude).
@@ -187,6 +198,8 @@ export function tickMatch(
 
     if (resolution) {
       const applied = clash.applyResolution(resolution, physics, first, second);
+      first.attack.blockCircularFor(CIRCULAR_LOCK_AFTER_CLASH_S);
+      second.attack.blockCircularFor(CIRCULAR_LOCK_AFTER_CLASH_S);
       if (applied.loserIsFirst !== undefined) {
         combatEvents.push({ kind: 'knockback', targetIsFirst: applied.loserIsFirst, force: applied.knockbackForce! });
         combatEvents.push({ kind: 'stabilityDamage', targetIsFirst: applied.loserIsFirst, amount: applied.stabilityDamageAmount! });
@@ -244,15 +257,29 @@ export function tickMatch(
   );
   if (firstDodge.staminaCostThisTick > 0) first.stamina.resource.subtract(firstDodge.staminaCostThisTick);
   if (secondDodge.staminaCostThisTick > 0) second.stamina.resource.subtract(secondDodge.staminaCostThisTick);
-  if (firstDodge.triggeredAirRecovery) first.spin.applyAirRecovery(first.body);
-  if (secondDodge.triggeredAirRecovery) second.spin.applyAirRecovery(second.body);
+  // Owner, 2026-10-04 ("apertar C e não apertar pra dar o recovery é a mesma coisa, simplesmente NÃO funciona"): the
+  // Air Recovery used to only straighten the Bey's (visual) attitude — the flight went on exactly the same. Now it
+  // ends the launch: the outward flight is cut, the Bey drops back to the floor, and control returns at once.
+  const airRecover = (bey: Bey): void => {
+    bey.spin.applyAirRecovery(bey.body);
+    const v = bey.body.linvel();
+    bey.body.setLinvel({ x: v.x * AIR_RECOVERY_KEEP_HORIZONTAL, y: Math.min(v.y, 0) - AIR_RECOVERY_DROP_MPS, z: v.z * AIR_RECOVERY_KEEP_HORIZONTAL }, true);
+    bey.movement.endKnockback();
+  };
+  if (firstDodge.triggeredAirRecovery) airRecover(first);
+  if (secondDodge.triggeredAirRecovery) airRecover(second);
 
+  // Owner, 2026-10-04: no defensive Circular while being knocked around.
+  if (first.movement.isKnockbackPlaying()) first.attack.blockCircularFor(fixedDeltaSeconds * 2);
+  if (second.movement.isKnockbackPlaying()) second.attack.blockCircularFor(fixedDeltaSeconds * 2);
   const firstAttack = first.attack.tick(
     firstActions,
     first.movement.getHeadingRad(),
     positionXZ(first.body),
     positionXZ(second.body),
     fixedDeltaSeconds,
+    length(horizontalVelocity(first.body)),
+    horizontalVelocity(second.body),
   );
   const secondAttack = second.attack.tick(
     secondActions,
@@ -260,6 +287,8 @@ export function tickMatch(
     positionXZ(second.body),
     positionXZ(first.body),
     fixedDeltaSeconds,
+    length(horizontalVelocity(second.body)),
+    horizontalVelocity(first.body),
   );
 
   const firstCondition = first.stamina.getPhysicalCondition();
@@ -328,8 +357,15 @@ export function tickMatch(
     second.stability.applyDamage(secondMovement.impactDeltaSpeedMps * WALL_IMPACT_STABILITY_DAMAGE_PER_MPS);
   }
 
-  first.stamina.tick(firstMovement.speedMps, fixedDeltaSeconds);
-  second.stamina.tick(secondMovement.speedMps, fixedDeltaSeconds);
+  // Owner, 2026-10-04: "o dash NÃO DEVIA NEM GASTAR STAMINA". A Dash (and its recovery, still at Dash speed) costs no
+  // movement Stamina at all — the speed drain made the fastest move in the game the most expensive one. The base spin
+  // drain still runs.
+  const dashing = (state: AttackState): boolean => state === AttackState.DashActive || state === AttackState.DashRecovery;
+  // Owner, 2026-10-04: the dodge costs no Stamina either — no movement drain while it runs.
+  const firstFree = dashing(firstAttack.state) || first.dodge.getState() === DodgeState.Dodging;
+  const secondFree = dashing(secondAttack.state) || second.dodge.getState() === DodgeState.Dodging;
+  first.stamina.tick(firstFree ? 0 : firstMovement.speedMps, fixedDeltaSeconds);
+  second.stamina.tick(secondFree ? 0 : secondMovement.speedMps, fixedDeltaSeconds);
   // Momentum (owner, 2026-10-02): builds with sustained fast, straight movement; a wall impact costs part of it.
   tickMomentum(first, firstMovement, firstGrounded, fixedDeltaSeconds);
   tickMomentum(second, secondMovement, secondGrounded, fixedDeltaSeconds);
@@ -348,6 +384,8 @@ export function tickMatch(
   let firstKoed = false;
   let secondKoed = false;
   const combatEvents: CombatEvent[] = [];
+  if (firstDodge.triggeredAirRecovery) combatEvents.push({ kind: 'airRecovery', targetIsFirst: true });
+  if (secondDodge.triggeredAirRecovery) combatEvents.push({ kind: 'airRecovery', targetIsFirst: false });
 
   // I-frames (Milestone 3): a hit that would otherwise connect is nullified
   // entirely — no knockback, no Stability damage, no registerHitConfirmed
@@ -378,8 +416,40 @@ export function tickMatch(
   // firstKoed/secondKoed, so a Circular Attack catching a Dash Attack could
   // deal qualifying Stability damage to an already-Broken defender without
   // ever actually ending the round.
+  // Item 11 (owner, 2026-10-04): "quanto mais rápido, mais dano" — an attack hit's damage follows the attacker's speed
+  // going into the contact (before the solver slows it), relative to the speed the hit was tuned for.
+  const speedDamageGain = first.rules.speedDamageGain ?? 0;
+  // Owner, 2026-10-04 ("um slider de força de knockback no geral"): scales every knockback — hits, body collisions,
+  // the Circular's launch, the contact repel and the attack recoil.
+  const knockbackScale = first.rules.knockbackScale ?? 1;
+  /** Owner, 2026-10-04: × the control-loss window of a plain body contact (no attack): 0.8 = 20% shorter. */
+  const bodyContactControlLoss = first.rules.bodyContactControlLossScale ?? 1;
+  function attackHitDamage(hit: HitEvent, attacker: Bey, defender: Bey): number {
+    const base = computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense);
+    const speedMps = length(hit.attackerIsFirst ? firstVelBefore : secondVelBefore);
+    return base * speedDamageMultiplier(speedMps, hit.hitbox.referenceSpeedMps ?? attacker.movement.getMaxSpeedMps(), speedDamageGain);
+  }
+
+  // Owner, 2026-10-04: "independente da velocidade, qualquer toque devia causar um impacto forte o suficiente para
+  // jogar os beys longe um do outro, ESPECIALMENTE QUANDO ATACA, o recoil deve ser alto também". At least `minMps` of
+  // horizontal speed away from the other Bey, plus a little lift; the movement controller lets it play out.
+  function pushApart(targetIsFirst: boolean, minMpsBase: number, bodyContact = false): void {
+    const minMps = minMpsBase * knockbackScale;
+    if (minMps <= 0) return;
+    const target = targetIsFirst ? first : second;
+    const dir = normalize(subtract(targetIsFirst ? firstPos : secondPos, targetIsFirst ? secondPos : firstPos));
+    if (dir.x === 0 && dir.z === 0) return;
+    const v = target.body.linvel();
+    const along = v.x * dir.x + v.z * dir.z;
+    if (along >= minMps) return;
+    const add = minMps - along;
+    target.body.setLinvel({ x: v.x + dir.x * add, y: Math.max(v.y, 0) + (first.rules.contactLiftMps ?? minMps * IMPACT_PUSH_LIFT_FRACTION), z: v.z + dir.z * add }, true);
+    target.movement.registerKnockback(bodyContact ? bodyContactControlLoss : 1);
+  }
+
   function applyStabilityDamageAndTrackKo(defenderIsFirst: boolean, defender: Bey, amount: number): void {
     const { causedBreak, isQualifyingKoHit } = defender.stability.applyDamage(amount);
+    if (amount > 0) defender.attack.blockCircularFor(defender.rules.circularLockAfterHitS ?? 0); // owner, 2026-10-04
     combatEvents.push({ kind: 'stabilityDamage', targetIsFirst: defenderIsFirst, amount });
     if (causedBreak) combatEvents.push({ kind: 'stabilityBreak', targetIsFirst: defenderIsFirst });
     if (isQualifyingKoHit) {
@@ -433,7 +503,7 @@ export function tickMatch(
     if (launchedThisTick[key]) return;
     launchedThisTick[key] = true;
     const target = targetIsFirst ? first : second;
-    const force = first.rules.circularLaunchForce;
+    const force = first.rules.circularLaunchForce * knockbackScale;
     const dir = normalize(subtract(targetIsFirst ? firstPos : secondPos, targetIsFirst ? secondPos : firstPos));
     const vel = target.body.linvel();
     target.body.setLinvel({ x: dir.x * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force, y: Math.max(0, vel.y) + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS * force, z: dir.z * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force }, true);
@@ -465,7 +535,7 @@ export function tickMatch(
       defender.body.setLinvel({ x: vel.x * keep, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z * keep }, true);
       defender.movement.registerKnockback();
       defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
-      applyStabilityDamageAndTrackKo(defenderIsFirst, defender, computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense));
+      applyStabilityDamageAndTrackKo(defenderIsFirst, defender, attackHitDamage(hit, attacker, defender));
       continue;
     }
 
@@ -476,14 +546,14 @@ export function tickMatch(
       applyStabilityDamageAndTrackKo(
         defenderIsFirst,
         defender,
-        computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense),
+        attackHitDamage(hit, attacker, defender),
       );
       continue;
     }
 
 
     const knockback = computeKnockback({
-      baseForce: hit.hitbox.knockbackForce * resolved.forceMultiplier,
+      baseForce: hit.hitbox.knockbackForce * resolved.forceMultiplier * knockbackScale,
       attackerSpeedMps: resolved.attackerSpeedMps,
       defenderSpeedMps: resolved.defenderSpeedMps,
       defenderStabilityFraction: resolved.defenderStabilityFraction,
@@ -509,13 +579,23 @@ export function tickMatch(
     applyStabilityDamageAndTrackKo(
       defenderIsFirst,
       defender,
-      computeStabilityDamage(hit.hitbox.stabilityDamage, attacker.stats.attack, defender.stats.defense) * resolved.forceMultiplier,
+      attackHitDamage(hit, attacker, defender) * resolved.forceMultiplier,
     );
+    // Owner, 2026-10-04: an attack throws the defender far and the attacker back (recoil).
+    pushApart(defenderIsFirst, first.rules.contactRepelMps * 1.5);
+    pushApart(hit.attackerIsFirst, first.rules.attackRecoilMps);
   }
 
   // Body collision (owner, 2026-10-02, item 9): the Beys touch with no attack connecting this tick.
   const bodyContactReach = first.definition.physical.colliderRadiusM + second.definition.physical.colliderRadiusM + BODY_COLLISION_CONTACT_SLOP_M;
   const bodiesOverlapVertically = beyBodiesOverlapVertically(firstYM, first.definition.physical.colliderHalfHeightM, secondYM, second.definition.physical.colliderHalfHeightM);
+  // Audit B5 (one collision per contact): a contact that landed as an attack hit is that contact's collision — it must
+  // not also score a body collision on the next ticks while the attacker (item 11: possibly still at full speed) keeps
+  // touching. Latched like a body collision; a real separation re-arms it below.
+  if (hitEvents.length > 0) {
+    first.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
+    second.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
+  }
   // Audit B5: a real separation (or one Bey clear above the other) re-arms the pair's next collision.
   if (!bodiesOverlapVertically || length(subtract(secondPos, firstPos)) > bodyContactReach + BODY_COLLISION_RELEASE_GAP_M) {
     first.momentum.releaseBodyContact();
@@ -529,7 +609,8 @@ export function tickMatch(
     if (
       touched &&
       bodiesOverlapVertically && // audit B3: the bodies' real heights, as the physics contact filter
-      closingSpeed >= BODY_COLLISION_MIN_CLOSING_SPEED_MPS &&
+      // Owner, 2026-10-04 ("independente da velocidade, qualquer toque"): with the contact repel on, any real approach counts.
+      closingSpeed >= ((first.rules.contactRepelMps ?? 0) > 0 ? 0.3 : BODY_COLLISION_MIN_CLOSING_SPEED_MPS) &&
       !first.momentum.isBodyContactLatched &&
       !second.momentum.isBodyContactLatched &&
       first.momentum.collisionCooldownRemainingS === 0 &&
@@ -542,6 +623,9 @@ export function tickMatch(
   function resolveBodyCollision(): void {
     first.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
     second.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
+    // Owner, 2026-10-04: any touch throws both Beys apart, whatever their speeds (dodge i-frames / an active Circular excepted).
+    if (!firstDodge.hasIFrames && firstAttack.state !== AttackState.CircularActive) pushApart(true, first.rules.contactRepelMps ?? 0, true);
+    if (!secondDodge.hasIFrames && secondAttack.state !== AttackState.CircularActive) pushApart(false, first.rules.contactRepelMps ?? 0, true);
     // The defensive Circular (item 13): touching an active Circular launches you; its user is unaffected.
     const firstCircular = firstAttack.state === AttackState.CircularActive;
     const secondCircular = secondAttack.state === AttackState.CircularActive;
@@ -582,7 +666,7 @@ export function tickMatch(
         const fasterPos = firstIsSlower ? secondPos : firstPos;
         const slowerPos = firstIsSlower ? firstPos : secondPos;
         const knockback = computeKnockback({
-          baseForce: (CIRCULAR_BASE_KNOCKBACK_FORCE * diff * scaleDamage) / BODY_COLLISION_REFERENCE_SPEED_DIFF_MPS,
+          baseForce: ((CIRCULAR_BASE_KNOCKBACK_FORCE * diff * scaleDamage) / BODY_COLLISION_REFERENCE_SPEED_DIFF_MPS) * knockbackScale,
           attackerSpeedMps: firstIsSlower ? secondSpeed : firstSpeed,
           defenderSpeedMps: firstIsSlower ? firstSpeed : secondSpeed,
           defenderStabilityFraction: slower.stability.resource.fraction,
@@ -593,7 +677,7 @@ export function tickMatch(
           impactDirectionXZ: normalize(subtract(slowerPos, fasterPos)),
         });
         applyKnockback(slower.body, fasterPos, slowerPos, knockback, slower.motion);
-        slower.movement.registerKnockback();
+        slower.movement.registerKnockback(bodyContactControlLoss);
         combatEvents.push({ kind: 'knockback', targetIsFirst: firstIsSlower, force: knockback.force, components: knockback.components, directionXZ: normalize(subtract(slowerPos, fasterPos)) });
       }
     }

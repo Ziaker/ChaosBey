@@ -3,7 +3,7 @@ import { Action } from '../../src/input/actions/Action';
 import { LATERAL_GRIP_PER_S } from '../../src/bey/movement/MovementTuning';
 import { ScriptedController } from '../../src/automation/scripted-scenarios/ScriptedController';
 import { DriftController, DriftState } from '../../src/drift/DriftController';
-import { JUMP_RELEASE_WINDOW_S } from '../../src/drift/DriftTuning';
+import { JUMP_RELEASE_WINDOW_S, JUMP_HOLD_FOR_FULL_DEFAULT_S } from '../../src/drift/DriftTuning';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { TestBeyHarness } from './physicsHarness';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
@@ -338,11 +338,10 @@ describe('jump vs drift: X + straight = variable jump, X + a real turn = drift (
     for (const [floor, o] of Object.entries(outcomes)) {
       const label = `${floor}: ${JSON.stringify(o)}`;
       expect(o.jumpDrift, label).toBe(false);
-      // The held jump reached the full release window (jump/air-control
-      // hotfix: holding past it commits to the uncut arc, so the tracked
-      // hold-elapsed value saturates there and never exceeds it); the drift
-      // hop (turned 2 ticks after X) almost none.
-      expect(o.jumpAssistS, label).toBeGreaterThan(JUMP_RELEASE_WINDOW_S * 0.8);
+      // The held jump waited the whole hold-for-full time before its one launch (owner, 2026-10-04: the height is
+      // decided before take-off — the tracked hold time saturates there); the drift hop (turned 2 ticks after X)
+      // almost none.
+      expect(o.jumpAssistS, label).toBeGreaterThan(JUMP_HOLD_FOR_FULL_DEFAULT_S - 0.02);
       expect(o.driftAssistS, label).toBeLessThan(0.05);
       expect(o.driftTicks, label).toBeGreaterThanOrEqual(35);
     }

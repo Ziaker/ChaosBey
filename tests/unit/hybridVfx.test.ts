@@ -315,7 +315,7 @@ describe('HybridVfxSystem', () => {
     h.hub.dispose();
     expect(h.scene.children).toEqual([h.beys.first.group, h.beys.second.group]);
     // Two Beys, plus the spark buffer and the flash light this system adds while attached.
-    expect(childrenBefore).toBe(4);
+    expect(childrenBefore).toBe(6); // + the two Circular vortices (owner, 2026-10-04)
   });
 
   it('never moves a Bey: position and attitude are untouched through a long fight', () => {

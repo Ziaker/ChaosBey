@@ -68,6 +68,7 @@ export class SelfTestMatchWorld {
   }> {
     const physics = await PhysicsWorld.create();
     const config = resolveMatchConfig(options.matchConfigOverrides ?? {});
+    physics.setGravityScale(config.gravityScale ?? 1);
     const motion = motionParams(config.motion);
     createArenaColliders(new THREE.Scene(), physics, arenaGeometryOf(config), undefined, motion); // detached scene: colliders only, never rendered.
     const floor = arenaFloorOf(config); // Lote 9: profile + depth

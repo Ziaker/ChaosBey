@@ -97,9 +97,10 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     isBroken: bey.stability.isBroken,
     dashReadiness: bey.attack.getDashReadiness(),
     momentum: bey.momentum.value,
-    airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable(),
+    airRecoveryAvailable: bey.dodge.canAirRecoverNow(),
     // Owner, 2026-10-02 (Lote 5): Stamina 0 is a spin-out loss, so the AI keeps a reserve and never dodges itself into one.
-    canAffordDodge: bey.stamina.resource.value >= DODGE_STAMINA_COST + AI_DODGE_STAMINA_RESERVE,
+    // A free dodge (owner, 2026-10-04: no Stamina cost) needs no reserve either.
+    canAffordDodge: bey.stamina.resource.value >= (bey.rules.dodgeStaminaCost ?? DODGE_STAMINA_COST) + ((bey.rules.dodgeStaminaCost ?? DODGE_STAMINA_COST) > 0 ? AI_DODGE_STAMINA_RESERVE : 0),
   };
 }
 
@@ -108,7 +109,7 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
  * 15 left Ace losing 18 of 72 tier rounds by spin-out (Rookie 2) — it dodged itself empty while winning the fights
  * (31 KOs to 17); at 45, Ace's spin-outs drop to 5 and it wins 45-25, still dodging 1.6× as often as Rookie.
  */
-const AI_DODGE_STAMINA_RESERVE = 45;
+export const AI_DODGE_STAMINA_RESERVE = 45;
 
 const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, punishWindow: false, edgePressure: 0 };
 

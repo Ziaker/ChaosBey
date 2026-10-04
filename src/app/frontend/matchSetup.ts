@@ -72,13 +72,15 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
 export type MatchRules = Pick<
   MatchConfig,
   'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'
-  | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS'
+  | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'speedDamageGain' | 'dashCarriesSpeed'
+  | 'turnRateScale' | 'turnSpeedRetention' | 'jumpHoldForFullS' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'highSpeedControl' | 'arenaSizeScale' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale'
 >;
 
 /** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
 export const MATCH_RULE_KEYS = [
   'ringOutDelayS', 'dashCooldownS', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyCollisionDamage', 'momentumLossOnCollision', 'jumpFullHeightM', 'jumpShortHopHeightM', 'movementStaminaDrain', 'dodgeCooldownS', 'circularLaunchForce',
-  'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS',
+  'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS', 'speedDamageGain', 'dashCarriesSpeed',
+  'turnRateScale', 'turnSpeedRetention', 'jumpHoldForFullS', 'gravityScale', 'contactRepelMps', 'attackRecoilMps', 'highSpeedControl', 'arenaSizeScale', 'dodgeStaminaCost', 'dodgeDistanceScale', 'contactLiftMps', 'knockbackScale', 'spinStaminaDrain', 'circularLockAfterHitS', 'bodyContactControlLossScale',
 ] as const satisfies readonly (keyof MatchRules)[];
 
 /**
@@ -118,6 +120,23 @@ export function defaultMatchRules(): MatchRules {
     movementStaminaDrain: config.movementStaminaDrain,
     dodgeCooldownS: config.dodgeCooldownS,
     circularLaunchForce: config.circularLaunchForce,
+    speedDamageGain: config.speedDamageGain,
+    dashCarriesSpeed: config.dashCarriesSpeed,
+    turnRateScale: config.turnRateScale,
+    turnSpeedRetention: config.turnSpeedRetention,
+    jumpHoldForFullS: config.jumpHoldForFullS,
+    gravityScale: config.gravityScale,
+    contactRepelMps: config.contactRepelMps,
+    attackRecoilMps: config.attackRecoilMps,
+    highSpeedControl: config.highSpeedControl,
+    arenaSizeScale: config.arenaSizeScale,
+    dodgeStaminaCost: config.dodgeStaminaCost,
+    dodgeDistanceScale: config.dodgeDistanceScale,
+    contactLiftMps: config.contactLiftMps,
+    knockbackScale: config.knockbackScale,
+    spinStaminaDrain: config.spinStaminaDrain,
+    circularLockAfterHitS: config.circularLockAfterHitS,
+    bodyContactControlLossScale: config.bodyContactControlLossScale,
   };
 }
 
@@ -195,7 +214,8 @@ export function matchupLines(setup: MatchSetup): readonly MatchupLine[] {
 
 // --- Remembering the last setup (Lote 9) ----------------------------------
 
-const SETUP_STORAGE_KEY = 'chaosbey.pregame.last.v1';
+// v2 (owner, 2026-10-04): new defaults (speed ×1.45, funnel 7 m, jump rule) must not be hidden by a remembered v1 setup.
+const SETUP_STORAGE_KEY = 'chaosbey.pregame.last.v2';
 
 /** The parts of a setup the Pregame remembers between matches (and reloads): everything but the seed. */
 export function saveLastSetup(setup: MatchSetup, storage: Pick<Storage, 'setItem'> | null = safeStorage()): void {
@@ -281,6 +301,23 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   airControl: { name: 'air control', format: (v) => `×${(v as number).toFixed(2)}` },
   jumpStaminaCost: { name: 'jump stamina cost', format: (v) => `${(v as number).toFixed(0)}` },
   jumpCooldownS: { name: 'jump cooldown', format: (v) => `${(v as number).toFixed(1)} s` },
+  speedDamageGain: { name: 'speed → damage', format: (v) => ((v as number) === 0 ? 'off' : `${Math.round((v as number) * 100)}%`) },
+  dashCarriesSpeed: { name: 'Dash keeps momentum', format: (v) => (v ? 'on' : 'off') },
+  turnRateScale: { name: 'turn rate', format: (v) => `×${(v as number).toFixed(2)}` },
+  turnSpeedRetention: { name: 'speed kept in turns', format: (v) => `${Math.round((v as number) * 100)}%` },
+  jumpHoldForFullS: { name: 'hold for full jump', format: (v) => `${(v as number).toFixed(2)} s` },
+  gravityScale: { name: 'gravity', format: (v) => `×${(v as number).toFixed(1)}` },
+  contactRepelMps: { name: 'contact repel', format: (v) => `${(v as number).toFixed(1)} m/s` },
+  attackRecoilMps: { name: 'attack recoil', format: (v) => `${(v as number).toFixed(1)} m/s` },
+  dodgeStaminaCost: { name: 'dodge stamina cost', format: (v) => ((v as number) === 0 ? 'free' : `${(v as number).toFixed(0)}`) },
+  dodgeDistanceScale: { name: 'dodge distance', format: (v) => `×${(v as number).toFixed(2)}` },
+  contactLiftMps: { name: 'contact lift', format: (v) => `${(v as number).toFixed(1)} m/s` },
+  knockbackScale: { name: 'knockback', format: (v) => `×${(v as number).toFixed(2)}` },
+  spinStaminaDrain: { name: 'spin stamina drain', format: (v) => `×${(v as number).toFixed(1)}` },
+  circularLockAfterHitS: { name: 'Circular lockout after a hit', format: (v) => `${(v as number).toFixed(2)} s` },
+  bodyContactControlLossScale: { name: 'control loss on body contact', format: (v) => `×${(v as number).toFixed(2)}` },
+  arenaSizeScale: { name: 'stage size', format: (v) => `×${(v as number).toFixed(2)}` },
+  highSpeedControl: { name: 'control at speed', format: (v) => `${Math.round((v as number) * 100)}%` },
 };
 
 /** "Dash cooldown 2.00 s", … for every rule that differs from its default (Lote 9: the explanation reflects the values). */
@@ -288,4 +325,71 @@ export function changedRuleLines(setup: MatchSetup): string[] {
   const defaults = defaultMatchRules();
   const rules = setup.rules ?? defaults;
   return MATCH_RULE_KEYS.filter((key) => rules[key] !== defaults[key]).map((key) => `${RULE_SUMMARY[key].name} ${RULE_SUMMARY[key].format(rules[key])}`);
+}
+
+// ============================================================
+// Saved rule configurations (owner, 2026-10-04: "adicione a opção de salvar configuração de regras avançadas").
+// Named snapshots of the Advanced rules (gameplay rules, walls, Clash impact, visual options), kept in this browser.
+// Loading one runs it through the same checks as the remembered setup, so an old save can't break the Pregame.
+// ============================================================
+
+const RULE_PRESETS_KEY = 'chaosbey.pregame.rulePresets.v1';
+
+export interface SavedRuleConfig {
+  readonly rules: MatchRules;
+  readonly visual: VfxOptions;
+  readonly clashImpactMultiplier: number;
+  readonly walls: { readonly wallHeightM: number; readonly wallRestitution: number };
+}
+
+export function loadRuleConfigs(storage: Pick<Storage, 'getItem'> | null = safeStorage()): Record<string, SavedRuleConfig> {
+  try {
+    const text = storage?.getItem(RULE_PRESETS_KEY);
+    const raw = text ? (JSON.parse(text) as unknown) : null;
+    return raw && typeof raw === 'object' ? (raw as Record<string, SavedRuleConfig>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveRuleConfig(name: string, setup: MatchSetup, storage: Pick<Storage, 'getItem' | 'setItem'> | null = safeStorage()): void {
+  const all = loadRuleConfigs(storage);
+  all[name] = { rules: setup.rules, visual: setup.visual, clashImpactMultiplier: setup.clashImpactMultiplier, walls: { wallHeightM: setup.arena.geometry.wallHeightM, wallRestitution: setup.arena.geometry.wallRestitution } };
+  try {
+    storage?.setItem(RULE_PRESETS_KEY, JSON.stringify(all));
+  } catch {
+    // Storage blocked: nothing is saved.
+  }
+}
+
+export function deleteRuleConfig(name: string, storage: Pick<Storage, 'getItem' | 'setItem'> | null = safeStorage()): void {
+  const all = loadRuleConfigs(storage);
+  delete all[name];
+  try {
+    storage?.setItem(RULE_PRESETS_KEY, JSON.stringify(all));
+  } catch {
+    // Storage blocked.
+  }
+}
+
+/** The setup with a saved configuration applied (validated field by field against today's rules). */
+export function withRuleConfig(setup: MatchSetup, saved: SavedRuleConfig): MatchSetup {
+  const rules: Record<string, unknown> = { ...defaultMatchRules() };
+  for (const key of MATCH_RULE_KEYS) {
+    const value = (saved.rules as Record<string, unknown> | undefined)?.[key];
+    if (typeof value === typeof rules[key] && (typeof value !== 'number' || Number.isFinite(value))) rules[key] = value;
+  }
+  const visual: Record<string, unknown> = { ...DEFAULT_VFX_OPTIONS };
+  for (const key of Object.keys(DEFAULT_VFX_OPTIONS)) {
+    const value = (saved.visual as unknown as Record<string, unknown> | undefined)?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) visual[key] = value;
+  }
+  const num = (v: unknown, fallback: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+  return {
+    ...setup,
+    rules: sanitizeMatchRules(rules as unknown as MatchRules),
+    visual: visual as unknown as VfxOptions,
+    clashImpactMultiplier: num(saved.clashImpactMultiplier, setup.clashImpactMultiplier),
+    arena: { ...setup.arena, geometry: { ...setup.arena.geometry, wallHeightM: num(saved.walls?.wallHeightM, setup.arena.geometry.wallHeightM), wallRestitution: num(saved.walls?.wallRestitution, setup.arena.geometry.wallRestitution) } },
+  };
 }

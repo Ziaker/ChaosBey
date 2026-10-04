@@ -83,5 +83,9 @@ function impactMagnitudesForTick(result: MatchTickResult, frozen: boolean, clash
   if (clashResolvedThisTick) return [CLASH_RESOLVED_MAGNITUDE];
   if (clashActive) return [];
   // Positions don't affect magnitudes; only the magnitudes decide hitstop.
-  return buildImpactEventsForTick(result, ORIGIN, ORIGIN).map((event) => event.magnitude);
+  // Owner, 2026-10-04: "por que fica acontecendo hitpause quando o bey aterrisa? eu NUNCA pedi isso" — a landing never
+  // freezes the game (its effects and the camera's own reaction stay; only the hitstop is gone).
+  return buildImpactEventsForTick(result, ORIGIN, ORIGIN)
+    .filter((event) => event.kind !== 'landing')
+    .map((event) => event.magnitude);
 }

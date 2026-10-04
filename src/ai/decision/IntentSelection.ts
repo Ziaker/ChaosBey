@@ -39,6 +39,16 @@ import type { WorldState } from './WorldState';
  * without ever resolving the round (defense vs defense, matrix-2/-4), so it is not used.
  */
 const MOMENTUM_COMMIT_BONUS = 0.5;
+/**
+ * Owner, 2026-10-04: BuildSpeed's score = (1 − momentum) × (BASE + aggression × AGGRESSION) — an AI without momentum
+ * takes a lap first (attack personalities most of all), one with momentum commits. PROVISIONAL.
+ */
+const BUILD_SPEED_SCORE_BASE = 0.35;
+const BUILD_SPEED_SCORE_AGGRESSION = 0.45;
+/** × patience taken off BuildSpeed: a patient personality circles its opponent more (still moving), an aggressive one laps. */
+const BUILD_SPEED_PATIENCE_DAMPING = 0.4;
+/** In Circular range there is no room for a lap: BuildSpeed keeps this share of its score. */
+const BUILD_SPEED_IN_CIRCULAR_RANGE = 0.4;
 const EDGE_RISK_OVERRIDE_THRESHOLD = 0.55;
 /** Once recovering, keep recovering until edgeRisk falls below this (hysteresis). Without it the AI stopped the moment it crossed back under the override threshold, turned to re-engage, and drifted straight back into danger. */
 const EDGE_RISK_RELEASE_THRESHOLD = 0.3;
@@ -350,6 +360,17 @@ export function selectIntent(
   scores.set(AiIntent.AttackDash, (scores.get(AiIntent.AttackDash) ?? 0) * (1 + own * MOMENTUM_COMMIT_BONUS));
 
   scores.set(AiIntent.Wait, alreadyAttacking ? 0 : personality.patience * 0.15 * passiveDamping);
+
+  // Owner, 2026-10-04: never parked — without momentum, build it with a lap before committing.
+  scores.set(
+    AiIntent.BuildSpeed,
+    alreadyAttacking || risk.punishWindow
+      ? 0
+      : (1 - own) *
+          (BUILD_SPEED_SCORE_BASE + personality.aggression * BUILD_SPEED_SCORE_AGGRESSION) *
+          (1 - personality.patience * BUILD_SPEED_PATIENCE_DAMPING) *
+          (inCircularRange ? BUILD_SPEED_IN_CIRCULAR_RANGE : 1),
+  );
 
   // Below the hard override threshold, a milder threat with Dodge already
   // on cooldown still nudges normal scoring toward a preemptive jump — the

@@ -46,6 +46,8 @@ import {
   jumpLaunchVelocityForApexM,
   JUMP_RELEASE_WINDOW_S,
   JUMP_SHORT_HOP_TARGET_APEX_M,
+  JUMP_HOLD_FOR_FULL_DEFAULT_S,
+  DRIFT_FOLLOW_UP_WINDOW_S,
   LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS,
 } from './DriftTuning';
 import type { CanonicalRecord } from '../replay/state/CanonicalValue';
@@ -134,11 +136,19 @@ export class DriftController {
   private readonly legacyLaunch: boolean;
   /** B6: a press began the hop; its single launch is decided this tick. */
   private launchPending = false;
+  /** Owner, 2026-10-04: the current/last hop was the short hop (its follow-up X press is the drift). */
+  private lastHopShort = false;
+  /** Seconds left, after a short hop landed, in which an X press is the drift instead of a new jump (null = none). */
+  private driftFollowUpS: number | null = null;
   /** B6: the body's height at launch and fixed steps since, for the release cut's height-already-gained (measured, not assumed). */
   private launchY = 0;
   private stepsSinceLaunch = 0;
   /** Lote 9 (GDD 12): MatchConfig.jumpCooldownS — after a hop begins, the next can't begin for this long (a press meanwhile is kept, as in the air). */
   private readonly jumpCooldownS: number;
+  /** Owner, 2026-10-04: X still held this long after the press turns the short hop into the full jump (MatchConfig.jumpHoldForFullS). */
+  private readonly jumpHoldForFullS: number;
+  /** The match's gravity (m/s², MatchConfig.gravityScale): the jump heights are launched against it. */
+  private readonly gravityMps2: number;
   private jumpCooldownRemainingS = 0;
   private hopBeganThisTick = false;
   /** Lote 9: whether a hop may begin this tick (the caller's Stamina check for the jump's cost). */
@@ -147,12 +157,14 @@ export class DriftController {
   constructor(
     private readonly normalLateralGripPerS: number = LATERAL_GRIP_PER_S,
     /** The match's jump heights (MatchConfig). Omitted = the pre-2026-10-02 jump (LEGACY_JUMP_FULL_HEIGHT_M). */
-    jumpRules?: { readonly jumpFullHeightM: number; readonly jumpShortHopHeightM: number; readonly jumpCooldownS?: number },
+    jumpRules?: { readonly jumpFullHeightM: number; readonly jumpShortHopHeightM: number; readonly jumpCooldownS?: number; readonly jumpHoldForFullS?: number; readonly gravityScale?: number },
   ) {
     this.jumpCooldownS = Math.max(0, jumpRules?.jumpCooldownS ?? 0);
+    this.jumpHoldForFullS = Math.max(0, jumpRules?.jumpHoldForFullS ?? JUMP_HOLD_FOR_FULL_DEFAULT_S);
+    this.gravityMps2 = GRAVITY_MPS2 * (jumpRules?.gravityScale ?? 1);
     this.legacyLaunch = jumpRules === undefined;
     const jump = jumpRules ?? { jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, jumpShortHopHeightM: JUMP_SHORT_HOP_TARGET_APEX_M };
-    this.launchMps = jumpLaunchVelocityForApexM(jump.jumpFullHeightM);
+    this.launchMps = jumpRules ? Math.sqrt(2 * this.gravityMps2 * jump.jumpFullHeightM) : jumpLaunchVelocityForApexM(jump.jumpFullHeightM);
     // A short hop can never be taller than the full jump.
     this.shortHopApexM = Math.min(jump.jumpShortHopHeightM, jump.jumpFullHeightM);
   }
@@ -191,8 +203,23 @@ export class DriftController {
     if (!jumpDriftHeld) {
       this.holdingSinceHop = false;
       this.driftArmed = false;
-    } else if (this.holdingSinceHop && this.movingAtHop && this.lateralHeld(actions)) {
+    } else if (this.legacyLaunch && this.holdingSinceHop && this.movingAtHop && this.lateralHeld(actions)) {
       this.driftArmed = true;
+    }
+    // Owner, 2026-10-04: "dar um toque + segurar, MESMO SE CAIR NO CHÃO = drift" — and never another jump. A second
+    // X press after a short hop (still in the air, or within DRIFT_FOLLOW_UP_WINDOW_S of landing) is the drift: held,
+    // the Bey drifts (on landing, or at once if already down). It is not buffered as a jump.
+    const driftFollowUp =
+      !this.legacyLaunch &&
+      jumpDriftPressed &&
+      ((this.state === DriftState.Hopping && !this.launchPending && this.lastHopShort) || (this.state === DriftState.Idle && this.driftFollowUpS !== null));
+    if (driftFollowUp) {
+      this.driftArmed = true;
+      this.bufferedJumpElapsedS = null;
+    }
+    if (this.driftFollowUpS !== null && this.state === DriftState.Idle && grounded) {
+      this.driftFollowUpS -= fixedDeltaSeconds;
+      if (this.driftFollowUpS <= 0) this.driftFollowUpS = null;
     }
 
     if (!grounded) {
@@ -228,7 +255,7 @@ export class DriftController {
     // Owner, 2026-10-02 (Lote 4; PR #76's pressDroppedWhileAirborne): a press made in the air — in any state, a hop or
     // a drift included — is kept until the Bey lands and consumed there once. It only ages on the ground, so a flight
     // or a landing settle longer than the window no longer throws it away.
-    if (jumpDriftPressed && !grounded && (this.state === DriftState.Hopping || this.state === DriftState.Drifting)) {
+    if (jumpDriftPressed && !driftFollowUp && !grounded && (this.state === DriftState.Hopping || this.state === DriftState.Drifting)) {
       this.bufferedJumpElapsedS = 0;
     }
     if (this.bufferedJumpElapsedS !== null && grounded) {
@@ -240,7 +267,12 @@ export class DriftController {
 
     switch (this.state) {
       case DriftState.Idle:
-        if (grounded && (jumpDriftPressed || this.bufferedJumpElapsedS !== null)) {
+        if (driftFollowUp) {
+          // The follow-up press after a short hop that already landed: drift right away, no new jump.
+          this.driftFollowUpS = null;
+          this.state = DriftState.Drifting;
+          this.driftAirborneS = 0;
+        } else if (grounded && (jumpDriftPressed || this.bufferedJumpElapsedS !== null)) {
           this.beginHop(body, actions, headingRad);
         } else if (jumpDriftPressed && !grounded) {
           // Can't begin the hop this tick (transiently airborne — a bounce,
@@ -256,15 +288,29 @@ export class DriftController {
         break;
 
       case DriftState.Hopping: {
-        if (this.launchPending) {
-          // B6: the press's one launch, decided now.
-          // The press tick was on the floor; one tick on, the launch happens whatever that tick's ground contact (a
-          // bowl's terrain or a landing bounce can lift the Bey for a tick) — exactly as the immediate launch did.
-          this.launchPending = false;
-          this.hopBaseVerticalMps = body.linvel().y;
-          if (this.driftArmed) this.launch(body, this.driftHopLaunchMps, true);
-          else if (!jumpDriftHeld) this.launch(body, this.shortHopLaunchMps, true);
-          else this.launch(body, this.launchMps, false);
+        if (!this.legacyLaunch) {
+          // Owner, 2026-10-04: two fixed heights, one arc each, decided only by how long X is held. The Bey leaves the
+          // floor once, with the height already decided: X released before jumpHoldForFullS = the short hop (launched
+          // on the release); X still held then = the full jump. Steering never changes the height (a turn only makes the
+          // landing a drift if X is still held); the exact release instant no longer shapes it either.
+          if (this.launchPending) {
+            const decided = !jumpDriftHeld ? this.shortHopLaunchMps : null;
+            this.jumpAssistElapsedS += fixedDeltaSeconds;
+            const launchMps = decided ?? (this.jumpAssistElapsedS >= this.jumpHoldForFullS - 1e-9 ? this.launchMps : null);
+            if (launchMps !== null) {
+              this.launchPending = false;
+              this.hopBaseVerticalMps = body.linvel().y;
+              this.hopTimerS = 0;
+              const heldS = this.jumpAssistElapsedS;
+              this.lastHopShort = launchMps === this.shortHopLaunchMps;
+              this.launch(body, launchMps, true);
+              this.jumpAssistElapsedS = heldS; // how long X was held before the launch (landing data reads it)
+            }
+            break;
+          }
+          this.stepsSinceLaunch++;
+          this.hopTimerS += fixedDeltaSeconds;
+          if (this.hopTimerS >= HOP_MIN_AIRBORNE_DURATION_S && grounded) this.landHop(body, jumpDriftHeld);
           break;
         }
         this.stepsSinceLaunch++;
@@ -317,12 +363,7 @@ export class DriftController {
           // The drift keeps the hop's momentum: the landing contact's
           // friction took ~35% of the horizontal speed in one step (6.4 →
           // 4.1 m/s measured), which read as the Bey stopping, not sliding.
-          if (jumpDriftHeld) {
-            const v = body.linvel();
-            body.setLinvel({ x: this.lastAirborneHorizontal.x, y: v.y, z: this.lastAirborneHorizontal.z }, true);
-          }
-          this.state = jumpDriftHeld && this.driftArmed ? DriftState.Drifting : DriftState.Idle;
-          this.driftAirborneS = 0;
+          this.landHop(body, jumpDriftHeld);
         }
         break;
       }
@@ -393,6 +434,8 @@ export class DriftController {
     this.jumpCooldownRemainingS = this.jumpCooldownS;
     this.hopBeganThisTick = true;
     this.bufferedJumpElapsedS = null;
+    this.driftFollowUpS = null;
+    this.lastHopShort = false;
     this.state = DriftState.Hopping;
     this.driftArmed = false;
     this.holdingSinceHop = true;
@@ -419,12 +462,22 @@ export class DriftController {
     }
     // B6: X with a lateral direction while moving is a drift hop from the first tick: launch it now. Anything else
     // launches next tick, once the input shows a tap or a hold.
-    if (this.movingAtHop && this.lateralHeld(actions)) {
-      this.driftArmed = true;
-      this.launch(body, this.driftHopLaunchMps, true);
-    } else {
-      this.launchPending = true;
+    // Owner, 2026-10-04: the floor is left once the tap/hold is known (see Hopping). A lateral direction only arms the
+    // drift for the landing; it never changes the height.
+    if (this.movingAtHop && this.lateralHeld(actions)) this.driftArmed = true;
+    this.launchPending = true;
+  }
+
+  /** Landed with JumpDrift still held: drift at once if a turn armed it. The drift keeps the hop's horizontal speed. */
+  private landHop(body: RAPIER.RigidBody, jumpDriftHeld: boolean): void {
+    // A short hop that lands opens the window in which a second X press is the drift, not a new jump.
+    if (!this.legacyLaunch && this.lastHopShort && !(jumpDriftHeld && this.driftArmed)) this.driftFollowUpS = DRIFT_FOLLOW_UP_WINDOW_S;
+    if (jumpDriftHeld) {
+      const v = body.linvel();
+      body.setLinvel({ x: this.lastAirborneHorizontal.x, y: v.y, z: this.lastAirborneHorizontal.z }, true);
     }
+    this.state = jumpDriftHeld && this.driftArmed ? DriftState.Drifting : DriftState.Idle;
+    this.driftAirborneS = 0;
   }
 
   /** The hop's single vertical impulse: `addedMps` on top of the vertical speed it had (a bowl slope's). `final` = no release cut will follow. */
@@ -439,11 +492,11 @@ export class DriftController {
 
   /** Launch speed of a short hop / a drift hop: their own apex, whatever the full jump is (B6). */
   private get shortHopLaunchMps(): number {
-    return Math.sqrt(2 * GRAVITY_MPS2 * this.shortHopApexM);
+    return Math.sqrt(2 * this.gravityMps2 * this.shortHopApexM);
   }
 
   private get driftHopLaunchMps(): number {
-    return Math.sqrt(2 * GRAVITY_MPS2 * DRIFT_HOP_TARGET_APEX_M);
+    return Math.sqrt(2 * this.gravityMps2 * DRIFT_HOP_TARGET_APEX_M);
   }
 
   /** Height the launch has added so far (above the bowl slope's own motion): measured (B6), or the old analytic arc for legacy constructions. */
@@ -589,6 +642,8 @@ export class DriftController {
       driftAirborneS: this.driftAirborneS,
       lastAirborneHorizontal: { x: this.lastAirborneHorizontal.x, z: this.lastAirborneHorizontal.z },
       bufferedJumpElapsedS: this.bufferedJumpElapsedS,
+      lastHopShort: this.lastHopShort,
+      driftFollowUpS: this.driftFollowUpS,
     };
   }
 }

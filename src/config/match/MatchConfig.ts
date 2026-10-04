@@ -14,7 +14,7 @@
 // ============================================================
 
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
-import { BOWL_DEPTH_M, DEFAULT_ARENA_FLOOR, type ArenaFloor, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import { BOWL_DEPTH_M, DEFAULT_ARENA_FLOOR, MATCH_BOWL_DEPTH_DEFAULT_M, type ArenaFloor, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { STANDARD_ARENA_GEOMETRY, type ArenaGeometry } from '../../arena/presets/ArenaPresets';
 import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
 import { RING_OUT_DELAY_DEFAULT_S } from '../../arena/ringout/RingOutTuning';
@@ -30,6 +30,8 @@ import { JUMP_FULL_HEIGHT_DEFAULT_M, JUMP_SHORT_HOP_TARGET_APEX_M } from '../../
 import { MOVEMENT_STAMINA_DRAIN_DEFAULT } from '../../bey/stamina/StaminaTuning';
 import { DODGE_COOLDOWN_S } from '../../dodge/DodgeTuning';
 import { CIRCULAR_LAUNCH_FORCE_DEFAULT } from '../../combat/attacks/AttackTuning';
+import { SPEED_DAMAGE_GAIN_DEFAULT } from '../../combat/attacks/SpeedDamage';
+import { JUMP_HOLD_FOR_FULL_DEFAULT_S } from '../../drift/DriftTuning';
 
 export interface MatchConfig {
   /** Multiplies the real knockback/Stability consequence a Clash resolution applies (both the FirstWins/SecondWins loser's knockback and a Tie's symmetric repulsion) — GDD section 152's "configurable impact multiplier". */
@@ -92,22 +94,62 @@ export interface MatchConfig {
   winBySpinOut: boolean;
   /** Multipliers on every Bey's acceleration, top speed and in-air steering grip (1 = as designed). */
   accelerationScale: number;
+  /** Owner, 2026-10-04 ("o dodge ainda reduz MUITA stamina … remover isso completamente"): Stamina a dodge costs. 0 by default. Pregame slider. */
+  dodgeStaminaCost: number;
+  /** Owner, 2026-10-04 ("cadê o slider de o quão longe ele vai?"): × the dodge's distance (its burst speed; same duration). Pregame slider. */
+  dodgeDistanceScale: number;
+  /** Owner, 2026-10-04 ("slider de força de impulsão vertical causada ao contato"): upward speed (m/s) a contact push adds. Pregame slider. */
+  contactLiftMps: number;
+  /** Owner, 2026-10-04 ("slider de força de knockback no geral"): × every knockback (hits, collisions, Circular launch, repel, recoil). Pregame slider. */
+  knockbackScale: number;
+  /** Owner, 2026-10-04: × the base spin Stamina drain (Stamina 0 = spin-out). Pregame slider. */
+  spinStaminaDrain: number;
+  /** Owner, 2026-10-04: seconds after taking damage during which the (defensive) Circular can't be started. Pregame slider. */
+  circularLockAfterHitS: number;
+  /**
+   * Owner, 2026-10-04 ("reduza o timer de perda de controle no chão ao contato contra o bey inimigo sem atacar […]
+   * adicione isso como slider, reduza em 20%"): × the control-loss window of a plain body contact (no attack). Pregame slider.
+   */
+  bodyContactControlLossScale: number;
+  /** Owner, 2026-10-04: stage size, × the 36 m floor radius (1 = as designed). Pregame slider. */
+  arenaSizeScale: number;
+  /** Owner, 2026-10-04 ("qualquer toque devia jogar os beys longe um do outro"): every contact pushes both Beys apart at least this fast (m/s). Pregame slider. */
+  contactRepelMps: number;
+  /** Owner, 2026-10-04 ("o recoil deve ser alto também, que nem na vida real"): an attack that lands throws its attacker back this fast (m/s); the defender at least 1.5× the contact repel. Pregame slider. */
+  attackRecoilMps: number;
+  /** Owner, 2026-10-04: gravity multiplier (×1 = 10.5 m/s²). Jump heights stay the same, they just take less time. Pregame slider. */
+  gravityScale: number;
+  /** Owner, 2026-10-04: multiplier on every Bey's turn rate (×1.45 default). Pregame slider. */
+  turnRateScale: number;
+  /** Owner, 2026-10-04: 0..1 — 1 = steering control does not fall as the Bey gets faster (0 = the old slip at speed). Pregame slider. */
+  highSpeedControl: number;
+  /** Owner, 2026-10-04: 0..1 share of the speed a turn would lose that is kept (0 = the old turns). Pregame slider. */
+  turnSpeedRetention: number;
   topSpeedScale: number;
   airControl: number;
   /** Stamina a hop/jump costs (0 = free); a Bey without that much can't jump. */
   jumpStaminaCost: number;
   /** Seconds after a hop/jump begins before the next can (0 = none). */
   jumpCooldownS: number;
+  /** Owner, 2026-10-04: X released before this (s) = short hop, still held = full jump. Nothing else picks the height. Pregame slider. */
+  jumpHoldForFullS: number;
   /**
    * Owner, 2026-10-02 (item 13): the Circular is defensive (its user takes nothing; whoever touches it is launched).
    * Always on in a match; false only for bare constructions (createBey without match rules: the Camera Lab), which
    * keep the pre-2026-10-02 Circular like their jump and ring-out. Not a Pregame option.
    */
   defensiveCircular: boolean;
+  /**
+   * Owner, 2026-10-04 (item 11): "quanto mais rápido, mais dano". How much an attack hit's damage follows the
+   * attacker's speed (see combat/attacks/SpeedDamage.ts); 0 = off. PROVISIONAL 0.5. Pregame slider.
+   */
+  speedDamageGain: number;
+  /** Item 11: a Dash keeps the speed built up before it (momentum) instead of resetting to its own speed. PROVISIONAL on. Pregame toggle. */
+  dashCarriesSpeed: boolean;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'defensiveCircular'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -123,16 +165,32 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     dodgeCooldownS: config.dodgeCooldownS,
     circularLaunchForce: config.circularLaunchForce,
     accelerationScale: config.accelerationScale,
+    turnRateScale: config.turnRateScale,
+    gravityScale: config.gravityScale,
+    contactRepelMps: config.contactRepelMps,
+    attackRecoilMps: config.attackRecoilMps,
+    dodgeStaminaCost: config.dodgeStaminaCost,
+    dodgeDistanceScale: config.dodgeDistanceScale,
+    contactLiftMps: config.contactLiftMps,
+    knockbackScale: config.knockbackScale,
+    spinStaminaDrain: config.spinStaminaDrain,
+    circularLockAfterHitS: config.circularLockAfterHitS,
+    bodyContactControlLossScale: config.bodyContactControlLossScale,
+    turnSpeedRetention: config.turnSpeedRetention,
+    highSpeedControl: config.highSpeedControl,
     topSpeedScale: config.topSpeedScale,
     airControl: config.airControl,
     jumpStaminaCost: config.jumpStaminaCost,
     jumpCooldownS: config.jumpCooldownS,
+    jumpHoldForFullS: config.jumpHoldForFullS,
     defensiveCircular: config.defensiveCircular ?? true,
+    speedDamageGain: config.speedDamageGain,
+    dashCarriesSpeed: config.dashCarriesSpeed,
   };
 }
 
 export function createDefaultMatchConfig(): MatchConfig {
-  return {
+  return withOwnerBaseRules({
     clashImpactMultiplier: CLASH_IMPACT_MULTIPLIER_DEFAULT,
     arenaWallHeightM: STANDARD_ARENA_GEOMETRY.wallHeightM,
     arenaWallRestitution: STANDARD_ARENA_GEOMETRY.wallRestitution,
@@ -150,18 +208,66 @@ export function createDefaultMatchConfig(): MatchConfig {
     movementStaminaDrain: MOVEMENT_STAMINA_DRAIN_DEFAULT,
     dodgeCooldownS: DODGE_COOLDOWN_S,
     circularLaunchForce: CIRCULAR_LAUNCH_FORCE_DEFAULT,
-    arenaBowlDepthM: BOWL_DEPTH_M,
+    arenaBowlDepthM: MATCH_BOWL_DEPTH_DEFAULT_M,
     roundTimeLimitS: 0,
     winByKo: true,
     winByRingOut: true,
     winBySpinOut: true,
-    accelerationScale: 1,
-    topSpeedScale: 1,
+    accelerationScale: SPEED_FEEL_SCALE_DEFAULT,
+    topSpeedScale: SPEED_FEEL_SCALE_DEFAULT,
+    turnRateScale: SPEED_FEEL_SCALE_DEFAULT,
+    gravityScale: GRAVITY_SCALE_DEFAULT,
+    contactRepelMps: CONTACT_REPEL_DEFAULT_MPS,
+    arenaSizeScale: 1,
+    circularLockAfterHitS: 0.6,
+    bodyContactControlLossScale: 0.8,
+    contactLiftMps: 4,
+    knockbackScale: 1,
+    spinStaminaDrain: 1,
+    dodgeStaminaCost: 0,
+    dodgeDistanceScale: 1,
+    attackRecoilMps: ATTACK_RECOIL_DEFAULT_MPS,
+    turnSpeedRetention: TURN_SPEED_RETENTION_DEFAULT,
+    highSpeedControl: 1,
     airControl: 1,
     jumpStaminaCost: 0,
     jumpCooldownS: 0,
+    jumpHoldForFullS: JUMP_HOLD_FOR_FULL_DEFAULT_S,
     defensiveCircular: true,
-  };
+    speedDamageGain: SPEED_DAMAGE_GAIN_DEFAULT,
+    dashCarriesSpeed: true,
+  });
+}
+
+/**
+ * Owner, 2026-10-04: "a partir de agora use estas regras como base do jogo" — the rules the owner playtested and
+ * approved (the Pregame's "Changed from the defaults" list) are now the defaults. Every one stays a Pregame slider.
+ */
+export const OWNER_BASE_RULES_2026_10_04 = {
+  arenaWallHeightM: 2,
+  arenaWallRestitution: 0.8,
+  arenaFloor: 'bowl-b',
+  arenaBowlDepthM: 8.5,
+  momentumGain: 1.7,
+  momentumDecayS: 2.5,
+  momentumLossOnCollision: 0.1,
+  jumpFullHeightM: 3.25,
+  jumpShortHopHeightM: 0.5,
+  movementStaminaDrain: 0.2,
+  dodgeCooldownS: 2.5,
+  accelerationScale: 1.9,
+  topSpeedScale: 2.8,
+  airControl: 1.5,
+  turnRateScale: 1.75,
+  turnSpeedRetention: 0.9,
+  jumpHoldForFullS: 0.15,
+  gravityScale: 3.6,
+  contactRepelMps: 16.5,
+  attackRecoilMps: 15.5,
+} as const satisfies Partial<MatchConfig>;
+
+function withOwnerBaseRules(config: MatchConfig): MatchConfig {
+  return { ...config, ...OWNER_BASE_RULES_2026_10_04 };
 }
 
 /** Merges a pre-match override on top of the defaults, producing the single resolved MatchConfig the rest of the app consumes. */
@@ -172,14 +278,35 @@ export function resolveMatchConfig(overrides: Partial<MatchConfig> = {}): MatchC
 /** The arena values of a resolved config, in the shape the arena builder takes. */
 export function arenaGeometryOf(config: MatchConfig): ArenaGeometry {
   // A config without a floor predates floors: flat (as MatchSession and replay playback read it too).
-  return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution, floor: config.arenaFloor ?? 'flat', floorDepthM: config.arenaBowlDepthM ?? BOWL_DEPTH_M };
+  return { wallHeightM: config.arenaWallHeightM, wallRestitution: config.arenaWallRestitution, floor: config.arenaFloor ?? 'flat', floorDepthM: config.arenaBowlDepthM ?? BOWL_DEPTH_M, sizeScale: config.arenaSizeScale ?? 1 };
 }
 
 /** Slider ranges for the Lote 9 rules (owner, 2026-10-02). PROVISIONAL. */
-export const ARENA_BOWL_DEPTH_RANGE = { min: 0, max: 5, step: 0.25 } as const;
+export const ARENA_BOWL_DEPTH_RANGE = { min: 0, max: 12, step: 0.25 } as const;
 export const ROUND_TIME_LIMIT_RANGE = { min: 0, max: 180, step: 15 } as const;
-export const ACCELERATION_SCALE_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
-export const TOP_SPEED_SCALE_RANGE = { min: 0.5, max: 1.5, step: 0.05 } as const;
+export const ACCELERATION_SCALE_RANGE = { min: 0.25, max: 3, step: 0.05 } as const;
+export const TOP_SPEED_SCALE_RANGE = { min: 0.5, max: 3, step: 0.05 } as const;
+/** Owner, 2026-10-04: "no mínimo 45% mais rápidos … isso inclui controle de movimento". Default for top speed, acceleration and turn rate. PROVISIONAL. */
+export const SPEED_FEEL_SCALE_DEFAULT = 1.45;
+export const TURN_RATE_SCALE_RANGE = { min: 0.5, max: 3, step: 0.05 } as const;
+/** Owner, 2026-10-04: "por que a gravidade não é realista?" — ×2.5 (26 m/s²): the full jump's 1.4 s in the air → 0.9 s. PROVISIONAL. */
+export const GRAVITY_SCALE_DEFAULT = 2.5;
+export const GRAVITY_SCALE_RANGE = { min: 1, max: 5, step: 0.1 } as const;
+/** Owner, 2026-10-04: contact repel and attack recoil (m/s). PROVISIONAL. */
+export const CONTACT_REPEL_DEFAULT_MPS = 9;
+export const ATTACK_RECOIL_DEFAULT_MPS = 10;
+export const IMPACT_PUSH_RANGE = { min: 0, max: 25, step: 0.5 } as const;
+export const DODGE_STAMINA_COST_RANGE = { min: 0, max: 40, step: 1 } as const;
+export const DODGE_DISTANCE_SCALE_RANGE = { min: 0.5, max: 3, step: 0.05 } as const;
+export const CONTACT_LIFT_RANGE = { min: 0, max: 20, step: 0.5 } as const;
+export const KNOCKBACK_SCALE_RANGE = { min: 0, max: 4, step: 0.05 } as const;
+export const SPIN_STAMINA_DRAIN_RANGE = { min: 0, max: 20, step: 0.5 } as const;
+export const CIRCULAR_LOCK_RANGE = { min: 0, max: 2, step: 0.05 } as const;
+export const BODY_CONTACT_CONTROL_LOSS_RANGE = { min: 0, max: 2, step: 0.05 } as const;
+export const ARENA_SIZE_SCALE_RANGE = { min: 0.5, max: 2.5, step: 0.05 } as const;
+/** Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade" — share of the speed a turn would scrub off that is kept. PROVISIONAL 0.85. */
+export const TURN_SPEED_RETENTION_DEFAULT = 0.85;
+export const TURN_SPEED_RETENTION_RANGE = { min: 0, max: 1, step: 0.05 } as const;
 export const AIR_CONTROL_RANGE = { min: 0, max: 3, step: 0.1 } as const;
 export const JUMP_STAMINA_COST_RANGE = { min: 0, max: 20, step: 1 } as const;
 export const JUMP_COOLDOWN_RANGE = { min: 0, max: 3, step: 0.1 } as const;

@@ -111,6 +111,9 @@ export interface MovementSnapshot {
   impactDirection: Vec2;
 }
 
+/** Numerical safety clamp on horizontal speed (m/s) — not a gameplay limit (owner speed pass, 2026-10-04). */
+const NUMERICAL_SPEED_CLAMP_MPS = 60;
+
 export class MovementController {
   private headingRad = 0;
   private turnRateRadPerS = 0;
@@ -141,21 +144,28 @@ export class MovementController {
 
   /** MatchConfig.airControl (Lote 9): scales the grip in the air — how much the Bey can steer its flight. */
   private readonly airControl: number;
+  /** Owner, 2026-10-04 (MatchConfig.turnSpeedRetention): share of the speed a grounded, driven turn would lose that it keeps. */
+  private readonly turnSpeedRetention: number;
+  /** Owner, 2026-10-04 (MatchConfig.highSpeedControl): 1 = control does not fall with speed (no slip loss, grip scales with speed). */
+  private readonly highSpeedControl: number;
 
   constructor(
     handling: BeyHandlingProfile = DEFAULT_HANDLING_PROFILE,
     private readonly motion: MotionParams = motionParams(),
     /** Owner, 2026-10-02 (Lote 9 / GDD 12): the match's acceleration, top speed and air control multipliers (1 = as designed). */
-    scales: { readonly acceleration: number; readonly topSpeed: number; readonly airControl: number } = { acceleration: 1, topSpeed: 1, airControl: 1 },
+    scales: { readonly acceleration: number; readonly topSpeed: number; readonly airControl: number; readonly turnRate?: number; readonly turnSpeedRetention?: number; readonly highSpeedControl?: number } = { acceleration: 1, topSpeed: 1, airControl: 1 },
   ) {
     this.airControl = scales.airControl;
+    this.turnSpeedRetention = Math.max(0, Math.min(1, scales.turnSpeedRetention ?? 0));
+    this.highSpeedControl = Math.max(0, Math.min(1, scales.highSpeedControl ?? 0));
     this.handling = {
       ...handling,
       accelerationMps2: handling.accelerationMps2 * motionRatio(motion, 'accel') * scales.acceleration,
       reverseAccelerationMps2: handling.reverseAccelerationMps2 * scales.acceleration,
       maxSpeedMps: handling.maxSpeedMps * motionRatio(motion, 'maxSpeed') * scales.topSpeed,
-      turnRateRadS: handling.turnRateRadS * motionRatio(motion, 'turnRate'),
-      lateralGripPerS: handling.lateralGripPerS * motionRatio(motion, 'lateralGrip'),
+      turnRateRadS: handling.turnRateRadS * motionRatio(motion, 'turnRate') * (scales.turnRate ?? 1),
+      // Owner, 2026-10-04: a faster turn rate comes with grip to match, so turning quicker does not mean sliding more.
+      lateralGripPerS: handling.lateralGripPerS * motionRatio(motion, 'lateralGrip') * (scales.turnRate ?? 1),
     };
     this.lastLateralGripPerS = this.handling.lateralGripPerS;
   }
@@ -190,12 +200,26 @@ export class MovementController {
    * velocity (a Dash at full speed), so only the upward part of a counter's
    * knockback survived and a countered dasher flew on over the wall.
    */
-  registerKnockback(): void {
+  /** @param controlLossScale × the control-loss window (MatchConfig.bodyContactControlLossScale for a plain body contact). */
+  registerKnockback(controlLossScale = 1): void {
     this.knockedThisJump = true;
     this.knockbackPlaying = true;
-    this.postImpactCooldownRemainingS = POST_IMPACT_GRIP_SUPPRESSION_S;
+    this.postImpactCooldownRemainingS = Math.max(this.postImpactCooldownRemainingS, POST_IMPACT_GRIP_SUPPRESSION_S * controlLossScale);
     this.intendedVelocityThisTick = null;
     this.grip = Math.min(this.grip, this.motion.slipGrip);
+  }
+
+  /** True while a knockback (a hit, a launch) is playing out. */
+  isKnockbackPlaying(): boolean {
+    return this.knockbackPlaying;
+  }
+
+  /** Owner, 2026-10-04: an Air Recovery ends the launch — the knockback stops playing and control comes back at once. */
+  endKnockback(): void {
+    this.postImpactCooldownRemainingS = 0;
+    this.knockbackPlaying = false;
+    this.grip = 1;
+    this.slipping = false;
   }
 
   /** Debug Lab "reset cooldowns" (GDD section 70) — explicit mutation, never called by gameplay. */
@@ -228,6 +252,10 @@ export class MovementController {
       return;
     }
 
+    // Owner, 2026-10-04: a Dash fired right after a wall bounce takes over at once — the post-impact "let the bounce
+    // play out" window used to swallow it, so the Bey kept flying the way the wall sent it (the opposite way).
+    // A real knockback (a hit, a Circular's launch) still plays out.
+    if (dashOverride && !this.knockbackPlaying) this.postImpactCooldownRemainingS = 0;
     const intent = actions.moveIntent;
     let headingForward: Vec2;
     if (dashOverride) {
@@ -267,7 +295,10 @@ export class MovementController {
     if (intent) {
       const magnitude = intentMagnitude(intent);
       const alignment = magnitude > 0 ? Math.cos(headingErrorRad(intent, this.headingRad)) : 0;
-      const drive = magnitude * Math.sign(alignment) * Math.abs(alignment) ** DIRECTIONAL_THRUST_ALIGNMENT_POWER;
+      // Owner, 2026-10-04 ("curvas não deviam reduzir tanto a velocidade"): with speed kept in turns, a new direction
+      // behind the Bey no longer brakes it in reverse — it turns toward it and keeps going (thrust resumes as it faces it).
+      const steered = this.turnSpeedRetention > 0 ? Math.max(0, alignment) : alignment;
+      const drive = magnitude * Math.sign(steered) * Math.abs(steered) ** DIRECTIONAL_THRUST_ALIGNMENT_POWER;
       throttleInput = Math.sign(drive);
       throttleScale = Math.abs(drive);
     } else {
@@ -293,7 +324,7 @@ export class MovementController {
     // air model applies (15% thrust, no rolling drag), so a countered
     // dasher is not pushed on over the wall at Dash speed.
     let newLongitudinalSpeed: number;
-    if (dashOverride && grounded) {
+    if (dashOverride && (grounded || !this.knockbackPlaying)) {
       newLongitudinalSpeed = dashOverride.longitudinalSpeedMps;
     } else {
       // Stamina degrades acceleration physically (GDD section 30) — never
@@ -327,8 +358,9 @@ export class MovementController {
     // grip comes back at gripRecovery. A Dash Attack commits fully to its
     // locked-on line; a drift substitutes its own low grip.
     let lateralGripPerS: number;
-    if (dashOverride && grounded) {
-      lateralGripPerS = this.handling.lateralGripPerS * 4;
+    if (dashOverride && (grounded || !this.knockbackPlaying)) {
+      // Owner, 2026-10-04: the Dash commits to its line at once (no curved slide from the speed it had before).
+      lateralGripPerS = this.handling.lateralGripPerS * 12;
     } else if (!grounded) {
       this.slipping = false;
       lateralGripPerS = lateralGripOverridePerS ?? this.motion.airGrip * this.airControl;
@@ -338,16 +370,35 @@ export class MovementController {
       this.slipping = this.slipping
         ? lateralSpeed > this.motion.slipThreshold * SLIP_REGRIP_FRACTION
         : lateralSpeed > this.motion.slipThreshold;
-      const slipFloor = Math.min(1, this.motion.slipGrip * SLIP_GRIP_FLOOR_MULTIPLIER);
+      // Owner, 2026-10-04: "por que o controle de movimento do bey é perdido ou reduzido quanto mais rápido ele fica? eu
+      // NUNCA pedi isso". At speed every turn crosses the slip threshold (a fixed 2.5 m/s sideways) and grip fell to
+      // ~1/3, and a fixed grip leaves more sideways slide the faster the Bey goes. With highSpeedControl the slip loss
+      // is gone and the grip grows with speed, so a fast Bey turns as cleanly as a slow one. A drift keeps its own grip.
+      const slipFloorBase = Math.min(1, this.motion.slipGrip * SLIP_GRIP_FLOOR_MULTIPLIER);
+      const slipFloor = slipFloorBase + (1 - slipFloorBase) * this.highSpeedControl;
       if (this.slipping) this.grip = Math.min(this.grip, Math.max(slipFloor, this.grip - SLIP_GRIP_LOSS_PER_S * fixedDeltaSeconds));
-      lateralGripPerS = lateralGripOverridePerS ?? this.handling.lateralGripPerS * this.grip;
+      const speedGrip = 1 + Math.max(0, length(velHoriz) / Math.max(1e-6, this.handling.maxSpeedMps) - 1) * this.highSpeedControl;
+      lateralGripPerS = lateralGripOverridePerS ?? this.handling.lateralGripPerS * this.grip * speedGrip;
     }
     const newLateral = scale(lateralVec, Math.exp(-lateralGripPerS * fixedDeltaSeconds));
 
     let newVelHoriz = add(scale(headingForward, newLongitudinalSpeed), newLateral);
+    // Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade". A driven turn on the ground keeps this share of
+    // the speed the heading change and the lateral grip scrub off (never above the top speed, never on a Dash).
+    if (this.turnSpeedRetention > 0 && grounded && !dashOverride && hasMovementInput && throttleInput >= 0) {
+      const before = length(velHoriz);
+      const after = length(newVelHoriz);
+      const cap = this.handling.maxSpeedMps * topSpeedMultiplier;
+      if (after > 1e-6 && after < before) {
+        const kept = Math.min(Math.max(after, cap), after + (before - after) * this.turnSpeedRetention);
+        if (kept > after) newVelHoriz = scale(newVelHoriz, kept / after);
+      }
+    }
     // Numerical safety clamp (motion-approval.md §3), not a gameplay limit.
     const newSpeed = length(newVelHoriz);
-    if (newSpeed > this.motion.maxLinearSpeed) newVelHoriz = scale(newVelHoriz, this.motion.maxLinearSpeed / newSpeed);
+    // Owner, 2026-10-04: the +45% speed and the bigger momentum need room above the Lab's 26 m/s (numerical safety only).
+    const safetyMps = Math.max(this.motion.maxLinearSpeed, NUMERICAL_SPEED_CLAMP_MPS);
+    if (newSpeed > safetyMps) newVelHoriz = scale(newVelHoriz, safetyMps / newSpeed);
 
     this.lastHeadingForward = headingForward;
     this.lastLateralGripPerS = lateralGripPerS;

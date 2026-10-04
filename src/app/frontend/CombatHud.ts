@@ -45,6 +45,7 @@ interface CardParts {
   readonly stamina: HTMLElement;
   readonly stability: HTMLElement;
   readonly dashCooldown: HTMLElement;
+  readonly dodgeCooldown: HTMLElement;
   readonly momentum: HTMLElement;
   readonly dash: HTMLElement | null;
   readonly tag: HTMLElement;
@@ -62,6 +63,9 @@ export class CombatHud {
    * didn't feel it". Not the final HUD.
    */
   private readonly driftTag = el('div', 'cb-hud__drift', 'hud-drift');
+  /** Owner, 2026-10-04: thrown into the air with Air Recovery open — just the button to press, over the player's Bey. */
+  private readonly recoverAlert = el('div', 'cb-hud__recover', 'hud-recover');
+  private readonly breakFlash = el('div', 'cb-hud__break', 'hud-break');
   private readonly clashBar = el('div', 'cb-hud__clash', 'hud-clash-bar');
   private readonly clashFirst = el('div', 'cb-hud__clash-half cb-hud__clash-half--first');
   private readonly clashSecond = el('div', 'cb-hud__clash-half cb-hud__clash-half--second');
@@ -99,7 +103,7 @@ export class CombatHud {
 
     this.hintsOn = options.controlHints;
     this.hints.hidden = !options.controlHints;
-    this.root.append(this.cards.first.root, center, this.cards.second.root, this.clashBar, this.banner, this.hints, this.driftTag);
+    this.root.append(this.cards.first.root, center, this.cards.second.root, this.clashBar, this.banner, this.hints, this.driftTag, this.recoverAlert, this.breakFlash);
     mount.append(this.root);
     this.refreshHints();
     this.showBanner(`ROUND ${options.roundNumber}`, 'FIGHT!', START_BANNER_MS);
@@ -118,7 +122,18 @@ export class CombatHud {
       this.driftTag.classList.toggle('is-recovering', drift === 'Recovering');
     }
     this.updateClashBar(session, camera, frameDeltaSeconds);
+    this.updateRecoverAlert(session, camera);
+    this.fillDodge(this.cards.first, session.getBey('first').dodge.getReadiness());
+    this.fillDodge(this.cards.second, session.getBey('second').dodge.getReadiness());
     if (this.hintsOn) this.refreshHints();
+  }
+
+  /** Owner, 2026-10-04: the defeat cutscene's break — a white flash and one big word. */
+  flashBreak(word: string): void {
+    this.breakFlash.textContent = word;
+    this.breakFlash.classList.remove('is-on');
+    void this.breakFlash.offsetWidth; // restart the animation
+    this.breakFlash.classList.add('is-on');
   }
 
   /** A big centred banner, e.g. "RING OUT!" at the end of the round. `durationMs` null = until disposed. */
@@ -175,22 +190,27 @@ export class CombatHud {
     root.append(head);
     const stamina = meter('stamina', 'STA');
     const stability = meter('stability', 'STB');
-    const dashCooldown = meter('dash-cd', 'CD');
-    dashCooldown.parentElement!.parentElement!.title = 'Dash cooldown: full = Dash ready';
-    const dash = isPlayer ? meter('dash', 'DASH') : null;
+    const dashCooldown = meter('dash-cd', 'DASH');
+    dashCooldown.parentElement!.parentElement!.title = 'Dash: green = you can Dash now; grey = still recharging';
+    const dodgeCooldown = meter('dodge-cd', 'DODGE');
+    dodgeCooldown.parentElement!.parentElement!.title = 'Dodge: green = you can dodge now; grey = still recharging';
+    const dash = isPlayer ? meter('dash', 'CHARGE') : null;
     // Owner, 2026-10-02 (Lote 3): momentum as a thin line under the meters, no label (the card is not redesigned).
     const momentumTrack = el('div', 'cb-hud__momentum');
     momentumTrack.title = 'Momentum: full = top speed raised';
     const momentum = el('div', 'cb-hud__momentum-fill', `hud-${side}-momentum`);
     momentumTrack.append(momentum);
     root.append(momentumTrack);
-    return { root, stamina, stability, dashCooldown, momentum, dash, tag };
+    return { root, stamina, stability, dashCooldown, dodgeCooldown, momentum, dash, tag };
   }
 
   private fillCard(card: CardParts, side: HudSide): void {
     card.stamina.style.width = `${side.stamina * 100}%`;
     card.stability.style.width = `${side.stability * 100}%`;
     card.dashCooldown.style.width = `${side.dashReadiness * 100}%`;
+    // Owner, 2026-10-04 ("nunca dá pra saber quando pode e quando não pode"): READY in bright green the moment a
+    // Dash can start, WAIT with a grey refilling bar until then.
+    card.dashCooldown.parentElement!.parentElement!.classList.toggle('is-ready', side.dashReadiness >= 1);
     card.momentum.style.width = `${side.momentum * 100}%`;
     if (card.dash) {
       card.dash.style.width = `${side.dashCharge * 100}%`;
@@ -252,6 +272,24 @@ export class CombatHud {
     this.clashBar.style.transform = `translate(${x - 160}px, ${y - 11}px) rotate(-18deg)`;
   }
 
+  /** Owner, 2026-10-04: the dodge's cooldown / ready line (read from the session; presentation only). */
+  private fillDodge(card: CardParts, readiness: number): void {
+    card.dodgeCooldown.style.width = `${readiness * 100}%`;
+    card.dodgeCooldown.parentElement!.parentElement!.classList.toggle('is-ready', readiness >= 1);
+  }
+
+  private updateRecoverAlert(session: MatchSession, camera: THREE.PerspectiveCamera): void {
+    const bey = session.getBey('first');
+    const show = session.getLastResult()?.first.grounded === false && bey.dodge.canAirRecoverNow();
+    this.recoverAlert.classList.toggle('is-on', show);
+    if (!show) return;
+    this.recoverAlert.textContent = readFirstGamepad(currentGamepads()) !== null ? 'B' : 'C';
+    const p = bey.body.translation();
+    const ndc = this.projected.set(p.x, p.y + 1.6, p.z).project(camera);
+    this.recoverAlert.style.left = `${((ndc.x + 1) / 2) * 100}%`;
+    this.recoverAlert.style.top = `${((1 - ndc.y) / 2) * 100}%`;
+  }
+
   private screenX(position: { x: number; y: number; z: number }, camera: THREE.PerspectiveCamera): number {
     return this.projected.set(position.x, position.y, position.z).project(camera).x;
   }
@@ -294,14 +332,19 @@ function injectHudStyle(): void {
     .cb-hud__card--second .cb-hud__tag { margin-left: 0; margin-right: auto; }
     .cb-hud__meter { display: flex; align-items: center; gap: 8px; }
     .cb-hud__meter.is-idle { opacity: 0.35; }
-    .cb-hud__meter-name { width: 34px; font: 600 10px/1 var(--cb-mono); letter-spacing: 0.1em; color: var(--cb-text-dim); }
+    .cb-hud__meter-name { width: 46px; font: 600 10px/1 var(--cb-mono); letter-spacing: 0.1em; color: var(--cb-text-dim); }
     .cb-hud__card--second .cb-hud__meter-name { text-align: right; }
     .cb-hud__bar { position: relative; flex: 1; height: 7px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden; }
     .cb-hud__fill { position: absolute; inset: 0 auto 0 0; width: 100%; border-radius: 4px; transition: width 90ms linear; }
     .cb-hud__meter--stamina .cb-hud__fill { background: linear-gradient(90deg, #58e38c, #b6ff7a); }
     .cb-hud__meter--stamina .cb-hud__fill.is-low { background: #ff9f43; }
     .cb-hud__meter--stability .cb-hud__fill { background: linear-gradient(90deg, #5ab8ff, #8fe3ff); }
-    .cb-hud__meter--dash-cd .cb-hud__fill { background: var(--bey-accent); }
+    .cb-hud__meter--dash-cd .cb-hud__fill, .cb-hud__meter--dodge-cd .cb-hud__fill { background: rgba(255, 255, 255, 0.28); }
+    .cb-hud__meter--dash-cd .cb-hud__meter-name, .cb-hud__meter--dodge-cd .cb-hud__meter-name { color: var(--cb-text-dim); }
+    .cb-hud__meter--dash-cd.is-ready .cb-hud__fill { background: #4dff88; box-shadow: 0 0 8px #4dff88; }
+    .cb-hud__meter--dodge-cd.is-ready .cb-hud__fill { background: #4dc8ff; box-shadow: 0 0 8px #4dc8ff; }
+    .cb-hud__meter--dash-cd.is-ready .cb-hud__meter-name { color: #4dff88; font-weight: 800; }
+    .cb-hud__meter--dodge-cd.is-ready .cb-hud__meter-name { color: #4dc8ff; font-weight: 800; }
     .cb-hud__momentum { height: 2px; margin-top: 4px; background: rgba(255,255,255,0.08); border-radius: 1px; overflow: hidden; }
     .cb-hud__momentum-fill { height: 100%; width: 0; background: linear-gradient(90deg, #7ad7ff, #ffffff); }
     .cb-hud__card--second .cb-hud__momentum-fill { margin-left: auto; }
@@ -322,6 +365,12 @@ function injectHudStyle(): void {
     .cb-hud__banner-sub { margin-top: 4px; font-size: clamp(16px, 3vw, 26px); font-weight: 800; letter-spacing: 0.4em; color: var(--cb-warn); }
     .cb-hud__hints { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--cb-text-dim); background: rgba(8, 10, 16, 0.5); padding: 6px 12px; border-radius: 5px; max-width: calc(100vw - 32px); box-sizing: border-box; }
     .cb-hud__hints[hidden] { display: none; }
+    .cb-hud__break { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 900 72px/1 var(--cb-font); letter-spacing: 0.2em; color: #ffffff; text-shadow: 0 0 30px rgba(255, 80, 80, 0.9); opacity: 0; pointer-events: none; }
+    .cb-hud__break.is-on { animation: cb-hud-break 1.5s ease-out forwards; }
+    @keyframes cb-hud-break { 0% { opacity: 1; background: rgba(255, 255, 255, 0.85); } 12% { background: rgba(255, 255, 255, 0); } 80% { opacity: 1; } 100% { opacity: 0; background: rgba(255, 255, 255, 0); } }
+    .cb-hud__recover { position: absolute; transform: translate(-50%, -100%); min-width: 46px; padding: 6px 12px; text-align: center; font: 900 30px/1 var(--cb-font); color: #10131a; background: #ffffff; border-radius: 8px; box-shadow: 0 0 22px rgba(255, 255, 255, 0.85); opacity: 0; pointer-events: none; }
+    .cb-hud__recover.is-on { opacity: 1; animation: cb-hud-recover 0.35s ease-in-out infinite alternate; }
+    @keyframes cb-hud-recover { from { transform: translate(-50%, -100%) scale(1); } to { transform: translate(-50%, -100%) scale(1.18); } }
     .cb-hud__drift { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); font: 900 22px/1 var(--cb-font); letter-spacing: 0.3em; padding: 6px 14px; border-radius: 4px; opacity: 0; transition: opacity 90ms linear; }
     .cb-hud__drift.is-drifting { opacity: 1; color: #1a1206; background: #ffcf4a; box-shadow: 0 0 18px rgba(255, 207, 74, 0.6); }
     .cb-hud__drift.is-recovering { opacity: 0.8; color: #ffcf4a; background: rgba(8, 10, 16, 0.6); border: 1px solid #ffcf4a; }

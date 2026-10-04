@@ -369,7 +369,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
 
   // Before the first tick: the initial state is the replay's first checkpoint.
   const capture = setup.record
-    ? startHeadlessCapture(world, { matchConfig: resolveMatchConfig(setup.matchConfigOverrides ?? {}), ...setup.record, seedText: setup.seed, spawns: { first: setup.firstSpawn ?? matchSpawnsFor(resolveMatchConfig(setup.matchConfigOverrides ?? {}).arenaFloor).first, second: setup.secondSpawn ?? matchSpawnsFor(resolveMatchConfig(setup.matchConfigOverrides ?? {}).arenaFloor).second } })
+    ? startHeadlessCapture(world, { matchConfig: resolveMatchConfig(setup.matchConfigOverrides ?? {}), ...setup.record, seedText: setup.seed, spawns: { first: setup.firstSpawn ?? matchSpawnsFor(arenaFloorOf(resolveMatchConfig(setup.matchConfigOverrides ?? {}))).first, second: setup.secondSpawn ?? matchSpawnsFor(arenaFloorOf(resolveMatchConfig(setup.matchConfigOverrides ?? {}))).second } })
     : null;
 
   const first = new SideTracker(firstPersonality.id);

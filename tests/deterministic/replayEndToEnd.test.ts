@@ -28,7 +28,8 @@ import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecord
 // header comment explains this seed's re-pinning history).
 // Re-pinned in the arena scale pass: see the seed notes in replayPlayback.test.ts.
 // Re-pinned with replayPlayback.test.ts (ring-out delay, Perfect Dodge once, Dash cooldown, momentum; owner 2026-10-02).
-const LONG_SEED = 'replay-198';
+// Re-picked for item 11 (owner, 2026-10-04): faster hits end 'replay-198' at tick 966; see replayPlayback.test.ts.
+const LONG_SEED = 'replay-25';
 /** The tampered-inputs check flips MoveForward on ticks 300 up to (not including) this. */
 const EDIT_END_TICK = 700;
 

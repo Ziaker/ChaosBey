@@ -5,12 +5,12 @@
 // ============================================================
 
 import { length, type Vec2 } from '../../physics/Vec2';
-import { ARENA_FLOOR_RADIUS } from '../colliders/ArenaTuning';
+import { arenaFloorRadius } from '../colliders/ArenaTuning';
 import { floorHeightAt, floorRimHeight, type ArenaFloor } from '../floor/ArenaFloorProfile';
-import { RING_OUT_FALLEN_BELOW_RIM_M, RINGOUT_RADIUS_M } from './RingOutTuning';
+import { RING_OUT_FALLEN_BELOW_RIM_M, ringOutRadiusM } from './RingOutTuning';
 
 export function isRingOut(positionXZ: Vec2): boolean {
-  return length(positionXZ) > RINGOUT_RADIUS_M;
+  return length(positionXZ) > ringOutRadiusM();
 }
 
 /**
@@ -21,7 +21,7 @@ export function isRingOut(positionXZ: Vec2): boolean {
  */
 export function isOutOfArena(position: { x: number; y: number; z: number }, floor: ArenaFloor): boolean {
   const r = Math.hypot(position.x, position.z);
-  if (r > RINGOUT_RADIUS_M) return true;
-  const surfaceY = r >= ARENA_FLOOR_RADIUS ? floorRimHeight(floor) : floorHeightAt(floor, position.x, position.z);
+  if (r > ringOutRadiusM()) return true;
+  const surfaceY = r >= arenaFloorRadius() ? floorRimHeight(floor) : floorHeightAt(floor, position.x, position.z);
   return position.y < surfaceY - RING_OUT_FALLEN_BELOW_RIM_M;
 }

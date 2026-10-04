@@ -45,6 +45,8 @@ export interface BeyVisualPose {
   readonly wobble: number;
   /** Which way the top leans (world XZ), magnitude = angle (rad). */
   readonly lean: Vec2;
+  /** Owner, 2026-10-04: a Bey launched high tumbles on several axes (angle rad about a horizontal axis). Visual only. */
+  readonly tumble?: { readonly angle: number; readonly axis: Vec2 };
 }
 
 export const REST_VISUAL_POSE: BeyVisualPose = { spin: 0, wobble: 0, lean: { x: 0, z: 0 } };
@@ -55,6 +57,8 @@ function createSyncFn(body: Bey['body'], visual: BeyVisual) {
   const wobbleAxis = new THREE.Vector3(1, 0, 0);
   const leanQuaternion = new THREE.Quaternion();
   const leanAxis = new THREE.Vector3();
+  const tumbleQuaternion = new THREE.Quaternion();
+  const tumbleAxis = new THREE.Vector3();
   return (pose: BeyVisualPose): void => {
     const t = body.translation();
     const r = body.rotation();
@@ -65,7 +69,9 @@ function createSyncFn(body: Bey['body'], visual: BeyVisual) {
     const leanAngle = Math.hypot(pose.lean.x, pose.lean.z);
     if (leanAngle > 1e-6) leanQuaternion.setFromAxisAngle(leanAxis.set(pose.lean.z / leanAngle, 0, -pose.lean.x / leanAngle), leanAngle);
     else leanQuaternion.identity();
-    visual.group.quaternion.copy(leanQuaternion).multiply(tiltQuaternion).multiply(wobbleQuaternion);
+    if (pose.tumble && Math.abs(pose.tumble.angle) > 1e-4) tumbleQuaternion.setFromAxisAngle(tumbleAxis.set(pose.tumble.axis.x, 0, pose.tumble.axis.z), pose.tumble.angle);
+    else tumbleQuaternion.identity();
+    visual.group.quaternion.copy(tumbleQuaternion).multiply(leanQuaternion).multiply(tiltQuaternion).multiply(wobbleQuaternion);
     visual.spinGroup.rotation.y = pose.spin;
   };
 }

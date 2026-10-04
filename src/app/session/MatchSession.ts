@@ -53,10 +53,11 @@ import { selectBeyPresentationState, type CameraPresentationSnapshot, type Recen
 import type { PresentationSide } from '../../presentation/events';
 import { collectSceneStats, type SceneStats } from '../../presentation/sceneStats';
 import { ConditionVisualsSystem, normalizeConditionLayers } from '../../vfx/condition/ConditionVisualsSystem';
+import { RecoveryRingEffect } from '../../vfx/RecoveryRing';
 import { HybridVfxSystem } from '../../vfx/hybrid/HybridVfxSystem';
 import { ClashPresentationSystem, clashDustHexFor } from '../../vfx/clash/ClashPresentationSystem';
 import { ArenaVisualsSystem } from '../../arena/visual/ArenaVisualsSystem';
-import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
+import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
 import type { LanguageId } from '../../vfx/condition/types';
 import { HeadingArrow } from '../../vfx/HeadingArrow';
 import { DriftVfx } from '../../vfx/DriftVfx';
@@ -149,6 +150,12 @@ const DEFAULT_RENDER_VIEW: SessionRenderView = { cameraView: 'game', cameraEffec
 const OVERVIEW_CAMERA_POSITION_M = { x: 0, y: 30, z: 20 } as const;
 const OVERVIEW_CAMERA_FOV_DEG = 55;
 
+/** Owner, 2026-10-04: air tumble tuning (visual only). PROVISIONAL. */
+const TUMBLE_MIN_LAUNCH_UP_MPS = 5;
+const TUMBLE_BASE_RATE_RAD_S = 8;
+const TUMBLE_MAX_RATE_RAD_S = 22;
+const TUMBLE_AXIS_SWING_RAD_S = 2.4;
+
 export class MatchSession {
   readonly matchId: string;
   readonly seedText: string;
@@ -168,6 +175,9 @@ export class MatchSession {
   private conditionVisuals: ConditionVisualsSystem | null = null;
   /** The approved Hybrid VFX (Cel Cyclone wind), attached only with the `hybridVfx` flag (render only). */
   private hybridVfx: HybridVfxSystem | null = null;
+  /** Owner, 2026-10-04: the expanding ring of an Air Recovery (render only). */
+  private readonly recoveryRings: RecoveryRingEffect;
+  private presentationFloorAt: ((x: number, z: number) => number) | null = null;
   /** The approved Clash Overdrive presentation, attached only with the `clashPresentation` flag (render only). */
   private clashPresentation: ClashPresentationSystem | null = null;
   /** The approved arena art, attached only with the `arenaVisuals` flag (render only; colliders untouched). */
@@ -279,6 +289,40 @@ export class MatchSession {
   private lastVelocity: Record<Side, { x: number; y: number; z: number }>;
   private lastAcceleration: Record<Side, { x: number; y: number; z: number }> = { first: zero3(), second: zero3() };
   private lastVisual: Record<Side, BeyVisualPose> = { first: REST_VISUAL_POSE, second: REST_VISUAL_POSE };
+  /** Owner, 2026-10-04: air tumble per Bey (presentation only, never read by gameplay). */
+  private readonly tumble: Record<Side, { active: boolean; angle: number; axis: { x: number; z: number }; rate: number }> = {
+    first: { active: false, angle: 0, axis: { x: 1, z: 0 }, rate: 0 },
+    second: { active: false, angle: 0, axis: { x: 1, z: 0 }, rate: 0 },
+  };
+
+  /**
+   * Owner, 2026-10-04: "faça os beys rotacionarem em múltiplos ângulos quando são lançados muito alto". A launch (Air
+   * Recovery open) with a strong upward speed starts a tumble about a horizontal axis that itself swings round, so the
+   * Bey turns over on several angles; it stops on landing and eases back upright. Visual only.
+   */
+  private stepTumble(side: Side, grounded: boolean): { angle: number; axis: { x: number; z: number } } {
+    const t = this.tumble[side];
+    const bey = this.getBey(side);
+    const v = bey.body.linvel();
+    const dt = FIXED_DELTA_SECONDS;
+    if (!t.active && !grounded && v.y > TUMBLE_MIN_LAUNCH_UP_MPS && bey.dodge.isAirRecoveryAvailable()) {
+      const h = Math.hypot(v.x, v.z);
+      t.active = true;
+      t.axis = h > 0.5 ? { x: v.z / h, z: -v.x / h } : { x: 1, z: 0 };
+      t.rate = Math.min(TUMBLE_MAX_RATE_RAD_S, TUMBLE_BASE_RATE_RAD_S + Math.hypot(v.x, v.y, v.z) * 0.35);
+    }
+    if (t.active && !grounded) {
+      t.angle += t.rate * dt;
+      const swing = TUMBLE_AXIS_SWING_RAD_S * dt;
+      t.axis = { x: t.axis.x * Math.cos(swing) - t.axis.z * Math.sin(swing), z: t.axis.x * Math.sin(swing) + t.axis.z * Math.cos(swing) };
+    } else {
+      t.active = false;
+      // Back upright: the nearest full turn, quickly.
+      const wrapped = Math.atan2(Math.sin(t.angle), Math.cos(t.angle));
+      t.angle = Math.abs(wrapped) < 0.01 ? 0 : wrapped * 0.6;
+    }
+    return { angle: t.angle, axis: t.axis };
+  }
   private disposed = false;
 
   private constructor(options: MatchSessionOptions, physics: PhysicsWorld) {
@@ -300,6 +344,7 @@ export class MatchSession {
     this.clash = new ClashOrchestration(options.matchConfig, new NullAiMashSource());
 
     options.scene.add(this.root);
+    this.recoveryRings = new RecoveryRingEffect(this.root);
     const presentationFeatures = options.presentationFeatures ?? presentationFeaturesFromLocation();
     this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys, {
       geometry: arenaGeometryOf(options.matchConfig),
@@ -324,6 +369,7 @@ export class MatchSession {
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
     const theme = options.arenaTheme ?? FOUNDRY_PIT.theme;
     const floorAt = (x: number, z: number): number => floorHeightAt(arenaFloor, x, z);
+    this.presentationFloorAt = floorAt;
     this.driftVfx = { first: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt), second: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt) };
     this.root.add(this.driftVfx.first.object3D, this.driftVfx.second.object3D);
     if (presentationFeatures.conditionVisuals) {
@@ -349,7 +395,7 @@ export class MatchSession {
         },
         floorHeightAtR: (r) => floorAt(r, 0),
         arenaSparks: [theme.sparkHotHex, theme.sparkCoolHex],
-        arenaRadiusM: ARENA_FLOOR_RADIUS,
+        arenaRadiusM: arenaFloorRadius(),
         vfx: options.vfx,
       });
       this.presentation.attach(this.hybridVfx);
@@ -396,7 +442,19 @@ export class MatchSession {
 
   static async create(options: MatchSessionOptions): Promise<MatchSession> {
     const physics = await PhysicsWorld.create();
+    physics.setGravityScale(resolveMatchConfig(options.matchConfig).gravityScale ?? 1);
     return new MatchSession(options, physics);
+  }
+
+  /** Owner, 2026-10-04: the defeated Bey of a KO / spin-out shows none of its own effects any more (presentation only). */
+  setBeyDefeated(side: Side): void {
+    this.conditionVisuals?.setDefeated(side);
+    this.hybridVfx?.setDefeated(side);
+  }
+
+  /** The arena floor height under (x, z) for presentation (the defeat cutscene's flight). */
+  floorHeightAt(x: number, z: number): number {
+    return this.presentationFloorAt ? this.presentationFloorAt(x, z) : 0;
   }
 
   getTickIndex(): number {
@@ -581,6 +639,11 @@ export class MatchSession {
           case 'perfectDodge':
             telemetry.record({ kind: TelemetryEventKind.PerfectDodge, targetIsFirst: combatEvent.targetIsFirst });
             break;
+          case 'airRecovery': {
+            const p = (combatEvent.targetIsFirst ? match.first : match.second).body.translation();
+            this.recoveryRings.spawn(p);
+            break;
+          }
         }
       }
       // A genuine unmodeled physics impact (wall/floor bounce) — distinct
@@ -664,8 +727,8 @@ export class MatchSession {
     }
 
     this.lastVisual = {
-      first: { spin: result.first.spin.visualSpinAngleRad, wobble: result.first.spin.wobbleOffsetRad, lean: result.first.spin.lean },
-      second: { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad, lean: result.second.spin.lean },
+      first: { spin: result.first.spin.visualSpinAngleRad, wobble: result.first.spin.wobbleOffsetRad, lean: result.first.spin.lean, tumble: this.stepTumble('first', result.first.grounded) },
+      second: { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad, lean: result.second.spin.lean, tumble: this.stepTumble('second', result.second.grounded) },
     };
 
     this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents.clashStarted);
@@ -699,6 +762,7 @@ export class MatchSession {
   renderFrame(frameDeltaSeconds: number, camera: THREE.PerspectiveCamera, view: SessionRenderView = DEFAULT_RENDER_VIEW): void {
     const match = this.match;
     match.syncVisualsToPhysics(this.lastVisual.first, this.lastVisual.second);
+    this.recoveryRings.update(frameDeltaSeconds);
 
     // The player's Bey (the keyboard/pad side) gets the heading arrow.
     const playerSide: Side | null = this.controllerSpecs.first.kind === 'keyboard' ? 'first' : this.controllerSpecs.second.kind === 'keyboard' ? 'second' : null;
@@ -810,6 +874,7 @@ export class MatchSession {
     this.disposed = true;
     this.presentation.dispose();
     this.vfxManager.dispose();
+    this.recoveryRings.dispose();
     this.driftVfx.first.dispose();
     this.driftVfx.second.dispose();
     this.root.removeFromParent();

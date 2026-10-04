@@ -41,7 +41,8 @@ export const DASH_MAX_SPEED_MPS = 18;
 export const DASH_ACTIVE_DURATION_S = 0.5;
 // Directional guidance toward the opponent while dashing (GDD section
 // 105): a turn-rate cap, not a teleport — the dash must stay missable.
-export const DASH_LOCK_ON_MAX_TURN_RATE_RAD_S = 3;
+// Owner, 2026-10-04 ("faça ainda mais correções de target"): 3 → 5 rad/s; the Dash also locks on when it fires. PROVISIONAL.
+export const DASH_LOCK_ON_MAX_TURN_RATE_RAD_S = 5;
 export const DASH_WHIFF_RECOVERY_S = 0.6;
 export const DASH_HITBOX_RADIUS_M = 1;
 export const DASH_MIN_STABILITY_DAMAGE = 10;

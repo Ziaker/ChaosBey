@@ -132,18 +132,7 @@ export class SettingsScreen {
 
     const play = this.section('Play');
     play.append(
-      this.choiceRow<ControlScheme>(
-        'control-scheme',
-        'Control',
-        [
-          { value: 'opponent', label: 'Toward opponent' },
-          { value: 'classic', label: 'Classic' },
-          { value: 'arena', label: 'Arena (fixed)' },
-          { value: 'screen', label: 'Screen (reads camera)' },
-        ],
-        (s) => s.controlScheme,
-        (s, v) => ({ ...s, controlScheme: v }),
-      ),
+      // Owner, 2026-10-04: Screen (reads camera) is the one control scheme; no selector.
       this.controlNote,
       this.toggleRow('pause-on-focus-loss', 'Pause when the window loses focus', 'pauseOnFocusLoss'),
       this.toggleRow('control-hints', 'Control hints on the HUD', 'controlHints'),
