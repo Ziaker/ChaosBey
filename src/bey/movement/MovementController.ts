@@ -119,6 +119,9 @@ export interface MovementSnapshot {
 /** Numerical safety clamp on horizontal speed (m/s) — not a gameplay limit (owner speed pass, 2026-10-04). */
 const NUMERICAL_SPEED_CLAMP_MPS = 60;
 
+/** × the grip recovery while steering after a knockback (match handling). PROVISIONAL. */
+const STEERED_REGRIP_MULTIPLIER = 4;
+
 /** The Clash loser's stun ends at the latest after this long if it never left the ground (s). PROVISIONAL. */
 const CLASH_STUN_MAX_S = 1.5;
 
@@ -383,7 +386,13 @@ export class MovementController {
       // Motion Lab whirl: an impact's rodopio turns the heading on top of
       // the steering, and dies out at the direction's angular damping.
       this.whirlRadPerS *= Math.exp(-this.motion.angularDamping * fixedDeltaSeconds);
-      this.headingRad += (this.turnRateRadPerS + this.whirlRadPerS) * fixedDeltaSeconds;
+      // Owner, 2026-10-04 ("o bey perde completamente o controle e a própria orientação de movimento quando leva um
+      // ataque e aterrissa, ele não vai pras direções certas que estou apertando"): an impact's rodopio (up to ~18 rad/s
+      // off a wall or a Bey) turned the heading against the stick for about a second. With the match handling it no
+      // longer steers the Bey while a direction is held — the player owns the heading.
+      const steering = intent ? intentMagnitude(intent) > 0 : actions.held.has(Action.MoveForward) || actions.held.has(Action.MoveBackward) || actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight);
+      const whirlTurn = this.highSpeedControl > 0 && steering ? 0 : this.whirlRadPerS;
+      this.headingRad += (this.turnRateRadPerS + whirlTurn) * fixedDeltaSeconds;
       headingForward = fromYaw(this.headingRad);
     }
 
@@ -471,7 +480,10 @@ export class MovementController {
       lateralGripPerS = lateralGripOverridePerS ?? this.motion.airGrip * this.airControl;
     } else {
       const lateralSpeed = length(lateralVec);
-      this.grip += (1 - this.grip) * (1 - Math.exp(-this.motion.gripRecovery * GRIP_RECOVERY_MULTIPLIER * fixedDeltaSeconds));
+      // Owner, 2026-10-04: once a knockback is over, a Bey that is being steered gets its grip back fast (it slid on in
+      // the hit's direction for ~0.8 s after landing). Match handling only.
+      const steeredRegrip = this.highSpeedControl > 0 && hasMovementInput && !this.knockbackPlaying ? STEERED_REGRIP_MULTIPLIER : 1;
+      this.grip += (1 - this.grip) * (1 - Math.exp(-this.motion.gripRecovery * GRIP_RECOVERY_MULTIPLIER * steeredRegrip * fixedDeltaSeconds));
       this.slipping = this.slipping
         ? lateralSpeed > this.motion.slipThreshold * SLIP_REGRIP_FRACTION
         : lateralSpeed > this.motion.slipThreshold;
@@ -494,7 +506,10 @@ export class MovementController {
     // pra curvar"): it used to keep 90% of each TICK's loss, which compounds — a steady curve lost ~11 m/s per second.
     // Now the loss is per radian the velocity actually turns: (1 − kept) × TURN_LOSS_PER_RAD of the speed per radian
     // (at 90%: ~2.4% over a 90° curve, ~4.7% over a U-turn), nothing at 100%.
-    if (this.turnSpeedRetention > 0 && grounded && !dashOverride && hasMovementInput) {
+    // Only for a Bey going forward: one thrown backward (a knockback, a bounce) that the player drives against must be
+    // allowed to brake and turn around — keeping its speed made it ACCELERATE backward while the stick asked forward
+    // (owner, 2026-10-04: "ele não vai pras direções certas que estou apertando" after a hit).
+    if (this.turnSpeedRetention > 0 && grounded && !dashOverride && hasMovementInput && longitudinalSpeed > 0) {
       const before = length(velHoriz);
       const after = length(newVelHoriz);
       const cap = this.handling.maxSpeedMps * topSpeedMultiplier;
@@ -503,7 +518,7 @@ export class MovementController {
         const turnedRad = Math.acos(cos);
         // The thrust gained this tick stays on top (it used to be clipped back to the speed before the tick, so a long
         // curve could only ever lose speed).
-        const thrustGain = Math.max(0, newLongitudinalSpeed - longitudinalSpeed);
+        const thrustGain = Math.max(0, newLongitudinalSpeed - Math.max(0, longitudinalSpeed));
         const kept = rewardingDrift ? 1 : this.turnSpeedRetention;
         const allowed = before * (1 - (1 - kept) * TURN_LOSS_PER_RAD * turnedRad) + thrustGain;
         const keptSpeed = Math.min(Math.max(after, cap), Math.max(after, allowed));
