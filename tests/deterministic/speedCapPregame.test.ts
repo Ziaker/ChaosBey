@@ -31,26 +31,37 @@ async function settledHarness(strictSpeedCap: boolean): Promise<CombatHarness> {
     { x: 20, y: BEY_SPAWN_HEIGHT_M, z: 20 },
     { arenaFloor: 'flat', momentumGain: 0, movementStaminaDrain: 0, strictSpeedCap },
   );
-  // A newly-spawned Bey opens MovementController's generic post-impact window when it first lands. Strict intentionally
-  // exempts that window (the same mechanism protects a real wall bounce/knockback), so this fixture must wait for
-  // ordinary grounded locomotion rather than merely five grounded samples inside the landing window.
+
+  // This suite tests speed-limit policy, not the initial spawn landing. Put the Bey directly at its physical resting
+  // height with zero velocity so Rapier can establish a stable flat-floor contact without first creating the Motion-Lab
+  // fall/bounce cycle. That cycle is intentionally airborne on alternating ticks and therefore must bypass Strict.
+  const p = h.first.body.translation();
+  h.first.body.setTranslation({ x: p.x, y: h.first.definition.physical.colliderHalfHeightM, z: p.z }, true);
+  h.first.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  h.first.movement.debugResetCooldown();
+
   let ordinaryGrounded = 0;
-  for (let i = 0; i < 240 && ordinaryGrounded < 5; i++) {
+  for (let i = 0; i < 30 && ordinaryGrounded < 5; i++) {
     const r = h.tick(NONE, NONE);
     ordinaryGrounded = r.first.grounded && !r.first.movement.isPostImpactCooldown ? ordinaryGrounded + 1 : 0;
   }
   if (ordinaryGrounded < 5) {
     h.dispose();
-    throw new Error('speed-cap fixture never reached ordinary grounded locomotion');
+    throw new Error('speed-cap fixture never established stable ordinary grounded locomotion');
   }
   return h;
 }
 
 async function speedAfterOrdinaryOverspeedTick(strictSpeedCap: boolean): Promise<{ speed: number; cap: number }> {
   const h = await settledHarness(strictSpeedCap);
+  expect(h.first.rules.strictSpeedCap).toBe(strictSpeedCap);
+  const before = h.first.movement.getSnapshot(h.first.body, true);
+  expect(before.isPostImpactCooldown).toBe(false);
+
   const cap = h.first.movement.getMaxSpeedMps();
-  h.first.body.setLinvel({ x: 0, y: h.first.body.linvel().y, z: cap * 1.5 }, true);
-  h.tick(FORWARD, NONE);
+  h.first.body.setLinvel({ x: 0, y: 0, z: cap * 1.5 }, true);
+  const result = h.tick(FORWARD, NONE);
+  expect(result.first.grounded).toBe(true);
   const v = h.first.body.linvel();
   const speed = Math.hypot(v.x, v.z);
   h.dispose();
@@ -88,7 +99,7 @@ describe('Master §12 speed-limit behavior playtest', () => {
     const h = await settledHarness(true);
     const cap = h.first.movement.getMaxSpeedMps();
     h.first.movement.registerKnockback();
-    h.first.body.setLinvel({ x: 0, y: h.first.body.linvel().y, z: cap * 1.5 }, true);
+    h.first.body.setLinvel({ x: 0, y: 0, z: cap * 1.5 }, true);
     h.tick(FORWARD, NONE);
     const v = h.first.body.linvel();
     expect(Math.hypot(v.x, v.z)).toBeGreaterThan(cap * 1.05);
@@ -101,8 +112,12 @@ describe('Master §12 speed-limit behavior playtest', () => {
     h.tick(attackInput(true, 0), NONE);
     for (let i = 0; i < 90; i++) h.tick(attackInput(false, (i + 1) / 60), NONE);
     const release = h.tick(NONE, NONE);
-    const v = h.first.body.linvel();
     expect(release.first.attackState).toBe(AttackState.DashActive);
+    // Charging -> DashActive happens on release; the Dash override itself is produced on the following active tick.
+    const driven = h.tick(NONE, NONE);
+    expect(driven.first.attackState).toBe(AttackState.DashActive);
+    expect(driven.first.grounded).toBe(true);
+    const v = h.first.body.linvel();
     expect(Math.hypot(v.x, v.z)).toBeGreaterThan(cap * 1.05);
     h.dispose();
   });
@@ -111,8 +126,9 @@ describe('Master §12 speed-limit behavior playtest', () => {
     const h = await settledHarness(true);
     const cap = h.first.movement.getMaxSpeedMps();
     const dodge = h.tick(DODGE_PRESS, NONE);
-    const v = h.first.body.linvel();
+    expect(dodge.first.grounded).toBe(true);
     expect(dodge.first.dodgeState).toBe(DodgeState.Dodging);
+    const v = h.first.body.linvel();
     expect(Math.hypot(v.x, v.z)).toBeGreaterThan(cap * 1.05);
     h.dispose();
   });
