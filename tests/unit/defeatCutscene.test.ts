@@ -50,4 +50,42 @@ describe('defeat cutscene', () => {
     const spread = pieces.map((p) => p.position.clone());
     expect(spread[0]!.distanceTo(spread[2]!)).toBeGreaterThan(0.5);
   });
+
+  /** The lowest point of the Bey's model / pieces each frame, against a floor at 0. */
+  function run(launchVelocity: { x: number; y: number; z: number }, knockedOut: boolean) {
+    const { scene, group, spinGroup } = fourPieceBey();
+    const cut = new DefeatCutscene({ visual: { group, spinGroup }, launchVelocity, knockedOut, gravityScale: 3.6, floorHeightAt: () => 0, onDone: () => undefined });
+    let lowest = Infinity;
+    let highest = -Infinity;
+    let maxRadius = 0;
+    const box = new THREE.Box3();
+    for (let i = 0; i < 60 * 8; i++) {
+      cut.update(1 / 60);
+      scene.updateMatrixWorld(true);
+      for (const name of PIECE_ORDER) {
+        box.setFromObject(scene.getObjectByName(name)!);
+        lowest = Math.min(lowest, box.min.y);
+        highest = Math.max(highest, box.min.y);
+        maxRadius = Math.max(maxRadius, Math.hypot(box.max.x, box.max.z), Math.hypot(box.min.x, box.min.z));
+      }
+    }
+    return { lowest, highest, maxRadius };
+  }
+
+  it('owner, 2026-10-04: a knock-out that is not thrown far still pops up and bounces — never through the floor', () => {
+    const r = run({ x: 0.5, y: 0, z: 0 }, true);
+    expect(r.lowest).toBeGreaterThan(-0.02);
+    expect(r.highest).toBeGreaterThan(0.3); // it really bounced
+  });
+
+  it('a spin-out keels over ONTO the floor (its rim never sinks in), and the pieces rest on it', () => {
+    const r = run({ x: 0, y: 0, z: 0 }, false);
+    expect(r.lowest).toBeGreaterThan(-0.02);
+  });
+
+  it('a hard knock-out toward the wall bounces off it: nothing leaves the arena', () => {
+    const r = run({ x: 40, y: 2, z: 0 }, true);
+    expect(r.lowest).toBeGreaterThan(-0.02);
+    expect(r.maxRadius).toBeLessThan(36);
+  });
 });

@@ -156,6 +156,9 @@ const TUMBLE_BASE_RATE_RAD_S = 8;
 const TUMBLE_MAX_RATE_RAD_S = 22;
 const TUMBLE_AXIS_SWING_RAD_S = 2.4;
 
+/** The winner's visual spin during the defeat cutscene (rad/s; render only). */
+const WINNER_SPIN_RAD_PER_S = 40;
+
 export class MatchSession {
   readonly matchId: string;
   readonly seedText: string;
@@ -179,6 +182,13 @@ export class MatchSession {
   private readonly recoveryRings: RecoveryRingEffect;
   private cutsceneFocus: (() => { x: number; y: number; z: number }) | null = null;
   private cutsceneCamera: { eye: THREE.Vector3; focus: THREE.Vector3 } | null = null;
+  /**
+   * Owner, 2026-10-04: the simulation freezes at the end of the round, so a winner that was mid-jump hung in the air,
+   * not spinning, for the whole cutscene. During it the winner (render only) keeps spinning and drops onto the floor.
+   */
+  private cutsceneWinner: Side | null = null;
+  private winnerFall: { y: number; vy: number } | null = null;
+  private readonly matchGravityScale: number;
   private presentationFloorAt: ((x: number, z: number) => number) | null = null;
   /** The approved Clash Overdrive presentation, attached only with the `clashPresentation` flag (render only). */
   private clashPresentation: ClashPresentationSystem | null = null;
@@ -347,6 +357,7 @@ export class MatchSession {
 
     options.scene.add(this.root);
     this.recoveryRings = new RecoveryRingEffect(this.root);
+    this.matchGravityScale = resolveMatchConfig(options.matchConfig).gravityScale ?? 1;
     const presentationFeatures = options.presentationFeatures ?? presentationFeaturesFromLocation();
     this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys, {
       geometry: arenaGeometryOf(options.matchConfig),
@@ -458,9 +469,11 @@ export class MatchSession {
    * Owner, 2026-10-04 ("é pra câmera seguir o bey sendo destruído"): while set, the camera leaves the (frozen) fight
    * director and follows this point — the defeated Bey's flight, then its pieces. Render only. Null hands it back.
    */
-  setCutsceneFocus(focus: (() => { x: number; y: number; z: number }) | null): void {
+  setCutsceneFocus(focus: (() => { x: number; y: number; z: number }) | null, winner: Side | null = null): void {
     this.cutsceneFocus = focus;
     this.cutsceneCamera = null;
+    this.cutsceneWinner = focus ? winner : null;
+    this.winnerFall = null;
   }
 
   /** The arena floor height under (x, z) for presentation (the defeat cutscene's flight). */
@@ -769,6 +782,21 @@ export class MatchSession {
     return { tickIndex, firstActions, secondActions, result, simulationAdvanced: !isFrozenByHitstop };
   }
 
+  /** The winner, during the defeat cutscene: falls (render only) onto the floor if the round froze it in the air. */
+  private settleWinner(side: Side, frameDeltaSeconds: number): void {
+    const bey = this.getBey(side);
+    const group = this.match.visuals[side].visual.group;
+    const t = bey.body.translation();
+    const rest = this.floorHeightAt(t.x, t.z) + bey.definition.physical.colliderHalfHeightM;
+    if (!this.winnerFall) this.winnerFall = { y: t.y, vy: Math.min(0, bey.body.linvel().y) };
+    const fall = this.winnerFall;
+    if (fall.y > rest) {
+      fall.vy -= 9.81 * this.matchGravityScale * Math.max(0, frameDeltaSeconds);
+      fall.y = Math.max(rest, fall.y + fall.vy * Math.max(0, frameDeltaSeconds));
+    }
+    group.position.y = Math.min(group.position.y, fall.y);
+  }
+
   /** The defeat cutscene's chase camera: keeps the current viewing side, ~8 m back and 4 m up, catching up smoothly. */
   private followCutscene(camera: THREE.PerspectiveCamera, frameDeltaSeconds: number): void {
     const p = this.cutsceneFocus!();
@@ -782,7 +810,17 @@ export class MatchSession {
     const back = new THREE.Vector3(cam.eye.x - target.x, 0, cam.eye.z - target.z);
     if (back.lengthSq() < 1e-4) back.set(0, 0, 1);
     back.setLength(8);
-    const desiredEye = target.clone().add(back).add(new THREE.Vector3(0, 4, 0));
+    let desiredEye = target.clone().add(back).add(new THREE.Vector3(0, 4, 0));
+    // Never through the wall or under the floor: the eye stays inside the arena, above the floor. Near the wall it
+    // swings round to look from the arena's side.
+    const maxR = arenaFloorRadius() - 0.8;
+    if (Math.hypot(desiredEye.x, desiredEye.z) > maxR) {
+      const inward = new THREE.Vector3(-target.x, 0, -target.z);
+      if (inward.lengthSq() > 1e-4) desiredEye = target.clone().add(inward.setLength(8)).add(new THREE.Vector3(0, 4, 0));
+    }
+    const r = Math.hypot(desiredEye.x, desiredEye.z);
+    if (r > maxR) desiredEye.multiply(new THREE.Vector3(maxR / r, 1, maxR / r));
+    desiredEye.y = Math.max(desiredEye.y, this.floorHeightAt(desiredEye.x, desiredEye.z) + 1.5, target.y + 1.5);
     const k = 1 - Math.exp(-5 * Math.max(0, frameDeltaSeconds));
     cam.focus.lerp(target, Math.min(1, k * 1.6));
     cam.eye.lerp(desiredEye, k);
@@ -793,7 +831,13 @@ export class MatchSession {
   /** Syncs visuals, camera and frame-rate VFX to the current state. Call once per rendered frame, before renderer.render(). */
   renderFrame(frameDeltaSeconds: number, camera: THREE.PerspectiveCamera, view: SessionRenderView = DEFAULT_RENDER_VIEW): void {
     const match = this.match;
+    const winner = this.cutsceneWinner;
+    if (winner) {
+      const pose = this.lastVisual[winner];
+      this.lastVisual = { ...this.lastVisual, [winner]: { ...pose, spin: pose.spin + WINNER_SPIN_RAD_PER_S * frameDeltaSeconds, tumble: undefined } };
+    }
     match.syncVisualsToPhysics(this.lastVisual.first, this.lastVisual.second);
+    if (winner) this.settleWinner(winner, frameDeltaSeconds);
     this.recoveryRings.update(frameDeltaSeconds);
 
     // The player's Bey (the keyboard/pad side) gets the heading arrow.

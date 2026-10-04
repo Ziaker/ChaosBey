@@ -94,6 +94,8 @@ export class PlayFlow {
   private resultsTimer: ReturnType<typeof setTimeout> | null = null;
   /** Owner, 2026-10-04: the defeated Bey's break, before the winner is announced (null when none is playing). */
   private defeatCutscene: DefeatCutscene | null = null;
+  /** MatchConfig.gameSpeed of the running round (frame times arrive scaled by it). */
+  private roundGameSpeed = 1;
   private score: MatchScore = EMPTY_SCORE;
   private matchSeed: string | null = null;
   /** Bumped on every screen change, so a round that finishes loading after the player left is dropped. */
@@ -170,6 +172,7 @@ export class PlayFlow {
     this.screen = 'loading';
     this.deps.stateMachine.transitionTo(GameState.MatchLoading);
     this.defeatCutscene = null;
+    this.roundGameSpeed = matchConfigFor(this.setup!).gameSpeed ?? 1;
     const runner = await MatchRunner.start(
       this.deps,
       {
@@ -192,9 +195,12 @@ export class PlayFlow {
             const generation = this.generation;
             session.setBeyDefeated(loser);
             const v = session.getBey(loser).body.linvel();
+            const spunOut = String(outcome).includes('SpinOut');
             this.defeatCutscene = new DefeatCutscene({
               visual: session.match.visuals[loser].visual,
-              launchVelocity: String(outcome).includes('SpinOut') ? { x: 0, y: 0, z: 0 } : { x: v.x, y: v.y, z: v.z },
+              launchVelocity: spunOut ? { x: 0, y: 0, z: 0 } : { x: v.x, y: v.y, z: v.z },
+              knockedOut: !spunOut,
+              gravityScale: matchConfigFor(this.setup).gravityScale ?? 1,
               floorHeightAt: (x, z) => session.floorHeightAt(x, z),
               onBreak: () => this.hud?.flashBreak(String(outcome).includes('SpinOut') ? 'SPIN OUT' : 'BROKEN'),
               onDone: () => {
@@ -206,7 +212,7 @@ export class PlayFlow {
               seed: this.score.rounds + 1,
             });
             const cutscene = this.defeatCutscene;
-            session.setCutsceneFocus(() => cutscene.focusPoint());
+            session.setCutsceneFocus(() => cutscene.focusPoint(), loser === 'first' ? 'second' : 'first');
             return;
           }
           this.hud?.showBanner(roundEndBanner(outcome) ?? '');
@@ -214,7 +220,8 @@ export class PlayFlow {
         },
         onFrame: (session, frameDeltaSeconds) => {
           this.hud?.update(session, this.deps.appRenderer.camera, frameDeltaSeconds);
-          this.defeatCutscene?.update(frameDeltaSeconds);
+          // The cutscene runs on real time: the Game speed slider must not shorten the owner's 1.5 s slow motion.
+          this.defeatCutscene?.update(frameDeltaSeconds / this.roundGameSpeed);
         },
         onTick: (session, firstActions) => {
           if (firstActions.pressedThisFrame.has(Action.Pause) && !session.roundState.isOver) queueMicrotask(() => this.openPause());
