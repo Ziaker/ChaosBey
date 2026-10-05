@@ -118,24 +118,31 @@ export class Particles {
     this.points.material.uniforms.uScale!.value = pxPerMeterAtUnitDistance;
   }
 
+  /**
+   * Owner, 2026-10-05: × the size (and the travel) of every particle spawned from now on — the Bey size × the effects
+   * size. 1 = the approved look.
+   */
+  effectScale = 1;
+
   spawn(p: ParticleSpawn): void {
+    const f = this.effectScale;
     const i = this.next;
     this.next = (this.next + 1) % this.capacity;
     const i3 = i * 3;
     this.pos[i3] = p.x;
     this.pos[i3 + 1] = p.y;
     this.pos[i3 + 2] = p.z;
-    this.vel[i3] = p.vx ?? 0;
-    this.vel[i3 + 1] = p.vy ?? 0;
-    this.vel[i3 + 2] = p.vz ?? 0;
+    this.vel[i3] = (p.vx ?? 0) * f;
+    this.vel[i3 + 1] = (p.vy ?? 0) * f;
+    this.vel[i3 + 2] = (p.vz ?? 0) * f;
     this.c.set(p.color);
     this.col[i3] = this.c.r;
     this.col[i3 + 1] = this.c.g;
     this.col[i3 + 2] = this.c.b;
     this.life[i] = p.life;
     this.maxLife[i] = p.life;
-    this.size0[i] = p.size;
-    this.size1[i] = p.sizeEnd ?? p.size;
+    this.size0[i] = p.size * f;
+    this.size1[i] = (p.sizeEnd ?? p.size) * f;
     this.alpha0[i] = p.alpha ?? 1;
     this.gravity[i] = p.gravity ?? 0;
     this.drag[i] = p.drag ?? 1;

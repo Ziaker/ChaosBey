@@ -52,6 +52,12 @@ export class ImpactFeedback {
   private shakeSide: FeedbackSide | null = null;
   private shakeClockS = 0;
   private readonly rings: Ring[] = [];
+  /**
+   * Owner, 2026-10-05: the counter burst and the hit shake follow the Bey size × the effects size (`effectScale`); the
+   * hit flash already hugs the Bey (its radius) and takes the effects size on top (`effectSize`).
+   */
+  effectScale = 1;
+  effectSize = 1;
 
   constructor(
     private readonly parent: THREE.Object3D,
@@ -104,7 +110,7 @@ export class ImpactFeedback {
       if (on) {
         const { group, radiusM } = models[side];
         group.getWorldPosition(flash.mesh.position);
-        flash.mesh.scale.setScalar(radiusM * HIT_FLASH_SCALE);
+        flash.mesh.scale.setScalar(radiusM * HIT_FLASH_SCALE * this.effectSize);
         flash.material.opacity = HIT_FLASH_PEAK * (flash.leftS / HIT_FLASH_S);
       }
     }
@@ -112,8 +118,8 @@ export class ImpactFeedback {
       this.shakeClockS += dtS;
       const phase = this.shakeClockS * HIT_SHAKE_HZ * Math.PI * 2;
       const group = models[this.shakeSide].group;
-      group.position.x += Math.sin(phase) * HIT_SHAKE_M;
-      group.position.z += Math.cos(phase * 1.37) * HIT_SHAKE_M * 0.8;
+      group.position.x += Math.sin(phase) * HIT_SHAKE_M * this.effectScale;
+      group.position.z += Math.cos(phase * 1.37) * HIT_SHAKE_M * 0.8 * this.effectScale;
     } else if (!hitstopActive) {
       this.shakeSide = null;
     }
@@ -143,7 +149,7 @@ export class ImpactFeedback {
   private addRing(position: { x: number; y: number; z: number }, ageS: number, peak: number): void {
     const material = new THREE.MeshBasicMaterial({ color: COUNTER_COLOR, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
     const mesh = new THREE.Mesh(this.ringGeometry, material);
-    mesh.position.set(position.x, position.y + 0.3, position.z);
+    mesh.position.set(position.x, position.y + 0.3 * this.effectScale, position.z);
     mesh.rotation.x = Math.PI / 2;
     mesh.visible = false;
     mesh.name = 'counterBurst';
@@ -164,7 +170,7 @@ export class ImpactFeedback {
       if (ring.ageS < 0) continue;
       const t = ring.ageS / COUNTER_BURST_S;
       const ease = 1 - (1 - t) ** 3;
-      const radius = COUNTER_START_RADIUS_M + (COUNTER_END_RADIUS_M - COUNTER_START_RADIUS_M) * ease;
+      const radius = (COUNTER_START_RADIUS_M + (COUNTER_END_RADIUS_M - COUNTER_START_RADIUS_M) * ease) * this.effectScale;
       ring.mesh.scale.set(radius, radius, radius * Math.max(0.25, 1 - t));
       ring.mesh.visible = true;
       ring.material.opacity = ring.peak * (1 - t);

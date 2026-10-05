@@ -59,6 +59,9 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
     let dazeTimer = 0;
     let sweepStarted = false;
     const floorY = (p: THREE.Vector3): number => ctx.floorHeightAt(Math.hypot(p.x, p.z));
+    // Owner, 2026-10-05: offsets from the Bey follow the effects' scale (the Bey size × the effects size); the effects'
+    // own sizes are scaled by the layer.
+    const k = (): number => ctx.layer.scale;
     const onFloor = (p: THREE.Vector3, lift = 0.03): THREE.Vector3 => new THREE.Vector3(p.x, floorY(p) + lift, p.z);
 
     const stars = (at: THREE.Vector3, color: THREE.Color, m: number, life = 0.26): void => {
@@ -98,13 +101,14 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
         if (e.progress < 0.05) chargedFlash = false;
         if (chargeTimer <= 0) {
           chargeTimer = 0.13 - 0.07 * e.progress;
-          const center = e.pos.clone().setY(e.pos.y - 0.1);
+          const center = e.pos.clone().setY(e.pos.y - 0.1 * k());
           if (TUNING.chargeAura > 0.01) ctx.layer.add(flatFx({ tex: ringTexture(), color, pos: onFloor(center, 0.05), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.05 }, size: [(2.6 - 0.4 * e.progress) * Math.max(0.4, TUNING.chargeAura), 0.3], life: 0.32, additive: true, opacity: Math.min(1, (0.4 + 0.6 * e.progress) * TUNING.chargeAura) }));
           for (let i = 0; i < stochastic((2 + Math.round(4 * e.progress)) * TUNING.chargeAura); i++) {
             const a = Math.random() * Math.PI * 2;
             const r = rand(1.0, 1.6);
-            const start = e.pos.clone().add(new THREE.Vector3(Math.cos(a) * r, rand(-0.2, 0.6), Math.sin(a) * r));
-            ctx.layer.add(spriteFx({ tex: softDot(), color, pos: start, vel: e.pos.clone().sub(start).multiplyScalar(3.2), size: [0.22, 0.05], life: 0.3 }));
+            const offset = new THREE.Vector3(Math.cos(a) * r, rand(-0.2, 0.6), Math.sin(a) * r);
+            // The sprite's travel is scaled with it: the inward speed stays the approved one.
+            ctx.layer.add(spriteFx({ tex: softDot(), color, pos: e.pos.clone().addScaledVector(offset, k()), vel: offset.clone().multiplyScalar(-3.2), size: [0.22, 0.05], life: 0.3 }));
           }
         }
         if (e.progress > 0.97 && !chargedFlash) {
@@ -134,15 +138,15 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
         const color = ctx.beyColor(e.slot);
         if (t < 0.1 && !sweepStarted) {
           sweepStarted = true;
-          const c = e.pos.clone().setY(e.pos.y + 0.05);
+          const c = e.pos.clone().setY(e.pos.y + 0.05 * k());
           ctx.layer.add(slashArcFx({ center: c, radius: 1.25 + 0.3 * e.m, width: 0.28, color, start: 0, sweep: 4.4, spin: 16, life: 0.45 }));
-          ctx.layer.add(slashArcFx({ center: c.clone().setY(c.y + 0.18), radius: 1.0, width: 0.16, color: WHITE, start: 2.2, sweep: 3.6, spin: 16, life: 0.35 }));
+          ctx.layer.add(slashArcFx({ center: c.clone().setY(c.y + 0.18 * k()), radius: 1.0, width: 0.16, color: WHITE, start: 2.2, sweep: 3.6, spin: 16, life: 0.35 }));
           shockwave(e.pos, color, 1.8 + e.m, 0.3);
         }
         if (t > 0.9) sweepStarted = false;
         if (Math.random() < 0.5) {
           const a = Math.random() * Math.PI * 2;
-          ctx.layer.add(spriteFx({ tex: softDot(), color, pos: e.pos.clone().add(new THREE.Vector3(Math.cos(a) * 1.2, 0, Math.sin(a) * 1.2)), size: [0.25, 0.05], life: 0.25 }));
+          ctx.layer.add(spriteFx({ tex: softDot(), color, pos: e.pos.clone().add(new THREE.Vector3(Math.cos(a) * 1.2 * k(), 0, Math.sin(a) * 1.2 * k())), size: [0.25, 0.05], life: 0.25 }));
         }
       },
       perfectDodge(e) {
@@ -179,9 +183,9 @@ export function createAnime(ctx: FxContext, opts: AnimeOptions): LanguageRuntime
         dazeTimer -= dt;
         if (dazeTimer > 0) return;
         dazeTimer = 0.14;
-        ctx.layer.add(spriteFx({ tex: ringTexture(), color: 0xffe066, pos: e.pos.clone().setY(e.pos.y + 0.75), size: [0.5, 0.8], life: 0.3, opacity: 0.8 }));
+        ctx.layer.add(spriteFx({ tex: ringTexture(), color: 0xffe066, pos: e.pos.clone().setY(e.pos.y + 0.75 * k()), size: [0.5, 0.8], life: 0.3, opacity: 0.8 }));
         const a = Math.random() * Math.PI * 2;
-        ctx.layer.add(spriteFx({ tex: softDot(), color: 0xffe066, pos: e.pos.clone().add(new THREE.Vector3(Math.cos(a) * 0.4, 0.8, Math.sin(a) * 0.4)), vel: new THREE.Vector3(0, 0.6, 0), size: [0.18, 0.05], life: 0.4 }));
+        ctx.layer.add(spriteFx({ tex: softDot(), color: 0xffe066, pos: e.pos.clone().add(new THREE.Vector3(Math.cos(a) * 0.4, 0.8, Math.sin(a) * 0.4).multiplyScalar(k())), vel: new THREE.Vector3(0, 0.6, 0), size: [0.18, 0.05], life: 0.4 }));
       },
       landing(e) {
         const color = ctx.beyColor(e.slot);

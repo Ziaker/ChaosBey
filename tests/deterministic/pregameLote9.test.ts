@@ -148,7 +148,7 @@ describe('the Pregame remembers the last setup and explains what changed', () =>
   it('saves and loads every rule and visual option; bad or unknown data falls back to the default', () => {
     const store = new Map<string, string>();
     const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) };
-    const setup = { ...createDefaultMatchSetup('defense-b'), rules: { ...defaultMatchRules(), dashCooldownS: 3, arenaBowlDepthM: 4, winBySpinOut: false }, visual: { intensity: 0.5, groundWaves: 0, dust: 1.2 }, seedText: 'x' };
+    const setup = { ...createDefaultMatchSetup('defense-b'), rules: { ...defaultMatchRules(), dashCooldownS: 3, arenaBowlDepthM: 4, winBySpinOut: false }, visual: { intensity: 0.5, groundWaves: 0, dust: 1.2, effectSize: 1.6 }, seedText: 'x' };
     saveLastSetup(setup, storage);
     const back = loadLastSetup(storage)!;
     expect(back.playerBeyId).toBe('defense-b');

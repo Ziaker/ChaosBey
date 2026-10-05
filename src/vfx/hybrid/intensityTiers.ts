@@ -66,8 +66,22 @@ export interface VfxOptions {
   readonly groundWaves: number;
   /** Scales the dust amount, 0 = none. */
   readonly dust: number;
+  /**
+   * Owner, 2026-10-05 ("adicione um slider pra isso também"): × the size of every effect, on top of the Bey size they
+   * already follow (MatchConfig.beySizeScale). 1 = the approved sizes. Optional for older saved setups (absent = 1).
+   */
+  readonly effectSize?: number;
 }
-export const DEFAULT_VFX_OPTIONS: VfxOptions = { intensity: 1, groundWaves: 1, dust: 1 };
+export const DEFAULT_VFX_OPTIONS: VfxOptions = { intensity: 1, groundWaves: 1, dust: 1, effectSize: 1 };
+export const VFX_EFFECT_SIZE_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
+
+/**
+ * The size every effect of a Bey is drawn at (owner, 2026-10-05): its in-match size (MatchConfig.beySizeScale, carried
+ * on the definition) × the Pregame's effects size. 1 = the approved sizes. Presentation only.
+ */
+export function effectScaleOf(gameplay: { readonly sizeScale?: number }, vfx?: Pick<VfxOptions, 'effectSize'> | null): number {
+  return (gameplay.sizeScale ?? 1) * (vfx?.effectSize ?? 1);
+}
 export const VFX_INTENSITY_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
 export const VFX_GROUND_WAVES_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
 export const VFX_DUST_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;

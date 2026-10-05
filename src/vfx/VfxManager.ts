@@ -32,6 +32,8 @@ export class VfxManager {
   private readonly secondTrail: SpeedTrail;
   private readonly speedLines: SpeedLines;
   private readonly layerVisible: Record<VfxLayer, boolean> = { impactBursts: true, trails: true, speedLines: true };
+  /** Owner, 2026-10-05: × the spark and landing bursts (the Bey size × the effects size). 1 = the approved look. */
+  effectScale = 1;
 
   constructor(
     private readonly scene: THREE.Object3D,
@@ -109,13 +111,13 @@ export class VfxManager {
       const particleProfile = event.isFirst ? this.firstParticleProfile : this.secondParticleProfile;
       if (route === 'landing') {
         if (event.magnitude < LANDING_MIN_MAGNITUDE_TO_SPAWN) continue;
-        const burst = createLandingBurst(event.magnitude, event.worldPositionM, particleProfile.landingTintHex);
+        const burst = createLandingBurst(event.magnitude, event.worldPositionM, particleProfile.landingTintHex, this.effectScale);
         burst.mesh.visible = this.layerVisible.impactBursts;
         this.scene.add(burst.mesh);
         this.activeLandingBursts.push(burst);
       } else if (route === 'spark') {
         if (event.magnitude < SPARK_MIN_MAGNITUDE_TO_SPAWN) continue;
-        const burst = createSparkBurst(event.magnitude, event.worldPositionM, particleProfile.sparkTintHex);
+        const burst = createSparkBurst(event.magnitude, event.worldPositionM, particleProfile.sparkTintHex, this.effectScale);
         burst.points.visible = this.layerVisible.impactBursts;
         this.scene.add(burst.points);
         this.activeSparkBursts.push(burst);

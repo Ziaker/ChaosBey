@@ -69,13 +69,15 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
   const follow = (): THREE.Vector3 => ctx.beyPos(e.slot);
   const accent = ctx.beyColor(e.slot);
   const m = e.m;
+  // Owner, 2026-10-05: offsets from the Bey follow the effects' scale (the Bey size × the effects size).
+  const k = ctx.layer.scale;
 
   const rings = (count: number, look: WindLook, scale = 1, life = 0.42, driftScale = 1): void => {
     for (let i = 0; i < count; i++) {
       const size = lerp(RING_SIZE, m) * scale * (1 - i * 0.18);
       ctx.layer.add(jaggedRingFx({
         tex: jaggedRing(), follow, dir, color: i === count - 1 && !look.cel ? accent : WIND_WHITE,
-        size: [0.6, size], life, delay: i * RING_STAGGER, drift: (0.6 + i * 0.5) * driftScale, look,
+        size: [0.6, size], life, delay: i * RING_STAGGER, drift: (0.6 + i * 0.5) * driftScale * k, look,
         groundAt: (p) => ctx.floorHeightAt(Math.hypot(p.x, p.z)),
       }));
     }
@@ -86,7 +88,7 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
     const origin = follow();
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + rand(-0.3, 0.3);
-      const r = rand(0.15, 0.9 + 0.5 * m);
+      const r = rand(0.15, 0.9 + 0.5 * m) * k;
       // Keep streaks above the floor: squash the lower half.
       const offset = u.clone().multiplyScalar(Math.cos(a) * r).addScaledVector(v, Math.max(-0.25, Math.sin(a) * r * 0.8));
       const isAccent = i % 5 === 0;
@@ -94,7 +96,7 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
         tex: tornStreak(), origin, follow, dir, offset,
         color: isAccent ? accent : i % 2 === 0 ? WIND_WHITE : WIND_GREY,
         width: (isAccent ? 0.14 : rand(0.45, 1.05)) * widthScale * (0.7 + 0.5 * m),
-        minLength: (1.5 + 1.5 * m) * lengthScale, overshoot: lerp(WAKE_OVERSHOOT, m) * lengthScale * rand(0.6, 1.1), life: rand(0.55, 0.8), look,
+        minLength: (1.5 + 1.5 * m) * lengthScale * k, overshoot: lerp(WAKE_OVERSHOOT, m) * lengthScale * k * rand(0.6, 1.1), life: rand(0.55, 0.8), look,
       }));
     }
   };
@@ -111,8 +113,8 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
     ctx.countDust?.(n);
     const origin = follow();
     for (let i = 0; i < n; i++) {
-      const p = origin.clone().addScaledVector(back, rand(0.3, 2.2 + 1.5 * m));
-      p.y = ctx.floorHeightAt(Math.hypot(p.x, p.z)) + rand(0.2, 0.5);
+      const p = origin.clone().addScaledVector(back, rand(0.3, 2.2 + 1.5 * m) * k);
+      p.y = ctx.floorHeightAt(Math.hypot(p.x, p.z)) + rand(0.2, 0.5) * k;
       const side = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(rand(-1.5, 1.5));
       ctx.layer.add(spriteFx({
         tex: toonSmoke(), color: 0xffffff, additive: false, opacity: 1, pos: p,
@@ -125,7 +127,7 @@ function windBurst(ctx: FxContext, e: DirEvent, style: WindStyle): void {
     const origin = follow();
     for (let i = 0; i < n; i++) {
       const vel = back.clone().multiplyScalar(rand(2, 5)).add(new THREE.Vector3(rand(-1.5, 1.5), rand(1.5, 3.5), rand(-1.5, 1.5)));
-      ctx.layer.add(debrisFx({ pos: origin.clone().setY(origin.y - 0.4), vel, size: rand(0.04, 0.09), color: 0x2b2d31, life: rand(0.9, 1.4), floorHeightAt: ctx.floorHeightAt }));
+      ctx.layer.add(debrisFx({ pos: origin.clone().setY(origin.y - 0.4 * k), vel, size: rand(0.04, 0.09), color: 0x2b2d31, life: rand(0.9, 1.4), floorHeightAt: ctx.floorHeightAt }));
     }
   };
 

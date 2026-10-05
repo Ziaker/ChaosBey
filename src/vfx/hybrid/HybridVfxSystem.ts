@@ -24,7 +24,7 @@
 // Observes only: no body, collider, stat, input or camera is written.
 // ============================================================
 
-import { FLOOR_SCAR_HIT_MIN_M, FLOOR_SCAR_LANDING_MIN_M, VFX_LIGHT, type VfxOptions } from './intensityTiers';
+import { effectScaleOf, FLOOR_SCAR_HIT_MIN_M, FLOOR_SCAR_LANDING_MIN_M, VFX_LIGHT, type VfxOptions } from './intensityTiers';
 import { FloorScars } from './FloorScars';
 import * as THREE from 'three';
 import { CircularVortex } from './fx/CircularVortex';
@@ -127,6 +127,8 @@ export class HybridVfxSystem implements PresentationSystem {
   private readonly quaternion = new THREE.Quaternion();
   private readonly scale = new THREE.Vector3();
   private readonly dir = new THREE.Vector3();
+  /** × the size of every effect (see effectScaleOf). */
+  private readonly effectScale: number;
 
   constructor(private readonly options: HybridVfxOptions) {
     const { scene, camera } = options;
@@ -134,6 +136,10 @@ export class HybridVfxSystem implements PresentationSystem {
     this.scars = new FloorScars(this.layer, options.floorHeightAtR);
     this.sparks = new StreakSparks(SPARK_CAPACITY, options.floorHeightAtR);
     this.overlay = new ScreenOverlay(camera, options.overlayParent);
+    // Owner, 2026-10-05: every effect follows the Bey size × the Pregame's effects size (both Beys share the size).
+    this.effectScale = effectScaleOf(options.beys.first.gameplay, options.vfx);
+    this.layer.scale = this.effectScale;
+    this.sparks.scale = this.effectScale;
     scene.add(this.sparks.object, this.flashLight);
     this.tracks = { first: this.buildTrack('first'), second: this.buildTrack('second') };
     this.runtime = makeHybrid('cel').create(this.context());
@@ -156,7 +162,7 @@ export class HybridVfxSystem implements PresentationSystem {
       dodgeState: DodgeState.Idle,
       lastCharge: 0,
       circularElapsed: 0,
-      vortex: this.addVortex(new THREE.Color(palette?.glow ?? target.gameplay.particle.sparkTintHex), target.gameplay.sizeScale ?? 1),
+      vortex: this.addVortex(new THREE.Color(palette?.glow ?? target.gameplay.particle.sparkTintHex), effectScaleOf(target.gameplay, this.options.vfx)),
     };
   }
 
@@ -309,7 +315,7 @@ export class HybridVfxSystem implements PresentationSystem {
           const outward = new THREE.Vector3(track.pos.x, 0, track.pos.z).normalize();
           const normal = outward.clone().negate();
           const tangent = new THREE.Vector3(-outward.z, 0, outward.x);
-          this.runtime.scrape({ pos: track.pos.clone().addScaledVector(outward, 0.7).setY(track.pos.y - 0.1), normal, tangent, m: event.magnitude, slot: SLOT[event.side] }, ONE_SHOT_DT);
+          this.runtime.scrape({ pos: track.pos.clone().addScaledVector(outward, 0.7 * (track.target.gameplay.sizeScale ?? 1)).setY(track.pos.y - 0.1 * (track.target.gameplay.sizeScale ?? 1)), normal, tangent, m: event.magnitude, slot: SLOT[event.side] }, ONE_SHOT_DT);
           break;
         }
         default:

@@ -26,6 +26,9 @@ export class RecoveryRingEffect {
   private readonly rings: Ring[] = [];
   private readonly geometry = new THREE.TorusGeometry(1, 0.045, 8, 64);
 
+  /** Owner, 2026-10-05: × the rings' size (the Bey size × the effects size). 1 = the approved look. */
+  effectScale = 1;
+
   constructor(private readonly parent: THREE.Object3D) {}
 
   /** A burst at a world position (the Bey's centre). */
@@ -58,7 +61,7 @@ export class RecoveryRingEffect {
       if (ring.ageS < 0) continue;
       const t = ring.ageS / RECOVERY_RING_LIFE_S;
       const ease = 1 - (1 - t) * (1 - t) * (1 - t); // fast burst, slow settle
-      const radius = START_RADIUS_M + (END_RADIUS_M - START_RADIUS_M) * ease;
+      const radius = (START_RADIUS_M + (END_RADIUS_M - START_RADIUS_M) * ease) * this.effectScale;
       // Local z is world up after the rotation: the ring flattens as it grows.
       ring.mesh.scale.set(radius, radius, radius * Math.max(0.2, 1 - t));
       ring.mesh.visible = true;

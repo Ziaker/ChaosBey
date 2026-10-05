@@ -55,6 +55,11 @@ export class ClashFx {
   private readonly dust = new ParticlePool(900, THREE.NormalBlending, 0.55, -1.2, 2.2);
   private readonly grit = new ParticlePool(500, THREE.AdditiveBlending, 1, -9.8, 0.6);
   private dustCarry = 0;
+  /**
+   * Owner, 2026-10-05: × the size (and the reach) of every Clash effect emitted from now on — the Bey size × the effects
+   * size. 1 = the approved look.
+   */
+  scale = 1;
 
   constructor() {
     this.group.add(this.dust.points, this.grit.points);
@@ -86,15 +91,16 @@ export class ClashFx {
     const perpX = -axisXZ.y * side;
     const perpZ = axisXZ.x * side;
     const spread = (rnd() - 0.5) * 0.9; // a little along the axis too
-    const speed = opts.speed * boost * (0.45 + rnd() * 0.9);
+    const k = this.scale;
+    const speed = opts.speed * boost * (0.45 + rnd() * 0.9) * k;
     const vx = (perpX + axisXZ.x * spread) * speed;
     const vz = (perpZ + axisXZ.y * spread) * speed;
-    const px = contact.x + (rnd() - 0.5) * 0.25;
-    const pz = contact.z + (rnd() - 0.5) * 0.25;
+    const px = contact.x + (rnd() - 0.5) * 0.25 * k;
+    const pz = contact.z + (rnd() - 0.5) * 0.25 * k;
     if (rnd() < opts.sparkShare) {
-      this.grit.spawn(px, contact.y + 0.05, pz, vx * 1.4, 0.6 + rnd() * 1.6, vz * 1.4, 0.05 + rnd() * 0.05, 0.25 + rnd() * 0.25, opts.sparkColor);
+      this.grit.spawn(px, contact.y + 0.05 * k, pz, vx * 1.4, (0.6 + rnd() * 1.6) * k, vz * 1.4, (0.05 + rnd() * 0.05) * k, 0.25 + rnd() * 0.25, opts.sparkColor);
     } else {
-      this.dust.spawn(px, contact.y + 0.03, pz, vx, 0.15 + rnd() * 0.7, vz, opts.size * (0.6 + rnd() * 0.9), 0.5 + rnd() * 0.6, opts.dustColor);
+      this.dust.spawn(px, contact.y + 0.03 * k, pz, vx, (0.15 + rnd() * 0.7) * k, vz, opts.size * (0.6 + rnd() * 0.9) * k, 0.5 + rnd() * 0.6, opts.dustColor);
     }
   }
 
@@ -116,7 +122,7 @@ export class ClashFx {
       ageS: 0,
       lifeS,
       update: (f) => {
-        const s = size * (0.6 + f * 1.6);
+        const s = size * (0.6 + f * 1.6) * this.scale;
         mesh.scale.setScalar(s);
         mat.opacity = 0.9 * (1 - f);
       },
@@ -132,11 +138,11 @@ export class ClashFx {
       positions[i * 3] = at.x;
       positions[i * 3 + 1] = at.y;
       positions[i * 3 + 2] = at.z;
-      velocities.push(new THREE.Vector3(this.random() - 0.5, this.random() * 0.6 + 0.1, this.random() - 0.5).normalize().multiplyScalar(speed * (0.4 + this.random() * 0.8)));
+      velocities.push(new THREE.Vector3(this.random() - 0.5, this.random() * 0.6 + 0.1, this.random() - 0.5).normalize().multiplyScalar(speed * this.scale * (0.4 + this.random() * 0.8)));
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const mat = new THREE.PointsMaterial({ color, size: 0.12, map: this.sprite, transparent: true, alphaTest: 0.01, blending: THREE.AdditiveBlending, depthWrite: false });
+    const mat = new THREE.PointsMaterial({ color, size: 0.12 * this.scale, map: this.sprite, transparent: true, alphaTest: 0.01, blending: THREE.AdditiveBlending, depthWrite: false });
     const points = new THREE.Points(geo, mat);
     this.group.add(points);
     const lifeS = 0.35 + this.random() * 0.3;
@@ -169,7 +175,7 @@ export class ClashFx {
       ageS: 0,
       lifeS,
       update: (f) => {
-        mesh.scale.setScalar(0.3 + f * maxRadius);
+        mesh.scale.setScalar((0.3 + f * maxRadius) * this.scale);
         mat.opacity = 1 - f;
       },
     });
@@ -198,7 +204,7 @@ export class ClashFx {
       ageS: 0,
       lifeS,
       update: (f) => {
-        mesh.scale.setScalar(size * (1.2 - f * 0.3));
+        mesh.scale.setScalar(size * (1.2 - f * 0.3) * this.scale);
         mesh.rotation.z += 0.02;
         mesh.lookAt(mesh.position.clone().add(new THREE.Vector3(0, 0, 1)));
         mat.opacity = 1 - f * f;

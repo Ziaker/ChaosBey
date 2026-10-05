@@ -53,6 +53,8 @@ export interface ConditionVisualsOptions {
   readonly tuning?: ConditionTuning;
   /** Drawing-buffer height in pixels, for particle size. Defaults to the window. */
   readonly viewportHeightPx?: () => number;
+  /** Owner, 2026-10-05: the Pregame's effects size (× on top of the Bey size, which the rig already follows). */
+  readonly effectSize?: number;
 }
 
 const SIDES: readonly PresentationSide[] = ['first', 'second'];
@@ -113,6 +115,8 @@ export class ConditionVisualsSystem implements PresentationSystem {
       },
     };
     scene.add(this.soft.points, this.glow.points);
+    // Owner, 2026-10-05: particles follow the Bey size × the effects size (the rig's own pieces follow the model).
+    this.glow.effectScale = this.soft.effectScale = (options.beys.first.gameplay.sizeScale ?? 1) * (options.effectSize ?? 1);
     this.entries = { first: this.buildEntry('first'), second: this.buildEntry('second') };
     for (const side of SIDES) this.syncLayers(this.entries[side]);
   }

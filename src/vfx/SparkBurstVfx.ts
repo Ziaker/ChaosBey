@@ -36,9 +36,10 @@ export interface ActiveSparkBurst {
   lifetimeS: number;
 }
 
-export function createSparkBurst(magnitude: number, positionM: WorldPositionM, tintHex: number = SPARK_COLOR_HEX): ActiveSparkBurst {
+/** `effectScale` (owner, 2026-10-05): the Bey size × the effects size — bigger sparks that fly farther; 1 = the approved burst. */
+export function createSparkBurst(magnitude: number, positionM: WorldPositionM, tintHex: number = SPARK_COLOR_HEX, effectScale = 1): ActiveSparkBurst {
   const particleCount = Math.max(1, Math.round(SPARK_BASE_PARTICLE_COUNT + magnitude * SPARK_MAX_EXTRA_PARTICLE_COUNT));
-  const speedMps = SPARK_BASE_SPEED_MPS + magnitude * SPARK_MAX_EXTRA_SPEED_MPS;
+  const speedMps = (SPARK_BASE_SPEED_MPS + magnitude * SPARK_MAX_EXTRA_SPEED_MPS) * effectScale;
   const positions = new Float32Array(particleCount * 3);
   const velocitiesMps = new Float32Array(particleCount * 3);
 
@@ -55,7 +56,7 @@ export function createSparkBurst(magnitude: number, positionM: WorldPositionM, t
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const material = new THREE.PointsMaterial({ color: tintHex, size: SPARK_SIZE_M, transparent: true, opacity: 1, depthWrite: false });
+  const material = new THREE.PointsMaterial({ color: tintHex, size: SPARK_SIZE_M * effectScale, transparent: true, opacity: 1, depthWrite: false });
   const points = new THREE.Points(geometry, material);
   points.position.set(positionM.x, positionM.y, positionM.z);
   points.frustumCulled = false;

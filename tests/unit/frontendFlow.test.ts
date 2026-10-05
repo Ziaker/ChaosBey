@@ -66,7 +66,7 @@ describe('match setup', () => {
         turnRateScale: 1.75, turnSpeedRetention: 0.9, jumpHoldForFullS: 0.15, gravityScale: 3.6, contactRepelMps: 16.5, attackRecoilMps: 15.5, highSpeedControl: 1, arenaSizeScale: 1, gameSpeed: 1.2, clashLaunchMps: 28, dodgeStaminaCost: 0, dodgeDistanceScale: 1, contactLiftMps: 4, knockbackScale: 1, spinStaminaDrain: 1, circularLockAfterHitS: 0.6, bodyContactControlLossScale: 0.8,
         circularAttack: true, beySizeScale: 1, airRecoveryMinDelayS: 0.2,
       },
-      visual: { intensity: 1, groundWaves: 1, dust: 1 },
+      visual: { intensity: 1, groundWaves: 1, dust: 1, effectSize: 1 },
       seedText: null,
     });
     // The default setup is the Debug Lab / quick-play pairing.

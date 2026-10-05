@@ -13,7 +13,7 @@
 // acceleration — GDD section 164) decides how many ticks run.
 // ============================================================
 
-import type { VfxOptions } from '../../vfx/hybrid/intensityTiers';
+import { effectScaleOf, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import * as THREE from 'three';
 import { createMatchScene, REST_VISUAL_POSE, type BeyVisualPose, type MatchBeys, type MatchScene } from '../bootstrap/createMatchScene';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
@@ -395,10 +395,16 @@ export class MatchSession {
         ? new CameraRig(this.initialCameraPreset, options.camera.aspect, floorRimHeight(arenaFloor) === 0 ? undefined : (x, z) => floorHeightAt(arenaFloor, x, z))
         : options.cameraRig;
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
+    // Owner, 2026-10-05: every effect follows the Bey size (MatchConfig.beySizeScale) × the Pregame's effects size.
+    const effectScale = effectScaleOf(this.match.first.definition, options.vfx);
+    this.vfxManager.effectScale = effectScale;
+    this.recoveryRings.effectScale = effectScale;
+    this.impactFeedback.effectScale = effectScale;
+    this.impactFeedback.effectSize = options.vfx?.effectSize ?? 1;
     const theme = options.arenaTheme ?? FOUNDRY_PIT.theme;
     const floorAt = (x: number, z: number): number => floorHeightAt(arenaFloor, x, z);
     this.presentationFloorAt = floorAt;
-    this.driftVfx = { first: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt), second: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt) };
+    this.driftVfx = { first: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt, effectScale), second: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt, effectScale) };
     this.root.add(this.driftVfx.first.object3D, this.driftVfx.second.object3D);
     if (presentationFeatures.conditionVisuals) {
       this.conditionVisuals = new ConditionVisualsSystem({
@@ -410,6 +416,7 @@ export class MatchSession {
         },
         floorHeightAt: floorAt,
         layers: normalizeConditionLayers(options.conditionLayers ?? ['A']),
+        effectSize: options.vfx?.effectSize ?? 1,
       });
       this.presentation.attach(this.conditionVisuals);
     }
@@ -443,6 +450,7 @@ export class MatchSession {
         dustHex: clashDustHexFor(ARENA_PRESETS.find((preset) => preset.theme === theme)?.id),
         // The approved arena art reacts to the Clash itself; the stand-in contact light is only for the temporary arena.
         contactLight: !presentationFeatures.arenaVisuals,
+        effectSize: options.vfx?.effectSize ?? 1,
       });
       this.presentation.attach(this.clashPresentation);
     }

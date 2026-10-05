@@ -18,22 +18,52 @@ export interface FxItem {
   readonly axisBillboard?: THREE.Vector3;
   /** k = age / life in [0, 1]. */
   update(k: number, dt: number, item: LiveFxItem): void;
+  /**
+   * Owner, 2026-10-05 (Bey size × effects size): the item applies `item.fxScale` itself (e.g. a decal draped on the
+   * floor, whose vertices are placed in world space). Otherwise the layer scales its object around its own origin.
+   */
+  readonly selfScaled?: boolean;
+  /** Never scaled (a ghost copy of the Bey model is already at the Bey's size). */
+  readonly unscaled?: boolean;
 }
 
 export interface LiveFxItem extends FxItem {
   age: number;
+  /** The effect scale this item was emitted at (1 = the approved size). */
+  fxScale: number;
+  /** The layer has applied fxScale to the object at least once. */
+  fxScaleApplied: boolean;
 }
 
 export class FxLayer {
   private readonly items: LiveFxItem[] = [];
 
+  /**
+   * Owner, 2026-10-05: × the size of every effect emitted from now on (the Bey size × the effects size slider; 1 = the
+   * approved sizes). Presentation only.
+   */
+  scale = 1;
+
   constructor(private readonly scene: THREE.Object3D, private readonly camera: THREE.Camera) {}
 
   add(item: FxItem): void {
-    const live = Object.assign(item, { age: 0 }) as LiveFxItem;
+    const live = Object.assign(item, { age: 0, fxScale: item.unscaled ? 1 : this.scale, fxScaleApplied: false }) as LiveFxItem;
     this.scene.add(item.object);
     this.items.push(live);
-    live.update(0, 0, live);
+    this.step(live, 0, 0);
+  }
+
+  /** One update, with the item's scale applied on top of whatever scale its own update sets (or keeps). */
+  private step(it: LiveFxItem, k: number, dt: number): void {
+    const f = it.selfScaled ? 1 : it.fxScale;
+    if (f === 1) {
+      it.update(k, dt, it);
+      return;
+    }
+    if (it.fxScaleApplied) it.object.scale.divideScalar(f);
+    it.update(k, dt, it);
+    it.object.scale.multiplyScalar(f);
+    it.fxScaleApplied = true;
   }
 
   tick(dt: number): void {
@@ -43,7 +73,7 @@ export class FxLayer {
       const k = Math.min(1, it.age / it.life);
       if (it.billboard) it.object.quaternion.copy(this.camera.quaternion);
       if (it.axisBillboard) axisFaceCamera(it.object, it.axisBillboard, this.camera);
-      it.update(k, dt, it);
+      this.step(it, k, dt);
       if (it.age >= it.life) {
         this.scene.remove(it.object);
         disposeObject(it.object);
@@ -114,6 +144,9 @@ export class StreakSparks {
   private readonly pos: THREE.BufferAttribute;
   private readonly col: THREE.BufferAttribute;
 
+  /** Owner, 2026-10-05: × how far (and how long-tailed) the sparks emitted from now on fly — the effects' scale. */
+  scale = 1;
+
   constructor(private readonly max: number, private readonly floorHeightAt: (r: number) => number, private readonly gravity = 9.8, private readonly bounce = 0.35) {
     const g = new THREE.BufferGeometry();
     this.pos = new THREE.BufferAttribute(new Float32Array(max * 6), 3);
@@ -132,7 +165,7 @@ export class StreakSparks {
       const v = o.dir.clone()
         .add(new THREE.Vector3(Math.random() - 0.5, (Math.random() - 0.5) + (o.upBias ?? 0.4), Math.random() - 0.5).multiplyScalar(o.spread))
         .normalize()
-        .multiplyScalar(o.speed * (0.35 + Math.random() * 0.9));
+        .multiplyScalar(o.speed * this.scale * (0.35 + Math.random() * 0.9));
       const life = o.life[0] + Math.random() * (o.life[1] - o.life[0]);
       this.sparks.push({ p: at.clone(), v, life, max: life, hot, cool, stretch: o.stretch ?? 0.035 });
     }

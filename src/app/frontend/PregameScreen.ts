@@ -35,7 +35,7 @@ import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
 import { CLASH_IMPACT_RANGE, changedRuleLines, deleteRuleConfig, loadRuleConfigs, saveRuleConfig, withRuleConfig, defaultMatchRules, matchupLines, normalizeSeedText, RING_OUT_OFF_TIME_LIMIT_S, sanitizeMatchRules, withArenaFloor, withArenaPreset, type MatchRules, type MatchSetup } from './matchSetup';
 import { ACCELERATION_SCALE_RANGE, AIR_CONTROL_RANGE, ARENA_BOWL_DEPTH_RANGE, JUMP_COOLDOWN_RANGE, JUMP_STAMINA_COST_RANGE, ROUND_TIME_LIMIT_RANGE, TOP_SPEED_SCALE_RANGE, GRAVITY_SCALE_RANGE, IMPACT_PUSH_RANGE, ARENA_SIZE_SCALE_RANGE, GAME_SPEED_RANGE, CLASH_LAUNCH_RANGE, DODGE_DISTANCE_SCALE_RANGE, DODGE_STAMINA_COST_RANGE, CONTACT_LIFT_RANGE, KNOCKBACK_SCALE_RANGE, SPIN_STAMINA_DRAIN_RANGE, CIRCULAR_LOCK_RANGE, BODY_CONTACT_CONTROL_LOSS_RANGE, TURN_RATE_SCALE_RANGE, TURN_SPEED_RETENTION_RANGE, BEY_SIZE_SCALE_RANGE, AIR_RECOVERY_MIN_DELAY_RANGE } from '../../config/match/MatchConfig';
-import { DEFAULT_VFX_OPTIONS, VFX_DUST_RANGE, VFX_GROUND_WAVES_RANGE, VFX_INTENSITY_RANGE, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
+import { DEFAULT_VFX_OPTIONS, VFX_DUST_RANGE, VFX_EFFECT_SIZE_RANGE, VFX_GROUND_WAVES_RANGE, VFX_INTENSITY_RANGE, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { DEFAULT_MOTION_DIRECTION, MOTION_DIRECTIONS, MOTION_DIRECTION_IDS, type MotionDirectionId } from '../../bey/motion/MotionPresets';
@@ -242,9 +242,9 @@ export class PregameScreen {
       defaultValue: defaultMatchRules()[key] as unknown as number,
     });
     const visual = (key: keyof VfxOptions) => ({
-      read: (s: MatchSetup) => s.visual[key],
+      read: (s: MatchSetup) => s.visual[key] ?? DEFAULT_VFX_OPTIONS[key] ?? 1,
       write: (s: MatchSetup, v: number) => ({ ...s, visual: { ...s.visual, [key]: v } }),
-      defaultValue: DEFAULT_VFX_OPTIONS[key],
+      defaultValue: DEFAULT_VFX_OPTIONS[key] ?? 1,
     });
     const pct = (v: number): string => `${Math.round(v * 100)}%`;
     const times = (v: number): string => `×${v.toFixed(2)}`;
@@ -312,7 +312,7 @@ export class PregameScreen {
         id: 'arena',
         items: [
           this.slider({ id: 'game-speed', label: 'Game speed', range: GAME_SPEED_RANGE, ...rule('gameSpeed'), format: (v) => `×${v.toFixed(2)}`, note: 'The whole match runs this much faster than real time: movement, attacks, gravity, effects. ×1.2 = 20% faster (owner). Provisional.' }),
-          this.slider({ id: 'bey-size', label: 'Bey size', range: BEY_SIZE_SCALE_RANGE, ...rule('beySizeScale'), format: (v) => `×${v.toFixed(2)}`, note: 'Both Beys\' size in the match: body, model and attack reach (same weight). ×1 = as designed. The stage size is its own slider. Provisional.' }),
+          this.slider({ id: 'bey-size', label: 'Bey size', range: BEY_SIZE_SCALE_RANGE, ...rule('beySizeScale'), format: (v) => `×${v.toFixed(2)}`, note: 'Both Beys\' size in the match: body, model, attack reach and every effect (same weight). ×1 = as designed. The stage size and the effects size (Visual) are their own sliders. Provisional.' }),
           this.slider({ id: 'stage-size', label: 'Stage size', range: ARENA_SIZE_SCALE_RANGE, ...rule('arenaSizeScale'), format: (v) => `×${v.toFixed(2)} (${Math.round(36 * v)} m radius)`, note: 'How big the stage is. ×1 = 36 m radius. The floor, walls, ring-out line, art and camera all follow it. Provisional.' }),
           this.slider({ id: 'bowl-depth', label: 'Bowl depth (funnel)', range: ARENA_BOWL_DEPTH_RANGE, ...rule('arenaBowlDepthM'), format: meters, note: 'How deep the bowl is (rim above the centre): the floor\'s collider, art, spawns and effects all follow it. 0 = flat. Default 8.5 m on the Funnel (owner base rules, 2026-10-04).' }),
           this.slider({ id: 'wall-height', label: 'Wall height', range: ARENA_WALL_HEIGHT_RANGE, read: (s) => s.arena.geometry.wallHeightM, write: (s, v) => ({ ...s, arena: { ...s.arena, geometry: { ...s.arena.geometry, wallHeightM: v } } }), defaultValue: arenaPreset(this.setup.arena.presetId).geometry.wallHeightM, format: (v) => `${v.toFixed(1)} m`, note: 'A low wall lets a launched Bey fly out of the arena; a tall one keeps it in. Default: the arena\'s.' }),
@@ -335,6 +335,7 @@ export class PregameScreen {
         id: 'visual',
         items: [
           this.slider({ id: 'vfx-intensity', label: 'Effects intensity', range: VFX_INTENSITY_RANGE, ...visual('intensity'), format: pct, note: 'Size and amount of every hit, landing and movement effect. Visual only: changes no outcome and is not in the replay.' }),
+          this.slider({ id: 'vfx-effect-size', label: 'Effects size', range: VFX_EFFECT_SIZE_RANGE, ...visual('effectSize'), format: times, note: 'How big every effect is drawn — hits, Dash, Circular, dodge, drift, landing, Clash, recovery, condition. Effects already follow the Bey size; this multiplies on top. Visual only: changes no outcome and is not in the replay.' }),
           this.slider({ id: 'vfx-ground-waves', label: 'Ground waves', range: VFX_GROUND_WAVES_RANGE, ...visual('groundWaves'), format: pct, note: 'Size of the shockwave rings on the floor. 0 = none.' }),
           this.slider({ id: 'vfx-dust', label: 'Dust', range: VFX_DUST_RANGE, ...visual('dust'), format: pct, note: 'How much dust Dashes, dodges and landings raise. 0 = none. Camera options stay out of this screen (camera frozen).' }),
         ],
