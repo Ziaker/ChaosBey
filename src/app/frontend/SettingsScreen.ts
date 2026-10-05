@@ -7,7 +7,7 @@
 // Keyboard: ↑/↓ row, ←/→ change, Esc back.
 // ============================================================
 
-import { CAMERA_PRESET_SETTINGS, QUALITY_PROFILES, DEFAULT_PLAYER_SETTINGS, toggleConditionLayer, type CameraPresetSetting, type ConditionLayerSetting, type ControlScheme, type PlayerSettings } from '../../config/settings/PlayerSettings';
+import { CAMERA_PRESET_SETTINGS, QUALITY_PROFILES, DEFAULT_PLAYER_SETTINGS, toggleConditionLayer, type CameraPresetSetting, type ConditionLayerSetting, type ControlScheme, type GameFeelSettingKey, type PlayerSettings } from '../../config/settings/PlayerSettings';
 import { presentationFeaturesFromLocation } from '../../presentation/features';
 import { CAMERA_PRESET_NAMES, CAMERA_PRESET_NOTES } from '../../camera/director/CameraRig';
 import { QualityPreset } from '../../config/runtime/QualityPreset';
@@ -30,7 +30,7 @@ const CONDITION_LAYER_LABELS: readonly (readonly [ConditionLayerSetting, string]
   ['C', 'C · Floor instrument'],
 ];
 
-type BooleanKey = 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart';
+type BooleanKey = 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart' | GameFeelSettingKey;
 
 interface Row {
   readonly buttons: HTMLButtonElement[];
@@ -160,6 +160,16 @@ export class SettingsScreen {
       condition.append(note);
     }
 
+    // Owner, 2026-10-05: impact and readability feedback, each with its own switch (presentation only).
+    const feel = this.section('Game feel');
+    feel.append(
+      this.toggleRow('counter-feedback', 'Counter hit burst ("COUNTER!")', 'counterFeedback'),
+      this.toggleRow('hit-flash', 'Hit flash on the Bey that is hit', 'hitFlash'),
+      this.toggleRow('hit-shake', 'Hit shake during the impact freeze', 'hitShake'),
+      this.toggleRow('ring-out-warning', 'Ring-out warning (red screen edges)', 'ringOutWarning'),
+      this.toggleRow('refused-input', 'Refused press feedback on the HUD', 'refusedInputFeedback'),
+    );
+
     const controls = this.section('Controls');
     const table = el('table', 'cb-settings__controls', 'settings-controls');
     const head = el('tr');
@@ -195,7 +205,7 @@ export class SettingsScreen {
 
     const body = el('div', 'cb-settings__body');
     // The condition section sits between Play and Controls, in the same order as its rows in the keyboard navigation.
-    body.append(...(condition ? [graphics, play, condition, controls] : [graphics, play, controls]));
+    body.append(...(condition ? [graphics, play, condition, feel, controls] : [graphics, play, feel, controls]));
     panel.append(eyebrow, title, body, footer);
     this.root.append(panel);
     mount.append(this.root);

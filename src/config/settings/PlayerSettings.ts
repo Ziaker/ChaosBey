@@ -74,7 +74,22 @@ export interface PlayerSettings {
   readonly debugOverlayOnStart: boolean;
   /** Which condition languages show (at least one). Presentation only; needs the `conditionVisuals` flag. */
   readonly conditionLayers: readonly ConditionLayerSetting[];
+  // Owner, 2026-10-05 (game feel, "implemente tudo exceto som e vibração"). Presentation only: none changes the match.
+  /** A Circular that catches a Dash shows its own burst and "COUNTER!" instead of a plain hit. */
+  readonly counterFeedback: boolean;
+  /** The Bey that takes a hit flashes for a moment. */
+  readonly hitFlash: boolean;
+  /** The Bey that takes a hit shakes in place while the hit freezes the match. */
+  readonly hitShake: boolean;
+  /** The screen edges glow red while the player's Bey is near the ring-out line or flying out. */
+  readonly ringOutWarning: boolean;
+  /** A Dodge or Attack press the game refuses (not ready) makes its HUD line flash and shake. */
+  readonly refusedInputFeedback: boolean;
 }
+
+/** The game-feel toggles (all on by default). */
+export const GAME_FEEL_SETTING_KEYS = ['counterFeedback', 'hitFlash', 'hitShake', 'ringOutWarning', 'refusedInputFeedback'] as const;
+export type GameFeelSettingKey = (typeof GAME_FEEL_SETTING_KEYS)[number];
 
 export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   quality: DEFAULT_QUALITY_PRESET,
@@ -89,6 +104,11 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   controlHints: true,
   debugOverlayOnStart: false,
   conditionLayers: DEFAULT_CONDITION_LAYERS,
+  counterFeedback: true,
+  hitFlash: true,
+  hitShake: true,
+  ringOutWarning: true,
+  refusedInputFeedback: true,
 };
 
 /** What each quality preset changes. Render cost only. */
@@ -108,7 +128,7 @@ export const QUALITY_PROFILES: Readonly<Record<QualityPreset, QualityProfile>> =
 /** Field-by-field validation: anything unusable becomes the default. */
 export function sanitizePlayerSettings(value: unknown): PlayerSettings {
   const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
-  const bool = (key: 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart'): boolean => (typeof input[key] === 'boolean' ? (input[key] as boolean) : (DEFAULT_PLAYER_SETTINGS[key] as boolean));
+  const bool = (key: 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart' | GameFeelSettingKey): boolean => (typeof input[key] === 'boolean' ? (input[key] as boolean) : (DEFAULT_PLAYER_SETTINGS[key] as boolean));
   const quality = Object.values(QualityPreset).find((q) => q === input.quality) ?? DEFAULT_PLAYER_SETTINGS.quality;
   // Before the four-scheme model, `directional` meant the screen-relative,
   // once-per-gesture camera reference. Preserve that saved behaviour by
@@ -128,6 +148,11 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
     controlHints: bool('controlHints'),
     debugOverlayOnStart: bool('debugOverlayOnStart'),
     conditionLayers,
+    counterFeedback: bool('counterFeedback'),
+    hitFlash: bool('hitFlash'),
+    hitShake: bool('hitShake'),
+    ringOutWarning: bool('ringOutWarning'),
+    refusedInputFeedback: bool('refusedInputFeedback'),
   };
 }
 

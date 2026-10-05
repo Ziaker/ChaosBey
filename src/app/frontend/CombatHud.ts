@@ -25,6 +25,8 @@ import { computeClashPower } from '../../combat/clash/ClashFormula';
 import { currentGamepads, readFirstGamepad } from '../../input/devices/gamepadMapping';
 import { el, ensureFrontendStyle } from './frontendStyle';
 import { clashBarShare, followClashBar, hudSide, type HudSide } from './hudModel';
+import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
+import { isOutOfArena } from '../../arena/ringout/RingOut';
 
 export interface CombatHudOptions {
   readonly player: { readonly label: string; readonly accentCss: string };
@@ -33,7 +35,22 @@ export interface CombatHudOptions {
   readonly score: { readonly player: number; readonly opponent: number };
   readonly roundsToWin: number;
   readonly controlHints: boolean;
+  /** Owner, 2026-10-05 (game feel): the HUD's own switches. Absent = all on. */
+  readonly feel?: HudFeelOptions;
 }
+
+export interface HudFeelOptions {
+  /** "COUNTER!" over a Circular that catches a Dash. */
+  readonly counterFeedback: boolean;
+  /** Red screen edges while the player's Bey is near the ring-out line or flying out. */
+  readonly ringOutWarning: boolean;
+  /** A refused Dodge / Attack press flashes and shakes its HUD line. */
+  readonly refusedInputFeedback: boolean;
+}
+
+const ALL_FEEL_ON: HudFeelOptions = { counterFeedback: true, ringOutWarning: true, refusedInputFeedback: true };
+/** Seconds the "COUNTER!" word floats. */
+const COUNTER_WORD_S = 0.9;
 
 /** How long the round-start banner stays up. */
 const START_BANNER_MS = 1300;
@@ -66,6 +83,12 @@ export class CombatHud {
   /** Owner, 2026-10-04: thrown into the air with Air Recovery open — just the button to press, over the player's Bey. */
   private readonly recoverAlert = el('div', 'cb-hud__recover', 'hud-recover');
   private readonly breakFlash = el('div', 'cb-hud__break', 'hud-break');
+  /** Owner, 2026-10-05: red screen edges, opacity = ring-out danger (0..1). */
+  private readonly ringOutVignette = el('div', 'cb-hud__ringout', 'hud-ringout');
+  private readonly counterWord = el('div', 'cb-hud__counter', 'hud-counter');
+  private counterAt: { x: number; y: number; z: number } | null = null;
+  private counterLeftS = 0;
+  private feel: HudFeelOptions;
   private readonly clashBar = el('div', 'cb-hud__clash', 'hud-clash-bar');
   private readonly clashFirst = el('div', 'cb-hud__clash-half cb-hud__clash-half--first');
   private readonly clashSecond = el('div', 'cb-hud__clash-half cb-hud__clash-half--second');
@@ -101,9 +124,11 @@ export class CombatHud {
     this.clashBar.append(this.clashFirst, this.clashSecond);
     this.clashBar.hidden = true;
 
+    this.feel = options.feel ?? ALL_FEEL_ON;
+    this.counterWord.textContent = 'COUNTER!';
     this.hintsOn = options.controlHints;
     this.hints.hidden = !options.controlHints;
-    this.root.append(this.cards.first.root, center, this.cards.second.root, this.clashBar, this.banner, this.hints, this.driftTag, this.recoverAlert, this.breakFlash);
+    this.root.append(this.cards.first.root, center, this.cards.second.root, this.clashBar, this.banner, this.hints, this.driftTag, this.recoverAlert, this.breakFlash, this.ringOutVignette, this.counterWord);
     mount.append(this.root);
     this.refreshHints();
     this.showBanner(`ROUND ${options.roundNumber}`, 'FIGHT!', START_BANNER_MS);
@@ -125,7 +150,62 @@ export class CombatHud {
     this.updateRecoverAlert(session, camera);
     this.fillDodge(this.cards.first, session.getBey('first').dodge.getReadiness());
     this.fillDodge(this.cards.second, session.getBey('second').dodge.getReadiness());
+    this.consumeFeedback(session);
+    this.updateCounterWord(camera, frameDeltaSeconds);
+    this.updateRingOutWarning(session);
     if (this.hintsOn) this.refreshHints();
+  }
+
+  /** Owner, 2026-10-05: the HUD's game-feel switches, live from Settings. */
+  setFeel(feel: HudFeelOptions): void {
+    this.feel = feel;
+    if (!feel.ringOutWarning) this.ringOutVignette.style.opacity = '0';
+    if (!feel.counterFeedback) {
+      this.counterLeftS = 0;
+      this.counterWord.classList.remove('is-on');
+    }
+  }
+
+  private consumeFeedback(session: MatchSession): void {
+    for (const event of session.drainHudFeedback()) {
+      if (event.kind === 'counter' && this.feel.counterFeedback) {
+        this.counterAt = event.position;
+        this.counterLeftS = COUNTER_WORD_S;
+        this.counterWord.classList.remove('is-on');
+        void this.counterWord.offsetWidth; // restart the animation
+        this.counterWord.classList.add('is-on');
+      } else if (event.kind === 'refused' && this.feel.refusedInputFeedback) {
+        const fill = event.action === 'dodge' ? this.cards.first.dodgeCooldown : this.cards.first.dashCooldown;
+        const row = fill.parentElement!.parentElement!;
+        row.classList.remove('is-refused');
+        void row.offsetWidth; // restart the animation
+        row.classList.add('is-refused');
+        row.addEventListener('animationend', () => row.classList.remove('is-refused'), { once: true });
+      }
+    }
+  }
+
+  private updateCounterWord(camera: THREE.PerspectiveCamera, dt: number): void {
+    this.counterLeftS = Math.max(0, this.counterLeftS - dt);
+    if (this.counterLeftS <= 0 || !this.counterAt) {
+      this.counterWord.classList.remove('is-on');
+      return;
+    }
+    const rise = (1 - this.counterLeftS / COUNTER_WORD_S) * 0.8;
+    const ndc = this.projected.set(this.counterAt.x, this.counterAt.y + 1.4 + rise, this.counterAt.z).project(camera);
+    this.counterWord.style.left = `${((ndc.x + 1) / 2) * 100}%`;
+    this.counterWord.style.top = `${((1 - ndc.y) / 2) * 100}%`;
+  }
+
+  /**
+   * Owner, 2026-10-05: red screen edges for the player's Bey (first). Full while it is outside the ring-out line
+   * (the ring-out clock is running); up to full while it flies outward in the outer part of the stage; a faint glow
+   * on the ground right at the wall. Presentation only.
+   */
+  private updateRingOutWarning(session: MatchSession): void {
+    if (!this.feel.ringOutWarning) return;
+    const bey = session.getBey('first');
+    this.ringOutVignette.style.opacity = ringOutDanger(bey.body.translation(), bey.body.linvel(), session.getLastResult()?.first.grounded ?? true, isOutOfArena(bey.body.translation(), bey.arenaFloor)).toFixed(3);
   }
 
   /** Owner, 2026-10-04: the defeat cutscene's break — a white flash and one big word. */
@@ -319,6 +399,26 @@ export class CombatHud {
   }
 }
 
+/**
+ * 0..1 ring-out danger for a Bey (owner, 2026-10-05): 1 outside the ring-out line; while airborne and flying outward,
+ * rising with how far out it already is and how fast it goes out; on the ground, a faint glow at the wall only.
+ */
+export function ringOutDanger(position: { x: number; z: number }, velocity: { x: number; z: number }, grounded: boolean, outside: boolean): number {
+  if (outside) return 1;
+  const r = Math.hypot(position.x, position.z);
+  const edge = r / arenaFloorRadius();
+  if (!grounded && r > 1e-6) {
+    const outward = (position.x * velocity.x + position.z * velocity.z) / r;
+    const flying = clamp01((edge - 0.55) / 0.4) * clamp01(outward / 10);
+    if (flying > 0) return Math.max(flying, 0.25 * clamp01((edge - 0.9) / 0.1));
+  }
+  return 0.25 * clamp01((edge - 0.9) / 0.1);
+}
+
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
 let hudStyleInjected = false;
 function injectHudStyle(): void {
   if (hudStyleInjected) return;
@@ -385,6 +485,13 @@ function injectHudStyle(): void {
     .cb-hud__clash[hidden] { display: none; }
     .cb-hud__clash.is-swapped { flex-direction: row-reverse; }
     .cb-hud__clash-half { flex: 1 1 0; background: var(--half); box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.45); transition: none; }
+    .cb-hud__ringout { position: absolute; inset: 0; opacity: 0; pointer-events: none; box-shadow: inset 0 0 90px 30px rgba(255, 40, 40, 0.85); transition: opacity 120ms linear; }
+    .cb-hud__counter { position: absolute; transform: translate(-50%, -100%); font: 900 34px/1 var(--cb-font); letter-spacing: 0.12em; color: #ffd24a; text-shadow: 0 0 16px rgba(255, 170, 40, 0.9), 0 3px 0 rgba(0, 0, 0, 0.7); opacity: 0; pointer-events: none; white-space: nowrap; }
+    .cb-hud__counter.is-on { animation: cb-hud-counter 0.9s ease-out forwards; }
+    @keyframes cb-hud-counter { 0% { opacity: 0; transform: translate(-50%, -100%) scale(1.6); } 12% { opacity: 1; transform: translate(-50%, -100%) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; } }
+    .cb-hud__meter.is-refused { animation: cb-hud-refused 0.32s ease-out; }
+    .cb-hud__meter.is-refused .cb-hud__bar { background: rgba(255, 70, 70, 0.55); }
+    @keyframes cb-hud-refused { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
     @media (max-width: 640px) {
       .cb-hud__card { top: 8px; width: 42vw; padding: 7px 8px; }
       .cb-hud__card--first { left: 8px; } .cb-hud__card--second { right: 8px; }

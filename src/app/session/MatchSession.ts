@@ -39,7 +39,9 @@ import { ARENA_PRESETS, FOUNDRY_PIT, type ArenaTheme } from '../../arena/presets
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { Bey } from '../../bey/core/Bey';
 import type { KnockbackComponents } from '../../combat/knockback/Knockback';
-import type { CombatController, ControllerActions } from '../../input/actions/Action';
+import { Action, type CombatController, type ControllerActions } from '../../input/actions/Action';
+import { AttackState } from '../../combat/attacks/AttackController';
+import { DodgeState } from '../../dodge/DodgeController';
 import { FIXED_DELTA_SECONDS } from '../../physics/fixed-step/FixedTimestepLoop';
 import { checkAngularVelocity, checkLinearVelocity } from '../../physics/diagnostics/physicsSafety';
 import { PhysicsWorld } from '../../physics/world/PhysicsWorld';
@@ -54,6 +56,7 @@ import type { PresentationSide } from '../../presentation/events';
 import { collectSceneStats, type SceneStats } from '../../presentation/sceneStats';
 import { ConditionVisualsSystem, normalizeConditionLayers } from '../../vfx/condition/ConditionVisualsSystem';
 import { RecoveryRingEffect } from '../../vfx/RecoveryRing';
+import { ImpactFeedback, type ImpactFeedbackOptions } from '../../vfx/ImpactFeedback';
 import { HybridVfxSystem } from '../../vfx/hybrid/HybridVfxSystem';
 import { ClashPresentationSystem, clashDustHexFor } from '../../vfx/clash/ClashPresentationSystem';
 import { ArenaVisualsSystem } from '../../arena/visual/ArenaVisualsSystem';
@@ -145,6 +148,13 @@ export interface SessionRenderView {
   readonly headingArrow?: boolean;
 }
 
+/** Owner, 2026-10-05 (game feel): beats the HUD shows. */
+export type HudFeedbackEvent =
+  | { readonly kind: 'counter'; readonly position: { readonly x: number; readonly y: number; readonly z: number }; readonly attackerSide: Side }
+  | { readonly kind: 'refused'; readonly action: 'dodge' | 'attack' };
+
+const HUD_FEEDBACK_MAX = 16;
+
 const DEFAULT_RENDER_VIEW: SessionRenderView = { cameraView: 'game', cameraEffects: true };
 /** Debug overview camera: high over the arena's near edge, whole bowl in frame. */
 const OVERVIEW_CAMERA_POSITION_M = { x: 0, y: 30, z: 20 } as const;
@@ -180,6 +190,10 @@ export class MatchSession {
   private hybridVfx: HybridVfxSystem | null = null;
   /** Owner, 2026-10-04: the expanding ring of an Air Recovery (render only). */
   private readonly recoveryRings: RecoveryRingEffect;
+  /** Owner, 2026-10-05 (game feel): hit flash, hit shake during the freeze, counter burst. Render only. */
+  private readonly impactFeedback: ImpactFeedback;
+  /** Player-facing feedback beats for the HUD (counter hits, refused presses), drained once per frame. */
+  private hudFeedback: HudFeedbackEvent[] = [];
   private cutsceneFocus: (() => { x: number; y: number; z: number }) | null = null;
   private cutsceneCamera: { eye: THREE.Vector3; focus: THREE.Vector3 } | null = null;
   /**
@@ -357,6 +371,7 @@ export class MatchSession {
 
     options.scene.add(this.root);
     this.recoveryRings = new RecoveryRingEffect(this.root);
+    this.impactFeedback = new ImpactFeedback(this.root, { hitFlash: true, hitShake: true, counterFeedback: true });
     this.matchGravityScale = resolveMatchConfig(options.matchConfig).gravityScale ?? 1;
     const presentationFeatures = options.presentationFeatures ?? presentationFeaturesFromLocation();
     this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys, {
@@ -620,6 +635,8 @@ export class MatchSession {
     // frozen, so a press made during the freeze is buffered (not lost) and
     // delivered once on the first unfrozen sample afterward — see
     // ActionSampleBuffer. Camera/VFX timers below still tick regardless.
+    const previousResult = this.lastMatchResult;
+    const clashActiveBefore = clash.controller.getState() === ClashState.Active;
     const stepStart = performance.now();
     const step = this.stepper.step(this.stepWorld(), this.drivers, fixedDeltaSeconds);
     const { firstActions, secondActions, result } = step;
@@ -632,6 +649,7 @@ export class MatchSession {
       this.lastPhysicsStepTimeMs = performance.now() - stepStart;
       this.lastMatchResult = result;
       this.recordTickDerivedState(tickIndex, result, fixedDeltaSeconds);
+      this.deriveFeedback(result, previousResult, step.firstActions, step.secondActions, clashActiveBefore);
       for (const hit of result.hitEvents) {
         telemetry.record({
           kind: TelemetryEventKind.Hit,
@@ -829,6 +847,60 @@ export class MatchSession {
   }
 
   /** Syncs visuals, camera and frame-rate VFX to the current state. Call once per rendered frame, before renderer.render(). */
+  /** Owner, 2026-10-05: the game-feel switches that live in the scene (Settings → Game feel). */
+  setGameFeel(options: ImpactFeedbackOptions): void {
+    this.impactFeedback.setOptions(options);
+  }
+
+  /** Counter hits and refused presses since the last call (the HUD reads them once per frame). */
+  drainHudFeedback(): HudFeedbackEvent[] {
+    const events = this.hudFeedback;
+    this.hudFeedback = [];
+    return events;
+  }
+
+  /** Kept short: with no HUD draining it (Debug Lab, headless), only the latest beats are kept. */
+  private pushHudFeedback(event: HudFeedbackEvent): void {
+    this.hudFeedback.push(event);
+    if (this.hudFeedback.length > HUD_FEEDBACK_MAX) this.hudFeedback.shift();
+  }
+
+  /** The side a person plays (keyboard / pad), if any. */
+  getPlayerSide(): Side | null {
+    return this.controllerSpecs.first.kind === 'keyboard' ? 'first' : this.controllerSpecs.second.kind === 'keyboard' ? 'second' : null;
+  }
+
+  /**
+   * Owner, 2026-10-05 (game feel), on a tick the match advanced: the hit flash / shake and the counter burst, and for
+   * the player's side the presses the game refused — Dodge that started neither a dodge nor an Air Recovery, Attack
+   * that started nothing from a neutral attack. A Clash tick is the mash, never a refusal.
+   */
+  private deriveFeedback(result: MatchTickResult, previous: MatchTickResult | null, firstActions: ControllerActions, secondActions: ControllerActions, clashActiveBefore: boolean): void {
+    const a = this.match.first.body.translation();
+    const b = this.match.second.body.translation();
+    for (const hit of result.hitEvents) {
+      this.impactFeedback.onHit(hit.attackerIsFirst ? 'second' : 'first');
+      if (hit.caughtOpponentDashing) {
+        const position = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+        this.impactFeedback.onCounter(position);
+        this.pushHudFeedback({ kind: 'counter', position, attackerSide: hit.attackerIsFirst ? 'first' : 'second' });
+      }
+    }
+    const side = this.getPlayerSide();
+    if (!side || !previous || clashActiveBefore || this.clash.controller.getState() === ClashState.Active || this.roundState.isOver) return;
+    const actions = side === 'first' ? firstActions : secondActions;
+    const now = result[side];
+    const before = previous[side];
+    if (actions.pressedThisFrame.has(Action.Dodge)) {
+      const dodged = now.dodgeState === DodgeState.Dodging && before.dodgeState !== DodgeState.Dodging;
+      const recovered = result.combatEvents.some((e) => e.kind === 'airRecovery' && e.targetIsFirst === (side === 'first'));
+      if (!dodged && !recovered) this.pushHudFeedback({ kind: 'refused', action: 'dodge' });
+    }
+    if (actions.pressedThisFrame.has(Action.Attack) && before.attackState === AttackState.Neutral && now.attackState === AttackState.Neutral) {
+      this.pushHudFeedback({ kind: 'refused', action: 'attack' });
+    }
+  }
+
   renderFrame(frameDeltaSeconds: number, camera: THREE.PerspectiveCamera, view: SessionRenderView = DEFAULT_RENDER_VIEW): void {
     const match = this.match;
     const winner = this.cutsceneWinner;
@@ -839,6 +911,10 @@ export class MatchSession {
     match.syncVisualsToPhysics(this.lastVisual.first, this.lastVisual.second);
     if (winner) this.settleWinner(winner, frameDeltaSeconds);
     this.recoveryRings.update(frameDeltaSeconds);
+    this.impactFeedback.update(frameDeltaSeconds, this.stepper.hitstop.isFreezing(), {
+      first: { group: match.visuals.first.visual.group, radiusM: match.first.definition.physical.colliderRadiusM },
+      second: { group: match.visuals.second.visual.group, radiusM: match.second.definition.physical.colliderRadiusM },
+    });
 
     // The player's Bey (the keyboard/pad side) gets the heading arrow.
     const playerSide: Side | null = this.controllerSpecs.first.kind === 'keyboard' ? 'first' : this.controllerSpecs.second.kind === 'keyboard' ? 'second' : null;
@@ -952,6 +1028,7 @@ export class MatchSession {
     this.presentation.dispose();
     this.vfxManager.dispose();
     this.recoveryRings.dispose();
+    this.impactFeedback.dispose();
     this.driftVfx.first.dispose();
     this.driftVfx.second.dispose();
     this.root.removeFromParent();

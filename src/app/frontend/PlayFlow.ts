@@ -29,7 +29,7 @@ import { EMPTY_SCORE, matchWinner, roundSeed, scoreRound, type MatchScore } from
 import { createDefaultMatchSetup, loadLastSetup, matchBeysFor, matchConfigFor, opponentControllerFor, saveLastSetup, withPlayerBey, type MatchSetup } from './matchSetup';
 import { PregameScreen } from './PregameScreen';
 import { SettingsScreen } from './SettingsScreen';
-import { CombatHud } from './CombatHud';
+import { CombatHud, type HudFeelOptions } from './CombatHud';
 import { roundEndBanner } from './hudModel';
 import { aiDifficultyTier } from '../../ai/difficulty/AiDifficultyTiers';
 import { AI_STYLE_LABELS } from './aiExplanation';
@@ -249,6 +249,7 @@ export class PlayFlow {
       score: { player: this.score.player, opponent: this.score.opponent },
       roundsToWin: this.setup.roundsToWin,
       controlHints: this.settings.controlHints,
+      feel: hudFeelOf(this.settings),
     });
   }
 
@@ -308,6 +309,7 @@ export class PlayFlow {
     this.runner?.setPresentation(presentationFor(settings));
     this.runner?.setControlScheme(settings.controlScheme);
     this.hud?.setControlHints(settings.controlHints);
+    this.hud?.setFeel(hudFeelOf(settings));
     this.runner?.redraw();
   }
 
@@ -410,4 +412,9 @@ export class PlayFlow {
     this.leaveCurrent();
     this.deps.navigate(appModeHref('menu', this.deps.location));
   }
+}
+
+/** Owner, 2026-10-05: the HUD's game-feel switches from the player's settings. */
+function hudFeelOf(settings: PlayerSettings): HudFeelOptions {
+  return { counterFeedback: settings.counterFeedback, ringOutWarning: settings.ringOutWarning, refusedInputFeedback: settings.refusedInputFeedback };
 }

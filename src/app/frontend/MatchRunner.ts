@@ -31,6 +31,7 @@ import type { DirectionalController, DirectionalDebug } from '../../input/direct
 import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ConditionLayerSetting, type ControlScheme } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
+import type { ImpactFeedbackOptions } from '../../vfx/ImpactFeedback';
 
 export interface MatchRunnerDeps {
   readonly appRenderer: AppRenderer;
@@ -67,6 +68,8 @@ export interface MatchPresentation {
   readonly conditionLayers?: readonly ConditionLayerSetting[];
   /** Lote 9: the Pregame's visual options. */
   readonly vfx?: VfxOptions;
+  /** Owner, 2026-10-05: the in-scene game-feel switches (hit flash, hit shake, counter burst). */
+  readonly feel?: ImpactFeedbackOptions;
 }
 
 export interface MatchRunnerEvents {
@@ -218,6 +221,7 @@ export class MatchRunner {
     this.session.getVfxManager().setLayerVisible('trails', presentation.trails);
     if (presentation.cameraPreset) this.session.setCameraPreset(presentation.cameraPreset);
     if (presentation.conditionLayers) this.session.setConditionLayers(presentation.conditionLayers);
+    if (presentation.feel) this.session.setGameFeel(presentation.feel);
   }
 
   /** Switches the control scheme live (from the Pause menu's settings). */
