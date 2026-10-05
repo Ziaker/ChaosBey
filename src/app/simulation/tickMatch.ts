@@ -48,7 +48,7 @@ import {
 } from '../../bey/momentum/MomentumTuning';
 import { isOutOfArena } from '../../arena/ringout/RingOut';
 import { RoundState } from '../../combat/round-rules/RoundState';
-import type { ControllerActions } from '../../input/actions/Action';
+import { Action, type ControllerActions } from '../../input/actions/Action';
 import { WALL_IMPACT_STABILITY_DAMAGE_PER_MPS } from '../../bey/stability/StabilityTuning';
 import type { MovementSnapshot } from '../../bey/movement/MovementController';
 import type { SpinSnapshot } from '../../bey/spin/SpinController';
@@ -160,6 +160,16 @@ function buildFrozenSnapshot(physics: PhysicsWorld, bey: Bey): BeySnapshot {
   };
 }
 
+/** The same actions with `removed` neither held nor pressed this tick (hold durations unchanged). */
+function withoutActions(actions: ControllerActions, removed: readonly Action[]): ControllerActions {
+  if (!removed.some((a) => actions.held.has(a) || actions.pressedThisFrame.has(a))) return actions;
+  return {
+    ...actions,
+    held: new Set([...actions.held].filter((a) => !removed.includes(a))),
+    pressedThisFrame: new Set([...actions.pressedThisFrame].filter((a) => !removed.includes(a))),
+  };
+}
+
 export function tickMatch(
   physics: PhysicsWorld,
   first: Bey,
@@ -257,6 +267,14 @@ export function tickMatch(
   if (firstDrift.hopBegan && (first.rules.jumpStaminaCost ?? 0) > 0) first.stamina.resource.subtract(first.rules.jumpStaminaCost);
   if (secondDrift.hopBegan && (second.rules.jumpStaminaCost ?? 0) > 0) second.stamina.resource.subtract(second.rules.jumpStaminaCost);
 
+  // Owner, 2026-10-05 ("perfect dodge ... ser cancelável em outros ataques"): a dodge and an attack never cut each
+  // other short. No ground dodge while the Bey's own attack is out or recovering; a dodge started while an attack was
+  // only being prepared (a buffered tap, a Dash charge) drops that attack; and while dodging, Attack does nothing.
+  // The air Dodge (the Air Recovery) is not an evasion and stays available.
+  const withoutDodgeIfCommitted = (bey: Bey, actions: ControllerActions, grounded: boolean): ControllerActions =>
+    grounded && bey.attack.isCommitted() && actions.pressedThisFrame.has(Action.Dodge) ? withoutActions(actions, [Action.Dodge]) : actions;
+  firstActions = withoutDodgeIfCommitted(first, firstActions, firstGrounded);
+  secondActions = withoutDodgeIfCommitted(second, secondActions, secondGrounded);
   const firstDodge = first.dodge.tick(
     first.body,
     firstActions,
@@ -288,11 +306,19 @@ export function tickMatch(
   if (firstDodge.triggeredAirRecovery) airRecover(first);
   if (secondDodge.triggeredAirRecovery) airRecover(second);
 
+  const attackActionsWhileDodging = (bey: Bey, dodge: { state: DodgeState }, actions: ControllerActions): ControllerActions => {
+    if (dodge.state !== DodgeState.Dodging) return actions;
+    if (!bey.attack.isCommitted() && bey.attack.getState() !== AttackState.Neutral) bey.attack.cancelForDodge();
+    return withoutActions(actions, [Action.Attack]);
+  };
+  const firstAttackActions = attackActionsWhileDodging(first, firstDodge, firstActions);
+  const secondAttackActions = attackActionsWhileDodging(second, secondDodge, secondActions);
+
   // Owner, 2026-10-04: no defensive Circular while being knocked around.
   if (first.movement.isKnockbackPlaying()) first.attack.blockCircularFor(fixedDeltaSeconds * 2);
   if (second.movement.isKnockbackPlaying()) second.attack.blockCircularFor(fixedDeltaSeconds * 2);
   const firstAttack = first.attack.tick(
-    firstActions,
+    firstAttackActions,
     first.movement.getHeadingRad(),
     positionXZ(first.body),
     positionXZ(second.body),
@@ -301,7 +327,7 @@ export function tickMatch(
     horizontalVelocity(second.body),
   );
   const secondAttack = second.attack.tick(
-    secondActions,
+    secondAttackActions,
     second.movement.getHeadingRad(),
     positionXZ(second.body),
     positionXZ(first.body),
@@ -430,7 +456,7 @@ export function tickMatch(
       const attacker = defenderIsFirst ? second : first;
       if (defender.dodge.firstEvasionOf(attacker.attack.getActivationId())) {
         combatEvents.push({ kind: 'dodged', targetIsFirst: defenderIsFirst });
-        if (defenderDodge.isPerfectWindow) combatEvents.push({ kind: 'perfectDodge', targetIsFirst: defenderIsFirst });
+        if (defenderDodge.isPerfectWindow && defender.dodge.claimPerfectDodge()) combatEvents.push({ kind: 'perfectDodge', targetIsFirst: defenderIsFirst });
       }
       continue;
     }

@@ -106,8 +106,11 @@ interface Recording {
 // new rule with a comfortable margin (seed scan replay-0..59: 2448 / 2406 ticks, 137 / 141 hitstop ticks). The checks themselves are unchanged.
 // Re-picked in the owner audit (2026-10-04, hitstop on hits only): replay-37 (2876 ticks, 28 frozen) and replay-3
 // (3118 ticks, 25 frozen, 1382 steering ticks after 900), from a scan of replay-0..79.
-const LONG_SEED = 'replay-37';
-const MUTATION_SEED = 'replay-3';
+// Re-picked again for 0.39.0 (owner, 2026-10-05: one Perfect Dodge per dodge, no dodge/attack cancels, dodge cooldown
+// 1.25 s changed every fight): replay-40 (2063 ticks, 22 frozen) and replay-11 (2001 ticks, 21 frozen, 538 steering
+// ticks after 900), from a scan of replay-0..119.
+const LONG_SEED = 'replay-40';
+const MUTATION_SEED = 'replay-11';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {

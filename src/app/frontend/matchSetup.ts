@@ -218,11 +218,18 @@ export function matchupLines(setup: MatchSetup): readonly MatchupLine[] {
 
 // v2 (owner, 2026-10-04): new defaults (speed ×1.45, funnel 7 m, jump rule) must not be hidden by a remembered v1 setup.
 const SETUP_STORAGE_KEY = 'chaosbey.pregame.last.v2';
+/**
+ * Bumped when an owner decision changes a rule's default. A setup saved before it that still holds the OLD default
+ * takes the new one (the player never chose that value); a value the player changed is kept.
+ * 1 (owner, 2026-10-05): dodge cooldown 2.5 s -> 1.25 s.
+ */
+const RULES_DEFAULTS_REVISION = 1;
+const SUPERSEDED_DEFAULTS: readonly { readonly revision: number; readonly key: string; readonly oldDefault: number }[] = [{ revision: 1, key: 'dodgeCooldownS', oldDefault: 2.5 }];
 
 /** The parts of a setup the Pregame remembers between matches (and reloads): everything but the seed. */
 export function saveLastSetup(setup: MatchSetup, storage: Pick<Storage, 'setItem'> | null = safeStorage()): void {
   try {
-    storage?.setItem(SETUP_STORAGE_KEY, JSON.stringify({ ...setup, seedText: null }));
+    storage?.setItem(SETUP_STORAGE_KEY, JSON.stringify({ ...setup, seedText: null, rulesDefaultsRevision: RULES_DEFAULTS_REVISION }));
   } catch {
     // Private mode / blocked storage: the setup is simply not remembered.
   }
@@ -245,9 +252,11 @@ export function loadLastSetup(storage: Pick<Storage, 'getItem'> | null = safeSto
   const saved = raw as Partial<MatchSetup>;
   const base = createDefaultMatchSetup(typeof saved.playerBeyId === 'string' && rosterEntryExists(saved.playerBeyId) ? saved.playerBeyId : undefined);
   const rules: Record<string, unknown> = { ...base.rules };
+  const savedRevision = typeof (raw as { rulesDefaultsRevision?: unknown }).rulesDefaultsRevision === 'number' ? (raw as { rulesDefaultsRevision: number }).rulesDefaultsRevision : 0;
   for (const key of MATCH_RULE_KEYS) {
     const value = (saved.rules as Record<string, unknown> | undefined)?.[key];
-    if (typeof value === typeof rules[key] && (typeof value !== 'number' || Number.isFinite(value))) rules[key] = value;
+    const superseded = SUPERSEDED_DEFAULTS.some((d) => d.key === key && savedRevision < d.revision && value === d.oldDefault);
+    if (!superseded && typeof value === typeof rules[key] && (typeof value !== 'number' || Number.isFinite(value))) rules[key] = value;
   }
   const visual: Record<string, unknown> = { ...base.visual };
   for (const key of Object.keys(DEFAULT_VFX_OPTIONS)) {

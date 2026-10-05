@@ -97,6 +97,8 @@ export class DodgeController {
   private latchedDirection: Vec2 | null = null;
   /** Opponent attacks (by activation id) this dodge has already reported as evaded: the hit is nullified every tick, the event is told once. */
   private readonly evadedThisDodge = new Set<number>();
+  /** Owner, 2026-10-05 ("perfect dodge ser ativado múltiplas vezes"): one Perfect Dodge per dodge, whatever it evades. */
+  private perfectDodgeThisDodge = false;
 
   getState(): DodgeState {
     return this.state;
@@ -223,6 +225,7 @@ export class DodgeController {
           this.state = DodgeState.Dodging;
           this.activeTimerS = 0;
           this.evadedThisDodge.clear();
+          this.perfectDodgeThisDodge = false;
           staminaCostThisTick = this.staminaCost;
           this.latchedDirection = this.computeDodgeDirection(actions, headingRad);
         }
@@ -278,6 +281,17 @@ export class DodgeController {
     return true;
   }
 
+  /**
+   * True once per dodge: the first evasion inside the perfect window (owner, 2026-10-05: "perfect dodge ser ativado
+   * múltiplas vezes"). A second attack evaded by the same dodge is still a plain dodged event, never a second Perfect
+   * Dodge — and so never a second Perfect Dodge freeze.
+   */
+  claimPerfectDodge(): boolean {
+    if (this.perfectDodgeThisDodge) return false;
+    this.perfectDodgeThisDodge = true;
+    return true;
+  }
+
   /** GDD section 22: dodges in the direction currently pressed/selected, relative to the Bey (forward/back/lateral, diagonals normalized) — defaults to forward when no direction is held. Only computes the direction; Fix 1 latches it once and the dodge's own flat speed replaces velocity for the whole Dodging state instead of adding a burst on top of whatever momentum existed at press time (GDD section 15/88 "momentum stays relevant" is now scoped to normal movement only — see DodgeTickResult.dodgeOverride). */
   private computeDodgeDirection(actions: ControllerActions, headingRad: number): Vec2 {
     const forward = fromYaw(headingRad);
@@ -305,6 +319,7 @@ export class DodgeController {
       launchPendingRemainingS: this.launchPendingRemainingS,
       latchedDirection: vec2(this.latchedDirection),
       evadedThisDodge: [...this.evadedThisDodge].sort((a, b) => a - b),
+      perfectDodgeThisDodge: this.perfectDodgeThisDodge,
     };
   }
 }

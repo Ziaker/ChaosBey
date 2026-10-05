@@ -30,6 +30,9 @@ import { AI_CIRCULAR_ATTACK_RANGE_M, AI_COUNTER_MAX_LEAD_S, AI_COUNTER_MIN_CLOSI
 import { AiIntent } from './Intent';
 import type { WorldState } from './WorldState';
 
+/** Attack states a ground dodge cannot cut short (AttackController.isCommitted). */
+const COMMITTED_ATTACK_STATES: ReadonlySet<AttackState> = new Set([AttackState.CircularActive, AttackState.CircularRecovery, AttackState.DashActive, AttackState.DashRecovery]);
+
 // ============================================================
 // ACTION SELECTION — EXECUTION TUNING
 // Engineering placeholders (GDD section 167). These shape HOW an intent is
@@ -407,6 +410,8 @@ export class ActionSelector {
       world.own.dodgeState === DodgeState.Idle &&
       world.own.grounded &&
       world.own.canAffordDodge &&
+      // Owner, 2026-10-05: no dodge out of the AI's own attack while it is out or recovering (the game refuses it).
+      !COMMITTED_ATTACK_STATES.has(world.own.attackState) &&
       !this.previousHeld.has(Action.Dodge)
     ) {
       for (const key of [Action.MoveForward, Action.MoveBackward, Action.SteerLeft, Action.SteerRight]) desiredHeld.delete(key);
@@ -440,7 +445,9 @@ export class ActionSelector {
     // (release = a normal grounded Dash).
     const charging = world.own.attackState === AttackState.ChargingDash;
     const airRecoverOwnsCharge = intent === AiIntent.AirRecover && charging;
-    const launchedAirborne = !world.own.grounded && world.own.airRecoveryAvailable;
+    // The launch itself, not whether the recovery can be pressed now (owner, 2026-10-04: the recovery spends the dodge;
+    // launched with the dodge recharging, the AI used to let go of the charge mid-flight — airdash-33).
+    const launchedAirborne = !world.own.grounded && (world.own.launchedFlight ?? world.own.airRecoveryAvailable);
     if (charging && (launchedAirborne || airRecoverOwnsCharge)) this.holdingChargeThroughLaunch = true;
     if (!charging || world.own.grounded) this.holdingChargeThroughLaunch = false;
     if (airRecoverOwnsCharge || this.holdingChargeThroughLaunch) desiredHeld.add(Action.Attack);

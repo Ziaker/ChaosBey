@@ -268,7 +268,7 @@ export const OWNER_BASE_RULES_2026_10_04 = {
   jumpFullHeightM: 3.25,
   jumpShortHopHeightM: 0.5,
   movementStaminaDrain: 0.2,
-  dodgeCooldownS: 2.5,
+  dodgeCooldownS: 1.25, // owner, 2026-10-05: "reduza o cooldown base pela metade" (was 2.5)
   accelerationScale: 1.9,
   topSpeedScale: 2.8,
   airControl: 1.5,

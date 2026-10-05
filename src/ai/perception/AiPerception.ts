@@ -53,6 +53,12 @@ export interface CombatantRawState {
    */
   circularLocked?: boolean;
   actionsLocked?: boolean;
+  /**
+   * DodgeController.isAirRecoveryAvailable(): this flight is a launch (a knockback put the Bey in the air), whether or
+   * not the recovery can be pressed right now — since it spends the dodge, a launch with the dodge recharging is still a
+   * launch (a player sees being thrown). Optional: absent = read airRecoveryAvailable.
+   */
+  launchedFlight?: boolean;
 }
 
 export interface PerceivedCombatant extends CombatantRawState {

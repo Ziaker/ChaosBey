@@ -131,7 +131,7 @@ describe('match setup rules', () => {
   });
 
   it('feeds the combat rules (owner, 2026-10-02) through MatchConfig', () => {
-    expect(createDefaultMatchSetup().rules).toMatchObject({ movementStaminaDrain: 0.2, dodgeCooldownS: 2.5, circularLaunchForce: 1 }); // owner base rules
+    expect(createDefaultMatchSetup().rules).toMatchObject({ movementStaminaDrain: 0.2, dodgeCooldownS: 1.25, circularLaunchForce: 1 }); // owner base rules
     const rules = { ...createDefaultMatchSetup().rules, movementStaminaDrain: 0.5, dodgeCooldownS: 1.5, circularLaunchForce: 2 };
     expect(matchConfigFor({ ...createDefaultMatchSetup(), rules })).toEqual({ ...createDefaultMatchConfig(), ...rules });
   });

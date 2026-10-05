@@ -130,6 +130,28 @@ export class AttackController {
 
   /** A Clash ended the attack (owner, 2026-10-04): back to Neutral, nothing buffered, held or charging carries on. */
   interruptByClash(): void {
+    this.resetToNeutral();
+  }
+
+  /**
+   * A dodge started while this attack was only being prepared (buffered tap or Dash charge): the dodge wins and the
+   * attack is dropped — it never fires out of, or during, the dodge (owner, 2026-10-05: no cancelling between them).
+   */
+  cancelForDodge(): void {
+    this.resetToNeutral();
+  }
+
+  /** True while an attack is out or recovering (Circular/Dash active or recovery): no dodge can cut it short. */
+  isCommitted(): boolean {
+    return (
+      this.state === AttackState.CircularActive ||
+      this.state === AttackState.CircularRecovery ||
+      this.state === AttackState.DashActive ||
+      this.state === AttackState.DashRecovery
+    );
+  }
+
+  private resetToNeutral(): void {
     this.state = AttackState.Neutral;
     this.bufferTimerS = 0;
     this.chargeTimerS = 0;
