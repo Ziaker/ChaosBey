@@ -109,7 +109,7 @@ describe('every effect system takes the Bey size × the effects size (real Match
       return out;
     };
     expect(await hashes(0.5)).toEqual(await hashes(2));
-  });
+  }, 60_000); // two full sessions with every presentation system on: ~4 s here, over the 5 s default on the CI runner
 });
 
 describe('the effect layer scales what it emits', () => {
