@@ -97,8 +97,8 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     isBroken: bey.stability.isBroken,
     dashReadiness: bey.attack.getDashReadiness(),
     momentum: bey.momentum.value,
-    // The post-Clash recovery lock (winner/tie, 0.4 s) refuses the Dodge, Air Recovery included; a stunned loser's one way out is that press.
-    airRecoveryAvailable: bey.dodge.canAirRecoverNow() && (bey.movement.isClashStunned() || !bey.movement.areActionsLocked()),
+    // The post-Clash locks refuse the Dodge, Air Recovery included (the winner's 0.4 s; the loser's stun until it lands).
+    airRecoveryAvailable: bey.dodge.canAirRecoverNow() && !bey.movement.areActionsLocked(),
     circularLocked: bey.attack.getCircularLockS() > 0,
     actionsLocked: bey.movement.areActionsLocked(),
     launchedFlight: bey.dodge.isAirRecoveryAvailable(),

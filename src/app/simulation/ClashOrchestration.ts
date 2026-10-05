@@ -288,7 +288,7 @@ export class ClashOrchestration {
     });
     applyKnockback(loser.body, winningHit.attackerPositionXZ, winningHit.defenderPositionXZ, knockback, loser.motion);
     // Owner, 2026-10-04 ("a força do knockback aplicado ao inimigo ao ganhar um clash devia ser MUITO maior"): the loser
-    // is launched — at least clashLaunchMps away from the winner and up into the air, where only the Air Recovery helps.
+    // is launched — at least clashLaunchMps away from the winner and up into the air (no Air Recovery: owner, 2026-10-05).
     const launch = (this.matchConfig.clashLaunchMps ?? 0) * (this.matchConfig.knockbackScale ?? 1);
     if (launch > 0) {
       const away = normalize(subtract(winningHit.defenderPositionXZ, winningHit.attackerPositionXZ));
@@ -299,7 +299,9 @@ export class ClashOrchestration {
       loser.body.setLinvel({ x: v.x + dir.x * add, y: Math.max(v.y, launch * CLASH_LAUNCH_UP_FRACTION), z: v.z + dir.z * add }, true);
     }
     loser.movement.registerKnockback();
-    loser.dodge.registerLaunch(!isGrounded(physics, loser.collider));
+    // Owner, 2026-10-05: "Remova a capacidade de dar recovery ao perder um clash" — the loser's flight is never an Air
+    // Recovery window (any window still open from an earlier launch is closed too); it lands stunned.
+    loser.dodge.cancelAirRecovery();
 
     const stabilityDamageAmount =
       computeStabilityDamage(winningHit.hit.hitbox.stabilityDamage, winner.stats.attack, loser.stats.defense) * this.matchConfig.clashImpactMultiplier;

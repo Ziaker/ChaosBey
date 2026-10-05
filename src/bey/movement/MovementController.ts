@@ -234,7 +234,7 @@ export class MovementController {
     return this.highSpeedControl > 0 && !this.knockbackPlaying && !this.ownJumpFlight;
   }
 
-  /** The Clash loser: locked out of every input but the Air Recovery (see clashStunned). */
+  /** The Clash loser: locked out of every input — no Air Recovery either (owner, 2026-10-05) — until it lands. */
   startClashStun(): void {
     this.clashStunned = true;
     this.clashStunElapsedS = 0;
@@ -269,14 +269,9 @@ export class MovementController {
     }
     this.actionLockS = Math.max(0, this.actionLockS - fixedDeltaSeconds);
     if (this.clashStunned) {
-      // Airborne, the Dodge button is the Air Recovery — the one way out. Nothing else reaches the Bey.
-      const recover = !grounded && actions.held.has(Action.Dodge);
-      return {
-        held: new Set(recover ? [Action.Dodge] : []),
-        pressedThisFrame: new Set(recover && actions.pressedThisFrame.has(Action.Dodge) ? [Action.Dodge] : []),
-        attackHoldDurationSeconds: 0,
-        jumpDriftHoldDurationSeconds: 0,
-      };
+      // Owner, 2026-10-05 ("Remova a capacidade de dar recovery ao perder um clash"): nothing reaches the Bey, the
+      // Dodge (Air Recovery) included, until it lands (or CLASH_STUN_MAX_S).
+      return { held: new Set(), pressedThisFrame: new Set(), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0 };
     }
     if (this.actionLockS > 0) {
       const blocked = (a: Action): boolean => a === Action.Attack || a === Action.Dodge || a === Action.JumpDrift;

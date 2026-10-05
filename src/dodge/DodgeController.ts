@@ -166,6 +166,13 @@ export class DodgeController {
    * arms a short pending window instead, consumed the next time this Bey
    * actually leaves the ground.
    */
+  /** Owner, 2026-10-05: no Air Recovery for this flight (a lost Clash): closes an open window and a pending one. */
+  cancelAirRecovery(): void {
+    this.airRecoveryAvailable = false;
+    this.launchPending = false;
+    this.launchPendingRemainingS = 0;
+  }
+
   registerLaunch(currentlyAirborne: boolean): void {
     if (currentlyAirborne) {
       this.airRecoveryAvailable = true;

@@ -3,7 +3,7 @@
 // INACEITAVELMENTE ERRADO, não é pra ser possível realizar nenhum movimento (no caso do perdedor) até se recuperar no ar".
 // Through the real tickMatch(), with the match's own rules.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { AttackState } from '../../src/combat/attacks/AttackController';
 import { ClashState } from '../../src/combat/clash/ClashController';
@@ -51,21 +51,21 @@ describe('after a Clash (owner, 2026-10-04)', () => {
     expect(v.y).toBeGreaterThan(10);
   });
 
-  it('the loser can do nothing — move, attack, jump, Circular — until it recovers; the Air Recovery is the one way out', async () => {
+  it('the loser can do nothing — move, attack, jump, Circular, Dodge — not even the Air Recovery (owner, 2026-10-05)', async () => {
     const h = await resolvedClash();
     expect(h.second.movement.isClashStunned()).toBe(true);
+    expect(h.second.dodge.isAirRecoveryAvailable(), 'no Air Recovery window for the loser').toBe(false);
+    const recoverySpin = vi.spyOn(h.second.spin, 'applyAirRecovery');
     for (let i = 0; i < 20; i++) {
-      h.tick(NONE, press(Action.Attack, Action.JumpDrift));
+      h.tick(NONE, press(i % 2 === 0 ? Action.Dodge : Action.Attack, Action.JumpDrift));
       expect(h.second.attack.getState()).toBe(AttackState.Neutral);
       expect(h.second.drift.getState?.() ?? DriftState.Idle).toBe(DriftState.Idle);
       expect(h.second.movement.isClashStunned()).toBe(true);
     }
-    // Airborne: Dodge = Air Recovery, and it hands control back.
-    h.tick(NONE, press(Action.Dodge));
-    expect(h.second.movement.isClashStunned()).toBe(false);
+    expect(recoverySpin).not.toHaveBeenCalled();
   });
 
-  it('without a recovery the stun lasts until it lands', async () => {
+  it('the stun lasts until it lands', async () => {
     const h = await resolvedClash();
     let ticks = 0;
     while (h.second.movement.isClashStunned() && ticks < 600) {

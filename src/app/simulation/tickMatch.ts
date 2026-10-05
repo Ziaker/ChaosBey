@@ -214,8 +214,9 @@ export function tickMatch(
       first.attack.blockCircularFor(CIRCULAR_LOCK_AFTER_CLASH_S);
       second.attack.blockCircularFor(CIRCULAR_LOCK_AFTER_CLASH_S);
       // Owner, 2026-10-04: "ambos jogadores podem realizar dodges, ataques, pulos e ataque giratório 1 milésimo após o
-      // fim de um clash, isso tá INACEITAVELMENTE ERRADO". The Clash ends both attacks; the loser is stunned (no input
-      // but the Air Recovery) until it recovers in the air or lands; the winner — both, on a tie — recovers briefly.
+      // fim de um clash, isso tá INACEITAVELMENTE ERRADO". The Clash ends both attacks; the loser is stunned (no input at
+      // all — owner, 2026-10-05: no Air Recovery after a lost Clash either) until it lands; the winner — both, on a tie —
+      // recovers briefly.
       first.attack.interruptByClash();
       second.attack.interruptByClash();
       if (applied.loserIsFirst !== undefined) {
