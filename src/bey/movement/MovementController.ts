@@ -13,7 +13,7 @@
 // model (GDD section 27/85).
 // ============================================================
 
-import { DRIFT_TURN_RATE_MULTIPLIER } from '../../drift/DriftTuning';
+import { DRIFT_CARVE_RATE_RAD_S, DRIFT_TURN_RATE_MULTIPLIER } from '../../drift/DriftTuning';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { type ControllerActions, Action } from '../../input/actions/Action';
 import { add, dot, fromYaw, length, scale, signedAngleBetween, type Vec2 } from '../../physics/Vec2';
@@ -560,12 +560,19 @@ export class MovementController {
     this.driftingThisStep = rewardingDrift && grounded && !dashOverride && hasMovementInput && this.postImpactCooldownRemainingS === 0;
     if (this.driftingThisStep) {
       const before = length(velHoriz);
-      const after = length(newVelHoriz);
       const cap = this.handling.maxSpeedMps * topSpeedMultiplier;
       const stick = intent ? (this.highSpeedControl > 0 ? intentMagnitude(intent) ** STICK_THRUST_EXPONENT : intentMagnitude(intent)) : throttleInput > 0 ? 1 : 0;
       const fullThrust = this.groundThrust(this.handling.accelerationMps2 * staminaAccelFactor, true) * fixedDeltaSeconds * stick;
-      const target = Math.min(Math.max(after, cap), before + fullThrust + this.driftFloorLossMps);
-      if (after > 1e-6 && target > after) newVelHoriz = scale(newVelHoriz, target / after);
+      const speed = Math.min(Math.max(before, cap), before + fullThrust + this.driftFloorLossMps);
+      // Owner, 2026-10-05 ("era pra ficar mais fácil de fazer curvas em arco"): the direction of travel carves toward the
+      // heading at DRIFT_CARVE_RATE_RAD_S, at that speed — the Bey arcs round instead of sliding wide. The heading turns
+      // faster still (DRIFT_TURN_RATE_MULTIPLIER), so it leads the motion a little: the drift's slide angle.
+      if (before > 0.5) {
+        const travelYaw = Math.atan2(velHoriz.x, velHoriz.z);
+        const behind = Math.atan2(Math.sin(this.headingRad - travelYaw), Math.cos(this.headingRad - travelYaw));
+        const step = Math.max(-DRIFT_CARVE_RATE_RAD_S * fixedDeltaSeconds, Math.min(DRIFT_CARVE_RATE_RAD_S * fixedDeltaSeconds, behind));
+        newVelHoriz = scale(fromYaw(travelYaw + step), speed);
+      }
     } else {
       this.driftFloorLossMps = 0;
     }

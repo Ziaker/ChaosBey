@@ -193,3 +193,11 @@ export const DRIFT_TURN_RATE_MULTIPLIER = 1.35;
  * starts at once instead of when the hop happens to come down. PROVISIONAL.
  */
 export const DRIFT_FAST_DROP_MPS = 9;
+
+/**
+ * Owner, 2026-10-05 ("PQ TÁ IMPOSSÍVEL DE DOBRAR NO DRIFT? … ERA PRA FICAR MAIS FÁCIL DE FAZER CURVAS EM ARCO"): while
+ * drifting, the Bey's direction of travel carves toward where it faces at up to this rate (rad/s), keeping its speed —
+ * an arc, not a slide. (The drift used to slide on a third of the grip: a full-stick 90° took 1.0–1.25 s and 6–22 m of
+ * width, against 0.35–0.4 s for a plain turn.) PROVISIONAL.
+ */
+export const DRIFT_CARVE_RATE_RAD_S = 6;

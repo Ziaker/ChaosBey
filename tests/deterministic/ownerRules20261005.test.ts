@@ -217,13 +217,53 @@ describe('drift: responsive, and a way to build speed', () => {
     }
   });
 
-  it('a drifted curve leaves faster, with more momentum, than the same curve driven plain — and no wider', async () => {
+  it('a drifted curve leaves faster, with more momentum, than the same curve driven plain', async () => {
     for (const runUp of [45, 120]) {
       const plain = await course(runUp, false);
       const drift = await course(runUp, true);
       expect(drift.exit, `run-up ${runUp}`).toBeGreaterThan(plain.exit * 1.2);
       expect(drift.momentum, `run-up ${runUp}`).toBeGreaterThanOrEqual(plain.momentum);
-      if (runUp === 45) expect(drift.width).toBeLessThanOrEqual(plain.width + 0.1);
+    }
+  });
+
+  // Owner, 2026-10-05 ("PQ TÁ IMPOSSÍVEL DE DOBRAR NO DRIFT? … ERA PRA FICAR MAIS FÁCIL DE FAZER CURVAS EM ARCO"): the
+  // stick pushed fully to the new direction at once. Measured (time from the tap to the velocity turned, width of the
+  // turn): plain 90° 0.35–0.40 s, 2.0 / 5.6 m; drift 0.41.0 0.98–1.25 s, 5.8 / 15.8 m; drift 0.42–0.43 1.0–1.22 s,
+  // 10.2 / 22.1 m and a 180° in 3.2 s. Now (DRIFT_CARVE_RATE_RAD_S): 90° 0.38 s, 1.9 / 4.1 m, leaving faster; 180° an arc
+  // in 0.65 s at 15–27 m/s where the plain turn stops and reverses (0.1–0.3 m/s).
+  async function fullStickTurn(runUpTicks: number, drift: boolean, targetDeg: number) {
+    const h = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: -60 }, { x: -60, y: BEY_SPAWN_HEIGHT_M, z: 50 }, { ...createDefaultMatchConfig(), arenaFloor: 'flat', arenaSizeScale: 2.5 });
+    for (let t = 0; t < runUpTicks; t++) h.tick({ ...NONE, moveIntent: { x: 0, z: 1 } }, NONE);
+    const x0 = h.first.body.translation().x;
+    const a = (targetDeg * Math.PI) / 180;
+    const intent = { x: Math.sin(a), z: Math.cos(a) };
+    let width = 0;
+    for (let t = 0; t < 240; t++) {
+      let act: ControllerActions = { ...NONE, moveIntent: intent };
+      if (drift && (t === 0 || t === 3)) act = { ...act, held: new Set([Action.JumpDrift]), pressedThisFrame: new Set([Action.JumpDrift]) };
+      else if (drift && t > 3) act = { ...act, held: new Set([Action.JumpDrift]) };
+      h.tick(act, NONE);
+      const v = h.first.body.linvel();
+      width = Math.max(width, Math.abs(h.first.body.translation().x - x0));
+      const turned = (Math.acos(Math.max(-1, Math.min(1, v.z / Math.max(1e-6, Math.hypot(v.x, v.z))))) * 180) / Math.PI;
+      if (turned >= targetDeg - 5) return { seconds: (t + 1) / 60, width, exit: Math.hypot(v.x, v.z) };
+    }
+    return { seconds: Infinity, width, exit: 0 };
+  }
+
+  it('full stick: a drift turns 90° as fast as a plain turn, no wider, and faster out; a 180° is an arc that keeps its speed', async () => {
+    for (const runUp of [45, 120]) {
+      const plain = await fullStickTurn(runUp, false, 90);
+      const drift = await fullStickTurn(runUp, true, 90);
+      expect(drift.seconds, `run-up ${runUp}: 90° time (hop included)`).toBeLessThanOrEqual(plain.seconds + 0.05);
+      expect(drift.width, `run-up ${runUp}: 90° width`).toBeLessThanOrEqual(plain.width);
+      expect(drift.exit, `run-up ${runUp}: 90° exit speed`).toBeGreaterThan(plain.exit);
+      const plainU = await fullStickTurn(runUp, false, 180);
+      const driftU = await fullStickTurn(runUp, true, 180);
+      // A plain 180° at low speed is a quick stop (0.43 s, leaving at 0.3 m/s); the drift's arc keeps going: ≤ 0.7 s either way.
+      expect(driftU.seconds, `run-up ${runUp}: 180° time`).toBeLessThanOrEqual(0.7);
+      expect(driftU.exit, `run-up ${runUp}: 180° keeps its speed`).toBeGreaterThan(10);
+      expect(plainU.exit, `run-up ${runUp}: a plain 180° stops and reverses`).toBeLessThan(1);
     }
   });
 
