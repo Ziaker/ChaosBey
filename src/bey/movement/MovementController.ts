@@ -250,6 +250,11 @@ export class MovementController {
     return this.clashStunned;
   }
 
+  /** Attack, Dodge and Jump are being ignored right now (the post-Clash recovery or stun). */
+  areActionsLocked(): boolean {
+    return this.clashStunned || this.actionLockS > 0;
+  }
+
   /** Attack, Dodge and Jump are ignored for `seconds` (movement still works). */
   lockActionsFor(seconds: number): void {
     this.actionLockS = Math.max(this.actionLockS, seconds);

@@ -3,11 +3,12 @@ import { Action } from '../../src/input/actions/Action';
 import { LATERAL_GRIP_PER_S } from '../../src/bey/movement/MovementTuning';
 import { ScriptedController } from '../../src/automation/scripted-scenarios/ScriptedController';
 import { DriftController, DriftState } from '../../src/drift/DriftController';
-import { JUMP_RELEASE_WINDOW_S, JUMP_HOLD_FOR_FULL_DEFAULT_S } from '../../src/drift/DriftTuning';
+import { JUMP_RELEASE_WINDOW_S } from '../../src/drift/DriftTuning';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { TestBeyHarness } from './physicsHarness';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import type { ControllerActions } from '../../src/input/actions/Action';
+import { resolveMatchConfig } from '../../src/config/match/MatchConfig';
 
 const intentArgs = (x: number, z: number) => ({ x, z });
 /**
@@ -341,7 +342,8 @@ describe('jump vs drift: X + straight = variable jump, X + a real turn = drift (
       // The held jump waited the whole hold-for-full time before its one launch (owner, 2026-10-04: the height is
       // decided before take-off — the tracked hold time saturates there); the drift hop (turned 2 ticks after X)
       // almost none.
-      expect(o.jumpAssistS, label).toBeGreaterThan(JUMP_HOLD_FOR_FULL_DEFAULT_S - 0.02);
+      // The match's own hold time: the owner's base rules set it to 0.15 s (the 0.2 s constant is the bare default).
+      expect(o.jumpAssistS, label).toBeGreaterThan(resolveMatchConfig().jumpHoldForFullS - 0.02);
       expect(o.driftAssistS, label).toBeLessThan(0.05);
       expect(o.driftTicks, label).toBeGreaterThanOrEqual(35);
     }

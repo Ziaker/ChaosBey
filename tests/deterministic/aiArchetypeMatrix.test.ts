@@ -33,6 +33,12 @@ const MAX_STALLED_ATTACK_TICKS = Math.round(0.5 * TICKS_PER_SECOND);
 const MAX_PRESSES_PER_SECOND = 6;
 /** Both sides holding nothing at the same time for longer than this is a stalemate. */
 const MAX_MUTUAL_IDLE_TICKS = 2 * TICKS_PER_SECOND;
+/**
+ * Audit 2026-10-04: a Defense mirror is a long fight, not a stalemate — matrix-3 traded 38 attacks with no mutual
+ * idle and no wedge and ended by KO at 6195 ticks (103 s), just past the old 6000-tick (100 s) ceiling. The round
+ * still has to resolve; it gets 200 s to do it (aiVsPlayerStandIn raised its own ceiling for the same reason).
+ */
+const MATRIX_MAX_TICKS = 200 * TICKS_PER_SECOND;
 /** A Bey wedged in the wall this long (see AiSideStats.longestWedgedTicks) explains a round that never resolved. */
 const WEDGED_EXPLAINS_STALL_TICKS = 5 * TICKS_PER_SECOND;
 
@@ -78,7 +84,7 @@ describe('AI vs AI archetype matrix', () => {
     for (const first of ALL_BEY_ARCHETYPES) {
       for (const second of ALL_BEY_ARCHETYPES) {
         for (const seed of SEEDS) {
-          const stats = await runAiMatch({ seed, firstDefinition: first, secondDefinition: second });
+          const stats = await runAiMatch({ seed, firstDefinition: first, secondDefinition: second, maxTicks: MATRIX_MAX_TICKS });
           matches.push({ label: `${first.id} vs ${second.id} (${seed})`, stats });
           accumulate(stats.first, stats);
           accumulate(stats.second, stats);

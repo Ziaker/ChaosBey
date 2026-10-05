@@ -149,6 +149,11 @@ export class AttackController {
    * Owner, 2026-10-04 ("os beys tão podendo realizar [o giratório] APÓS levarem dano, isso tá inaceitavelmente errado,
    * é pra ser um golpe defensivo que NÃO DEVE ser possível de ser realizado ao levar dano"): no Circular for `seconds`.
    */
+  /** Seconds the Circular is still blocked (after a hit, a knockback or a Clash). */
+  getCircularLockS(): number {
+    return this.circularLockS;
+  }
+
   blockCircularFor(seconds: number): void {
     this.circularLockS = Math.max(this.circularLockS, seconds);
   }

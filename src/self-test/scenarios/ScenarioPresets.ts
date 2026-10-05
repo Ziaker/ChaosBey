@@ -144,6 +144,21 @@ const COOLDOWN_SECOND_EXTRA_HOLD_TICKS = 24;
 const COOLDOWN_FIRST_STEER_TICKS = 40;
 const COOLDOWN_STEER_AT_S = 6;
 
+/**
+ * The drift input (owner, 2026-10-04: "dar um toque + segurar = drift"): drive, tap X for a short hop at tick 60,
+ * then press X again and hold it while steering until tick 150. Holding X from the first press is the Full Jump now,
+ * not the drift. `after` is what is held once X is let go.
+ */
+function driftTapThenHold(after: Action[]): ScriptedFrame[] {
+  return [
+    { fromTick: 0, held: [Action.MoveForward] },
+    { fromTick: 60, held: [Action.MoveForward, Action.JumpDrift] },
+    { fromTick: 60 + TAP_TICKS, held: [Action.MoveForward] },
+    { fromTick: 66, held: [Action.MoveForward, Action.JumpDrift, Action.SteerRight] },
+    { fromTick: 150, held: after },
+  ];
+}
+
 // ---- the presets ----
 
 export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
@@ -254,7 +269,10 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     // its own higher residual velocity at the moment of the hit — total
     // clearance depends on height-already-gained plus the knockback's
     // added vy together, not the added vy alone.
-    first: script(hold(Action.JumpDrift, FULL_DASH_HOLD_TICKS + 10, 20)),
+    // Speed pass re-sweep (owner, 2026-10-04: the faster Dash arrives sooner): on the flat floor the jump has to start
+    // 1–5 ticks BEFORE the release now (+10 after it, as swept above, lands after the hit and nothing rings out);
+    // 3 before is the middle of that range.
+    first: script(hold(Action.JumpDrift, FULL_DASH_HOLD_TICKS - 3, 20)),
     second: script(hold(Action.Attack, 0, FULL_DASH_HOLD_TICKS)),
     doneWhen: (t) => t.roundOver,
     check: (t) => ok(t.outcome === 'SecondWinsByRingOut', `outcome ${t.outcome}; Dash hits ${t.hits.filter((h) => !h.attackerIsFirst).length}`),
@@ -353,12 +371,11 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     durationTicks: 4 * FIXED_TICKS_PER_SECOND,
     setup: faceOff(2.5),
     first: script(hold(Action.Attack, 0, SHORT_DASH_HOLD_TICKS)),
-    // Dodge 16 ticks after the release: the middle of the 11–20 tick range
-    // that lands inside the Perfect Dodge window. (Motion Lab integration,
-    // M11: +3 before — a Dash now only drives on the ground, and the Beys
-    // placed at spawn height are still settling from the drop's small floor
-    // bounce, so the dasher arrives later.)
-    second: script(hold(Action.Dodge, SHORT_DASH_HOLD_TICKS + 16, TAP_TICKS)),
+    // Dodge 3 ticks after the release: the middle of the 0–6 tick range that
+    // lands inside the Perfect Dodge window (swept after the speed pass,
+    // owner 2026-10-04: the faster Dash arrives ~13 ticks sooner than the
+    // 11–20 range measured at M11, which now dodges nothing).
+    second: script(hold(Action.Dodge, SHORT_DASH_HOLD_TICKS + 3, TAP_TICKS)),
     doneWhen: (t) => t.perfectDodges.includes('second'),
     check: (t) => ok(t.perfectDodges.includes('second'), `perfect dodges: ${t.perfectDodges.join(', ') || 'none'}; dodged: ${t.dodges.join(', ') || 'none'}`),
   },
@@ -413,12 +430,7 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
       placeBey(first, 0, -8, 0);
       placeBey(second, 8, 8, 0);
     },
-    first: script([
-      { fromTick: 0, held: [Action.MoveForward] },
-      { fromTick: 60, held: [Action.MoveForward, Action.JumpDrift] },
-      { fromTick: 62, held: [Action.MoveForward, Action.JumpDrift, Action.SteerRight] },
-      { fromTick: 150, held: [Action.MoveForward] },
-    ]),
+    first: script(driftTapThenHold([Action.MoveForward])),
     second: idle,
     // Drifting for most of the hold (X held ticks 60–150, minus the hop) and a real slide
     // (owner playtest, after M11: it used to leave Drifting after a few ticks). Measured:
@@ -435,21 +447,16 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
       placeBey(first, 0, -8, 0);
       placeBey(second, 8, 8, 0);
     },
-    first: script([
-      { fromTick: 0, held: [Action.MoveForward] },
-      { fromTick: 60, held: [Action.MoveForward, Action.JumpDrift] },
-      { fromTick: 62, held: [Action.MoveForward, Action.JumpDrift, Action.SteerRight] },
-      // Coasting after the drift: since the drift lasts as long as X is held (owner playtest,
-      // after M11), driving on at full speed hit the wall before grip was back to 99%.
-      { fromTick: 150, held: [] },
-    ]),
+    // Coasting after the drift: since the drift lasts as long as X is held (owner playtest,
+    // after M11), driving on at full speed hit the wall before grip was back to 99%.
+    first: script(driftTapThenHold([])),
     second: idle,
     check: (t) => ok(t.firstMinDriftGripPerS < t.firstNormalGripPerS && t.firstGripRestoredAfterDrift, `grip while drifting ${t.firstMinDriftGripPerS.toFixed(2)} /s, normal ${t.firstNormalGripPerS.toFixed(2)} /s, restored on the ground after the drift: ${t.firstGripRestoredAfterDrift}`),
   },
   {
     id: 'high-speed-collision',
     label: 'Test High-Speed Collision',
-    description: 'Both Beys driven into each other at 12 m/s with no attack: a physical collision (impact on both), no hit.',
+    description: 'Both Beys driven into each other at 12 m/s with no attack: a physical body collision that throws both apart, no hit.',
     supported: true,
     durationTicks: 2 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
@@ -460,7 +467,10 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     },
     first: idle,
     second: idle,
-    check: (t) => ok(t.firstMaxImpactMps > 0 && t.secondMaxImpactMps > 0 && t.hits.length === 0, `impact Δv first ${t.firstMaxImpactMps.toFixed(2)}, second ${t.secondMaxImpactMps.toFixed(2)} m/s; hits ${t.hits.length}`),
+    // Owner, 2026-10-04 ("qualquer toque"): a Bey-to-Bey touch is the match's own body collision now (both thrown
+    // apart as a knockback), no longer a wall-style velocity impact — so the check reads that collision (its event
+    // names the slower Bey, or both on a tie).
+    check: (t) => ok(t.bodyCollisionTargets.size > 0 && t.hits.length === 0, `body collision on: ${[...t.bodyCollisionTargets].join(', ') || 'none'}; hits ${t.hits.length}`),
   },
   {
     id: 'clash-cooldown-collision',

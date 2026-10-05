@@ -164,7 +164,9 @@ describe('every bowl plays clean (no invalid state)', () => {
   it('AI vs AI, every pairing: rounds resolve, no invalid state', async () => {
     for (const floor of BOWLS) {
       // 7200 ticks (2 min, was 3600): on the 36 m stage one bowl-B pairing was still going at 60 s (arena scale pass: longer rounds).
-      const batch = await runFloorAiBatch(floor, 1, 7200);
+      // 12000 (200 s) since the owner audit (2026-10-04): the bowl-A Defense mirror trades 40 attacks with no idle and no
+      // wedge and ends by spin-out at 8906 ticks (148 s) — a long fight between the two toughest Beys, not a stalemate.
+      const batch = await runFloorAiBatch(floor, 1, 12000);
       expect(batch.matches).toBe(9);
       expect(batch.invalidStates, floor).toBe(0);
       expect(batch.unresolved, floor).toBe(0);

@@ -46,6 +46,13 @@ export interface CombatantRawState {
   airRecoveryAvailable: boolean;
   /** Current Stamina covers a Dodge's cost — the Bey's own resource bar, which a player reads off the HUD. DodgeController silently ignores a Dodge press it cannot pay for. */
   canAffordDodge: boolean;
+  /**
+   * Owner audit, 2026-10-04: the Circular is blocked right now (after a hit or a Clash) / the post-Clash lock ignores
+   * Attack, Dodge and Jump. Both are on screen for a player (the attack simply doesn't come out); without them the AI
+   * kept tapping a refused Circular every other tick (19 presses a second). Optional: absent = not locked.
+   */
+  circularLocked?: boolean;
+  actionsLocked?: boolean;
 }
 
 export interface PerceivedCombatant extends CombatantRawState {

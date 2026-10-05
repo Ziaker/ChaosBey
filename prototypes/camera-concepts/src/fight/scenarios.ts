@@ -77,10 +77,12 @@ export const SCENARIOS: readonly Scenario[] = [
     // Clash; 'b' is the first of a..z with a Clash and no round end within 15 s). 'c' since the Dash cooldown
     // replaced Attack Energy (owner, 2026-10-02): 'b' now ends its round inside 15 s; 'c' is the first of a..z with
     // a hit, a Clash, no round end and every readability guard holding (seed only; no camera value changed).
+    // 'i' since the owner audit (2026-10-04: speed pass, post-Clash lock, AI no longer pressing into it): 'c' ends its
+    // round at 13.8 s with no Clash; 'i' is the first of a..z with a hit, a Clash (5.8 s) and no round end in 15 s.
     firstSpawn: { x: -3, z: -5 },
     secondSpawn: { x: 3, z: 5 },
-    first: { kind: 'ai', seed: 'duel-p-c' },
-    second: { kind: 'ai', seed: 'duel-o-c' },
+    first: { kind: 'ai', seed: 'duel-p-i' },
+    second: { kind: 'ai', seed: 'duel-o-i' },
     expects: ['hit', 'clashActive'],
   },
   {

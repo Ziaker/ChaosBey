@@ -248,7 +248,7 @@ export function selectIntent(
       edgeRecovery: true,
     };
   }
-  if (context.counterDash && isCounterableDash(world)) {
+  if (context.counterDash && isCounterableDash(world) && !world.own.circularLocked && !world.own.actionsLocked) {
     return {
       intent: AiIntent.CounterAttack,
       reason: `reading opponent ${world.opponent.attackState} at ${world.distanceToOpponentM.toFixed(1)} m — Circular counter`,
@@ -293,6 +293,9 @@ export function selectIntent(
   // states resolve on their own timers) — the AI simply keeps whatever
   // ActionSelection.ts derives for holding the attack button, not a fresh
   // intent every tick.
+  // Owner audit, 2026-10-04: no attack while the post-Clash lock ignores it, no Circular while it is blocked.
+  const cannotAttack = world.own.actionsLocked === true;
+  const circularBlocked = cannotAttack || world.own.circularLocked === true;
   const alreadyAttacking =
     world.own.attackState !== AttackState.Neutral &&
     world.own.attackState !== AttackState.DashRecovery &&
@@ -326,14 +329,14 @@ export function selectIntent(
 
   scores.set(
     AiIntent.AttackCircular,
-    inCircularRange && !alreadyAttacking
+    inCircularRange && !alreadyAttacking && !circularBlocked
       ? (0.4 + personality.aggression * 0.4 - personality.caution * 0.2 + punishBonus * PUNISH_CIRCULAR_SCORE_BONUS) * willingness
       : 0,
   );
 
   scores.set(
     AiIntent.AttackDash,
-    inDashRange && !alreadyAttacking && world.own.dashReadiness >= 1
+    inDashRange && !alreadyAttacking && !cannotAttack && world.own.dashReadiness >= 1
       ? (0.3 + personality.aggression * 0.5 - personality.patience * 0.2 + punishBonus * PUNISH_DASH_SCORE_BONUS) *
           willingness *
           (1 - collisionReluctance * COLLISION_AVOIDANCE_DASH_DAMPING)

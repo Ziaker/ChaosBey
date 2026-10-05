@@ -372,7 +372,7 @@ export class ActionSelector {
     const dashWantsMoreCharge = world.own.dashChargeFraction < dashTargetChargeFraction(personality);
     const dashWaitingForLine = !dashAligned && world.own.dashChargeFraction < 1;
 
-    if (wantsToAttack && wantsCircular && world.own.attackState === AttackState.Neutral) {
+    if (wantsToAttack && wantsCircular && world.own.attackState === AttackState.Neutral && !world.own.circularLocked && !world.own.actionsLocked) {
       desiredHeld.add(Action.Attack);
     } else if (
       wantsToAttack &&
@@ -388,7 +388,7 @@ export class ActionSelector {
 
     // CounterAttack: hold ground, tap Circular at the moment the incoming
     // dasher is about to enter reach (GDD section 107: timing must matter).
-    if (intent === AiIntent.CounterAttack && world.own.attackState === AttackState.Neutral && isCounterTapMoment(world)) {
+    if (intent === AiIntent.CounterAttack && world.own.attackState === AttackState.Neutral && !world.own.circularLocked && !world.own.actionsLocked && isCounterTapMoment(world)) {
       desiredHeld.add(Action.Attack);
     }
 
