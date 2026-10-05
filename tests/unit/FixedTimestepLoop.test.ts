@@ -87,3 +87,34 @@ describe('FixedTimestepLoop — a throwing callback', () => {
     expect(queued).toHaveLength(0);
   });
 });
+
+describe('FixedTimestepLoop — Game speed (owner, 2026-10-04: MatchConfig.gameSpeed)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** One real second of 60 Hz frames; returns the fixed ticks run and the summed render-frame delta. */
+  function oneRealSecond(timeScale: number): { ticks: number; renderedS: number } {
+    const queued: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => queued.push(callback));
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+    let ticks = 0;
+    let renderedS = 0;
+    const loop = new FixedTimestepLoop({ onFixedTick: () => ticks++, onRenderFrame: (dt) => (renderedS += dt) }, timeScale);
+    loop.start();
+    for (let frame = 0; frame <= 60; frame++) queued.shift()!((frame * 1000) / 60);
+    loop.stop();
+    return { ticks, renderedS };
+  }
+
+  it('×1.2 runs 20% more fixed ticks per real second, never a bigger step, and scales the render delta the same', () => {
+    const normal = oneRealSecond(1);
+    const fast = oneRealSecond(1.2);
+    expect(normal.ticks).toBeGreaterThanOrEqual(59);
+    expect(normal.ticks).toBeLessThanOrEqual(60);
+    expect(fast.ticks).toBeGreaterThanOrEqual(71);
+    expect(fast.ticks).toBeLessThanOrEqual(72);
+    expect(normal.renderedS).toBeCloseTo(1, 6);
+    expect(fast.renderedS).toBeCloseTo(1.2, 6);
+  });
+});
