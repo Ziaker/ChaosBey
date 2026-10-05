@@ -11,6 +11,7 @@ import { CombatHarness } from './combatHarness';
 
 const NONE: ControllerActions = { held: new Set(), pressedThisFrame: new Set(), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0 };
 type Kind = 'short hop' | 'drift hop' | 'full jump';
+const DRIFT_SECOND_PRESS_TICK = 4;
 
 async function flight(kind: Kind, jumpFullHeightM: number) {
   const h = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: -14 }, { x: 25, y: BEY_SPAWN_HEIGHT_M, z: 25 }, { arenaFloor: 'flat', jumpFullHeightM });
@@ -26,9 +27,12 @@ async function flight(kind: Kind, jumpFullHeightM: number) {
   let drifted = false;
   let takeoffTick = Infinity; // owner, 2026-10-04: the full jump leaves the floor once the hold is known (tick ~7), not on tick 1
   for (let t = 0; t < 200; t++) {
-    const holdX = kind === 'full jump' ? t < 40 : kind === 'drift hop' ? t < 60 : t < 1;
+    // The drift is tap + hold (owner, 2026-10-04): tap X for the hop, then press X again (tick 4, in the air) and hold
+    // it while steering. Holding X from the first press is the full jump whatever the steering.
+    const holdX = kind === 'full jump' ? t < 40 : kind === 'drift hop' ? t < 2 || (t >= DRIFT_SECOND_PRESS_TICK && t < 60) : t < 1;
     const held = new Set<Action>([...(holdX ? [Action.JumpDrift] : []), ...(moving ? [Action.MoveForward, Action.SteerRight] : [])]);
-    const r = h.tick({ ...NONE, held, pressedThisFrame: new Set(t === 0 ? [Action.JumpDrift] : []) }, NONE);
+    const pressedX = t === 0 || (kind === 'drift hop' && t === DRIFT_SECOND_PRESS_TICK);
+    const r = h.tick({ ...NONE, held, pressedThisFrame: new Set(pressedX ? [Action.JumpDrift] : []) }, NONE);
     if (r.first.driftState === DriftState.Drifting) drifted = true;
     const g = isGrounded(h.physics, h.first.collider);
     if (was && !g) {

@@ -49,7 +49,9 @@ describe('AI air recovery (real physics)', () => {
     let pressesThisWindow = 0;
 
     for (let tick = 0; tick < 900 && !harness.roundState.isOver; tick++) {
-      const open = !isGrounded(harness.physics, harness.second.collider) && harness.second.dodge.isAirRecoveryAvailable();
+      // Owner, 2026-10-04: the recovery spends the dodge — launched while the dodge recharges, a press does nothing
+      // until it is back. The reaction is counted from the tick a press would really recover (canAirRecoverNow).
+      const open = !isGrounded(harness.physics, harness.second.collider) && harness.second.dodge.canAirRecoverNow();
       if (open && windowOpenedAt === null) {
         windowOpenedAt = tick;
         windowChargingAtOpen = harness.second.attack.getState() === AttackState.ChargingDash;

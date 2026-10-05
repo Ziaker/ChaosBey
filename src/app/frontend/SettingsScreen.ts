@@ -65,7 +65,7 @@ const CONTROL_TEXT: Readonly<Record<ControlScheme, { readonly note: string; read
     rows: [['Move (fixed arena directions)', '← → ↑ ↓', 'Left stick / D-pad']],
   },
   screen: {
-    note: 'Screen-relative: ↑ goes up the screen as the camera is when you start to move, and stays locked until you let go. This is the only option that reads the camera (an opt-in exception) — the camera can change what the next press means.',
+    note: 'Screen-relative: ↑ goes up the screen. A new direction reads the camera at once, and a held direction follows the camera when it really turns, so the arrows keep meaning what you see.',
     rows: [['Move (up the screen)', '← → ↑ ↓', 'Left stick / D-pad']],
   },
 };

@@ -104,13 +104,17 @@ interface Recording {
 // Seeds re-picked for item 11 (owner, 2026-10-04): faster hits deal more damage, so 'replay-198' now ends at tick 966
 // and 'replay-18' at ~70 hitstop ticks — under expectSubstantial. These two are long-enough matches under the
 // new rule with a comfortable margin (seed scan replay-0..59: 2448 / 2406 ticks, 137 / 141 hitstop ticks). The checks themselves are unchanged.
-const LONG_SEED = 'replay-25';
-const MUTATION_SEED = 'replay-39';
+// Re-picked in the owner audit (2026-10-04, hitstop on hits only): replay-37 (2876 ticks, 28 frozen) and replay-3
+// (3118 ticks, 25 frozen, 1382 steering ticks after 900), from a scan of replay-0..79.
+const LONG_SEED = 'replay-37';
+const MUTATION_SEED = 'replay-3';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {
   expect(recording.frames.first.length).toBeGreaterThan(1000);
-  expect(recording.advanced.filter((ran) => !ran).length).toBeGreaterThan(100);
+  // 20 (was 100) since the owner audit (2026-10-04): wall/rim impacts and landings no longer freeze the match, only
+  // hits do — the most of replay-0..79 is 28 frozen ticks. Still a real share of hitstop for the replay to reproduce.
+  expect(recording.advanced.filter((ran) => !ran).length).toBeGreaterThanOrEqual(20);
 }
 
 /** Plays a live AI-vs-AI match and records what a replay recorder would: each tick's actions and state hash. */

@@ -1,6 +1,6 @@
 // Owner, 2026-10-02 (Lote 4, item 6): the jump. Through the real tickMatch().
-// - Drift rule: X + a lateral direction (left/right or diagonal) while moving
-//   always drifts; X without one, or from a standstill, is a jump.
+// - Drift rule (owner, 2026-10-04, replacing 2026-10-02's "X + lateral while
+//   moving"): tap X, then press and hold it = drift; X held from the press = jump.
 // - An X press made in the air (during a jump, a drift hop or a fall's
 //   bounce) is kept and consumed on landing, once (PR #76's
 //   pressDroppedWhileAirborne) — deterministic, no retries.
@@ -28,7 +28,8 @@ const HELD: Record<Dir, Action[]> = {
   'forward-left': [Action.MoveForward, Action.SteerLeft],
   'back-right': [Action.MoveBackward, Action.SteerRight],
 };
-const LATERAL: Record<Dir, boolean> = { none: false, forward: false, left: true, right: true, 'forward-left': true, 'back-right': true };
+/** Tap + hold: X tapped for 2 ticks, then pressed again on this tick (the hop is in the air) and held. */
+const TAP_HOLD_SECOND_PRESS_TICK = 4;
 
 async function harness(overrides = {}): Promise<CombatHarness> {
   const h = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: -14 }, { x: 25, y: BEY_SPAWN_HEIGHT_M, z: 25 }, { arenaFloor: 'flat', ...overrides });
@@ -37,7 +38,7 @@ async function harness(overrides = {}): Promise<CombatHarness> {
 }
 
 /** Drives at `speedMps` (0 = standing), then presses X with `dir` held for `pressTicks`; returns whether it drifted. */
-async function drifts(dir: Dir, speedMps: number, pressTicks: number, directional: boolean): Promise<boolean> {
+async function drifts(dir: Dir, speedMps: number, pressTicks: number, directional: boolean, gesture: 'hold' | 'tapHold' = 'hold'): Promise<boolean> {
   const h = await harness();
   const run: ControllerActions = { ...NONE, held: new Set([Action.MoveForward]) };
   for (let i = 0; i < 80 && speedMps > 0; i++) {
@@ -50,8 +51,9 @@ async function drifts(dir: Dir, speedMps: number, pressTicks: number, directiona
     h.tick(run, NONE);
   }
   let drifted = false;
-  for (let t = 0; t < 90; t++) {
-    const holdX = t < pressTicks;
+  for (let t = 0; t < 100; t++) {
+    const holdX = gesture === 'hold' ? t < pressTicks : t < 2 || (t >= TAP_HOLD_SECOND_PRESS_TICK && t < TAP_HOLD_SECOND_PRESS_TICK + pressTicks);
+    const pressedX = t === 0 || (gesture === 'tapHold' && t === TAP_HOLD_SECOND_PRESS_TICK);
     const held = new Set<Action>([...HELD[dir], ...(holdX ? [Action.JumpDrift] : [])]);
     // Directional control: the world intent plus SteerLeft/SteerRight kept as the screen's lateral input
     // (DirectionalController drops MoveForward/MoveBackward from held).
@@ -59,31 +61,36 @@ async function drifts(dir: Dir, speedMps: number, pressTicks: number, directiona
       ? {
           ...NONE,
           held: new Set([...held].filter((a) => a !== Action.MoveForward && a !== Action.MoveBackward)),
-          pressedThisFrame: new Set(t === 0 ? [Action.JumpDrift] : []),
+          pressedThisFrame: new Set(pressedX ? [Action.JumpDrift] : []),
           moveIntent: { x: held.has(Action.SteerRight) ? 0.7 : held.has(Action.SteerLeft) ? -0.7 : 0, z: held.has(Action.MoveBackward) ? -0.7 : dir === 'none' ? 0 : 0.7 },
         }
-      : { ...NONE, held, pressedThisFrame: new Set(t === 0 ? [Action.JumpDrift] : []) };
+      : { ...NONE, held, pressedThisFrame: new Set(pressedX ? [Action.JumpDrift] : []) };
     if (h.tick(actions, NONE).first.driftState === DriftState.Drifting) drifted = true;
   }
   h.dispose();
   return drifted;
 }
 
-describe('drift rule: X + lateral while moving always drifts (owner, 2026-10-02)', () => {
+// Owner, 2026-10-04, superseding the 2026-10-02 rule above ("X + lateral while moving always drifts"): "dar um toque
+// + segurar, MESMO SE CAIR NO CHÃO = drift" — the gesture decides, never the direction. X held from the press is the
+// full jump in every direction and at every speed; a tap, then X pressed again and held, is the drift in all of them.
+describe('drift rule: tap + hold drifts, a plain hold never does (owner, 2026-10-04)', () => {
   for (const directional of [false, true]) {
-    it(`${directional ? 'directional' : 'classic'} control: direction × speed × press length`, async () => {
+    it(`${directional ? 'directional' : 'classic'} control: direction × speed × press length × gesture`, async () => {
       const wrong: string[] = [];
       for (const dir of Object.keys(HELD) as Dir[]) {
         for (const speed of [0, 6, 11]) {
           for (const press of [30, 60]) {
-            const expected = LATERAL[dir] && speed > 0;
-            const got = await drifts(dir, speed, press, directional);
-            if (got !== expected) wrong.push(`${dir} @ ${speed} m/s, press ${press}: drift ${got}, expected ${expected}`);
+            for (const gesture of ['hold', 'tapHold'] as const) {
+              const expected = gesture === 'tapHold';
+              const got = await drifts(dir, speed, press, directional, gesture);
+              if (got !== expected) wrong.push(`${gesture} ${dir} @ ${speed} m/s, press ${press}: drift ${got}, expected ${expected}`);
+            }
           }
         }
       }
       expect(wrong).toEqual([]);
-    }, 120_000);
+    }, 240_000);
   }
 });
 

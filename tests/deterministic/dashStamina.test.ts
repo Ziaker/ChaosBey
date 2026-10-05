@@ -1,5 +1,6 @@
 // Owner, 2026-10-02 (Lote 2, item 19): a Dash touches Stamina only through
-// the normal movement drain (base + speed) of the ticks it lasts. Measured
+// the normal movement drain (base + speed) of the ticks it lasts — and since
+// 2026-10-04 not even the speed part: only the base spin drain while it runs. Measured
 // through the real tickMatch() with nobody in reach (no hit, no Clash).
 
 import { describe, expect, it } from 'vitest';
@@ -24,8 +25,8 @@ function movementDrain(speedMps: number, stat: number): number {
   return ((STAMINA_BASE_DRAIN_PER_S + STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED * Math.min(1, extra)) / stat) * FIXED_DELTA_SECONDS;
 }
 
-describe('a Dash spends no Stamina beyond the movement drain (item 19)', () => {
-  it('full-charge Dash: Stamina before/after differs only by the base + speed drain of those ticks', async () => {
+describe('a Dash spends no Stamina beyond the base drain (item 19; owner, 2026-10-04)', () => {
+  it('full-charge Dash: Stamina before/after differs only by the base drain while dashing, + speed drain outside it', async () => {
     // Far apart: the Dash whiffs.
     const harness = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: -12 }, { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 14 });
     for (let i = 0; i < 30; i++) harness.tick(NONE, NONE);
@@ -36,7 +37,10 @@ describe('a Dash spends no Stamina beyond the movement drain (item 19)', () => {
     const states: AttackState[] = [];
     const step = (a: ControllerActions): void => {
       const result = harness.tick(a, NONE);
-      expected += movementDrain(result.first.movement.speedMps, stat);
+      // Owner, 2026-10-04 ("o dash NÃO DEVIA NEM GASTAR STAMINA"): while the Dash and its recovery run, only the base
+      // spin drain — no speed drain at all.
+      const dashing = result.first.attackState === AttackState.DashActive || result.first.attackState === AttackState.DashRecovery;
+      expected += movementDrain(dashing ? 0 : result.first.movement.speedMps, stat);
       states.push(result.first.attackState);
     };
     step(attack(true, true));

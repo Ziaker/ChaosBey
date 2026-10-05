@@ -65,9 +65,12 @@ describe('dodge flat-velocity state — mandatory scenarios E-K (owner spec sect
     const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, { x: 6, y: BEY_SPAWN_HEIGHT_M, z: 6 });
     settle(harness);
     harness.first.body.setLinvel({ x: 0, y: 0, z: 8 }, true); // heading 0 => +Z forward, real speed.
-    // Hop + turn to enter Drifting, then dodge sideways mid-drift.
+    // Tap + hold to enter Drifting (owner, 2026-10-04: X held from the first press is the full jump), then dodge
+    // sideways mid-drift.
     const driver = new ScriptedController([
       { fromTick: 0, held: [Action.MoveForward, Action.JumpDrift, Action.SteerRight] },
+      { fromTick: 2, held: [Action.MoveForward, Action.SteerRight] },
+      { fromTick: 4, held: [Action.MoveForward, Action.JumpDrift, Action.SteerRight] },
       { fromTick: 25, held: [Action.MoveForward, Action.SteerRight, Action.Dodge] },
       { fromTick: 26, held: [Action.MoveForward, Action.SteerRight] },
     ]);

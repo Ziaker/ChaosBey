@@ -405,10 +405,11 @@ describe('attacking mid-jump', () => {
     // then tap Circular Attack mid-air without letting go of JumpDrift.
     const attacker = new ScriptedController([
       { fromTick: 0, held: [Action.JumpDrift] },
-      // Owner, 2026-10-04: a held X leaves the floor once the hold is known (~tick 7), so the Circular is tapped after.
-      { fromTick: 9, held: [Action.JumpDrift, Action.Attack] },
-      { fromTick: 11, held: [Action.JumpDrift] },
-      { fromTick: 16, held: [] },
+      // Owner, 2026-10-04: a held X leaves the floor once the hold is known — the hold-for-full time, 0.2 s here
+      // (launch on tick 12, airborne on 13; it was ~7 when this was first written) — so the Circular is tapped after.
+      { fromTick: 14, held: [Action.JumpDrift, Action.Attack] },
+      { fromTick: 16, held: [Action.JumpDrift] },
+      { fromTick: 21, held: [] },
     ]);
 
     let sawAirborne = false;
@@ -420,7 +421,7 @@ describe('attacking mid-jump', () => {
     // own ground bounce (confirmed by tracing this exact scenario), whose
     // own legitimate velocity discontinuity would otherwise be
     // indistinguishable from "something disrupted the jump".
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 25; i++) {
       const result = harness.tick(attacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
       const verticalVelocity = harness.first.body.linvel().y;
 

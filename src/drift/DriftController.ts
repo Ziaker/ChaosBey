@@ -243,7 +243,9 @@ export class DriftController {
       // Leaving the ground for any reason starts a fresh airborne period
       // with no jump-height assist accrued yet — beginHop() below only
       // adds to it if this period turns out to actually be a jump.
-      this.jumpAssistElapsedS = 0;
+      // Owner audit, 2026-10-04: except the Bey's own hop, launched from the floor the tick before (the height is decided
+      // there): that launch recorded how long X was held, and this reset wiped it — every landing reported 0 s.
+      if (!(this.state === DriftState.Hopping && !this.launchPending && this.stepsSinceLaunch <= 1)) this.jumpAssistElapsedS = 0;
     } else if (!this.wasGrounded && grounded) {
       justLanded = true;
       landingDescentSpeedMps = Math.max(0, -this.lastAirborneVerticalVelocityMps);

@@ -294,7 +294,8 @@ describe('cooldown alternative resolution', () => {
     expect(harness.clash.controller.getState()).toBe(ClashState.Cooldown);
 
     // Let the resolution's own impulse play out and attack recovery windows (frozen throughout Active) fully elapse, well short of the 10s cooldown.
-    for (let i = 0; i < 45; i++) harness.tick(NO_ACTIONS, NO_ACTIONS);
+    // 75 ticks (was 45): past the post-Clash locks too (owner, 2026-10-04: 0.4 s without actions, 1 s without a Circular).
+    for (let i = 0; i < 75; i++) harness.tick(NO_ACTIONS, NO_ACTIONS);
     expect(harness.clash.controller.getState()).toBe(ClashState.Cooldown);
 
     // Reset to a clean, close, deliberately asymmetric-speed setup for the cooldown-alternative double-hit.

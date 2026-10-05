@@ -40,8 +40,11 @@ import { SeededRng } from '../../src/rng/SeededRng';
 // Thresholds — deliberately generous over what the batch measures today,
 // so they catch degenerate behavior, not ordinary tuning drift.
 // ------------------------------------------------------------
-/** A match (no round timer yet) must still resolve within this. */
-const MAX_MATCH_S = 90;
+/**
+ * A match (no round timer yet) must still resolve within this. 120 since the owner audit (2026-10-04): the Stamina
+ * mirror batch-1 is an active fight (longest attack gap 7.4 s, no wasted presses) that ends by spin-out at 93 s.
+ */
+const MAX_MATCH_S = 120;
 /** Longest stretch in which neither side starts any attack. */
 const MAX_NO_ATTACK_GAP_S = 12;
 /** Longest time one side may stay in a single non-Neutral attack state outside an Active Clash (charging auto-releases when Attack Energy runs out). */

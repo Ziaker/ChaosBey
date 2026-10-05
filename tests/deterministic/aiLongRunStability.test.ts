@@ -16,7 +16,7 @@ import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepL
 import { SeededRng } from '../../src/rng/SeededRng';
 import { CombatHarness } from './combatHarness';
 
-const MAX_TICKS = 4000; // ~66 simulated seconds — generous room for a round to resolve.
+const MAX_TICKS = 7200; // 120 simulated seconds (was 4000: since the owner audit, 2026-10-04, this Attack-vs-Defense round ends at 4454).
 
 function assertValidControllerContract(actions: ControllerActions, label: string): void {
   expect(actions.held, `${label}: held must be a Set`).toBeInstanceOf(Set);

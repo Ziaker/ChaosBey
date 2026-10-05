@@ -54,13 +54,14 @@ async function run(caution: number) {
     DEFAULT_AI_DIFFICULTY_PROFILE,
     SeededRng.fromSeedText('clash-willingness'),
   );
-  // The opponent charges from tick 30 and releases its Dash at tick 120 —
+  // The opponent charges from tick 30 and releases its Dash at tick 140 (was 120) —
   // 110 before the Motion Lab integration (M11): the AI now keeps drifting
   // toward it while charging (rolling drag only when coasting), so an
   // earlier release hit it before its own Dash left. 115–125 all Clash.
+  // 140 since the owner audit (2026-10-04): with the current rules 125–155 all Clash and 120 no longer does.
   const opponent = new ScriptedController([
     { fromTick: 30, held: [Action.Attack] },
-    { fromTick: 120, held: [] },
+    { fromTick: 140, held: [] },
   ]);
   const ticks: Tick[] = [];
   let clashStartedAt: number | null = null;
