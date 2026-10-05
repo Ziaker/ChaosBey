@@ -36,6 +36,7 @@ import { GRAVITY_MPS2 } from '../physics/world/PhysicsWorld';
 import { FIXED_DELTA_SECONDS as FIXED_STEP_S } from '../physics/fixed-step/FixedTimestepLoop';
 import {
   DRIFT_AIRBORNE_GRACE_S,
+  DRIFT_FAST_DROP_MPS,
   DRIFT_HOP_TARGET_APEX_M,
   DRIFT_REFERENCE_MIN_SPEED_MPS,
   DRIFT_GRIP_RECOVERY_DURATION_S,
@@ -219,6 +220,11 @@ export class DriftController {
     if (driftFollowUp) {
       this.driftArmed = true;
       this.bufferedJumpElapsedS = null;
+      // Owner, 2026-10-05: still in the air — straight down to the floor, the drift starts on landing.
+      if (this.state === DriftState.Hopping && !grounded) {
+        const v = body.linvel();
+        if (v.y > this.hopBaseVerticalMps - DRIFT_FAST_DROP_MPS) body.setLinvel({ x: v.x, y: this.hopBaseVerticalMps - DRIFT_FAST_DROP_MPS, z: v.z }, true);
+      }
     }
     if (this.driftFollowUpS !== null && this.state === DriftState.Idle && grounded) {
       this.driftFollowUpS -= fixedDeltaSeconds;

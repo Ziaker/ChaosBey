@@ -156,7 +156,9 @@ export class CircularVortex {
   private time = 0;
   private readonly anchor = new THREE.Vector3();
 
-  constructor(color: THREE.Color) {
+  /** `sizeScale`: the Bey's in-match size (owner, 2026-10-05: MatchConfig.beySizeScale), × the whole vortex. */
+  constructor(color: THREE.Color, sizeScale = 1) {
+    this.object.scale.setScalar(sizeScale);
     this.moteColor = color.clone().lerp(new THREE.Color(0xffffff), 0.5);
     this.discMaterial = shaderMaterial(DISC_FRAGMENT, DISC_VERTEX, color, THREE.NormalBlending);
     const outer = CIRCULAR_VORTEX_RADIUS_M * 1.15;

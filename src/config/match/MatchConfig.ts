@@ -158,10 +158,26 @@ export interface MatchConfig {
   speedDamageGain: number;
   /** Item 11: a Dash keeps the speed built up before it (momentum) instead of resetting to its own speed. PROVISIONAL on. Pregame toggle. */
   dashCarriesSpeed: boolean;
+  /**
+   * Owner, 2026-10-05 ("Ataque giratório - ligado (base) e desligado"): false = no Circular at all — a tap does nothing
+   * (Attack held = Dash as always), the AI never uses it (no counter either). Clash unchanged. Pregame toggle, on.
+   */
+  circularAttack: boolean;
+  /**
+   * Owner, 2026-10-05 ("Tamanho do bey in-game"): × both Beys' size — body, model, attack reach, vortex and the AI's
+   * ranges; same mass. Pregame slider, ×1.
+   */
+  beySizeScale: number;
+  /**
+   * Owner, 2026-10-05 ("recovery time … o slider trata apenas o mínimo … a força do ataque aumente esse tempo"): seconds
+   * a launched Bey must fly before the Air Recovery can be pressed — this minimum plus AIR_RECOVERY_DELAY_PER_FORCE_S
+   * per unit of the launching force (capped). Pregame slider, 0.2 s.
+   */
+  airRecoveryMinDelayS: number;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed' | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -198,6 +214,9 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     defensiveCircular: config.defensiveCircular ?? true,
     speedDamageGain: config.speedDamageGain,
     dashCarriesSpeed: config.dashCarriesSpeed,
+    circularAttack: config.circularAttack ?? true,
+    beySizeScale: config.beySizeScale ?? 1,
+    airRecoveryMinDelayS: config.airRecoveryMinDelayS ?? 0,
   };
 }
 
@@ -250,6 +269,9 @@ export function createDefaultMatchConfig(): MatchConfig {
     defensiveCircular: true,
     speedDamageGain: SPEED_DAMAGE_GAIN_DEFAULT,
     dashCarriesSpeed: true,
+    circularAttack: true,
+    beySizeScale: 1,
+    airRecoveryMinDelayS: AIR_RECOVERY_MIN_DELAY_DEFAULT_S,
   });
 }
 
@@ -296,7 +318,13 @@ export function arenaGeometryOf(config: MatchConfig): ArenaGeometry {
 }
 
 /** Slider ranges for the Lote 9 rules (owner, 2026-10-02). PROVISIONAL. */
-export const ARENA_BOWL_DEPTH_RANGE = { min: 0, max: 12, step: 0.25 } as const;
+// Owner, 2026-10-05: "aumente o limite do slider do funilamento dos stages em 50%" — max 12 -> 18 m (default unchanged).
+export const ARENA_BOWL_DEPTH_RANGE = { min: 0, max: 18, step: 0.25 } as const;
+/** Owner, 2026-10-05: Bey size slider. PROVISIONAL range. */
+export const BEY_SIZE_SCALE_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
+/** Owner, 2026-10-05: the recovery time slider (the minimum; the launching force adds to it). PROVISIONAL. */
+export const AIR_RECOVERY_MIN_DELAY_DEFAULT_S = 0.2;
+export const AIR_RECOVERY_MIN_DELAY_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
 export const ROUND_TIME_LIMIT_RANGE = { min: 0, max: 180, step: 15 } as const;
 export const ACCELERATION_SCALE_RANGE = { min: 0.25, max: 3, step: 0.05 } as const;
 export const TOP_SPEED_SCALE_RANGE = { min: 0.5, max: 3, step: 0.05 } as const;

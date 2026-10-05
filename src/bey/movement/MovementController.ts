@@ -166,6 +166,13 @@ export class MovementController {
   private whirlRadPerS = 0;
   /** Vertical velocity the body carried into physics.step() (for the Motion Lab landing bounce in postStep). */
   private preStepVerticalMps = 0;
+  /**
+   * Owner, 2026-10-05 (drift for speed build-up): the speed the floor contact took from the last drifting step (the
+   * leaning, sliding tip brakes it in the physics step) — the next drifting step gives it back. 0 outside a drift.
+   */
+  private driftFloorLossMps = 0;
+  /** This step was a drift on the ground with the match handling (see driftFloorLossMps). */
+  private driftingThisStep = false;
   /** The current post-impact window was opened by a knockback (a hit, a counter, a Clash): it plays out undamped. */
   private knockbackPlaying = false;
   /** Horizontal velocity the body carried into physics.step() (a landing keeps it — see applyLandingBounce). */
@@ -367,7 +374,9 @@ export class MovementController {
     const driftTurn = rewardingDrift ? DRIFT_TURN_RATE_MULTIPLIER : 1;
     const topSpeedMultiplier = input.topSpeedMultiplier ?? 1;
 
+    this.driftingThisStep = false;
     if (dodgeOverride) {
+      this.driftFloorLossMps = 0;
       this.applyDodgeOverride(body, dodgeOverride, grounded, fixedDeltaSeconds, floorNormal);
       return;
     }
@@ -544,6 +553,22 @@ export class MovementController {
         if (keptSpeed > after) newVelHoriz = scale(newVelHoriz, keptSpeed / after);
       }
     }
+    // Owner, 2026-10-05 ("ajeite o drift para que seja … mais útil para build-up de velocidade"): a drift accelerates at
+    // full thrust whatever its slide angle (thrust only counted along the heading, and the slide puts the velocity off
+    // it), and the floor contact of the leaning tip no longer brakes it (measured: −0.06 m/s every step at 20 m/s, so a
+    // long drift lost speed while a plain curve gained it). Up to the top speed, never on a Dash.
+    this.driftingThisStep = rewardingDrift && grounded && !dashOverride && hasMovementInput && this.postImpactCooldownRemainingS === 0;
+    if (this.driftingThisStep) {
+      const before = length(velHoriz);
+      const after = length(newVelHoriz);
+      const cap = this.handling.maxSpeedMps * topSpeedMultiplier;
+      const stick = intent ? (this.highSpeedControl > 0 ? intentMagnitude(intent) ** STICK_THRUST_EXPONENT : intentMagnitude(intent)) : throttleInput > 0 ? 1 : 0;
+      const fullThrust = this.groundThrust(this.handling.accelerationMps2 * staminaAccelFactor, true) * fixedDeltaSeconds * stick;
+      const target = Math.min(Math.max(after, cap), before + fullThrust + this.driftFloorLossMps);
+      if (after > 1e-6 && target > after) newVelHoriz = scale(newVelHoriz, target / after);
+    } else {
+      this.driftFloorLossMps = 0;
+    }
     // Numerical safety clamp (motion-approval.md §3), not a gameplay limit.
     const newSpeed = length(newVelHoriz);
     // Owner, 2026-10-04: the +45% speed and the bigger momentum need room above the Lab's 26 m/s (numerical safety only).
@@ -649,6 +674,11 @@ export class MovementController {
     this.airborneTicks = grounded ? 0 : this.airborneTicks + 1;
     const vel = body.linvel();
     const actualVelocityVector: Vec2 = { x: vel.x, z: vel.z };
+    // See driftFloorLossMps: what this drifting step's floor contact took (a real impact is not that).
+    if (this.driftingThisStep && this.intendedVelocityThisTick) {
+      const loss = length(this.intendedVelocityThisTick) - length(actualVelocityVector);
+      this.driftFloorLossMps = loss > 0 && loss < IMPACT_VELOCITY_DELTA_THRESHOLD_MPS ? loss : 0;
+    }
 
     let impactDeltaSpeedMps = 0;
     let impactDirection: Vec2 = { x: 0, z: 0 };
@@ -784,6 +814,8 @@ export class MovementController {
       lastLateralGripPerS: this.lastLateralGripPerS,
       intendedVelocityThisTick: vec2(this.intendedVelocityThisTick),
       preStepVerticalMps: this.preStepVerticalMps,
+      driftFloorLossMps: this.driftFloorLossMps,
+      driftingThisStep: this.driftingThisStep,
       knockbackPlaying: this.knockbackPlaying,
       preStepHorizontal: vec2(this.preStepHorizontal),
       airborneTicks: this.airborneTicks,

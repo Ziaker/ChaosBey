@@ -84,6 +84,15 @@ const FALLBACK_BODY = 0x8a93a3;
 
 /** Ring / top / height measured on the real visual, in metres above the tip (named pieces when the visual has them). */
 export function measureRigDims(visual: BeyVisual, tipBelowOriginM: number): RigDimsLike {
+  // Owner, 2026-10-05 (MatchConfig.beySizeScale): a scaled model (its group scaled, its body's half-height already
+  // scaled) is measured at its designed size and the result given in metres at the match's size.
+  const s = visual.group.scale.x;
+  if (s === 1) return measureRigDimsUnscaled(visual, tipBelowOriginM);
+  const d = measureRigDimsUnscaled(visual, tipBelowOriginM / s);
+  return { ringRadius: d.ringRadius * s, ringBottomY: d.ringBottomY * s, ringTopY: d.ringTopY * s, ringMidY: d.ringMidY * s, height: d.height * s, topY: d.topY * s };
+}
+
+function measureRigDimsUnscaled(visual: BeyVisual, tipBelowOriginM: number): RigDimsLike {
   visual.group.updateWorldMatrix(true, true);
   const inverse = new THREE.Matrix4().copy(visual.group.matrixWorld).invert();
   const boxOf = (object: THREE.Object3D | undefined | null): THREE.Box3 | null => {

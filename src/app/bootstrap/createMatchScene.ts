@@ -122,8 +122,10 @@ export function createMatchScene(
 
   const floor: ArenaFloor = { id: arena.geometry.floor ?? 'flat', depthM: arena.geometry.floorDepthM ?? BOWL_DEPTH_M }; // Lote 9: profile + depth
   const spawns = matchSpawnsFor(floor);
-  const first = createBey(physics, spawns.first, applyAttackProfileSettings(beys.first, attackProfileSettings), floor, motionValues, rules);
-  const second = createBey(physics, spawns.second, applyAttackProfileSettings(beys.second, attackProfileSettings), floor, motionValues, rules);
+  const firstBase = applyAttackProfileSettings(beys.first, attackProfileSettings);
+  const secondBase = applyAttackProfileSettings(beys.second, attackProfileSettings);
+  const first = createBey(physics, spawns.first, firstBase, floor, motionValues, rules);
+  const second = createBey(physics, spawns.second, secondBase, floor, motionValues, rules);
 
   // The same resolution Character Select's preview uses (beyVisualDefinitionFor):
   // the approved concept with `newBeyVisuals` on, the legacy placeholder
@@ -131,8 +133,12 @@ export function createMatchScene(
   // reaches the body or the stats.
   const firstVisualDefinition = beyVisualDefinitionFor(first.definition, features);
   const secondVisualDefinition = beyVisualDefinitionFor(second.definition, features);
-  const firstVisual = firstVisualDefinition.create(first.definition);
-  const secondVisual = secondVisualDefinition.create(second.definition);
+  // Owner, 2026-10-05 (MatchConfig.beySizeScale): the model is built at its designed size and its group scaled, so it
+  // matches the scaled body (the model's own offsets scale with it).
+  const firstVisual = firstVisualDefinition.create(firstBase);
+  const secondVisual = secondVisualDefinition.create(secondBase);
+  firstVisual.group.scale.setScalar(first.definition.sizeScale ?? 1);
+  secondVisual.group.scale.setScalar(second.definition.sizeScale ?? 1);
   const visuals = {
     first: { definition: firstVisualDefinition, anchors: new BeyVisualAnchors(firstVisual, firstVisualDefinition.anchors), visual: firstVisual },
     second: { definition: secondVisualDefinition, anchors: new BeyVisualAnchors(secondVisual, secondVisualDefinition.anchors), visual: secondVisual },

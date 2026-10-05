@@ -74,6 +74,7 @@ export type MatchRules = Pick<
   'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'
   | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'speedDamageGain' | 'dashCarriesSpeed'
   | 'turnRateScale' | 'turnSpeedRetention' | 'jumpHoldForFullS' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'highSpeedControl' | 'arenaSizeScale' | 'gameSpeed' | 'clashLaunchMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale'
+  | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS'
 >;
 
 /** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
@@ -81,6 +82,7 @@ export const MATCH_RULE_KEYS = [
   'ringOutDelayS', 'dashCooldownS', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyCollisionDamage', 'momentumLossOnCollision', 'jumpFullHeightM', 'jumpShortHopHeightM', 'movementStaminaDrain', 'dodgeCooldownS', 'circularLaunchForce',
   'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS', 'speedDamageGain', 'dashCarriesSpeed',
   'turnRateScale', 'turnSpeedRetention', 'jumpHoldForFullS', 'gravityScale', 'contactRepelMps', 'attackRecoilMps', 'highSpeedControl', 'arenaSizeScale', 'gameSpeed', 'clashLaunchMps', 'dodgeStaminaCost', 'dodgeDistanceScale', 'contactLiftMps', 'knockbackScale', 'spinStaminaDrain', 'circularLockAfterHitS', 'bodyContactControlLossScale',
+  'circularAttack', 'beySizeScale', 'airRecoveryMinDelayS',
 ] as const satisfies readonly (keyof MatchRules)[];
 
 /**
@@ -139,6 +141,9 @@ export function defaultMatchRules(): MatchRules {
     spinStaminaDrain: config.spinStaminaDrain,
     circularLockAfterHitS: config.circularLockAfterHitS,
     bodyContactControlLossScale: config.bodyContactControlLossScale,
+    circularAttack: config.circularAttack,
+    beySizeScale: config.beySizeScale,
+    airRecoveryMinDelayS: config.airRecoveryMinDelayS,
   };
 }
 
@@ -331,6 +336,9 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   gameSpeed: { name: 'game speed', format: (v) => `×${(v as number).toFixed(2)}` },
   clashLaunchMps: { name: 'Clash knockback', format: (v) => `${(v as number).toFixed(0)} m/s` },
   highSpeedControl: { name: 'control at speed', format: (v) => `${Math.round((v as number) * 100)}%` },
+  circularAttack: { name: 'Circular attack', format: (v) => (v ? 'on' : 'off') },
+  beySizeScale: { name: 'Bey size', format: (v) => `×${(v as number).toFixed(2)}` },
+  airRecoveryMinDelayS: { name: 'recovery time', format: (v) => `${(v as number).toFixed(2)} s` },
 };
 
 /** "Dash cooldown 2.00 s", … for every rule that differs from its default (Lote 9: the explanation reflects the values). */

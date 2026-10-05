@@ -108,6 +108,8 @@ export class AttackController {
   private circularLockS = 0;
   /** The current Dash's own line (null outside a Dash). */
   private dashHeadingRad: number | null = null;
+  /** See wasPressRefusedThisTick(). Reset at the start of every tick. */
+  private pressRefusedThisTick = false;
 
   constructor(
     private readonly profile: BeyAttackProfile = DEFAULT_ATTACK_PROFILE,
@@ -117,7 +119,19 @@ export class AttackController {
     private readonly dashCarriesSpeed: boolean = false,
     /** MatchConfig.topSpeedScale (owner, 2026-10-04): the Dash speeds up with the Beys, so it is never slower than running. */
     private readonly dashSpeedScale: number = 1,
+    /** MatchConfig.circularAttack (owner, 2026-10-05): false = a tap starts nothing (the Dash is unchanged). */
+    private readonly circularEnabled: boolean = true,
   ) {}
+
+  /** MatchConfig.circularAttack: whether this match has the Circular at all. */
+  isCircularEnabled(): boolean {
+    return this.circularEnabled;
+  }
+
+  /** A tap (or a hold released before its Dash was ready) that started nothing, this tick — for the HUD's refused flash. */
+  wasPressRefusedThisTick(): boolean {
+    return this.pressRefusedThisTick;
+  }
 
   getState(): AttackState {
     return this.state;
@@ -242,6 +256,7 @@ export class AttackController {
     opponentVelocityXZ: Vec2 = { x: 0, z: 0 },
   ): AttackTickResult {
     const attackHeld = actions.held.has(Action.Attack);
+    this.pressRefusedThisTick = false;
     this.circularLockS = Math.max(0, this.circularLockS - fixedDeltaSeconds);
     let dashOverride: MovementPreStepInput['dashOverride'] = null;
     // B1: a press during a recovery is kept while it stays held.
@@ -333,9 +348,12 @@ export class AttackController {
         // A hold that waited for the Dash cooldown, released before it ran out: no Dash, and not a tap either.
         this.state = AttackState.Neutral;
         this.waitingForDash = false;
-      } else if (this.circularLockS > 0) {
+        this.pressRefusedThisTick = true;
+      } else if (this.circularLockS > 0 || !this.circularEnabled) {
         // Owner, 2026-10-04: the Circular is a defensive move that can't be thrown while taking a hit.
+        // Owner, 2026-10-05: a match with the Circular off ("Ataque giratório: desligado") has no Circular at all.
         this.state = AttackState.Neutral;
+        this.pressRefusedThisTick = true;
       } else {
         this.state = AttackState.CircularActive;
         this.activeTimerS = 0;
@@ -432,6 +450,7 @@ export class AttackController {
       dashEntrySpeedMps: this.dashEntrySpeedMps,
       dashHeadingRad: this.dashHeadingRad,
       circularLockS: this.circularLockS,
+      pressRefusedThisTick: this.pressRefusedThisTick,
     };
   }
 }

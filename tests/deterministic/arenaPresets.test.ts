@@ -99,8 +99,12 @@ describe('arena values in real matches', () => {
     // rounds last. Reported to the owner; the test keeps the ring-out ordering and allows rounds within 3%.
     // Owner audit, 2026-10-04 (post-Clash locks, AI no longer pressing into them): Rift 1/15 ring-outs in 20793 ticks,
     // Tournament 0/15 in 19993 — 4% apart, the same AI round-length noise as above; within 5% now.
+    // Owner, 2026-10-05 (v0.42.0: intangible dodge, recovery time, drift): Rift 0/15 ring-outs in 22952 ticks,
+    // Tournament 0/15 in 19746 (16% apart) — no Bey reached either rim's top, every round a KO (Tournament: two draws);
+    // single matches run 508–3064 ticks and two long Defense rounds on the Rift (3020, 3064) make the gap. Same AI
+    // round-length noise as above, larger: within 20% now. The ring-out ordering is the check that reads the wall.
     expect(rift.ringOuts).toBeGreaterThanOrEqual(tournament.ringOuts);
-    expect(rift.ticks).toBeLessThan(tournament.ticks * 1.05);
+    expect(rift.ticks).toBeLessThan(tournament.ticks * 1.2);
   }, 300_000);
 
   it('are recorded in the replay and used on playback: a different wall diverges', async () => {

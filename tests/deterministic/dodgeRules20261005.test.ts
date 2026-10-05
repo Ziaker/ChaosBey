@@ -7,6 +7,7 @@ import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { AttackState } from '../../src/combat/attacks/AttackController';
 import { createDefaultMatchConfig } from '../../src/config/match/MatchConfig';
 import { DodgeController, DodgeState } from '../../src/dodge/DodgeController';
+import { INTANGIBLE_AFTER_DODGE_MAX_S } from '../../src/dodge/DodgeTuning';
 import { Action, type ControllerActions } from '../../src/input/actions/Action';
 import { CombatHarness } from './combatHarness';
 
@@ -103,5 +104,61 @@ describe('a dodge and an attack never cancel each other (owner, 2026-10-05)', ()
 describe('dodge cooldown (owner, 2026-10-05)', () => {
   it('the base dodge cooldown is half what it was: 1.25 s (was 2.5 s)', () => {
     expect(createDefaultMatchConfig().dodgeCooldownS).toBe(1.25);
+  });
+});
+
+describe('a dodging Bey is invincible and intangible (owner, 2026-10-05)', () => {
+  // "durante o dodge, o bey fica invencível e intangível, além de NUNCA deixar os beys tocar um no outro durante o
+  // perfect dodge". Checked: with the intangibility switched off, the first case takes a collision with damage (tick 51).
+  it('a Dash at a dodging Bey passes straight through it: no hit, no body collision, no push, one Perfect Dodge', async () => {
+    for (const dodgeTick of [20, 24, 26]) {
+      const h = await harness(-2, 4);
+      const reach = h.first.definition.physical.colliderRadiusM + h.second.definition.physical.colliderRadiusM;
+      let closest = Infinity;
+      let perfect = 0;
+      for (let t = 0; t < 90; t++) {
+        const second = t < 20 ? hold([Action.Attack], t === 0 ? [Action.Attack] : []) : NONE;
+        const first = t === dodgeTick ? hold([Action.Dodge], [Action.Dodge]) : NONE;
+        const r = h.tick(first, second);
+        const a = h.first.body.translation();
+        const b = h.second.body.translation();
+        closest = Math.min(closest, Math.hypot(a.x - b.x, a.z - b.z));
+        perfect += r.combatEvents.filter((e) => e.kind === 'perfectDodge').length;
+        const touched = r.combatEvents.filter((e) => e.kind === 'stabilityDamage' || e.kind === 'knockback' || e.kind === 'bodyCollision');
+        expect(touched, `dodge at ${dodgeTick}, tick ${t}`).toEqual([]);
+      }
+      expect(closest, `dodge at ${dodgeTick}: the Dash went through the body`).toBeLessThan(reach * 0.5);
+      expect(perfect, `dodge at ${dodgeTick}`).toBe(1);
+    }
+  });
+
+  it('after the dodge it stays intangible while the two still overlap (at most the cap), then is solid again', () => {
+    const dodge = new DodgeController(0.1, 0);
+    const body = { linvel: () => ({ x: 0, y: 0, z: 0 }) } as never;
+    expect(dodge.isIntangible()).toBe(false);
+    dodge.tick(body, hold([Action.Dodge], [Action.Dodge]), 0, true, 100, 1 / 60);
+    dodge.updateIntangibility(false, 1 / 60);
+    expect(dodge.isIntangible(), 'dodging').toBe(true);
+    for (let i = 0; i < 120 && dodge.getState() === DodgeState.Dodging; i++) {
+      dodge.tick(body, NONE, 0, true, 100, 1 / 60);
+      dodge.updateIntangibility(true, 1 / 60);
+    }
+    expect(dodge.getState()).not.toBe(DodgeState.Dodging);
+    dodge.updateIntangibility(true, 1 / 60);
+    expect(dodge.isIntangible(), 'dodge over, still inside the other Bey').toBe(true);
+    dodge.updateIntangibility(false, 1 / 60);
+    expect(dodge.isIntangible(), 'out of the other Bey').toBe(false);
+
+    // Stuck inside for longer than the cap: solid again after it (the solver separates them).
+    const stuck = new DodgeController(0.1, 0);
+    stuck.tick(body, hold([Action.Dodge], [Action.Dodge]), 0, true, 100, 1 / 60);
+    stuck.updateIntangibility(true, 1 / 60);
+    for (let i = 0; i < 120 && stuck.getState() === DodgeState.Dodging; i++) stuck.tick(body, NONE, 0, true, 100, 1 / 60);
+    let ticks = 0;
+    while (stuck.isIntangible() && ticks < 600) {
+      stuck.updateIntangibility(true, 1 / 60);
+      ticks++;
+    }
+    expect(ticks / 60).toBeCloseTo(INTANGIBLE_AFTER_DODGE_MAX_S, 1);
   });
 });

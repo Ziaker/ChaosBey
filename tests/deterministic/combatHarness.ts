@@ -50,6 +50,9 @@ export const MECHANISM_BASELINE: Partial<MatchConfig> = {
   arenaFloor: 'bowl-a',
   arenaBowlDepthM: 2.5,
   clashLaunchMps: 0,
+  // Owner, 2026-10-05: the recovery time's minimum (0.2 s shipped; ownerRules20261005 covers it). 0 here: the Air
+  // Recovery tests isolate the recovery itself (a launch's force still adds its share).
+  airRecoveryMinDelayS: 0,
 };
 
 export class CombatHarness extends SelfTestMatchWorld {

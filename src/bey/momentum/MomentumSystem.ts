@@ -48,7 +48,8 @@ export class MomentumSystem {
    * headingRad: its velocity direction (null when nearly still). Builds over momentumFillS of sustained fast,
    * straight-ish movement on the ground; drains over momentumDecayS otherwise.
    */
-  tick(speedMps: number, topSpeedMps: number, headingRad: number | null, grounded: boolean, fixedDeltaSeconds: number): void {
+  /** `drifting` (owner, 2026-10-05): a drift's turn is the move for building speed — it never counts as a sharp turn. */
+  tick(speedMps: number, topSpeedMps: number, headingRad: number | null, grounded: boolean, fixedDeltaSeconds: number, drifting = false): void {
     this.bodyCollisionCooldownS = Math.max(0, this.bodyCollisionCooldownS - fixedDeltaSeconds);
     let turnRate = 0;
     if (headingRad !== null && this.lastHeadingRad !== null) {
@@ -59,7 +60,7 @@ export class MomentumSystem {
     this.lastHeadingRad = headingRad;
     const fastEnough = speedMps >= MOMENTUM_BUILD_MIN_SPEED_FRACTION * topSpeedMps;
     const keep = Math.max(0, Math.min(1, this.rules.turnSpeedRetention ?? 0));
-    const straightEnough = keep >= 1 || turnRate <= MOMENTUM_SHARP_TURN_RAD_PER_S / (1 - keep);
+    const straightEnough = drifting || keep >= 1 || turnRate <= MOMENTUM_SHARP_TURN_RAD_PER_S / (1 - keep);
     // In the air momentum holds: a hop is not a brake.
     if (!grounded) return;
     if (fastEnough && straightEnough) this.momentum = Math.min(1, this.momentum + fixedDeltaSeconds / Math.max(1e-6, this.rules.momentumFillS));

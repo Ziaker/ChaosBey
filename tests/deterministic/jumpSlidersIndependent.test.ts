@@ -56,7 +56,8 @@ describe('B6 — Full jump does not change the short hop or the drift hop', () =
       for (const x of r) {
         expect(x.takeoffs).toBe(1);
         expect(x.upwardKicks).toBe(0);
-        expect(x.apexM).toBeGreaterThan(0.05);
+        // Owner, 2026-10-05: the drift press made in the air drops the hop straight to the floor (it peaks at ~0.048 m).
+        expect(x.apexM).toBeGreaterThan(kind === 'drift hop' ? 0.02 : 0.05);
         expect(x.apexM).toBeLessThan(0.2);
       }
       expect(r[1]!.apexM).toBeCloseTo(r[0]!.apexM, 6);

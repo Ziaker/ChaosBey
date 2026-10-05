@@ -98,7 +98,10 @@ export class CombatHud {
   private clashShare = 0.5;
   private clashFirstOnLeft = true;
   private clashHoldS = 0;
-  private hintsForPad: boolean | null = null;
+  /** The hints shown: pad or keyboard, and whether the match has the Circular. Null = rebuild. */
+  private hintsKey: string | null = null;
+  /** Owner, 2026-10-05: false when the match has no Circular ("Ataque giratório: desligado"). */
+  private hintsCircular = true;
   private hintsOn: boolean;
 
   constructor(
@@ -153,6 +156,7 @@ export class CombatHud {
     this.consumeFeedback(session);
     this.updateCounterWord(camera, frameDeltaSeconds);
     this.updateRingOutWarning(session);
+    this.hintsCircular = session.getBey('first').attack.isCircularEnabled();
     if (this.hintsOn) this.refreshHints();
   }
 
@@ -237,7 +241,7 @@ export class CombatHud {
   setControlHints(visible: boolean): void {
     this.hints.hidden = !visible;
     this.hintsOn = visible;
-    this.hintsForPad = null;
+    this.hintsKey = null;
     if (visible) this.refreshHints();
   }
 
@@ -362,13 +366,17 @@ export class CombatHud {
     const bey = session.getBey('first');
     // Owner, 2026-10-04: the recovery spends the dodge. While launched with the dodge still recharging the alert shows
     // greyed, its border filling as the dodge recharges — pressing then does nothing, and now that reads on screen.
+    // Owner, 2026-10-05: same while the recovery time runs (an early C does nothing; the HUD flashes it refused).
     const launched = session.getLastResult()?.first.grounded === false && bey.dodge.isAirRecoveryAvailable();
     const ready = launched && bey.dodge.canAirRecoverNow();
     const show = launched;
     this.recoverAlert.classList.toggle('is-on', show);
     this.recoverAlert.classList.toggle('is-wait', show && !ready);
     if (!show) return;
-    this.recoverAlert.style.setProperty('--cb-recover-fill', `${Math.round(bey.dodge.getReadiness() * 100)}%`);
+    // Owner, 2026-10-05: the recovery time (slider minimum + the launching force) fills it too — the slower of the two.
+    const wait = bey.dodge.getRecoveryWait();
+    const waitFill = wait.totalS > 0 ? 1 - wait.remainingS / wait.totalS : 1;
+    this.recoverAlert.style.setProperty('--cb-recover-fill', `${Math.round(Math.min(bey.dodge.getReadiness(), waitFill) * 100)}%`);
     this.recoverAlert.textContent = readFirstGamepad(currentGamepads()) !== null ? 'B' : 'C';
     const p = bey.body.translation();
     const ndc = this.projected.set(p.x, p.y + 1.6, p.z).project(camera);
@@ -382,11 +390,13 @@ export class CombatHud {
 
   private refreshHints(): void {
     const pad = readFirstGamepad(currentGamepads()) !== null;
-    if (pad === this.hintsForPad) return;
-    this.hintsForPad = pad;
+    const key = `${pad}|${this.hintsCircular}`;
+    if (key === this.hintsKey) return;
+    this.hintsKey = key;
+    const attack = this.hintsCircular ? 'attack · hold: Dash' : 'hold: Dash';
     const items = pad
-      ? [['Stick', 'move'], ['A', 'attack · hold: Dash'], ['X', 'tap: hop · hold: jump · tap + hold: drift'], ['B', 'dodge'], ['Start', 'pause']]
-      : [['← → ↑ ↓', 'move'], ['Z', 'attack · hold: Dash'], ['X', 'tap: hop · hold: jump · tap + hold: drift'], ['C', 'dodge'], ['Esc', 'pause']];
+      ? [['Stick', 'move'], ['A', attack], ['X', 'tap: hop · hold: jump · tap + hold: drift'], ['B', 'dodge'], ['Start', 'pause']]
+      : [['← → ↑ ↓', 'move'], ['Z', attack], ['X', 'tap: hop · hold: jump · tap + hold: drift'], ['C', 'dodge'], ['Esc', 'pause']];
     this.hints.replaceChildren(
       ...items.map(([key, meaning]) => {
         const item = el('span', 'cb-hud__hint');

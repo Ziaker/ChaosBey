@@ -27,7 +27,7 @@ import { CLASH_STAMINA_FACTOR_MAX, CLASH_STAMINA_FACTOR_MIN } from '../../combat
 import { DodgeState } from '../../dodge/DodgeController';
 import { DriftState } from '../../drift/DriftController';
 import type { AiPersonality } from '../personalities/AiPersonality';
-import { AI_CIRCULAR_ATTACK_RANGE_M, AI_COUNTER_MIN_CLOSING_SPEED_MPS, AI_DASH_ATTACK_MAX_RANGE_M } from './AiCombatRanges';
+import { aiCircularAttackRangeM, AI_COUNTER_MIN_CLOSING_SPEED_MPS, AI_DASH_ATTACK_MAX_RANGE_M } from './AiCombatRanges';
 import { AiIntent } from './Intent';
 import type { RiskAssessment } from './RiskEvaluation';
 import type { WorldState } from './WorldState';
@@ -301,8 +301,10 @@ export function selectIntent(
     world.own.attackState !== AttackState.DashRecovery &&
     world.own.attackState !== AttackState.CircularRecovery;
 
-  const inCircularRange = world.distanceToOpponentM <= AI_CIRCULAR_ATTACK_RANGE_M;
-  const inDashRange = world.distanceToOpponentM > AI_CIRCULAR_ATTACK_RANGE_M && world.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M;
+  const circularRangeM = aiCircularAttackRangeM(world.own);
+  const inCircularRange = world.distanceToOpponentM <= circularRangeM;
+  // Owner, 2026-10-05: in a match without the Circular the Dash is the only attack, at close range too.
+  const inDashRange = (world.own.circularDisabled === true || world.distanceToOpponentM > circularRangeM) && world.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M;
 
   // GDD section 64 Stamina "avoids unnecessary heavy collisions": closing
   // in and Dash commitments lose appeal unless the opponent is actually open

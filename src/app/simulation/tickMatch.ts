@@ -378,6 +378,16 @@ export function tickMatch(
   const gapBefore = length(subtract(positionXZ(second.body), positionXZ(first.body)));
   const firstWasAboveFloor = isAboveFloor(first);
   const secondWasAboveFloor = isAboveFloor(second);
+  // Owner, 2026-10-05: "durante o dodge, o bey fica invencível e intangível, além de NUNCA deixar os beys tocar um no
+  // outro durante o perfect dodge". While either Bey dodges — and after, until the two bodies no longer overlap — they
+  // pass through each other: no solver contact, no hit, no body collision.
+  const overlapBefore =
+    gapBefore <= first.definition.physical.colliderRadiusM + second.definition.physical.colliderRadiusM + BODY_COLLISION_CONTACT_SLOP_M &&
+    beyBodiesOverlapVertically(first.body.translation().y, first.definition.physical.colliderHalfHeightM, second.body.translation().y, second.definition.physical.colliderHalfHeightM);
+  first.dodge.updateIntangibility(overlapBefore, fixedDeltaSeconds);
+  second.dodge.updateIntangibility(overlapBefore, fixedDeltaSeconds);
+  const phased = first.dodge.isIntangible() || second.dodge.isIntangible();
+  physics.setBeyContactsEnabled(!phased);
   physics.step();
   if (firstWasAboveFloor) keepAboveFloor(first);
   if (secondWasAboveFloor) keepAboveFloor(second);
@@ -421,8 +431,8 @@ export function tickMatch(
   first.stamina.tick(firstFree ? 0 : firstMovement.speedMps, fixedDeltaSeconds);
   second.stamina.tick(secondFree ? 0 : secondMovement.speedMps, fixedDeltaSeconds);
   // Momentum (owner, 2026-10-02): builds with sustained fast, straight movement; a wall impact costs part of it.
-  tickMomentum(first, firstMovement, firstGrounded, fixedDeltaSeconds);
-  tickMomentum(second, secondMovement, secondGrounded, fixedDeltaSeconds);
+  tickMomentum(first, firstMovement, firstGrounded, fixedDeltaSeconds, firstDrift.driftState === DriftState.Drifting);
+  tickMomentum(second, secondMovement, secondGrounded, fixedDeltaSeconds, secondDrift.driftState === DriftState.Drifting);
   first.stability.tick(fixedDeltaSeconds);
   second.stability.tick(fixedDeltaSeconds);
 
@@ -461,6 +471,8 @@ export function tickMatch(
       }
       continue;
     }
+    // Still passing through a Bey whose dodge just ended (see `phased` above): the hit is not there at all.
+    if (phased) continue;
     hitEvents.push(hit);
   }
 
@@ -564,7 +576,7 @@ export function tickMatch(
     target.movement.registerKnockback();
     target.momentum.loseOnCollision();
     // A genuine launch: arm Air Recovery at once if already airborne, else the short pending window.
-    target.dodge.registerLaunch(!isGrounded(physics, target.collider));
+    target.dodge.registerLaunch(!isGrounded(physics, target.collider), CIRCULAR_LAUNCH_HORIZONTAL_MPS * force);
     combatEvents.push({ kind: 'knockback', targetIsFirst, force: CIRCULAR_LAUNCH_HORIZONTAL_MPS * force, directionXZ: dir });
   }
 
@@ -620,8 +632,8 @@ export function tickMatch(
     applyKnockback(defender.body, resolved.attackerPositionXZ, resolved.defenderPositionXZ, knockback, defender.motion);
     defender.movement.registerKnockback();
     defender.momentum.loseOnCollision();
-    // Same immediate-vs-pending arming as the catch-launch path above.
-    defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
+    // Same immediate-vs-pending arming as the catch-launch path above; the hit's force lengthens the recovery time.
+    defender.dodge.registerLaunch(!isGrounded(physics, defender.collider), knockback.force);
     combatEvents.push({
       kind: 'knockback',
       targetIsFirst: defenderIsFirst,
@@ -655,7 +667,7 @@ export function tickMatch(
     first.momentum.releaseBodyContact();
     second.momentum.releaseBodyContact();
   }
-  if (hitEvents.length === 0 && rawHitEvents.length === 0 && !roundState.isOver) {
+  if (hitEvents.length === 0 && rawHitEvents.length === 0 && !roundState.isOver && !phased) {
     const firstToSecond = subtract(secondPos, firstPos);
     const closingSpeed = dot(subtract(firstVelBefore, secondVelBefore), normalize(firstToSecond));
     // Touching after the step, or would have met during it (a fast contact can bounce them apart within the tick).
@@ -850,10 +862,12 @@ function keepAboveFloor(bey: Bey): void {
 }
 
 /** Momentum bookkeeping after the physics step (owner, 2026-10-02, Lote 3; see bey/momentum/). */
-function tickMomentum(bey: Bey, movement: MovementSnapshot, grounded: boolean, fixedDeltaSeconds: number): void {
+function tickMomentum(bey: Bey, movement: MovementSnapshot, grounded: boolean, fixedDeltaSeconds: number, drifting: boolean): void {
   const v = movement.actualVelocityVector;
   const heading = movement.speedMps > 0.5 ? Math.atan2(v.x, v.z) : null;
-  bey.momentum.tick(movement.speedMps, bey.movement.getMaxSpeedMps() * bey.momentum.topSpeedMultiplier, heading, grounded, fixedDeltaSeconds);
+  // Owner, 2026-10-05: a drift builds momentum like a straight line (match handling only — a bare construction keeps the old rule).
+  const driftBuilds = drifting && (bey.rules.turnSpeedRetention ?? 0) > 0;
+  bey.momentum.tick(movement.speedMps, bey.movement.getMaxSpeedMps() * bey.momentum.topSpeedMultiplier, heading, grounded, fixedDeltaSeconds, driftBuilds);
   if (movement.impactDeltaSpeedMps > 0) bey.momentum.loseOnCollision();
 }
 

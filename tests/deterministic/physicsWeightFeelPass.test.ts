@@ -141,21 +141,23 @@ describe('dodge flat-velocity state — mandatory scenarios E-K (owner spec sect
     expect(z).toBeLessThan(ARENA_FLOOR_RADIUS + 0.5); // did not clip through the wall.
   });
 
-  it('K: dodging straight into another Bey is a real collision, not a pass-through', async () => {
-    // Second Bey directly ahead on the dodge's own forward direction, close enough to hit within the active window.
+  it('K: dodging straight into another Bey passes through it — the dodge is intangible (owner, 2026-10-05)', async () => {
+    // Was "a real collision, not a pass-through" (owner spec section 16). Owner, 2026-10-05: "durante o dodge, o bey
+    // fica invencível e intangível, além de NUNCA deixar os beys tocar um no outro durante o perfect dodge".
+    // Second Bey directly ahead on the dodge's own forward direction, close enough to reach within the active window.
     const harness = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: -1.5 }, { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 1.5 });
     settle(harness);
     const dodger = new ScriptedController([
       { fromTick: 0, held: [Action.Dodge, Action.MoveForward] }, // forward (+Z), straight at the second Bey.
       { fromTick: 1, held: [] },
     ]);
-    const startSecondZ = harness.second.body.translation().z;
+    const startSecond = harness.second.body.translation();
     for (let i = 0; i < ACTIVE_TICKS + 10; i++) harness.tick(dodger.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
-    const firstZ = harness.first.body.translation().z;
-    const secondZ = harness.second.body.translation().z;
-    // The dodger didn't tunnel through the second Bey (stayed behind it), and the collision pushed the second Bey along.
-    expect(firstZ).toBeLessThan(secondZ);
-    expect(secondZ).toBeGreaterThan(startSecondZ);
+    const first = harness.first.body.translation();
+    const second = harness.second.body.translation();
+    // The dodger went through and out the other side; the second Bey was not pushed.
+    expect(first.z).toBeGreaterThan(second.z);
+    expect(Math.hypot(second.x - startSecond.x, second.z - startSecond.z)).toBeLessThan(0.1);
   });
 });
 

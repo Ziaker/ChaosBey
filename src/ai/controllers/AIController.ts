@@ -99,7 +99,10 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     momentum: bey.momentum.value,
     // The post-Clash locks refuse the Dodge, Air Recovery included (the winner's 0.4 s; the loser's stun until it lands).
     airRecoveryAvailable: bey.dodge.canAirRecoverNow() && !bey.movement.areActionsLocked(),
-    circularLocked: bey.attack.getCircularLockS() > 0,
+    // Owner, 2026-10-05: with the Circular off it is locked for good — no Circular, no counter.
+    circularLocked: bey.attack.getCircularLockS() > 0 || !bey.attack.isCircularEnabled(),
+    circularDisabled: !bey.attack.isCircularEnabled(),
+    sizeScale: bey.definition.sizeScale ?? 1,
     actionsLocked: bey.movement.areActionsLocked(),
     launchedFlight: bey.dodge.isAirRecoveryAvailable(),
     // Owner, 2026-10-02 (Lote 5): Stamina 0 is a spin-out loss, so the AI keeps a reserve and never dodges itself into one.

@@ -23,12 +23,15 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import { Action, type ControllerActions } from '../input/actions/Action';
 import { add, fromYaw, normalize, perpendicular, scale, type Vec2 } from '../physics/Vec2';
 import {
+  AIR_RECOVERY_DELAY_PER_FORCE_S,
+  AIR_RECOVERY_FORCE_DELAY_CAP_S,
   DODGE_ACTIVE_DURATION_S,
   DODGE_BURST_SPEED_MPS,
   DODGE_COOLDOWN_S,
   DODGE_GRIP_OVERRIDE_PER_S,
   DODGE_PERFECT_WINDOW_S,
   DODGE_STAMINA_COST,
+  INTANGIBLE_AFTER_DODGE_MAX_S,
   LAUNCH_PENDING_WINDOW_S,
 } from './DodgeTuning';
 import { vec2, type CanonicalRecord } from '../replay/state/CanonicalValue';
@@ -78,7 +81,21 @@ export class DodgeController {
      * constructions keep the old free recovery.
      */
     private readonly recoveryUsesDodge: boolean = false,
+    /**
+     * MatchConfig.airRecoveryMinDelayS (owner, 2026-10-05): a launched Bey can't recover before this long (s) after the
+     * launching hit, plus AIR_RECOVERY_DELAY_PER_FORCE_S per unit of its force (capped). null = no wait (bare
+     * constructions keep the old recovery).
+     */
+    private readonly recoveryMinDelayS: number | null = null,
   ) {}
+
+  /**
+   * The recovery time still to wait (s) and its whole length, for the HUD's "C" alert — 0 / 0 when there is none.
+   * Counted from the launching hit; a press before it ends does nothing.
+   */
+  getRecoveryWait(): { remainingS: number; totalS: number } {
+    return { remainingS: this.recoveryWaitRemainingS, totalS: this.recoveryWaitTotalS };
+  }
 
   /** 0..1 for the HUD's dodge line: 1 = a dodge can start now, refilling during the cooldown, 0 while dodging. */
   getReadiness(): number {
@@ -93,12 +110,22 @@ export class DodgeController {
   private airRecoveryAvailable = false;
   private launchPending = false;
   private launchPendingRemainingS = 0;
+  /** See getRecoveryWait(). */
+  private recoveryWaitRemainingS = 0;
+  private recoveryWaitTotalS = 0;
   /** Direction latched once at the Idle->Dodging transition ("Fix 1" — see dodgeOverride on DodgeTickResult). Null outside Dodging. */
   private latchedDirection: Vec2 | null = null;
   /** Opponent attacks (by activation id) this dodge has already reported as evaded: the hit is nullified every tick, the event is told once. */
   private readonly evadedThisDodge = new Set<number>();
   /** Owner, 2026-10-05 ("perfect dodge ser ativado múltiplas vezes"): one Perfect Dodge per dodge, whatever it evades. */
   private perfectDodgeThisDodge = false;
+  /**
+   * Owner, 2026-10-05: "durante o dodge, o bey fica invencível e intangível, além de NUNCA deixar os beys tocar um no
+   * outro durante o perfect dodge". True for the whole dodge, and after it while the two Beys still overlap (they
+   * passed through each other), at most INTANGIBLE_AFTER_DODGE_MAX_S: so they never touch on the way out either.
+   */
+  private intangible = false;
+  private intangibleAfterDodgeS = 0;
 
   getState(): DodgeState {
     return this.state;
@@ -140,7 +167,7 @@ export class DodgeController {
    */
   /** isAirRecoveryAvailable() and, when the recovery uses the dodge bar, a dodge ready right now: a press would recover. */
   canAirRecoverNow(): boolean {
-    return this.isAirRecoveryAvailable() && (!this.recoveryUsesDodge || this.state === DodgeState.Idle);
+    return this.isAirRecoveryAvailable() && (!this.recoveryUsesDodge || this.state === DodgeState.Idle) && this.recoveryWaitRemainingS <= 0;
   }
 
   isAirRecoveryAvailable(): boolean {
@@ -171,9 +198,16 @@ export class DodgeController {
     this.airRecoveryAvailable = false;
     this.launchPending = false;
     this.launchPendingRemainingS = 0;
+    this.recoveryWaitRemainingS = 0;
+    this.recoveryWaitTotalS = 0;
   }
 
-  registerLaunch(currentlyAirborne: boolean): void {
+  /** `force`: the launching hit's force (the knockback event's), which lengthens the recovery time (see the constructor). */
+  registerLaunch(currentlyAirborne: boolean, force = 0): void {
+    if (this.recoveryMinDelayS !== null) {
+      this.recoveryWaitTotalS = this.recoveryMinDelayS + Math.min(AIR_RECOVERY_FORCE_DELAY_CAP_S, Math.max(0, force) * AIR_RECOVERY_DELAY_PER_FORCE_S);
+      this.recoveryWaitRemainingS = this.recoveryWaitTotalS;
+    }
     if (currentlyAirborne) {
       this.airRecoveryAvailable = true;
       this.launchPending = false;
@@ -193,6 +227,7 @@ export class DodgeController {
   ): DodgeTickResult {
     const dodgePressed = actions.pressedThisFrame.has(Action.Dodge);
 
+    this.recoveryWaitRemainingS = Math.max(0, this.recoveryWaitRemainingS - fixedDeltaSeconds);
     if (this.launchPending) {
       this.launchPendingRemainingS -= fixedDeltaSeconds;
       if (this.launchPendingRemainingS <= 0) this.launchPending = false;
@@ -208,7 +243,8 @@ export class DodgeController {
     this.wasGrounded = grounded;
 
     let triggeredAirRecovery = false;
-    if (!grounded && dodgePressed && this.airRecoveryAvailable && (!this.recoveryUsesDodge || this.state === DodgeState.Idle)) {
+    // Owner, 2026-10-05: not before the recovery time is over (a press during it does nothing).
+    if (!grounded && dodgePressed && this.airRecoveryAvailable && (!this.recoveryUsesDodge || this.state === DodgeState.Idle) && this.recoveryWaitRemainingS <= 0) {
       this.airRecoveryAvailable = false;
       triggeredAirRecovery = true;
       if (this.recoveryUsesDodge) {
@@ -270,11 +306,35 @@ export class DodgeController {
       state: this.state,
       lateralGripOverridePerS: grantsGroundIFrames ? DODGE_GRIP_OVERRIDE_PER_S : null,
       dodgeOverride,
-      hasIFrames: grantsGroundIFrames,
-      isPerfectWindow: grantsGroundIFrames && this.activeTimerS <= DODGE_PERFECT_WINDOW_S,
+      // Owner, 2026-10-05: invincible for the whole dodge, on the ground or carried off it into the air.
+      hasIFrames: this.state === DodgeState.Dodging,
+      isPerfectWindow: this.state === DodgeState.Dodging && this.activeTimerS <= DODGE_PERFECT_WINDOW_S,
       triggeredAirRecovery,
       staminaCostThisTick,
     };
+  }
+
+  /**
+   * Once per tick, before the physics step: `overlappingOpponent` = the two Beys' bodies overlap right now. A dodging
+   * Bey is intangible; once the dodge is over it stays intangible until they no longer overlap (or the cap runs out).
+   */
+  updateIntangibility(overlappingOpponent: boolean, fixedDeltaSeconds: number): void {
+    if (this.state === DodgeState.Dodging) {
+      this.intangible = true;
+      this.intangibleAfterDodgeS = 0;
+      return;
+    }
+    if (!this.intangible) return;
+    this.intangibleAfterDodgeS += fixedDeltaSeconds;
+    if (!overlappingOpponent || this.intangibleAfterDodgeS >= INTANGIBLE_AFTER_DODGE_MAX_S) {
+      this.intangible = false;
+      this.intangibleAfterDodgeS = 0;
+    }
+  }
+
+  /** The two Beys pass through each other: no physical contact, no hit, no body collision (see updateIntangibility). */
+  isIntangible(): boolean {
+    return this.intangible;
   }
 
   /**
@@ -324,9 +384,13 @@ export class DodgeController {
       airRecoveryAvailable: this.airRecoveryAvailable,
       launchPending: this.launchPending,
       launchPendingRemainingS: this.launchPendingRemainingS,
+      recoveryWaitRemainingS: this.recoveryWaitRemainingS,
+      recoveryWaitTotalS: this.recoveryWaitTotalS,
       latchedDirection: vec2(this.latchedDirection),
       evadedThisDodge: [...this.evadedThisDodge].sort((a, b) => a - b),
       perfectDodgeThisDodge: this.perfectDodgeThisDodge,
+      intangible: this.intangible,
+      intangibleAfterDodgeS: this.intangibleAfterDodgeS,
     };
   }
 }

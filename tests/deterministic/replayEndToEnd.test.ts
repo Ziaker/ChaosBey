@@ -32,7 +32,8 @@ import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecord
 // replay-37 since the owner audit (2026-10-04, hitstop on hits only): 2876 ticks, 28 frozen (see replayPlayback).
 // replay-40 since 0.39.0 (owner, 2026-10-05 dodge rules): 2063 ticks, 22 frozen (see replayPlayback).
 // replay-4 since 0.41.0 (owner, 2026-10-05: no Air Recovery after a lost Clash): 1945 ticks, 28 frozen.
-const LONG_SEED = 'replay-4';
+// replay-46 since 0.42.0 (owner, 2026-10-05: intangible dodge, recovery time, drift): 2628 ticks, 22 frozen.
+const LONG_SEED = 'replay-46';
 /** The tampered-inputs check flips MoveForward on ticks 300 up to (not including) this. */
 const EDIT_END_TICK = 700;
 

@@ -328,8 +328,9 @@ export class ClashOrchestration {
 
     second.body.applyImpulse({ x: horizontal.x, y: upward, z: horizontal.z }, true);
     first.body.applyImpulse({ x: -horizontal.x, y: upward, z: -horizontal.z }, true);
-    first.dodge.registerLaunch(!isGrounded(physics, first.collider));
-    second.dodge.registerLaunch(!isGrounded(physics, second.collider));
+    const tieForce = CLASH_TIE_REPULSION_BASE_FORCE * this.matchConfig.clashImpactMultiplier;
+    first.dodge.registerLaunch(!isGrounded(physics, first.collider), tieForce);
+    second.dodge.registerLaunch(!isGrounded(physics, second.collider), tieForce);
   }
 
   /** Read-only: this system's part of CanonicalMatchStateV1 (M9 state hash). */

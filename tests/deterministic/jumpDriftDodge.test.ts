@@ -337,7 +337,7 @@ describe('dodge i-frames', () => {
 });
 
 describe('dodge timers keep advancing while airborne', () => {
-  it('active and cooldown timers advance on simulated time even while airborne, without granting airborne i-frames', async () => {
+  it('active and cooldown timers advance on simulated time even while airborne; the i-frames last exactly the dodge, in the air too', async () => {
     // Drives the real DodgeController directly (bypassing tickMatch) with
     // hand-picked `grounded` values instead of letting physics decide them
     // — the specific bug this guards is state-machine/lifecycle timing,
@@ -369,14 +369,14 @@ describe('dodge timers keep advancing while airborne', () => {
     const activeTicks = Math.ceil(DODGE_ACTIVE_DURATION_S / FIXED_DELTA_SECONDS);
     const cooldownTicks = Math.ceil(DODGE_COOLDOWN_S / FIXED_DELTA_SECONDS);
 
-    let sawAirborneIFrames = false;
+    // Owner, 2026-10-05 ("durante o dodge, o bey fica invencível"): invincible for the whole dodge, in the air too —
+    // and only while Dodging (it used to need the ground).
     let result = first;
     for (let i = 1; i < activeTicks + cooldownTicks + 5; i++) {
       result = dodge.tick(body, noPress, 0, false, 999, FIXED_DELTA_SECONDS);
-      if (result.hasIFrames) sawAirborneIFrames = true;
+      expect(result.hasIFrames, `tick ${i}`).toBe(result.state === DodgeState.Dodging);
     }
 
-    expect(sawAirborneIFrames).toBe(false);
     // The cooldown fully elapsed purely from simulated ticks despite being
     // airborne the entire time — a frozen timer would still show Dodging
     // or Cooldown here.

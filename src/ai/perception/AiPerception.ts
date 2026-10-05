@@ -52,6 +52,10 @@ export interface CombatantRawState {
    * kept tapping a refused Circular every other tick (19 presses a second). Optional: absent = not locked.
    */
   circularLocked?: boolean;
+  /** Owner, 2026-10-05: this match has no Circular (MatchConfig.circularAttack off) — a Pregame rule both sides see. Optional: absent = it has one. */
+  circularDisabled?: boolean;
+  /** Owner, 2026-10-05: the Bey's in-match size (MatchConfig.beySizeScale, a Pregame rule): its reach follows it. Optional: absent = 1. */
+  sizeScale?: number;
   actionsLocked?: boolean;
   /**
    * DodgeController.isAirRecoveryAvailable(): this flight is a launch (a knockback put the Bey in the air), whether or

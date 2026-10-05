@@ -111,8 +111,10 @@ interface Recording {
 // ticks after 900), from a scan of replay-0..119.
 // And for 0.41.0 (owner, 2026-10-05: no Air Recovery after a lost Clash): replay-4 (1945 ticks, 28 frozen) and
 // replay-38 (1794 ticks, 22 frozen, 700 steering ticks after 900), from a scan of replay-0..119.
-const LONG_SEED = 'replay-4';
-const MUTATION_SEED = 'replay-38';
+// And for 0.42.0 (owner, 2026-10-05: intangible dodge, recovery time, drift): replay-46 (2628 ticks, 22 frozen) and
+// replay-100 (2147 ticks, 21 frozen, 717 steering ticks after 900), from a scan of replay-0..119 (4 qualify).
+const LONG_SEED = 'replay-46';
+const MUTATION_SEED = 'replay-100';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {

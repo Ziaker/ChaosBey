@@ -178,7 +178,9 @@ describe('one simulation (M9-0)', () => {
   }, 120_000);
 
   it('a live AI-vs-AI match and a headless one with the same seed hash identically on every tick (hitstop and RNG included)', async () => {
-    const seed = 'live-equals-headless';
+    // 'live-equals-headless' until 0.42.0, when it stopped freezing on a hit within 1800 ticks (owner, 2026-10-05
+    // rules); replay-30 ends at tick 1239 with 22 frozen ticks (the replayPlayback seed scan).
+    const seed = 'replay-30';
     const live = await liveSession(seed);
     const headless = await headlessAiMatch(seed);
     let frozenTicks = 0;

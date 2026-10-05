@@ -65,6 +65,8 @@ export class PhysicsWorld {
       const b1 = this.bumpers.get(collider1);
       const b2 = this.bumpers.get(collider2);
       if (b1 === undefined || b2 === undefined) return RAPIER.SolverFlags.COMPUTE_IMPULSE;
+      // Owner, 2026-10-05: a dodging Bey is intangible — the two Beys pass through each other.
+      if (!this.beyContactsEnabled) return RAPIER.SolverFlags.EMPTY;
       // Heights cached at the start of step(): the world cannot be read from inside a hook (Rapier holds it).
       return beyBodiesOverlapVertically(b1.y, b1.halfHeightM, b2.y, b2.halfHeightM) ? RAPIER.SolverFlags.COMPUTE_IMPULSE : RAPIER.SolverFlags.EMPTY;
     },
@@ -80,6 +82,13 @@ export class PhysicsWorld {
   private readonly eventQueue = new RAPIER.EventQueue(true);
 
   private constructor(readonly rapierWorld: RAPIER.World) {}
+
+  /** Bey-Bey contact on/off for the next step (owner, 2026-10-05: off while a Bey is intangible from its dodge). */
+  private beyContactsEnabled = true;
+
+  setBeyContactsEnabled(enabled: boolean): void {
+    this.beyContactsEnabled = enabled;
+  }
 
   /** Registers a Bey-Bey bumper collider with its Bey body's half-height (for the contact filter above). */
   registerBeyBumper(collider: RAPIER.Collider, bodyHalfHeightM: number): void {

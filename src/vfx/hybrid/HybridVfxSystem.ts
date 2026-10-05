@@ -156,12 +156,12 @@ export class HybridVfxSystem implements PresentationSystem {
       dodgeState: DodgeState.Idle,
       lastCharge: 0,
       circularElapsed: 0,
-      vortex: this.addVortex(new THREE.Color(palette?.glow ?? target.gameplay.particle.sparkTintHex)),
+      vortex: this.addVortex(new THREE.Color(palette?.glow ?? target.gameplay.particle.sparkTintHex), target.gameplay.sizeScale ?? 1),
     };
   }
 
-  private addVortex(color: THREE.Color): CircularVortex {
-    const vortex = new CircularVortex(color);
+  private addVortex(color: THREE.Color, sizeScale: number): CircularVortex {
+    const vortex = new CircularVortex(color, sizeScale);
     this.options.scene.add(vortex.object);
     return vortex;
   }

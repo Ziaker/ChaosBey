@@ -28,7 +28,8 @@ describe('Air Recovery ring (owner, 2026-10-04)', () => {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
     scene.add(camera);
-    const PRESS_TICK = 45;
+    // Owner, 2026-10-05: past the recovery time (0.2 s from the launch at tick 40).
+    const PRESS_TICK = 54;
     const firstFrames = Array.from({ length: 120 }, (_, i) => (i === PRESS_TICK ? DODGE : NONE));
     const session = await MatchSession.create({
       scene,

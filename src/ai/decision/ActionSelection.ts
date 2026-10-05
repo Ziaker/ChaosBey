@@ -26,7 +26,7 @@ import { Action, type ControllerActions } from '../../input/actions/Action';
 import { add, dot, fromYaw, length, normalize, perpendicular, scale, signedAngleBetween, subtract, type Vec2 } from '../../physics/Vec2';
 import { ringOutRadiusM } from '../../arena/ringout/RingOutTuning';
 import type { AiPersonality } from '../personalities/AiPersonality';
-import { AI_CIRCULAR_ATTACK_RANGE_M, AI_COUNTER_MAX_LEAD_S, AI_COUNTER_MIN_CLOSING_SPEED_MPS, AI_DASH_ATTACK_MAX_RANGE_M } from './AiCombatRanges';
+import { aiCircularAttackRangeM, AI_COUNTER_MAX_LEAD_S, AI_COUNTER_MIN_CLOSING_SPEED_MPS, AI_DASH_ATTACK_MAX_RANGE_M } from './AiCombatRanges';
 import { AiIntent } from './Intent';
 import type { WorldState } from './WorldState';
 
@@ -362,10 +362,12 @@ export class ActionSelector {
     // so the hit drives them outward rather than back toward the middle.
     const pressGateOpen = intent !== AiIntent.PressAdvantage || !edgePlan || edgePlan.centerSide;
     const wantsToAttack = pressGateOpen && (intent === AiIntent.AttackCircular || intent === AiIntent.AttackDash || intent === AiIntent.PressAdvantage);
-    const wantsCircular = intent === AiIntent.AttackCircular || (intent === AiIntent.PressAdvantage && world.distanceToOpponentM <= AI_CIRCULAR_ATTACK_RANGE_M);
+    const noCircular = world.own.circularDisabled === true; // owner, 2026-10-05: the Dash is the only attack
+    const circularRangeM = aiCircularAttackRangeM(world.own);
+    const wantsCircular = !noCircular && (intent === AiIntent.AttackCircular || (intent === AiIntent.PressAdvantage && world.distanceToOpponentM <= circularRangeM));
     const wantsDash =
       intent === AiIntent.AttackDash ||
-      (intent === AiIntent.PressAdvantage && world.distanceToOpponentM > AI_CIRCULAR_ATTACK_RANGE_M && world.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M);
+      (intent === AiIntent.PressAdvantage && (noCircular || world.distanceToOpponentM > circularRangeM) && world.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M);
 
     // Keep charging until both the personality's target charge is reached
     // AND the heading is on line — releasing off-line mostly whiffs, since

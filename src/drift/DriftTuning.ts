@@ -115,7 +115,8 @@ export const DRIFT_LATERAL_GRIP_PER_S = 1.1;
 // How long, after releasing JumpDrift, it takes lateral grip to ease back
 // to normal — an instant snap back would feel like the slide never
 // happened.
-export const DRIFT_GRIP_RECOVERY_DURATION_S = 0.5;
+// Owner, 2026-10-05 ("ajeite o drift para que seja mais responsivo"): 0.5 → 0.25 s, the grip is back sooner.
+export const DRIFT_GRIP_RECOVERY_DURATION_S = 0.25;
 // While drifting, time (s) the Bey may be off the ground — the landing
 // bounce right after the hop, a bump — before the drift ends. Longer than
 // the Motion Lab landing bounce (a hop landing at ~4 m/s leaves at
@@ -185,3 +186,10 @@ export const DRIFT_FOLLOW_UP_WINDOW_S = 1;
 export const DRIFT_GRIP_FRACTION = 0.35;
 /** The heading turns this much faster while drifting: a drift is the sharp turn. */
 export const DRIFT_TURN_RATE_MULTIPLIER = 1.35;
+
+/**
+ * Owner, 2026-10-05 ("ajeite o drift para que seja mais responsivo e mais útil para build-up de velocidade"): the drift
+ * press made while the short hop is still in the air drops the Bey to the floor at least this fast (m/s), so the drift
+ * starts at once instead of when the hop happens to come down. PROVISIONAL.
+ */
+export const DRIFT_FAST_DROP_MPS = 9;

@@ -896,7 +896,9 @@ export class MatchSession {
       const recovered = result.combatEvents.some((e) => e.kind === 'airRecovery' && e.targetIsFirst === (side === 'first'));
       if (!dodged && !recovered) this.pushHudFeedback({ kind: 'refused', action: 'dodge' });
     }
-    if (actions.pressedThisFrame.has(Action.Attack) && before.attackState === AttackState.Neutral && now.attackState === AttackState.Neutral) {
+    // Attack refused: a press that started nothing, or a tap / early release that ended in nothing (the Circular
+    // locked or switched off for the match, a hold released before the Dash was ready).
+    if ((actions.pressedThisFrame.has(Action.Attack) && before.attackState === AttackState.Neutral && now.attackState === AttackState.Neutral) || this.match[side].attack.wasPressRefusedThisTick()) {
       this.pushHudFeedback({ kind: 'refused', action: 'attack' });
     }
   }

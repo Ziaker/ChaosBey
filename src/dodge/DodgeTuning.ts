@@ -38,3 +38,16 @@ export const DODGE_STAMINA_COST = 20;
 // without letting a weak knockback that never left the ground silently
 // arm recovery for a much later, unrelated jump.
 export const LAUNCH_PENDING_WINDOW_S = 0.75;
+
+// Owner, 2026-10-05: after a dodge the Bey stays intangible while the two Beys still overlap (they passed through each
+// other), so they never touch on the way out — at most this long. PROVISIONAL.
+export const INTANGIBLE_AFTER_DODGE_MAX_S = 0.5;
+
+/**
+ * Owner, 2026-10-05 ("a força do ataque do bey aumente esse tempo naturalmente, o slider trata apenas o mínimo"): each
+ * unit of the launching hit's force adds this much (s) to the recovery time (MatchConfig.airRecoveryMinDelayS).
+ * Measured knockback forces: median 25 (+0.25 s), p90 45 (+0.45 s). PROVISIONAL.
+ */
+export const AIR_RECOVERY_DELAY_PER_FORCE_S = 0.01;
+/** Most the launching force can add to the recovery time (s). PROVISIONAL. */
+export const AIR_RECOVERY_FORCE_DELAY_CAP_S = 0.6;
