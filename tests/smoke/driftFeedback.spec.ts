@@ -65,13 +65,13 @@ test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with 
   await driveIntoDrift(page);
   await expect.poll(async () => (await tag.getAttribute('data-state')) ?? '', { timeout: 3000 }).toBe('Drifting');
   await expect(tag).toHaveText('DRIFT');
-  // It stays in the drift while X is held.
+  // It stays in the drift while X is held. Keep this window short: the Beys are fast (top speed ×2.8 and momentum), and a
+  // drift held for 1.2 s or more reaches the wall at ~30 m/s — the impact ends it, the still-held keys start it again,
+  // and this test counted two starts (4 failures in 8 runs; the screenshot taken inside the drift made it likelier).
   for (let i = 0; i < 4; i++) {
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(100);
     states.push((await tag.getAttribute('data-state')) ?? '');
   }
-  fs.mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/drift-play.png' });
   const during = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getDriftVfxCounts('first'));
   await releaseDrift(page);
   // Read state and text together, in one evaluation: on a slow, software-rendered
@@ -92,6 +92,10 @@ test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with 
   if (afterRelease.startsWith('Recovering')) expect(afterRelease).toBe('Recovering|GRIP');
   await expect.poll(async () => (await tag.getAttribute('data-state')) ?? '', { timeout: 3000 }).toBe('Idle');
   const after = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getDriftVfxCounts('first'));
+
+  // The skid marks stay on the floor after the drift: the picture is taken once it has ended, not inside the drift.
+  fs.mkdirSync('test-results', { recursive: true });
+  await page.screenshot({ path: 'test-results/drift-play.png' });
 
   expect(states.every((s) => s === 'Drifting'), states.join(',')).toBe(true);
   expect(during.driftStarts).toBe(1);
