@@ -49,6 +49,17 @@ declare global {
   }
 }
 
+/**
+ * The loop kept advancing after the first hitstop: at least MIN_TICKS_AFTER_HITSTOP ticks later — or, when that hitstop was the
+ * decisive blow (found on CI: it ended at tick 1869 and the round ended at 1895, 26 ticks later), the round reached RoundEnd
+ * after it, which a frozen loop could not do. Without this the check failed whenever the first hit of a run was the last.
+ */
+function advancedAfterHitstop(flags: SmokeFlags, roundOver: boolean): boolean {
+  if (flags.tickWhenFirstHitstopEnded === null) return false;
+  const last = flags.lastTick ?? 0;
+  return last >= flags.tickWhenFirstHitstopEnded + MIN_TICKS_AFTER_HITSTOP || (roundOver && last > flags.tickWhenFirstHitstopEnded);
+}
+
 test('AI opponent runs in the real loop through hits, hitstop and (when it happens) Clash, with no fatal or console errors', async ({ page }) => {
   test.setTimeout(60_000);
 
@@ -132,9 +143,8 @@ test('AI opponent runs in the real loop through hits, hitstop and (when it happe
     const current = await flags();
     latest = current;
     if (current.clashActiveSeen && clashFirstSeenAt === null) clashFirstSeenAt = Date.now();
-    const hitstopRecovered =
-      current.tickWhenFirstHitstopEnded !== null && (current.lastTick ?? 0) >= current.tickWhenFirstHitstopEnded + MIN_TICKS_AFTER_HITSTOP;
     const roundOver = current.gameStates.includes('RoundEnd');
+    const hitstopRecovered = advancedAfterHitstop(current, roundOver);
     const clashSettled = !current.clashActiveSeen || current.clashLeftActive || Date.now() - (clashFirstSeenAt ?? Date.now()) > CLASH_RESOLVE_GRACE_MS;
     if (hitstopRecovered && roundOver && clashSettled) break;
   }
@@ -150,9 +160,7 @@ test('AI opponent runs in the real loop through hits, hitstop and (when it happe
   expect(result.aiScoresSeen, 'AI considered-scores line is live').toBe(true);
   expect(result.hitstopActiveSeen, 'at least one real hit froze the simulation (hitstop ACTIVE)').toBe(true);
   expect(result.tickWhenFirstHitstopEnded, 'the hitstop ended').not.toBeNull();
-  expect(result.lastTick!, 'the fixed-step loop kept advancing after the hitstop').toBeGreaterThanOrEqual(
-    result.tickWhenFirstHitstopEnded! + MIN_TICKS_AFTER_HITSTOP,
-  );
+  expect(advancedAfterHitstop(result, result.gameStates.includes('RoundEnd')), `the fixed-step loop kept advancing after the hitstop (ended at tick ${result.tickWhenFirstHitstopEnded}, last tick ${result.lastTick})`).toBe(true);
   if (result.clashActiveSeen) expect(result.clashLeftActive, 'a Clash that started also resolved (not stuck Active)').toBe(true);
   expect(result.haltedSeen, 'no fatal simulation halt').toBe(false);
   expect(consoleErrors).toEqual([]);

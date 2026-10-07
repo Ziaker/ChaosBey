@@ -4,7 +4,7 @@ A browser-based 3D spinning-top arena combat simulator, built with Three.js, Rap
 
 **Play it:** https://ziaker.github.io/ChaosBey/ — every merge to `main` is built, tested and deployed there automatically.
 
-**Version:** 0.46.2 (`package.json`). The game shows its version and the commit it was built from in the bottom-right corner of every screen (e.g. `v0.46.2 · 8d51f79`); if it doesn't match the latest `main`, reload with Ctrl+Shift+R (GitHub Pages caches the page for a few minutes).
+**Version:** 0.46.3 (`package.json`). The game shows its version and the commit it was built from in the bottom-right corner of every screen (e.g. `v0.46.3 · 8d51f79`); if it doesn't match the latest `main`, reload with Ctrl+Shift+R (GitHub Pages caches the page for a few minutes).
 
 **Standing rule (every change, no exceptions):** each PR that changes the game, its rules, its content or its tooling must (1) bump the version in `package.json` (and `package-lock.json`) — patch for fixes, minor for features/gameplay/content changes — so the number in the corner of the game moves, and (2) update this README (the **Version** line above and the **Status** / **Latest changes** notes below). A unit test (`tests/unit/versionSync.test.ts`) fails if `package.json`, `package-lock.json` and this README disagree. The rule is also written in `CLAUDE.md` (§4), `docs/design-decisions/README.md` and the PR template.
 
@@ -22,6 +22,7 @@ The approved Pregame overhaul and official Advanced presets are specified in [`d
 
 ## Latest changes
 
+- **0.46.3 — Smoke fix (test only):** the full smoke run on `main` after #115 failed once, in `aiRuntime.spec.ts` ("the fixed-step loop kept advancing after the hitstop": the first hit of that run was also the decisive one — the hitstop ended at tick 1869 and the round ended at 1895, 26 ticks later, under the 30-tick bar). The check now also accepts a round that reached RoundEnd after the hitstop, which a frozen loop could not do. No game change.
 - **0.46.2 — Pregame overhaul approved and prepared (docs only, no game change):** added the canonical implementation brief for a simpler two-column Pregame, compact sections, categorized Advanced controls, modified/reset states and five official Advanced presets — **Normal Original, Realistic, Epic, Smooth, Strategic** — plus derived **Custom**. Normal Original follows the real defaults; the four alternative presets get centralized deterministic configurations with first-pass numeric tuning marked **PROVISIONAL**. The visual masters now close the Pregame direction while leaving the other menu screens open; implementation is still pending.
 
 - **0.46.1 — Smoke split (tests and CI only, polish idea 9):** pull requests now run the fast half of the browser suite (`npm run test:smoke:fast`, 43 specs, about 5 min locally against ~20 for everything; the slow specs — whole rounds, repeated matches, the prototype labs on software WebGL — are listed in `tests/smoke/slowSpecs.ts`); pushes to `main`, a **nightly run** (03:23 UTC) and a manual run still run everything (`npm run test:smoke`). The Play drift spec was made robust on slow runners (it observes the drift in-page, in simulation ticks, and spaces the tap and the second press by ticks).
