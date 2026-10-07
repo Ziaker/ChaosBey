@@ -81,7 +81,7 @@ test('Esc pauses and resumes, focus loss pauses, Settings apply from Pause, Leav
   await page.getByTestId('settings-quality-High').click();
   await page.getByTestId('settings-back').click();
   await expect(pause).toBeVisible();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('chaosbey.settings.player.v1') ?? '{}').quality)).toBe('High');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('chaosbey.settings.player.v2') ?? '{}').quality)).toBe('High');
 
   // Resume by button, then Leave match from a new pause.
   await page.getByTestId('pause-menu-resume').click();

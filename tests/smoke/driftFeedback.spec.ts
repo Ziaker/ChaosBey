@@ -16,9 +16,12 @@ async function driveIntoDrift(page: Page): Promise<void> {
   // main too) the frame rate drops and 700 ms of wall time is far fewer ticks.
   const startTick = await page.evaluate(() => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex());
   await page.waitForFunction((t0) => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex() >= t0 + 42, startTick, { timeout: 20_000 });
-  // Turn as X goes down: X + a real turn is a drift (X held going straight
-  // would be the variable jump — see DriftController).
+  // The drift gesture (owner, 2026-10-04/05): tap X (a short hop), then press X again and hold it while steering — tap + hold.
+  // X held from the first press would be the variable (full) jump instead — see DriftController.
   await page.keyboard.up('ArrowUp');
+  await page.keyboard.down('x');
+  await page.keyboard.up('x');
+  await page.waitForTimeout(60); // a few ticks into the hop: well inside the short-hop window and the 1 s drift window
   // X first, then the turn: the drift latches its reference direction when X goes
   // down and starts on a turn AWAY from it, so a tick that sees ArrowRight already
   // held before X (two key events can land in different frames on a slow runner)
@@ -49,7 +52,11 @@ test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with 
     const s = window.__chaosBeyPlay!.getSession()!;
     s.setController('second', { kind: 'idle' });
     const p = s.getBey('first').body.translation();
-    s.getBey('second').body.setTranslation({ x: p.x, y: p.y + 0.2, z: p.z - 6 }, true); // behind it: the drive goes forward
+    // Behind it: the drive goes forward. On the floor, not at the player's height: the default stage is a funnel
+    // (Bowl B, 8.5 m deep), where that height is inside the floor 6 m further out (the opponent fell through, the
+    // round ended as a ring-out and the HUD stayed on its last frame, "Drifting").
+    const behind = { x: p.x, z: p.z - 6 };
+    s.getBey('second').body.setTranslation({ x: behind.x, y: s.floorHeightAt(behind.x, behind.z) + 0.6, z: behind.z }, true);
     s.getBey('second').body.setLinvel({ x: 0, y: 0, z: 0 }, true);
   });
 

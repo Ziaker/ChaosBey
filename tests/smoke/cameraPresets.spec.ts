@@ -8,19 +8,21 @@ import { baselineUrl } from './presentationBaseline';
 // - In the Debug Lab's Clash preset, the Clash forces camera B (no orbit)
 //   for a player on A, then hands the camera back to A.
 
-test('Settings: camera preset A/B/C, B by default, persisted', async ({ page }) => {
+test('Settings: camera preset A/B/C, A (Arena Fighter) by default, persisted', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/ChaosBey/?mode=settings');
   const row = page.getByTestId('settings-camera');
   await expect(row).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId('settings-camera-B')).toHaveAttribute('aria-checked', 'true');
+  // Owner, 2026-10-04: Arena Fighter is the game's base camera.
+  await expect(page.getByTestId('settings-camera-A')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('settings-camera-A')).toHaveText('Arena Fighter');
   await expect(page.getByTestId('settings-camera-B')).toHaveText('Cinematic Hybrid');
   await page.getByTestId('settings-camera-C').click();
   await expect(page.getByTestId('settings-camera-note')).toContainText('Maximum spectacle');
   await page.reload();
   await expect(page.getByTestId('settings-camera-C')).toHaveAttribute('aria-checked', 'true');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('chaosbey.settings.player.v1') ?? '{}').cameraPreset)).toBe('C');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('chaosbey.settings.player.v2') ?? '{}').cameraPreset)).toBe('C');
   expect(errors).toEqual([]);
 });
 
@@ -32,7 +34,7 @@ test('a match runs on each camera preset, the preset reaching the game camera', 
   });
   for (const preset of ['A', 'B', 'C'] as const) {
     await page.goto(baselineUrl('/ChaosBey/'));
-    await page.evaluate((p) => localStorage.setItem('chaosbey.settings.player.v1', JSON.stringify({ cameraPreset: p })), preset);
+    await page.evaluate((p) => localStorage.setItem('chaosbey.settings.player.v2', JSON.stringify({ cameraPreset: p })), preset);
     await page.goto(baselineUrl('/ChaosBey/?mode=play'));
     await page.getByTestId('character-select-confirm').click({ timeout: 15_000 });
     await page.getByTestId('pregame-start').click();

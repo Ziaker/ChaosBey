@@ -81,30 +81,34 @@ test('Character Select previews the concept the match uses, and the match runs t
   expect(errors).toEqual([]);
 });
 
-test('Settings shows the condition languages with no query string: A by default, any combination, never none, persisted, reset to A', async ({ page }) => {
+test('Settings shows the condition languages with no query string: A+B+C by default, any combination, never none, persisted, reset to all on', async ({ page }) => {
   const errors = watchErrors(page);
   await page.goto('/ChaosBey/?mode=settings');
   await expect(page.getByTestId('settings')).toBeVisible({ timeout: 20_000 });
   const on = (id: string) => page.getByTestId(`settings-condition-${id}-true`);
   const off = (id: string) => page.getByTestId(`settings-condition-${id}-false`);
+  // Owner, 2026-10-04: every condition layer is on by default.
+  for (const id of ['a', 'b', 'c']) await expect(on(id)).toHaveAttribute('aria-checked', 'true');
+  // A alone.
+  await off('b').click();
+  await off('c').click();
   await expect(on('a')).toHaveAttribute('aria-checked', 'true');
   await expect(off('b')).toHaveAttribute('aria-checked', 'true');
   await expect(off('c')).toHaveAttribute('aria-checked', 'true');
+  // Turning off the last one is refused: at least one always stays on.
+  await off('a').click();
+  await expect(on('a')).toHaveAttribute('aria-checked', 'true');
   // A + C.
   await on('c').click();
   await expect(on('c')).toHaveAttribute('aria-checked', 'true');
-  // Turning off the last one is refused: at least one always stays on.
-  await off('a').click();
-  await off('c').click();
-  await expect(on('c')).toHaveAttribute('aria-checked', 'true');
   // Persisted across a reload.
   await page.reload();
-  await expect(on('c')).toHaveAttribute('aria-checked', 'true');
-  await expect(off('a')).toHaveAttribute('aria-checked', 'true');
-  // Reset to defaults: A alone.
-  await page.getByTestId('settings-reset').click();
   await expect(on('a')).toHaveAttribute('aria-checked', 'true');
-  await expect(off('c')).toHaveAttribute('aria-checked', 'true');
+  await expect(off('b')).toHaveAttribute('aria-checked', 'true');
+  await expect(on('c')).toHaveAttribute('aria-checked', 'true');
+  // Reset to defaults: all on.
+  await page.getByTestId('settings-reset').click();
+  for (const id of ['a', 'b', 'c']) await expect(on(id)).toHaveAttribute('aria-checked', 'true');
   expect(errors).toEqual([]);
 });
 

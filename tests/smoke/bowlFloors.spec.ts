@@ -15,15 +15,14 @@ function watchErrors(page: import('@playwright/test').Page): string[] {
   return errors;
 }
 
-test('Pregame: Bowl A by default (the stage is not flat), another floor can be chosen and the match plays on it', async ({ page }) => {
+test('Pregame: Bowl B (the funnel) by default (the stage is not flat), another floor can be chosen and the match plays on it', async ({ page }) => {
   const errors = watchErrors(page);
   await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await page.getByTestId('character-select-confirm').click({ timeout: 15_000 });
-  await expect(page.getByTestId('pregame-arena-floor-bowl-a')).toHaveAttribute('aria-checked', 'true');
-  await expect(page.getByTestId('pregame-rules')).toContainText('Bowl A — Parabolic dish');
-  await page.getByTestId('pregame-arena-floor-bowl-b').click();
+  await expect(page.getByTestId('pregame-arena-floor-bowl-b')).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByTestId('pregame-rules')).toContainText('Bowl B — Funnel');
   await page.getByTestId('pregame-arena-floor-bowl-a').click();
+  await expect(page.getByTestId('pregame-rules')).toContainText('Bowl A — Parabolic dish');
   // The floor is independent of the look: changing the arena keeps it.
   await page.getByTestId('pregame-arena-tournament').click();
   await expect(page.getByTestId('pregame-arena-floor-bowl-a')).toHaveAttribute('aria-checked', 'true');
@@ -33,11 +32,11 @@ test('Pregame: Bowl A by default (the stage is not flat), another floor can be c
   const state = await page.evaluate(() => {
     const session = window.__chaosBeyPlay!.getSession()!;
     const p = session.getBey('first').body.translation();
-    return { floor: session.matchConfig.arenaFloor, x: p.x, y: p.y, z: p.z };
+    return { floor: session.matchConfig.arenaFloor, depth: session.matchConfig.arenaBowlDepthM, x: p.x, y: p.y, z: p.z };
   });
   expect(state.floor).toBe('bowl-a');
-  // On the bowl (h = 2.5 (r/36)², 36 m radius), resting on the floor, never under it.
-  const floorY = 2.5 * (Math.hypot(state.x, state.z) / 36) ** 2;
+  // On the bowl (h = depth (r/36)², 36 m radius, the Pregame's funnel depth), resting on the floor, never under it.
+  const floorY = state.depth * (Math.hypot(state.x, state.z) / 36) ** 2;
   expect(state.y).toBeGreaterThan(floorY);
   expect(errors).toEqual([]);
 });
