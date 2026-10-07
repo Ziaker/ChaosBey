@@ -67,7 +67,7 @@ import { DriftVfx } from '../../vfx/DriftVfx';
 import { VfxManager } from '../../vfx/VfxManager';
 import { ForcedInputController } from '../../automation/scripted-scenarios/ForcedInputController';
 import { AIController } from '../../ai/controllers/AIController';
-import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector, type DetectedAnomaly } from '../../self-test/anomalies/MatchAnomalyDetector';
+import { anomalyThresholdsFor, MatchAnomalyDetector, type DetectedAnomaly } from '../../self-test/anomalies/MatchAnomalyDetector';
 import type { ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
 import { matchSpawnsFor } from '../bootstrap/matchSpawns';
 import { floorHeightAt, floorRimHeight } from '../../arena/floor/ArenaFloorProfile';
@@ -467,7 +467,7 @@ export class MatchSession {
     }
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
-    this.anomalyDetector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(arenaFloorOf(resolveMatchConfig(options.matchConfig))) + options.matchConfig.arenaWallHeightM });
+    this.anomalyDetector = new MatchAnomalyDetector(anomalyThresholdsFor(resolveMatchConfig(options.matchConfig)));
 
     this.controllerSpecs = { first: options.controllers.first, second: options.controllers.second };
     this.drivers = {

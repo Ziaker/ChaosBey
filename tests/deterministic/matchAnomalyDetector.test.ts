@@ -3,6 +3,7 @@
 // plays clean (M11 lane 3 fixed the wall collider; see arenaWall.test.ts).
 
 import { ARENA_FLOOR_RADIUS } from '../../src/arena/colliders/ArenaTuning';
+import { resolveMatchConfig, type MatchConfig } from '../../src/config/match/MatchConfig';
 import { describe, expect, it } from 'vitest';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { ClashState, type ClashController } from '../../src/combat/clash/ClashController';
@@ -13,7 +14,7 @@ import { IdleController } from '../../src/automation/scripted-scenarios/IdleCont
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { SelfTestMatchWorld } from '../../src/self-test/SelfTestMatchWorld';
 import { simulateAiMatch } from '../../src/self-test/AiMatchSimulation';
-import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector, type AnomalyTickInput, type DetectedAnomaly } from '../../src/self-test/anomalies/MatchAnomalyDetector';
+import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector, anomalyThresholdsFor, type AnomalyTickInput, type DetectedAnomaly } from '../../src/self-test/anomalies/MatchAnomalyDetector';
 
 const idle = new IdleController();
 const noActions = (): ControllerActions => idle.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
@@ -26,9 +27,10 @@ async function run(
   ticks: number,
   mutate: (world: SelfTestMatchWorld, tick: number) => Partial<AnomalyTickInput> | void,
   aiSides = { first: false, second: false },
+  detector = new MatchAnomalyDetector(),
+  matchConfigOverrides: Partial<MatchConfig> = {},
 ): Promise<DetectedAnomaly[]> {
-  const world = await SelfTestMatchWorld.build({ firstDefinition: ATTACK_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE });
-  const detector = new MatchAnomalyDetector();
+  const world = await SelfTestMatchWorld.build({ firstDefinition: ATTACK_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE, matchConfigOverrides });
   const found: DetectedAnomaly[] = [];
   try {
     for (let tick = 0; tick < ticks; tick++) {
@@ -218,4 +220,35 @@ describe('ext-32 regression: the seed that reproduced the wall bug now plays cle
     expect(b.detections).toEqual([]);
     expect(a.stats.outcome).toBe(b.stats.outcome);
   }, 60_000);
+});
+
+describe('MatchAnomalyDetector — follows the match\'s own rules (found in the 0.43.1 review)', () => {
+  it('a Bey inside a bigger stage is not "left the world" or "stuck in the wall" (stage size slider)', async () => {
+    // The default stage's limits (37.9 m, 35.7 m) flagged every Bey past 36 m on a 90 m stage (x2.5 flagged 3-10 findings per match).
+    const big = { arenaSizeScale: 2.5 };
+    const found = await run(40, (w, tick) => {
+      if (tick >= 5) w.second.body.setTranslation({ x: 50, y: 0.6, z: 0 }, false);
+    }, undefined, undefined, big);
+    expect(found.filter((d) => d.kind === 'left-world' || d.kind === 'stuck-in-wall')).toEqual([]);
+    // ...and past that stage's own ring-out line it still is.
+    const out = await run(40, (w, tick) => {
+      if (tick >= 5) w.second.body.setTranslation({ x: 95, y: 0.6, z: 0 }, false);
+    }, undefined, undefined, big);
+    expect(out.filter((d) => d.kind === 'left-world')).toHaveLength(1);
+  });
+
+  it('a long dodge cooldown (the Pregame slider goes to 6 s) is not "never ending"', async () => {
+    const config = resolveMatchConfig({ dodgeCooldownS: 6 });
+    const thresholds = anomalyThresholdsFor(config);
+    expect(thresholds.maxDodgeCooldownTicks).toBeGreaterThan(DEFAULT_ANOMALY_THRESHOLDS.maxDodgeCooldownTicks);
+    const found = await run(
+      DEFAULT_ANOMALY_THRESHOLDS.maxDodgeCooldownTicks + 60,
+      (w) => {
+        w.first.dodge.getState = () => DodgeState.Cooldown;
+      },
+      { first: false, second: false },
+      new MatchAnomalyDetector(thresholds),
+    );
+    expect(found.filter((d) => d.kind === 'cooldown-never-ending')).toEqual([]);
+  });
 });

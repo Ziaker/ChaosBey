@@ -24,7 +24,7 @@ import { floorRimHeight, type ArenaFloorId } from '../../arena/floor/ArenaFloorP
 import type { ChaosBeyReplayV1 } from '../../replay/format/ChaosBeyReplayV1';
 import { startHeadlessCapture, type HeadlessCaptureInput } from '../../replay/recording/ReplayCapture';
 import { SelfTestMatchWorld } from '../SelfTestMatchWorld';
-import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector, type DetectedAnomaly } from '../anomalies/MatchAnomalyDetector';
+import { anomalyThresholdsFor, MatchAnomalyDetector, type DetectedAnomaly } from '../anomalies/MatchAnomalyDetector';
 import { arenaFloorOf, resolveMatchConfig } from '../../config/match/MatchConfig';
 import { SCENARIO_PRESETS, type ScenarioPreset, type ScenarioSideScript } from './ScenarioPresets';
 import { createScenarioTrace, recordScenarioTick, type ScenarioTrace } from './ScenarioTrace';
@@ -113,7 +113,7 @@ export async function runScenario(preset: ScenarioPreset, options: ScenarioRunOp
     };
     const first = options.aiSide === 'first' ? aiFor('first') : controllerForScript(preset.first);
     const second = options.aiSide === 'second' ? aiFor('second') : controllerForScript(preset.second);
-    const detector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(arenaFloorOf(matchConfig)) + matchConfig.arenaWallHeightM });
+    const detector = new MatchAnomalyDetector(anomalyThresholdsFor(matchConfig));
     const capture = options.record ? startHeadlessCapture(world, { ...options.record, seedText: preset.id, spawns: matchSpawnsFor(arenaFloorOf(matchConfig)), matchConfig }) : null;
     for (let tick = 0; tick < preset.durationTicks; tick++) {
       const clashStateBefore: ClashState = world.clash.controller.getState();

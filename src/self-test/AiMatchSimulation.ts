@@ -13,7 +13,7 @@
 // match is seeded or simulated, so every existing seed plays the same fight.
 // ============================================================
 
-import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector, type DetectedAnomaly } from './anomalies/MatchAnomalyDetector';
+import { anomalyThresholdsFor, MatchAnomalyDetector, type DetectedAnomaly } from './anomalies/MatchAnomalyDetector';
 import { AIController } from '../ai/controllers/AIController';
 import { AI_DASH_ATTACK_MAX_RANGE_M } from '../ai/decision/AiCombatRanges';
 import { AiIntent } from '../ai/decision/Intent';
@@ -26,7 +26,7 @@ import type { ChaosBeyReplayV1 } from '../replay/format/ChaosBeyReplayV1';
 import { startHeadlessCapture, type HeadlessCaptureInput } from '../replay/recording/ReplayCapture';
 import { arenaFloorOf, resolveMatchConfig, type MatchConfig } from '../config/match/MatchConfig';
 import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
-import { ARENA_FLOOR_RADIUS } from '../arena/colliders/ArenaTuning';
+import { arenaFloorRadius } from '../arena/colliders/ArenaTuning';
 import { AttackState } from '../combat/attacks/AttackController';
 import { ClashState } from '../combat/clash/ClashController';
 import { NullAiMashSource } from '../combat/clash/ClashMash';
@@ -182,7 +182,7 @@ class SideTracker {
     speedMps: number,
   ): void {
     const throttling = actions.held.has(Action.MoveForward) || actions.held.has(Action.MoveBackward);
-    const wedged = !clashActive && radiusM > ARENA_FLOOR_RADIUS && speedMps < WEDGED_MAX_SPEED_MPS && throttling;
+    const wedged = !clashActive && radiusM > arenaFloorRadius() && speedMps < WEDGED_MAX_SPEED_MPS && throttling;
     this.wedgedStreak = wedged ? this.wedgedStreak + 1 : 0;
     this.stats.longestWedgedTicks = Math.max(this.stats.longestWedgedTicks, this.wedgedStreak);
 
@@ -378,7 +378,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
   const anomalies: MatchAnomaly[] = [];
   let anomalyCount = 0;
   const resolvedArena = resolveMatchConfig(setup.matchConfigOverrides ?? {});
-  const detector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(arenaFloorOf(resolvedArena)) + resolvedArena.arenaWallHeightM });
+  const detector = new MatchAnomalyDetector(anomalyThresholdsFor(resolvedArena));
   const detections: DetectedAnomaly[] = [];
   let invalidDetectionCount = 0;
   let warningCount = 0;
