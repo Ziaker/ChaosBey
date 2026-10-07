@@ -23,6 +23,13 @@ import { baselineUrl } from './presentationBaseline';
 // ============================================================
 
 const MAX_RUN_MS = 25_000;
+/**
+ * A real hit is random (a fresh seed every run, the AI circles and builds speed before it commits, the player here only taps Z):
+ * the full run on main saw none in 25 s once, and a first hit only at the very end another time. The run therefore keeps going
+ * until the first hit has frozen the simulation, up to this much longer — a runtime that never lets the AI hit in a minute is the
+ * thing the check exists to catch.
+ */
+const MAX_WAIT_FOR_FIRST_HIT_MS = 75_000;
 const PLAYER_TAP_INTERVAL_MS = 300;
 /** After a hitstop ends, the fixed-step tick must keep advancing at least this much (~0.5 s). */
 const MIN_TICKS_AFTER_HITSTOP = 30;
@@ -61,7 +68,7 @@ function advancedAfterHitstop(flags: SmokeFlags, roundOver: boolean): boolean {
 }
 
 test('AI opponent runs in the real loop through hits, hitstop and (when it happens) Clash, with no fatal or console errors', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(MAX_WAIT_FOR_FIRST_HIT_MS + 45_000);
 
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
@@ -133,7 +140,10 @@ test('AI opponent runs in the real loop through hits, hitstop and (when it happe
   const clashStillResolving = (f: SmokeFlags | undefined): boolean =>
     f !== undefined && f.clashActiveSeen && !f.clashLeftActive && clashFirstSeenAt !== null && Date.now() - clashFirstSeenAt <= CLASH_RESOLVE_GRACE_MS;
   let latest: SmokeFlags | undefined;
-  while (Date.now() - startedAt < MAX_RUN_MS || clashStillResolving(latest)) {
+  // Until the first hit has frozen the sim AND the loop has been seen advancing after it.
+  const waitingForFirstHit = (f: SmokeFlags | undefined): boolean =>
+    Date.now() - startedAt < MAX_WAIT_FOR_FIRST_HIT_MS && !(f !== undefined && advancedAfterHitstop(f, f.gameStates.includes('RoundEnd')));
+  while (Date.now() - startedAt < MAX_RUN_MS || clashStillResolving(latest) || waitingForFirstHit(latest)) {
     // A player tap (Circular) — the same key a person presses.
     await page.keyboard.down('z');
     await page.waitForTimeout(50);
