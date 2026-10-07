@@ -5,31 +5,39 @@ import type { Action } from '../../src/input/actions/Action';
 // JUMP INPUT BUFFER — REAL-BROWSER REGRESSION (item H of the hotfix's
 // required tests). DriftController's Idle/Recovering states used to gate
 // beginHop() on a same-tick `jumpDriftPressed && grounded`: a press landing
-// on a tick where grounded briefly read false (the landing-contact bounce a
-// hop produces right after touchdown — the same bounce DRIFT_AIRBORNE_GRACE_S's
-// own tuning comment in DriftTuning.ts relies on existing) was silently and
-// permanently dropped. Confirmed happening in real AI matches via direct
-// input-event/landing instrumentation (see PR history) before the fix.
+// on a tick where grounded briefly read false was silently and permanently
+// dropped. Confirmed happening in real AI matches via direct input-event/
+// landing instrumentation (see PR history) before the fix.
+//
+// Rewritten for the current jump rules (owner, 2026-10-04/05): one X press is
+// one flight, and a SECOND press made while the short hop is still in the air
+// (held, with the Bey moving) is the drift — tap + hold — never a second hop.
+// The regression the test guards is unchanged: a press made in the air just
+// before landing must not be dropped. Now that means: it starts the drift
+// right at the landing, and the Bey never takes off a second time.
 //
 // This drives the REAL engine end to end through the Debug Lab — real
-// MatchSession, real Rapier physics, a live AI opponent — but through
-// handle.step(1) rather than real-time page.keyboard input, so the exact
-// airborne-press repro is reached by DETERMINISTIC single-tick stepping on a
-// fixed seed, not by racing Playwright/CDP's input-dispatch jitter (see
-// git history for that dead end). Two passes on the IDENTICAL seed:
+// MatchSession, real Rapier physics, an idle opponent (so that a bump can't
+// end the drift) — but through handle.step(1) rather than real-time
+// page.keyboard input, so the exact airborne-press repro is reached by
+// DETERMINISTIC single-tick stepping on a fixed seed, not by racing
+// Playwright/CDP's input-dispatch jitter (see git history for that dead end).
+// Two passes on the IDENTICAL seed:
 // 1. a probe pass that taps JumpDrift once and records grounded/DriftState
-//    every tick, to find the exact tick where this run's own landing bounce
-//    reads grounded === false (no guessed/hardcoded physics numbers);
-// 2. a repro pass that sends a SECOND JumpDrift tap on exactly that tick,
-//    then asserts the second hop still begins (the press was buffered, not
-//    dropped) exactly once.
+//    every tick, to find the exact tick where this run lands (no guessed or
+//    hardcoded physics numbers);
+// 2. a repro pass that presses JumpDrift again 3 ticks before that landing and
+//    keeps it held, then asserts the drift starts (the press was kept, not
+//    dropped) and that there is no second hop.
 // Deterministic end to end (fixed seed, tick-stepped, no wall-clock
 // dependency) — must pass every run with no retries (playwright.config.ts's
 // project default is already retries: 0; this file adds no override).
 
 const SEED = 'jump-input-buffer-repro-h';
 const SETTLE_TICKS = 60; // matches this suite's usual "let the spawn-drop settle" convention.
-const PROBE_TICKS = 220; // generous margin past any bare-tap hop's full landing + bounce.
+const RUN_UP_TICKS = 45; // forward the whole time, a short run-up before the tap (at the Beys' speed a longer one reaches the wall).
+const PROBE_TICKS = 70; // past a bare-tap hop's landing, short of the wall.
+const DRIFT_START_TICKS = 12; // the press is answered at once: the fast drop starts the drift ~0.1 s (6 ticks) later.
 const BOUNCE_SEARCH_WINDOW_TICKS = 20; // how far past landing to look for the bounce.
 
 interface TraceRow {
@@ -43,26 +51,29 @@ async function waitForLabReady(page: Page): Promise<void> {
   await expect(page.getByTestId('debug-lab-status')).toContainText('RUNNING', { timeout: 15_000 });
 }
 
-/** One deterministic run on `seedText`: settle, tap JumpDrift once at SETTLE_TICKS, optionally a second tap at `secondTapTick`. Returns the full per-tick trace. */
-async function runTappedMatch(page: Page, seedText: string, secondTapTick: number | null): Promise<TraceRow[]> {
+/** One deterministic run on `seedText`: forward the whole time, tap JumpDrift once at SETTLE_TICKS, optionally press it again at `secondPressTick` and keep it held. Returns the full per-tick trace. */
+async function runTappedMatch(page: Page, seedText: string, secondPressTick: number | null): Promise<TraceRow[]> {
   return page.evaluate(
-    async ({ seedText, secondTapTick, settleTicks, probeTicks }) => {
+    async ({ seedText, secondPressTick, settleTicks, runUpTicks, probeTicks }) => {
       const handle = window.__chaosBeyDebugLab;
       if (!handle) throw new Error('no Debug Lab handle');
+      // The flat floor: this checks the input buffer, and the default funnel's slope makes a Bey running at speed leave the
+      // floor on its own (grounded false for a tick or two), which is not the landing bounce this test looks for.
+      await handle.setArenaFloor('flat');
       await handle.restart(seedText);
-      handle.setController('second', { kind: 'ai', personality: 'archetype' });
+      handle.setController('second', { kind: 'idle' });
       const JumpDrift = 'JumpDrift' as Action;
+      const MoveForward = 'MoveForward' as Action;
       const frames: { fromTick: number; held: Action[] }[] = [
         { fromTick: 0, held: [] },
-        { fromTick: settleTicks, held: [JumpDrift] },
-        { fromTick: settleTicks + 1, held: [] },
+        { fromTick: settleTicks - runUpTicks, held: [MoveForward] },
+        { fromTick: settleTicks, held: [MoveForward, JumpDrift] },
+        { fromTick: settleTicks + 1, held: [MoveForward] },
       ];
-      if (secondTapTick !== null) {
-        frames.push({ fromTick: secondTapTick, held: [JumpDrift] }, { fromTick: secondTapTick + 1, held: [] });
-      }
+      if (secondPressTick !== null) frames.push({ fromTick: secondPressTick, held: [MoveForward, JumpDrift] });
       handle.setController('first', { kind: 'scripted', label: 'jump-input-buffer', frames });
       handle.setPaused(true);
-      const totalTicks = secondTapTick !== null ? secondTapTick + probeTicks : probeTicks;
+      const totalTicks = settleTicks + probeTicks;
       const trace: { tick: number; state: string; grounded: boolean | null }[] = [];
       for (let i = 0; i < totalTicks; i++) {
         handle.step(1);
@@ -74,7 +85,7 @@ async function runTappedMatch(page: Page, seedText: string, secondTapTick: numbe
       }
       return trace;
     },
-    { seedText, secondTapTick, settleTicks: SETTLE_TICKS, probeTicks: PROBE_TICKS },
+    { seedText, secondPressTick, settleTicks: SETTLE_TICKS, runUpTicks: RUN_UP_TICKS, probeTicks: PROBE_TICKS },
   );
 }
 
@@ -89,7 +100,7 @@ function hopStartTicks(trace: readonly TraceRow[]): number[] {
   return starts;
 }
 
-test('jump input buffer: a JumpDrift press on this run\'s own landing-bounce tick (grounded briefly false) still begins a hop, exactly once, instead of being dropped', async ({ page }) => {
+test('jump input buffer: a JumpDrift press made in the air just before landing is kept — it starts the drift (tap + hold), exactly one hop, instead of being dropped', async ({ page }) => {
   test.setTimeout(60_000);
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
@@ -99,10 +110,7 @@ test('jump input buffer: a JumpDrift press on this run\'s own landing-bounce tic
 
   await waitForLabReady(page);
 
-  // Pass 1 (probe): one bare tap, no second press. Find this seed's own
-  // landing-bounce tick — the first tick, shortly after landing back in
-  // Idle, where grounded reads false again (never a guessed/hardcoded
-  // physics number).
+  // Pass 1 (probe): one bare tap, no second press. Find this seed's own landing tick (never a guessed/hardcoded physics number).
   const probe = await runTappedMatch(page, SEED, null);
   const probeHopStarts = hopStartTicks(probe);
   expect(probeHopStarts.length, 'the bare tap must produce a hop at all').toBeGreaterThan(0);
@@ -117,18 +125,24 @@ test('jump input buffer: a JumpDrift press on this run\'s own landing-bounce tic
   }
   expect(landedTick, 'the hop must land back in Idle within the probe window').toBeGreaterThan(hopStart);
 
-  // Owner, 2026-10-02 (Lote 4): one X press = one flight — landing from the Bey's own hop no longer bounces, so the
-  // old "press on the landing-bounce tick" situation cannot happen any more: check that, then that a press made in the
-  // air just before landing (the same drop the old bug made, PR #76) begins exactly one more hop on landing.
-  for (let t = landedTick; t < Math.min(probe.length, landedTick + BOUNCE_SEARCH_WINDOW_TICKS); t++) {
-    expect(probe[t]!.grounded, `no landing bounce after the Bey's own hop (tick ${t})`).toBe(true);
-  }
-  const airTick = landedTick - 3;
-  expect(probe[airTick]!.grounded, 'the repro press lands in the air').toBe(false);
-  const repro = await runTappedMatch(page, SEED, airTick);
-  const secondHopStarts = hopStartTicks(repro).filter((t) => t > airTick);
-  expect(secondHopStarts.length, 'the press made in the air must begin exactly one more hop on landing — not zero (dropped, the old bug) and not more than one').toBe(1);
-  expect(secondHopStarts[0]! - landedTick, 'the kept press is used right at the landing').toBeLessThanOrEqual(3);
+  // One X press = one flight (owner, 2026-10-02, Lote 4), and a second press is the drift press — tap + hold (owner,
+  // 2026-10-04): so a press made in the air just before landing, or on the tick where the landing's small floor bounce
+  // reads grounded === false (the Motion Lab's floorBounce, which the 0.5 m short hop now shows), must be KEPT — the old
+  // bug dropped it (PR #76). Kept now means: the drift starts right away, and the Bey never takes off a second time.
+  const expectKeptPress = async (pressTick: number, label: string): Promise<void> => {
+    expect(probe[pressTick]!.grounded, `${label}: the repro press lands while grounded reads false`).toBe(false);
+    const repro = await runTappedMatch(page, SEED, pressTick);
+    expect(hopStartTicks(repro), `${label}: one tap, one flight — the press must not begin a second hop`).toHaveLength(1);
+    const driftStart = repro.findIndex((row, t) => t > pressTick && row.state === 'Drifting');
+    expect(driftStart, `${label}: the press must start the drift — not be dropped`).toBeGreaterThan(pressTick);
+    expect(driftStart - pressTick, `${label}: the kept press is answered right away`).toBeLessThanOrEqual(DRIFT_START_TICKS);
+  };
+  await expectKeptPress(landedTick - 3, 'in the air, just before landing');
+
+  // The landing's own bounce tick (grounded briefly false again in Idle), found in this run's probe — never a hardcoded tick.
+  const bounceTick = probe.findIndex((row, t) => t > landedTick && t < landedTick + BOUNCE_SEARCH_WINDOW_TICKS && row.state === 'Idle' && row.grounded === false);
+  expect(bounceTick, 'the 0.5 m short hop has a visible landing bounce on this seed (if the landing stops bouncing, drop this case)').toBeGreaterThan(landedTick);
+  await expectKeptPress(bounceTick, 'on the landing-bounce tick');
 
   expect(consoleErrors, `console errors: ${consoleErrors.join('\n')}`).toEqual([]);
 });

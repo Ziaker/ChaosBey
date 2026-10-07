@@ -16,9 +16,12 @@ async function driveIntoDrift(page: Page): Promise<void> {
   // main too) the frame rate drops and 700 ms of wall time is far fewer ticks.
   const startTick = await page.evaluate(() => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex());
   await page.waitForFunction((t0) => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex() >= t0 + 42, startTick, { timeout: 20_000 });
-  // Turn as X goes down: X + a real turn is a drift (X held going straight
-  // would be the variable jump — see DriftController).
+  // The drift gesture (owner, 2026-10-04/05): tap X (a short hop), then press X again and hold it while steering — tap + hold.
+  // X held from the first press would be the variable (full) jump instead — see DriftController.
   await page.keyboard.up('ArrowUp');
+  await page.keyboard.down('x');
+  await page.keyboard.up('x');
+  await page.waitForTimeout(60); // a few ticks into the hop: well inside the short-hop window and the 1 s drift window
   // X first, then the turn: the drift latches its reference direction when X goes
   // down and starts on a turn AWAY from it, so a tick that sees ArrowRight already
   // held before X (two key events can land in different frames on a slow runner)
@@ -49,7 +52,11 @@ test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with 
     const s = window.__chaosBeyPlay!.getSession()!;
     s.setController('second', { kind: 'idle' });
     const p = s.getBey('first').body.translation();
-    s.getBey('second').body.setTranslation({ x: p.x, y: p.y + 0.2, z: p.z - 6 }, true); // behind it: the drive goes forward
+    // Behind it: the drive goes forward. On the floor, not at the player's height: the default stage is a funnel
+    // (Bowl B, 8.5 m deep), where that height is inside the floor 6 m further out (the opponent fell through, the
+    // round ended as a ring-out and the HUD stayed on its last frame, "Drifting").
+    const behind = { x: p.x, z: p.z - 6 };
+    s.getBey('second').body.setTranslation({ x: behind.x, y: s.floorHeightAt(behind.x, behind.z) + 0.6, z: behind.z }, true);
     s.getBey('second').body.setLinvel({ x: 0, y: 0, z: 0 }, true);
   });
 
@@ -58,13 +65,13 @@ test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with 
   await driveIntoDrift(page);
   await expect.poll(async () => (await tag.getAttribute('data-state')) ?? '', { timeout: 3000 }).toBe('Drifting');
   await expect(tag).toHaveText('DRIFT');
-  // It stays in the drift while X is held.
+  // It stays in the drift while X is held. Keep this window short: the Beys are fast (top speed ×2.8 and momentum), and a
+  // drift held for 1.2 s or more reaches the wall at ~30 m/s — the impact ends it, the still-held keys start it again,
+  // and this test counted two starts (4 failures in 8 runs; the screenshot taken inside the drift made it likelier).
   for (let i = 0; i < 4; i++) {
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(100);
     states.push((await tag.getAttribute('data-state')) ?? '');
   }
-  fs.mkdirSync('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/drift-play.png' });
   const during = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getDriftVfxCounts('first'));
   await releaseDrift(page);
   // Read state and text together, in one evaluation: on a slow, software-rendered
@@ -85,6 +92,10 @@ test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with 
   if (afterRelease.startsWith('Recovering')) expect(afterRelease).toBe('Recovering|GRIP');
   await expect.poll(async () => (await tag.getAttribute('data-state')) ?? '', { timeout: 3000 }).toBe('Idle');
   const after = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getDriftVfxCounts('first'));
+
+  // The skid marks stay on the floor after the drift: the picture is taken once it has ended, not inside the drift.
+  fs.mkdirSync('test-results', { recursive: true });
+  await page.screenshot({ path: 'test-results/drift-play.png' });
 
   expect(states.every((s) => s === 'Drifting'), states.join(',')).toBe(true);
   expect(during.driftStarts).toBe(1);
