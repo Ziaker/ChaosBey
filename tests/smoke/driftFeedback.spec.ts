@@ -10,33 +10,47 @@ import * as fs from 'fs';
 // bowls A/B/C.
 
 async function driveIntoDrift(page: Page): Promise<void> {
-  await page.keyboard.down('ArrowUp');
-  // Build speed for 0.7 s of SIMULATION time (42 fixed ticks), not wall time: on a
-  // slow runner (CI's software-rendered browser, or one CPU core — it fails on
-  // main too) the frame rate drops and 700 ms of wall time is far fewer ticks.
-  const startTick = await page.evaluate(() => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex());
-  await page.waitForFunction((t0) => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex() >= t0 + 42, startTick, { timeout: 20_000 });
-  // The drift gesture (owner, 2026-10-04/05): tap X (a short hop), then press X again and hold it while steering — tap + hold.
-  // X held from the first press would be the variable (full) jump instead — see DriftController.
-  await page.keyboard.up('ArrowUp');
-  await page.keyboard.down('x');
-  await page.keyboard.up('x');
-  // Wait in SIMULATION ticks, not wall time: the second press must come in a later frame than the tap, or the two merge
-  // into one held press (a full jump, no drift). With a fixed 60 ms wait that happened on a slow or loaded runner (2 runs
-  // in 24 on a loaded machine). 15 ticks (0.25 s) is inside the hop and well inside the 1 s drift window after it lands.
-  const tapTick = await page.evaluate(() => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex());
-  await page.waitForFunction((t0) => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex() >= t0 + 15, tapTick, { timeout: 20_000 });
-  // X first, then the turn: the drift latches its reference direction when X goes
-  // down and starts on a turn AWAY from it, so a tick that sees ArrowRight already
-  // held before X (two key events can land in different frames on a slow runner)
-  // latches the turn itself as the reference and never drifts.
-  await page.keyboard.down('x');
-  await page.keyboard.down('ArrowRight');
+  // The whole gesture is played from INSIDE the page, scheduled in simulation ticks — the game's own clock — and not as a
+  // chain of Playwright key presses separated by waits. The game reads `KeyboardEvent.code` from the window and measures a
+  // tap by simulation time, so synthetic events are what it sees from a keyboard; what they add is that the timing no longer
+  // depends on how long a round trip to the browser takes. As separate Playwright calls the gesture failed on slow and loaded
+  // runners: the 60 ms between the tap and the second press collapsed into one frame (a held press = the full jump), or a
+  // longer wait outlasted the 1 s drift window.
+  //   1. ArrowUp for 42 ticks (0.7 s) to build speed;
+  //   2. release it, tap X (down + up at once = the short hop);
+  //   3. 12 ticks later (0.2 s: inside the hop, a later frame than the tap) press X again and the turn, X first, then the
+  //      turn: the drift latches its reference direction when X goes down and starts on a turn AWAY from it, so a tick that
+  //      sees ArrowRight held before X latches the turn itself as the reference and never drifts.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const session = (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!;
+        const fire = (type: 'keydown' | 'keyup', code: string, key: string): void => {
+          window.dispatchEvent(new KeyboardEvent(type, { code, key, bubbles: true, cancelable: true }));
+        };
+        const steps: { atTick: number; run: () => void }[] = [];
+        const start = session.getTickIndex();
+        fire('keydown', 'ArrowUp', 'ArrowUp');
+        steps.push({ atTick: start + 42, run: () => { fire('keyup', 'ArrowUp', 'ArrowUp'); fire('keydown', 'KeyX', 'x'); fire('keyup', 'KeyX', 'x'); } });
+        steps.push({ atTick: start + 42 + 12, run: () => { fire('keydown', 'KeyX', 'x'); fire('keydown', 'ArrowRight', 'ArrowRight'); } });
+        const startedAt = performance.now();
+        const frame = (): void => {
+          // One step per frame: a slow frame that jumps many ticks must not fold the tap and the second press into one.
+          if (steps.length > 0 && session.getTickIndex() >= steps[0]!.atTick) steps.shift()!.run();
+          if (steps.length === 0) resolve();
+          else if (performance.now() - startedAt > 30_000) reject(new Error('the drift gesture timed out'));
+          else requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+      }),
+  );
 }
 
 async function releaseDrift(page: Page): Promise<void> {
-  await page.keyboard.up('x');
-  await page.keyboard.up('ArrowRight');
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyX', key: 'x', bubbles: true, cancelable: true }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowRight', key: 'ArrowRight', bubbles: true, cancelable: true }));
+  });
 }
 
 test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with GRIP', async ({ page }) => {
