@@ -27,6 +27,14 @@ export const ARENA_WALL_THICKNESS = 0.6;
 // hairline gap a fast-moving Bey could clip through.
 export const ARENA_WALL_SEGMENT_OVERLAP_FACTOR = 1.15;
 
+/**
+ * The most a Bey can bounce off the wall (rebound speed / impact speed). The wall's bounce is the arena's restitution
+ * × the motion direction's wall bounce relative to B, which for direction C (×1.5) at the 0.8 default is 1.2 — a wall
+ * that gives energy back (13.2 m/s out for 10.9 m/s in, measured), and 1.35 at the slider's 0.9. A wall may throw a
+ * Bey back hard, never faster than it came: createArenaColliders caps the bounce here. A and B never reach it.
+ */
+export const ARENA_WALL_BOUNCE_MAX = 0.95;
+
 // Milestone 1 has no ring-out rule yet (that's combat/round-rules,
 // Milestone 2+) — the wall is a hard physical boundary for now, not a
 // ring-out trigger volume.

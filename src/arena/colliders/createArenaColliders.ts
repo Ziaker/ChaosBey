@@ -21,6 +21,7 @@ import {
   setArenaSizeScale,
   ARENA_FLOOR_THICKNESS,
   ARENA_WALL_SEGMENT_COUNT,
+  ARENA_WALL_BOUNCE_MAX,
   ARENA_WALL_SEGMENT_OVERLAP_FACTOR,
   ARENA_WALL_THICKNESS,
 } from './ArenaTuning';
@@ -50,7 +51,7 @@ export function createArenaColliders(
   // bounce every rim contact of a rocking Bey, which at C's 0.55 pumped
   // the rocking until the cylinder lay on its side (measured).
   const floorRestitution = 0;
-  const wallRestitution = surfaceColliderRestitution(geometry.wallRestitution * motionRatio(motion, 'wallBounce'), motion);
+  const wallRestitution = surfaceColliderRestitution(Math.min(geometry.wallRestitution * motionRatio(motion, 'wallBounce'), ARENA_WALL_BOUNCE_MAX), motion);
   const wallFriction = WALL_MATERIAL.friction * motionRatio(motion, 'wallFriction');
   // The floor keeps the game's contact friction. The Motion Lab has none
   // (its drive alone slows a coasting Bey, at 0.6/s: an ~18 m glide from
