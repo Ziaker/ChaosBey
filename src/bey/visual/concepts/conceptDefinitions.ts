@@ -41,7 +41,7 @@ export const ATTACK_A: ConceptDefinition = {
     disc: 'Thick notched metal disc (4 notches)',
     driver: 'Flared housing + flat rubber tip',
   },
-  palette: { primary: 0xc4202b, secondary: 0x2a2d35, accent: 0xff7a1a, metal: 0xb9bdc6, darkMetal: 0x3a3e47, translucent: 0xff5a3c, glow: 0xff6a2a },
+  palette: { primary: 0xc4202b, secondary: 0x2a2d35, accent: 0xff7a1a, metal: 0xb9bdc6, darkMetal: 0x3a3e47, translucent: 0xff5a3c, glow: 0xff4d4d },
   parts: {
     topLayer: top.gemCrown({ radius: 1.05, height: 0.6 }),
     ring: rings.impactLobes({ baseRadius: 2.1, innerRadius: 1.1, lobes: 4, reach: 0.8, height: 0.45 }),
@@ -63,7 +63,7 @@ export const ATTACK_B: ConceptDefinition = {
     disc: 'Toothed gear disc + translucent layer',
     driver: 'Faceted 7-sided housing + hex spike',
   },
-  palette: { primary: 0xd21a6e, secondary: 0x5a1027, accent: 0xff8f3a, metal: 0xc3c7cf, darkMetal: 0x2c2f37, translucent: 0xff4fa0, glow: 0xff3d8b },
+  palette: { primary: 0xd0229f, secondary: 0x4a0f3c, accent: 0xff8f3a, metal: 0xc3c7cf, darkMetal: 0x2c2f37, translucent: 0xff6ad8, glow: 0xff52d8 },
   parts: {
     topLayer: top.sigilHub({ radius: 0.95, height: 0.6 }),
     ring: rings.sweptBlades({ hubRadius: 1.6, innerRadius: 0.95, height: 0.45 }),
@@ -85,7 +85,7 @@ export const ATTACK_C: ConceptDefinition = {
     disc: 'Heavy 10-panel metal drum',
     driver: 'Bolted drum housing + rubber dome',
   },
-  palette: { primary: 0x8f1822, secondary: 0x33363d, accent: 0xf26a21, metal: 0xa9adb5, darkMetal: 0x25272c, translucent: 0xff6d3a, glow: 0xff5a1e },
+  palette: { primary: 0xf0801a, secondary: 0x3b2412, accent: 0xffd23a, metal: 0xa9adb5, darkMetal: 0x25272c, translucent: 0xffb060, glow: 0xffa030 },
   parts: {
     topLayer: top.boltedDome({ radius: 1.1, height: 0.7 }),
     ring: rings.hammerHeads({ bandInner: 1.15, bandOuter: 1.9, height: 0.6, heads: 2 }),
@@ -109,7 +109,7 @@ export const DEFENSE_A: ConceptDefinition = {
     disc: 'Two-layer round steel disc, rivets',
     driver: 'Convex bowl housing + guarded ball',
   },
-  palette: { primary: 0x2358c4, secondary: 0x16307a, accent: 0x3fd2ff, metal: 0xc8ced8, darkMetal: 0x39404d, translucent: 0x5fdcff, glow: 0x49d6ff },
+  palette: { primary: 0x2358c4, secondary: 0x16307a, accent: 0x3fd2ff, metal: 0xc8ced8, darkMetal: 0x39404d, translucent: 0x5f9cff, glow: 0x4d8dff },
   parts: {
     topLayer: top.shieldDome({ radius: 1.3, height: 0.6 }),
     ring: rings.overlappingPlates({ outerRadius: 2.8, innerRadius: 1.3, plates: 8, tiltDeg: 6 }),
@@ -131,7 +131,7 @@ export const DEFENSE_B: ConceptDefinition = {
     disc: 'Metal disc with rubber bumper tire',
     driver: 'Sprung skirt housing + crown ring tip',
   },
-  palette: { primary: 0x1c9bd8, secondary: 0x123a66, accent: 0x9eeaff, metal: 0xb7bfca, darkMetal: 0x2d3440, translucent: 0x7fe5ff, glow: 0x6fe0ff },
+  palette: { primary: 0x7a3fd0, secondary: 0x2a1763, accent: 0xd8b8ff, metal: 0xb7bfca, darkMetal: 0x2d3440, translucent: 0xb890ff, glow: 0xa070ff },
   parts: {
     topLayer: top.hexHub({ radius: 0.95, height: 0.6 }),
     ring: rings.bumperPods({ pods: 6, radius: 2.3, innerRadius: 0.95, bandRadius: 1.55 }),
@@ -153,7 +153,7 @@ export const DEFENSE_C: ConceptDefinition = {
     disc: 'Octagonal disc with buttresses',
     driver: 'Stepped octagonal housing + stacked tip',
   },
-  palette: { primary: 0x1b3290, secondary: 0x4a5566, accent: 0x55b2ff, metal: 0xc2c8d2, darkMetal: 0x262c38, translucent: 0x68c4ff, glow: 0x3fb8ff },
+  palette: { primary: 0x1fb5e0, secondary: 0x4a5566, accent: 0xffffff, metal: 0xc2c8d2, darkMetal: 0x262c38, translucent: 0x8ae8ff, glow: 0x3fdcff },
   parts: {
     topLayer: top.tower({ tiers: 3, baseRadius: 1.25, tierHeight: 0.42 }),
     ring: rings.crenellated({ outerRadius: 2.3, innerRadius: 1.4, merlons: 8 }),
@@ -177,7 +177,7 @@ export const STAMINA_A: ConceptDefinition = {
     disc: 'Windowed disc with rim beads',
     driver: 'Waisted slim housing + needle tip',
   },
-  palette: { primary: 0x12a08c, secondary: 0x0f4d45, accent: 0xe4b83c, metal: 0xd3d7de, darkMetal: 0x3a4146, translucent: 0x6fe8d0, glow: 0x5ff0d0 },
+  palette: { primary: 0x1fa85a, secondary: 0x0f4d2c, accent: 0xe4b83c, metal: 0xd3d7de, darkMetal: 0x3a4146, translucent: 0x6fe8a0, glow: 0x3fe07a },
   parts: {
     topLayer: top.smallCap({ radius: 0.8, height: 0.45 }),
     ring: rings.flywheel({ radius: 3.0, hubRadius: 0.95, spokes: 5, weights: 5 }),
@@ -199,7 +199,7 @@ export const STAMINA_B: ConceptDefinition = {
     disc: '3-step precision disc with pins',
     driver: 'Open cage housing + bearing tip',
   },
-  palette: { primary: 0x1f8f86, secondary: 0x2f3a3c, accent: 0xd8b04a, metal: 0xd7dbe2, darkMetal: 0x4a5257, translucent: 0x8ff5e0, glow: 0x3fe0c0 },
+  palette: { primary: 0x8cc63a, secondary: 0x2f3a3c, accent: 0xd8b04a, metal: 0xd7dbe2, darkMetal: 0x4a5257, translucent: 0xd0f58a, glow: 0xb8f04a },
   parts: {
     topLayer: top.precisionLens({ radius: 0.95, height: 0.55 }),
     ring: rings.concentricRings({ outer: 2.7, middle: 2.05, inner: 1.45, floorRadius: 1.25 }),
@@ -221,7 +221,7 @@ export const STAMINA_C: ConceptDefinition = {
     disc: 'Lens-shaped aero metal disc',
     driver: 'Finned fairing + long ogive tip',
   },
-  palette: { primary: 0xe3c24a, secondary: 0x1f6b45, accent: 0x3cbf6e, metal: 0xd0d4db, darkMetal: 0x3b4240, translucent: 0xb8f5a0, glow: 0x9dff7a },
+  palette: { primary: 0xf2e03a, secondary: 0x1f6b45, accent: 0x3cbf6e, metal: 0xd0d4db, darkMetal: 0x3b4240, translucent: 0xfff3a0, glow: 0xffe44a },
   parts: {
     topLayer: top.spire({ radius: 1.15, height: 1.0 }),
     ring: rings.triLobeAero({ radius: 2.15, width: 0.5, innerRadius: 1.15 }),

@@ -7,6 +7,7 @@
 // and tests can read where the player is.
 // ============================================================
 
+import { sideAccentsCss } from '../../bey/visual/beyColors';
 import { DefeatCutscene } from './DefeatCutscene';
 import type { AppRenderer } from '../bootstrap/createRenderer';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
@@ -242,9 +243,11 @@ export class PlayFlow {
     this.padMenu.stop();
     const player = rosterEntry(this.setup.playerBeyId);
     const opponent = rosterEntry(this.setup.opponentBeyId);
+    // The Clash bar, cards and pips wear each Bey's own color; the same Bey on both sides (or two close colors) takes its second color.
+    const accents = sideAccentsCss(player.accentCss, player.definition.id, opponent.accentCss, opponent.definition.id);
     this.hud = new CombatHud(this.deps.screenRoot, {
-      player: { label: player.label, accentCss: player.accentCss },
-      opponent: { label: opponent.label, accentCss: opponent.accentCss, subtitle: `${aiDifficultyTier(this.setup.ai.tier).label} AI · ${AI_STYLE_LABELS[this.setup.ai.style]}` },
+      player: { label: player.label, accentCss: accents.first },
+      opponent: { label: opponent.label, accentCss: accents.second, subtitle: `${aiDifficultyTier(this.setup.ai.tier).label} AI · ${AI_STYLE_LABELS[this.setup.ai.style]}` },
       roundNumber: this.score.rounds + 1,
       score: { player: this.score.player, opponent: this.score.opponent },
       roundsToWin: this.setup.roundsToWin,

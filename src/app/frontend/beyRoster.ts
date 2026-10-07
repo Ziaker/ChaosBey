@@ -15,6 +15,7 @@
 
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
 import { CONCEPT_BEYS, familyArchetypeOf, type ConceptBey } from '../../bey/archetype/BeyConceptRoster';
+import { beyColorsFor, cssHex } from '../../bey/visual/beyColors';
 import { CONCEPTS } from '../../bey/visual/concepts/conceptDefinitions';
 import { DEFAULT_ATTACK_PROFILE } from '../../bey/archetype/BeyAttackProfile';
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
@@ -77,7 +78,9 @@ function entryFor(concept: ConceptBey): RosterEntry {
   const visual = CONCEPTS.find((c) => c.id === concept.conceptId);
   if (!copy || !visual) throw new Error(`beyRoster: no roster copy or concept for Bey definition "${concept.definition.id}".`);
   const description = concept.letter === 'A' ? copy.description : `${copy.description} Plays exactly like ${copy.label} A for now (provisional).`;
-  return { definition: concept.definition, label: `${copy.label} ${concept.letter}`, role: visual.headline, description, accentCss: copy.accentCss };
+  // Owner, 2026-10-07: each Bey has its own color (the family color only when a concept has none).
+  const colors = beyColorsFor(concept.definition.id);
+  return { definition: concept.definition, label: `${copy.label} ${concept.letter}`, role: visual.headline, description, accentCss: colors ? cssHex(colors.glow) : copy.accentCss };
 }
 
 export const BEY_ROSTER: readonly RosterEntry[] = CONCEPT_BEYS.map(entryFor);

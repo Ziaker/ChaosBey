@@ -108,6 +108,18 @@ export interface PieceNotes {
   readonly driver: string;
 }
 
+/** The four pieces of the anatomy, by the names the whole game uses (topLayer, ring, disc, driver). */
+export type BeyPieceName = 'topLayer' | 'ring' | 'disc' | 'driver';
+
+/**
+ * PLANNED, not used yet (owner, 2026-10-07: "deixe planejado a vontade de colorir as 4 peças de cada bey"): a color
+ * override per piece on top of the concept's palette, so each of the four pieces can be painted on its own (a red ring on
+ * a blue driver). Today every piece is painted from the one `palette`. Nothing reads this field; the plan, and what it
+ * will change (the materials kit per piece, the Bey colors and so the Clash bar), is in
+ * docs/design-decisions/bey-colors-plan.md.
+ */
+export type PieceColorOverrides = Partial<Record<BeyPieceName, Partial<ConceptPalette>>>;
+
 export interface ConceptDefinition {
   /** Stable id, also used as URL hash (e.g. `attack-b`). */
   readonly id: string;
@@ -119,5 +131,7 @@ export interface ConceptDefinition {
   readonly description: string;
   readonly pieces: PieceNotes;
   readonly palette: ConceptPalette;
+  /** PLANNED (see PieceColorOverrides): per-piece colors. Unset for every concept today. */
+  readonly pieceColors?: PieceColorOverrides;
   readonly parts: ConceptParts;
 }
