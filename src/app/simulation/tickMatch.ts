@@ -19,6 +19,7 @@
 // ended, rather than letting the fight silently continue in the background.
 // ============================================================
 
+import { LAUNCH_SPEED_CEILING_MPS } from '../../combat/knockback/KnockbackTuning';
 import { floorHeightAt, floorNormalAt } from '../../arena/floor/ArenaFloorProfile';
 import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
 import type { Bey } from '../../bey/core/Bey';
@@ -388,9 +389,13 @@ export function tickMatch(
   second.dodge.updateIntangibility(overlapBefore, fixedDeltaSeconds);
   const phased = first.dodge.isIntangible() || second.dodge.isIntangible();
   physics.setBeyContactsEnabled(!phased);
+  capLaunchSpeed(first); // a launch applied late in the last tick (a hit, a Clash) is cut before it can carry the Bey through a wall
+  capLaunchSpeed(second);
   physics.step();
   if (firstWasAboveFloor) keepAboveFloor(first);
   if (secondWasAboveFloor) keepAboveFloor(second);
+  capLaunchSpeed(first);
+  capLaunchSpeed(second);
 
   // The defensive Circular (owner, 2026-10-02, item 13): the other Bey's contact must not push its user either —
   // the solver's push is undone (horizontal velocity back to what it carried into the step) before the movement
@@ -768,6 +773,9 @@ export function tickMatch(
   roundState.resolveTick({ firstKoed, secondKoed, firstRingOut: ringOutFirst, secondRingOut: ringOutSecond, firstSpunOut, secondSpunOut });
   roundState.tickClock(fixedDeltaSeconds); // Lote 9: the round timer (Clash time is not counted)
 
+  capLaunchSpeed(first);
+  capLaunchSpeed(second);
+
   return {
     first: {
       movement: firstMovement,
@@ -834,6 +842,15 @@ function keepHorizontalVelocity(bey: Bey, velocity: Vec2): void {
 function horizontalVelocity(body: Bey['body']): Vec2 {
   const v = body.linvel();
   return { x: v.x, z: v.z };
+}
+
+/** No launch, from any source, leaves a Bey faster than LAUNCH_SPEED_CEILING_MPS (Knockback x4 reached 260 m/s). */
+function capLaunchSpeed(bey: Bey): void {
+  const v = bey.body.linvel();
+  const speed = Math.hypot(v.x, v.y, v.z);
+  if (speed <= LAUNCH_SPEED_CEILING_MPS) return;
+  const k = LAUNCH_SPEED_CEILING_MPS / speed;
+  bey.body.setLinvel({ x: v.x * k, y: v.y * k, z: v.z * k }, true);
 }
 
 /**

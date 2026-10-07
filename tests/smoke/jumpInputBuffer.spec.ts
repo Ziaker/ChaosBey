@@ -62,6 +62,11 @@ async function runTappedMatch(page: Page, seedText: string, secondPressTick: num
       await handle.setArenaFloor('flat');
       await handle.restart(seedText);
       handle.setController('second', { kind: 'idle' });
+      // Off to the side, out of the run's path: the Beys are fast, and a Bey running straight at the idle opponent (spawned
+      // 21 m ahead) bumped into it ~1.3 s in — a knock that reads grounded === false for a few ticks, which this test
+      // once mistook for a landing bounce.
+      const second = handle.getSession()!.getBey('second').body;
+      second.setTranslation({ x: 16, y: second.translation().y, z: 12 }, true);
       const JumpDrift = 'JumpDrift' as Action;
       const MoveForward = 'MoveForward' as Action;
       const frames: { fromTick: number; held: Action[] }[] = [
@@ -125,24 +130,21 @@ test('jump input buffer: a JumpDrift press made in the air just before landing i
   }
   expect(landedTick, 'the hop must land back in Idle within the probe window').toBeGreaterThan(hopStart);
 
-  // One X press = one flight (owner, 2026-10-02, Lote 4), and a second press is the drift press — tap + hold (owner,
-  // 2026-10-04): so a press made in the air just before landing, or on the tick where the landing's small floor bounce
-  // reads grounded === false (the Motion Lab's floorBounce, which the 0.5 m short hop now shows), must be KEPT — the old
-  // bug dropped it (PR #76). Kept now means: the drift starts right away, and the Bey never takes off a second time.
-  const expectKeptPress = async (pressTick: number, label: string): Promise<void> => {
-    expect(probe[pressTick]!.grounded, `${label}: the repro press lands while grounded reads false`).toBe(false);
-    const repro = await runTappedMatch(page, SEED, pressTick);
-    expect(hopStartTicks(repro), `${label}: one tap, one flight — the press must not begin a second hop`).toHaveLength(1);
-    const driftStart = repro.findIndex((row, t) => t > pressTick && row.state === 'Drifting');
-    expect(driftStart, `${label}: the press must start the drift — not be dropped`).toBeGreaterThan(pressTick);
-    expect(driftStart - pressTick, `${label}: the kept press is answered right away`).toBeLessThanOrEqual(DRIFT_START_TICKS);
-  };
-  await expectKeptPress(landedTick - 3, 'in the air, just before landing');
-
-  // The landing's own bounce tick (grounded briefly false again in Idle), found in this run's probe — never a hardcoded tick.
-  const bounceTick = probe.findIndex((row, t) => t > landedTick && t < landedTick + BOUNCE_SEARCH_WINDOW_TICKS && row.state === 'Idle' && row.grounded === false);
-  expect(bounceTick, 'the 0.5 m short hop has a visible landing bounce on this seed (if the landing stops bouncing, drop this case)').toBeGreaterThan(landedTick);
-  await expectKeptPress(bounceTick, 'on the landing-bounce tick');
+  // One X press = one flight (owner, 2026-10-02, Lote 4): landing from the Bey's own hop does not bounce, so there is no
+  // "grounded briefly false" tick after it (measured on the flat floor: the first tick after landing has no vertical
+  // speed). A second press is the drift press — tap + hold (owner, 2026-10-04): a press made in the air just before
+  // landing (the same drop the old bug made, PR #76) must be KEPT. Kept now means: the drift starts right away, and the
+  // Bey never takes off a second time.
+  for (let t = landedTick; t < Math.min(probe.length, landedTick + BOUNCE_SEARCH_WINDOW_TICKS); t++) {
+    expect(probe[t]!.grounded, `no landing bounce after the Bey's own hop (tick ${t})`).toBe(true);
+  }
+  const airTick = landedTick - 3;
+  expect(probe[airTick]!.grounded, 'the repro press lands in the air').toBe(false);
+  const repro = await runTappedMatch(page, SEED, airTick);
+  expect(hopStartTicks(repro), 'one tap, one flight: the press made in the air must not begin a second hop').toHaveLength(1);
+  const driftStart = repro.findIndex((row, t) => t > airTick && row.state === 'Drifting');
+  expect(driftStart, 'the press made in the air must start the drift — not be dropped').toBeGreaterThan(airTick);
+  expect(driftStart - airTick, 'the kept press is answered right away').toBeLessThanOrEqual(DRIFT_START_TICKS);
 
   expect(consoleErrors, `console errors: ${consoleErrors.join('\n')}`).toEqual([]);
 });

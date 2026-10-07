@@ -1,6 +1,6 @@
 {
   "name": "chaosbey",
-  "version": "0.43.3",
+  "version": "0.46.1",
   "private": true,
   "description": "ChaosBey - 3D spinning-top arena combat simulator (browser, GitHub Pages)",
   "type": "module",
@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "playwright test -c tests/smoke/playwright.config.ts",
+    "test:smoke:fast": "playwright test -c tests/smoke/playwright.fast.config.ts",
     "build:exe": "npm run build && electron-builder --win --publish=never",
     "build:mac": "npm run build && electron-builder --mac --publish=never"
   },

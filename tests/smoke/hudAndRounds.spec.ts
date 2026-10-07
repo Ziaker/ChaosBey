@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { baselineUrl } from './presentationBaseline';
 import { ROUND_WALL_TIMEOUT_MS, describeRun, playRoundToEnd } from './support/playRoundToEnd';
+import { GAME_DEFAULTS } from './gameDefaults';
 
 // ============================================================
 // COMBAT HUD AND ROUNDS (M10 lane E), production build.
@@ -37,6 +38,8 @@ test('the HUD reads the live match, a round ends with its banner, and round 2 ca
   await expect(page.getByTestId('hud-round')).toContainText('ROUND 1');
   await expect(page.getByTestId('hud-banner')).toContainText('FIGHT!');
   await expect(page.getByTestId('hud-hints')).toBeVisible();
+  // Round-start cue of what the arrows mean (Screen control): on with the hints.
+  await expect(page.getByTestId('hud-up-cue')).toBeVisible();
   await expect(page.getByTestId('hud-pips-player').locator('.is-won')).toHaveCount(0);
 
   // The meters follow the match: Stamina drains from full.
@@ -86,11 +89,12 @@ test('the HUD reads the live match, a round ends with its banner, and round 2 ca
 
 test('control hints follow the setting', async ({ page }) => {
   const errors = watchErrors(page);
-  await page.addInitScript(() => localStorage.setItem('chaosbey.settings.player.v1', JSON.stringify({ controlHints: false })));
+  await page.addInitScript((key) => localStorage.setItem(key, JSON.stringify({ controlHints: false })), GAME_DEFAULTS.settingsStorageKey);
   await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await page.getByTestId('character-select-confirm').click({ timeout: 15_000 });
   await page.getByTestId('pregame-start').click();
   await expect(page.getByTestId('combat-hud')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId('hud-hints')).toBeHidden();
+  await expect(page.getByTestId('hud-up-cue')).toBeHidden();
   expect(errors).toEqual([]);
 });

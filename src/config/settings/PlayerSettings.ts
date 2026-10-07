@@ -156,7 +156,9 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
   };
 }
 
-const STORAGE_KEY = 'chaosbey.settings.player.v2';
+/** Where the Settings are saved (the browser smoke specs read it from here, not from a copy: it changed once already, v1 → v2). */
+export const PLAYER_SETTINGS_STORAGE_KEY = 'chaosbey.settings.player.v2';
+const STORAGE_KEY = PLAYER_SETTINGS_STORAGE_KEY;
 const LEGACY_STORAGE_KEY = 'chaosbey.settings.player.v1';
 
 function getStorage(): Storage | null {

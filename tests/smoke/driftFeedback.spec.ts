@@ -10,29 +10,47 @@ import * as fs from 'fs';
 // bowls A/B/C.
 
 async function driveIntoDrift(page: Page): Promise<void> {
-  await page.keyboard.down('ArrowUp');
-  // Build speed for 0.7 s of SIMULATION time (42 fixed ticks), not wall time: on a
-  // slow runner (CI's software-rendered browser, or one CPU core — it fails on
-  // main too) the frame rate drops and 700 ms of wall time is far fewer ticks.
-  const startTick = await page.evaluate(() => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex());
-  await page.waitForFunction((t0) => (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!.getTickIndex() >= t0 + 42, startTick, { timeout: 20_000 });
-  // The drift gesture (owner, 2026-10-04/05): tap X (a short hop), then press X again and hold it while steering — tap + hold.
-  // X held from the first press would be the variable (full) jump instead — see DriftController.
-  await page.keyboard.up('ArrowUp');
-  await page.keyboard.down('x');
-  await page.keyboard.up('x');
-  await page.waitForTimeout(60); // a few ticks into the hop: well inside the short-hop window and the 1 s drift window
-  // X first, then the turn: the drift latches its reference direction when X goes
-  // down and starts on a turn AWAY from it, so a tick that sees ArrowRight already
-  // held before X (two key events can land in different frames on a slow runner)
-  // latches the turn itself as the reference and never drifts.
-  await page.keyboard.down('x');
-  await page.keyboard.down('ArrowRight');
+  // The whole gesture is played from INSIDE the page, scheduled in simulation ticks — the game's own clock — and not as a
+  // chain of Playwright key presses separated by waits. The game reads `KeyboardEvent.code` from the window and measures a
+  // tap by simulation time, so synthetic events are what it sees from a keyboard; what they add is that the timing no longer
+  // depends on how long a round trip to the browser takes. As separate Playwright calls the gesture failed on slow and loaded
+  // runners: the 60 ms between the tap and the second press collapsed into one frame (a held press = the full jump), or a
+  // longer wait outlasted the 1 s drift window.
+  //   1. ArrowUp for 42 ticks (0.7 s) to build speed;
+  //   2. release it, tap X (down + up at once = the short hop);
+  //   3. 12 ticks later (0.2 s: inside the hop, a later frame than the tap) press X again and the turn, X first, then the
+  //      turn: the drift latches its reference direction when X goes down and starts on a turn AWAY from it, so a tick that
+  //      sees ArrowRight held before X latches the turn itself as the reference and never drifts.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const session = (window.__chaosBeyPlay ?? window.__chaosBeyDebugLab)!.getSession()!;
+        const fire = (type: 'keydown' | 'keyup', code: string, key: string): void => {
+          window.dispatchEvent(new KeyboardEvent(type, { code, key, bubbles: true, cancelable: true }));
+        };
+        const steps: { atTick: number; run: () => void }[] = [];
+        const start = session.getTickIndex();
+        fire('keydown', 'ArrowUp', 'ArrowUp');
+        steps.push({ atTick: start + 42, run: () => { fire('keyup', 'ArrowUp', 'ArrowUp'); fire('keydown', 'KeyX', 'x'); fire('keyup', 'KeyX', 'x'); } });
+        steps.push({ atTick: start + 42 + 12, run: () => { fire('keydown', 'KeyX', 'x'); fire('keydown', 'ArrowRight', 'ArrowRight'); } });
+        const startedAt = performance.now();
+        const frame = (): void => {
+          // One step per frame: a slow frame that jumps many ticks must not fold the tap and the second press into one.
+          if (steps.length > 0 && session.getTickIndex() >= steps[0]!.atTick) steps.shift()!.run();
+          if (steps.length === 0) resolve();
+          else if (performance.now() - startedAt > 30_000) reject(new Error('the drift gesture timed out'));
+          else requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+      }),
+  );
 }
 
 async function releaseDrift(page: Page): Promise<void> {
-  await page.keyboard.up('x');
-  await page.keyboard.up('ArrowRight');
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyX', key: 'x', bubbles: true, cancelable: true }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowRight', key: 'ArrowRight', bubbles: true, cancelable: true }));
+  });
 }
 
 test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with GRIP', async ({ page }) => {
@@ -61,18 +79,45 @@ test('Play: the drift starts, shows DRIFT, skid marks and sparks, and ends with 
   });
 
   const tag = page.getByTestId('hud-drift');
-  const states: string[] = [];
+  // Observe the drift from INSIDE the page, in simulation ticks, with the observer installed BEFORE the keys go down. This
+  // used to be a poll, a text check and four 100 ms waits after the keys, each a round trip to the browser, and on a slow
+  // or loaded runner those took so long that the Bey (top speed ×2.8: the wall is ~1.2 s of drift away) hit the wall, broke
+  // the drift and the test saw it end before its first sample (CI; and 1 run in ~15 on a loaded machine). The drift's first
+  // 30 ticks (0.5 s, the wall is further than that) are recorded as they happen, however late the test looks at them.
+  await page.evaluate(() => {
+    const hud = document.querySelector('[data-testid="hud-drift"]')!;
+    const session = window.__chaosBeyPlay!.getSession()!;
+    const watch = { text: null as string | null, states: [] as string[], counts: null as ReturnType<typeof session.getDriftVfxCounts> | null, firstTick: -1 };
+    (window as unknown as { __driftWatch: typeof watch }).__driftWatch = watch;
+    const frame = (): void => {
+      if (watch.counts === null) {
+        const state = hud.getAttribute('data-state') ?? '';
+        if (watch.firstTick < 0 && state === 'Drifting') {
+          watch.firstTick = session.getTickIndex();
+          watch.text = hud.textContent;
+        }
+        if (watch.firstTick >= 0) {
+          watch.states.push(state);
+          if (session.getTickIndex() >= watch.firstTick + 30) watch.counts = session.getDriftVfxCounts('first');
+        }
+        requestAnimationFrame(frame);
+      }
+    };
+    requestAnimationFrame(frame);
+  });
   await driveIntoDrift(page);
-  await expect.poll(async () => (await tag.getAttribute('data-state')) ?? '', { timeout: 3000 }).toBe('Drifting');
-  await expect(tag).toHaveText('DRIFT');
-  // It stays in the drift while X is held. Keep this window short: the Beys are fast (top speed ×2.8 and momentum), and a
-  // drift held for 1.2 s or more reaches the wall at ~30 m/s — the impact ends it, the still-held keys start it again,
-  // and this test counted two starts (4 failures in 8 runs; the screenshot taken inside the drift made it likelier).
-  for (let i = 0; i < 4; i++) {
-    await page.waitForTimeout(100);
-    states.push((await tag.getAttribute('data-state')) ?? '');
-  }
-  const during = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getDriftVfxCounts('first'));
+  await page.waitForFunction(() => (window as unknown as { __driftWatch: { counts: unknown } }).__driftWatch.counts !== null, null, { timeout: 15_000 }).catch(async (error: Error) => {
+    const watch = await page.evaluate(() => {
+      const w = (window as unknown as { __driftWatch: { firstTick: number; states: string[] } }).__driftWatch;
+      const session = window.__chaosBeyPlay!.getSession()!;
+      return { firstTick: w.firstTick, states: w.states.slice(0, 40).join(','), tick: session.getTickIndex(), drift: session.getLastResult()?.first.driftState, round: session.roundState.result };
+    });
+    throw new Error(`${error.message} — ${JSON.stringify(watch)}`);
+  });
+  const drifting = await page.evaluate(() => (window as unknown as { __driftWatch: { text: string | null; states: string[]; counts: { driftStarts: number; drawnDecals: number } } }).__driftWatch);
+  expect(drifting.text).toBe('DRIFT');
+  const states = drifting.states;
+  const during = drifting.counts;
   await releaseDrift(page);
   // Read state and text together, in one evaluation: on a slow, software-rendered
   // runner the Recovering window can pass between two separate reads (the state

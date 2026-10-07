@@ -33,7 +33,7 @@ import { BEY_ROSTER, rosterEntry } from './beyRoster';
 import { button, el, ensureFrontendStyle, keyHint } from './frontendStyle';
 import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
-import { CLASH_IMPACT_RANGE, changedRuleLines, deleteRuleConfig, loadRuleConfigs, saveRuleConfig, withRuleConfig, defaultMatchRules, matchupLines, normalizeSeedText, RING_OUT_OFF_TIME_LIMIT_S, sanitizeMatchRules, withArenaFloor, withArenaPreset, type MatchRules, type MatchSetup } from './matchSetup';
+import { CLASH_IMPACT_RANGE, changedRuleLines, deleteRuleConfig, loadRuleConfigs, saveRuleConfig, withRuleConfig, defaultMatchRules, matchupLines, normalizeSeedText, RING_OUT_OFF_TIME_LIMIT_S, sanitizeMatchRules, withArenaFloor, withArenaPreset, withDefaultRules, type MatchRules, type MatchSetup } from './matchSetup';
 import { ACCELERATION_SCALE_RANGE, AIR_CONTROL_RANGE, ARENA_BOWL_DEPTH_RANGE, JUMP_COOLDOWN_RANGE, JUMP_STAMINA_COST_RANGE, ROUND_TIME_LIMIT_RANGE, TOP_SPEED_SCALE_RANGE, GRAVITY_SCALE_RANGE, IMPACT_PUSH_RANGE, ARENA_SIZE_SCALE_RANGE, GAME_SPEED_RANGE, CLASH_LAUNCH_RANGE, DODGE_DISTANCE_SCALE_RANGE, DODGE_STAMINA_COST_RANGE, CONTACT_LIFT_RANGE, KNOCKBACK_SCALE_RANGE, SPIN_STAMINA_DRAIN_RANGE, CIRCULAR_LOCK_RANGE, BODY_CONTACT_CONTROL_LOSS_RANGE, TURN_RATE_SCALE_RANGE, TURN_SPEED_RETENTION_RANGE, BEY_SIZE_SCALE_RANGE, AIR_RECOVERY_MIN_DELAY_RANGE } from '../../config/match/MatchConfig';
 import { DEFAULT_VFX_OPTIONS, VFX_DUST_RANGE, VFX_EFFECT_SIZE_RANGE, VFX_GROUND_WAVES_RANGE, VFX_INTENSITY_RANGE, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
@@ -405,14 +405,7 @@ export class PregameScreen {
   }
 
   private resetAdvanced(): void {
-    const preset = arenaPreset(this.setup.arena.presetId).geometry;
-    this.update({
-      ...this.setup,
-      rules: defaultMatchRules(),
-      visual: DEFAULT_VFX_OPTIONS,
-      clashImpactMultiplier: CLASH_IMPACT_MULTIPLIER_DEFAULT,
-      arena: { ...this.setup.arena, geometry: { ...this.setup.arena.geometry, wallHeightM: preset.wallHeightM, wallRestitution: preset.wallRestitution } },
-    });
+    this.update(withDefaultRules(this.setup));
   }
 
   private toggle(spec: { id: string; label: string; key: ToggleRuleKey; note: string }): DocumentFragment {

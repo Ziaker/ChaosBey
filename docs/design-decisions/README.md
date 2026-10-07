@@ -23,6 +23,7 @@ Este diretório contém decisões de design que agentes **não devem reabrir** s
 | Câmera de combate atual — azimute inercial, composição screen-space e escala da arena 36 m | `inertial-duel-camera.md` |
 | Movimento / Motion Lab | `motion-approval.md` |
 | Apresentação do Clash | `clash-presentation-approval.md` |
+| Cores dos Beys (uma por Bey), barra de Clash e plano das 4 peças | `bey-colors-plan.md` |
 | Inventário/histórico de labs | `visual-prototype-inventory.md` |
 
 ## Precedência
