@@ -14,6 +14,14 @@ permissions:
   pages: write
   id-token: write
 
+# A new commit on the same PR supersedes that PR's older build/smoke run.
+# The workflow name + PR number scope cancellation to one PR in this workflow.
+# `github.run_id` keeps non-PR runs (main pushes, nightly, manual) unique, so
+# parallel PRs never cancel each other and main is never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Fast gate (~2-3 min): typecheck, the fast suite, the production build.
   # This is the PR/push signal and the only thing deploy waits on — it does
