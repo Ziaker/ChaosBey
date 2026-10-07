@@ -1,7 +1,7 @@
 # ChaosBey — Owner Decisions Master
 
 **Status:** CANÔNICO — ledger de decisões fechadas do owner e regra de não reabrir perguntas já respondidas  
-**Atualizado:** 2026-10-02  
+**Atualizado:** 2026-10-07  
 **Precedência:** este arquivo registra decisões/overrides mais recentes e deve ser lido antes dos masters históricos. Quando houver conflito, a decisão explícita mais recente do owner e o documento detalhado mais recente da área prevalecem.
 
 > **Diretiva do owner — 2026-09-30:** não reprototipar, rediscutir ou pedir nova aprovação para câmera, movimento, arena, VFX, condição ou Clash apenas porque outro sistema (por exemplo HUD/UI) ainda tenha uma pendência visual. Um novo lab deve testar somente a lacuna real que ainda estiver aberta e usar os sistemas já aprovados como base.
@@ -29,6 +29,7 @@ Documentos detalhados:
 - `inertial-duel-camera.md` — override de 2026-10-02 para yaw/composição da câmera de combate atual;
 - `motion-approval.md` — movimento e Motion Lab;
 - `clash-presentation-approval.md` — apresentação do Clash;
+- `pregame-overhaul.md` — overhaul visual/UX aprovado do Pregame e presets oficiais de Advanced;
 - `m10-status.md` / `m11-status.md` — integração de player flow e pós-M11.
 
 ---
@@ -379,7 +380,7 @@ O HUD deve ser colocado sobre os sistemas reais/aprovados.
 
 ---
 
-# 11. UI / fluxo do jogador — FUNÇÃO DEFINIDA, TEMA VISUAL FINAL SEPARADO
+# 11. UI / fluxo do jogador — PREGAME VISUAL APROVADO; RESTANTE SEPARADO
 
 Fluxo funcional existente/definido inclui:
 
@@ -394,7 +395,27 @@ Fluxo funcional existente/definido inclui:
 
 Pregame é a tela para selecionar/configurar opções de partida que foram autorizadas para exposição; Debug Lab fica responsável por tuning profundo.
 
-A existência funcional dessas telas não transforma automaticamente a aparência provisória atual em tema visual final aprovado.
+## Owner override — Pregame, 2026-10-07
+
+A direção visual/UX do **Pregame Setup** foi aprovada e está detalhada em `pregame-overhaul.md`.
+
+Decisões fechadas:
+
+- interface objetiva e fácil de alterar, não cinematográfica;
+- layout desktop simples em duas colunas: configuração à esquerda, resumo curto à direita;
+- seções principais compactas: Preset, Opponent, AI, Arena, Match e Advanced;
+- Advanced reorganizado em Movement / Jump / Combat / Arena / Round / Visual;
+- controles compactos, default discreto, indicador `MODIFIED`, reset por categoria e `Reset all`;
+- cinco presets oficiais: **Normal Original, Realistic, Epic, Smooth, Strategic**;
+- `Custom` é estado derivado quando o Advanced não coincide com um preset oficial;
+- cada preset oficial possui descrição breve e uma configuração determinística do Advanced;
+- **Normal Original = defaults canônicos atuais**, sem tabela normal duplicada;
+- números iniciais de Realistic/Epic/Smooth/Strategic são tuning de implementação **PROVISÓRIO** dentro dos ranges existentes;
+- presets oficiais não alteram Player Bey, Opponent, AI difficulty/style, Arena/Floor principal nem Motion A/B/C;
+- presets salvos pelo usuário continuam separados dos presets oficiais;
+- sem VS cinematográfico, grandes previews 3D, arena-showcase ou animações pesadas.
+
+Esta aprovação é específica do Pregame. Ela **não** fecha o tratamento visual final de Main Menu, Character Select, Pause, Results ou Settings.
 
 ---
 
@@ -464,7 +485,8 @@ Isto é uma pendência estreita de UI/legibilidade, não uma licença para repro
 
 ## 13.2 UI visual
 
-- tema visual final de Main Menu / Character Select / Pregame / Pause / Results / Settings, se ainda não houver documento posterior de aprovação.
+- **Pregame:** direção visual/UX aprovada em 2026-10-07; ver `pregame-overhaul.md`. Não reabrir a direção aprovada; a integração ainda pode estar pendente.
+- continuam abertos, quando não houver decisão posterior: tema visual final de Main Menu / Character Select / Pause / Results / Settings.
 
 ## 13.3 Intro / Launch
 

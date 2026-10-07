@@ -1,7 +1,7 @@
 # ChaosBey — Canonical Visual Approvals Master
 
 **Status:** CANÔNICO — fonte de entrada para qualquer auditoria de protótipos e aprovações visuais  
-**Atualizado:** 2026-10-02 (estado de integração; nenhuma decisão de aprovação mudou)  
+**Atualizado:** 2026-10-07 (owner aprovou direção visual/UX do Pregame)  
 **Escopo:** Beys, Arena, VFX, condição (Stamina/Stability/Quebrado), câmera, movimento, Clash e lacunas visuais ainda não aprovadas.
 
 > **Regra obrigatória para agentes:** antes de perguntar novamente ao owner sobre uma decisão visual, leia este arquivo e depois o documento detalhado apontado na seção correspondente. Uma decisão marcada como **APROVADA** aqui não deve ser reaberta sem uma nova instrução explícita do owner.
@@ -48,7 +48,8 @@ A existência de UI de debug, sliders ou readouts dentro de um lab **não** sign
 | 33 valores do Motion Lab | **NÃO são tuning final** | `motion-approval.md` |
 | Clash Presentation | **C — Overdrive + câmera B aprovados** | `clash-presentation-approval.md` |
 | HUD de combate completo | **AINDA NÃO APROVADO / lab dedicado pendente** | GDD + este arquivo |
-| UI/menus/pregame/results | **AINDA NÃO PROTOTIPADOS como direção visual final** | GDD |
+| Pregame Setup UI | **DIREÇÃO VISUAL/UX APROVADA — ainda não integrada** | `pregame-overhaul.md` |
+| Main Menu / Character Select / Pause / Results / Settings | **DIREÇÃO VISUAL FINAL AINDA ABERTA** | GDD + este arquivo |
 | Intro/Countdown/Launch | **AINDA NÃO PROTOTIPADOS como pacote visual final** | GDD |
 | Bloom / chromatic aberration | **NÃO PROTOTIPADOS / uso final não decidido** | inventário |
 
@@ -415,11 +416,30 @@ Portanto, **Combat HUD continua sendo uma lacuna visual real** e deve passar por
 
 ## 11.1 UI / menus
 
-Ainda não existe, neste conjunto canônico, direção visual final aprovada para o pacote completo de:
+### Pregame Setup — APROVADO pelo owner em 2026-10-07
+
+A direção visual/UX do Pregame foi aprovada e está detalhada em `docs/design-decisions/pregame-overhaul.md`.
+
+Resumo da aprovação:
+
+- configuração objetiva e fácil de manipular;
+- duas colunas no desktop: controles + resumo curto;
+- Advanced dividido em Movement / Jump / Combat / Arena / Round / Visual;
+- valores/defaults/modificações visíveis sem virar Debug Lab;
+- presets oficiais Normal Original / Realistic / Epic / Smooth / Strategic e estado derivado Custom;
+- cada preset oficial aplica sua configuração de Advanced e mostra uma descrição curta;
+- Normal Original segue os defaults canônicos atuais;
+- tuning numérico inicial dos quatro presets alternativos é provisório;
+- sem apresentação cinematográfica, grandes previews 3D ou animação decorativa pesada.
+
+**Estado:** aprovado para implementação, ainda não integrado por esta decisão documental.
+
+### Outras telas — ainda abertas
+
+Esta aprovação não decide o tratamento visual final de:
 
 - Main Menu;
 - Character Select;
-- Pregame Setup;
 - Pause;
 - Results;
 - Settings.
@@ -474,7 +494,7 @@ Um item pode estar **não integrado** e ainda assim estar totalmente prototipado
 Com base nas decisões registradas até 2026-09-27, os grandes buracos visuais restantes incluem:
 
 1. **Combat HUD Lab completo**;
-2. **UI/Menu/Character Select/Pregame/Pause/Results/Settings visual package**;
+2. **UI visual de Main Menu / Character Select / Pause / Results / Settings**; o Pregame foi aprovado separadamente em 2026-10-07;
 3. **Match Intro / Countdown / Launch presentation**;
 4. **Camera treatment dedicado de Perfect Dodge / Intro / momentos decisivos**, conforme `camera-approval.md`;
 5. **VFX específico de pulo, ataque aéreo e air recovery**, ainda não coberto pelo pacote aprovado do VFX Lab (GDD §§20, 21 e 25);
@@ -495,6 +515,7 @@ Leia este master primeiro e depois, conforme a área:
 - `docs/design-decisions/camera-approval.md` — Camera Director e presets;
 - `docs/design-decisions/motion-approval.md` — linguagem e limites do Motion Lab;
 - `docs/design-decisions/clash-presentation-approval.md` — apresentação do Clash;
+- `docs/design-decisions/pregame-overhaul.md` — direção visual/UX aprovada do Pregame e presets oficiais;
 - `docs/design-decisions/visual-prototype-inventory.md` — inventário/histórico; usar com cuidado quando uma linha tiver sido superseded por decisão posterior.
 
 Protótipos correspondentes:
