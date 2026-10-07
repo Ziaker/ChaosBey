@@ -72,12 +72,22 @@ const COPY: Readonly<Record<string, RosterCopy>> = {
   },
 };
 
+/** How each B and C plays against its family's A (owner, 2026-10-07; the numbers are CONCEPT_GAMEPLAY_OVERRIDES in BeyConceptRoster.ts). */
+const VARIANT_PLAY_NOTES: Readonly<Record<string, string>> = {
+  'attack-b': 'A lighter, nimbler Attack: quicker to turn and to Dash than Attack A, with a shorter reach and a little less raw hit.',
+  'attack-c': 'The heaviest hitter: the hardest Attack of all and the longest reach, but slow to turn, slow to accelerate and fragile.',
+  'defense-b': 'A wall of bumpers: absorbs contact, reaches further than Defense A and accelerates better, for a little less defense.',
+  'defense-c': 'The toughest Bey: the most defense and the most weight, the slowest and the grippiest, with almost no offense.',
+  'stamina-b': 'Precision steering: the sharpest turns and grip of the Stamina family and a little more defense, for a little less endurance.',
+  'stamina-c': 'A fast glider: the longest endurance of all and a higher top speed, with the weakest defense.',
+};
+
 function entryFor(concept: ConceptBey): RosterEntry {
   const family = familyArchetypeOf(concept.definition.id)!;
   const copy = COPY[family.id];
   const visual = CONCEPTS.find((c) => c.id === concept.conceptId);
   if (!copy || !visual) throw new Error(`beyRoster: no roster copy or concept for Bey definition "${concept.definition.id}".`);
-  const description = concept.letter === 'A' ? copy.description : `${copy.description} Plays exactly like ${copy.label} A for now (provisional).`;
+  const description = concept.letter === 'A' ? copy.description : VARIANT_PLAY_NOTES[concept.conceptId] ?? copy.description;
   // Owner, 2026-10-07: each Bey has its own color (the family color only when a concept has none).
   const colors = beyColorsFor(concept.definition.id);
   return { definition: concept.definition, label: `${copy.label} ${concept.letter}`, role: visual.headline, description, accentCss: colors ? cssHex(colors.glow) : copy.accentCss };
