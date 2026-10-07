@@ -39,10 +39,10 @@ export function spriteFx(o: SpriteOpts): FxItem {
   return {
     object: sprite,
     life: o.life,
-    update(k, dt) {
+    update(k, dt, item) {
       vel.y -= (o.gravity ?? 0) * dt;
       vel.multiplyScalar(1 - Math.min(1, (o.drag ?? 0) * dt));
-      sprite.position.addScaledVector(vel, dt);
+      sprite.position.addScaledVector(vel, dt * (item.fxScale ?? 1)); // a bigger puff drifts as much farther
       const s = THREE.MathUtils.lerp(o.size[0], o.size[1], ease(k));
       sprite.scale.set(s, s, 1);
       mat.rotation += (o.spin ?? 0) * dt;
@@ -63,7 +63,16 @@ export interface FlatOpts {
   rotation?: number;
   /** Fraction of life before fading starts (decals stay, then fade). */
   hold?: number;
+  /**
+   * GAME: lay the quad ON the real floor instead of flat at the centre's height: every vertex sits `lift` m above
+   * `floorHeightAt(r)`. On the bowl the floor rises outward, so a flat ring 4 cm above its centre had its outer half
+   * buried (owner, 2026-10-02: "ground waves saindo pela metade"). The lab's floor never cut the ring; this keeps it whole.
+   */
+  conform?: { readonly floorHeightAt: (r: number) => number; readonly lift: number };
 }
+
+/** Segments per side of a conformed floor quad: enough for the bowl's curvature at ring sizes up to ~8 m. */
+const CONFORM_SEGMENTS = 24;
 
 /** Horizontal textured quad lying on the floor (shockwave rings, decals). */
 export function flatFx(o: FlatOpts): FxItem {
@@ -71,17 +80,38 @@ export function flatFx(o: FlatOpts): FxItem {
     map: o.tex, color: o.color, transparent: true, depthWrite: false, opacity: o.opacity ?? 1, side: THREE.DoubleSide,
     blending: o.additive ? THREE.AdditiveBlending : THREE.NormalBlending, polygonOffset: true, polygonOffsetFactor: -2,
   });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat);
+  const conform = o.conform;
+  const geometry = conform ? new THREE.PlaneGeometry(1, 1, CONFORM_SEGMENTS, CONFORM_SEGMENTS).rotateX(-Math.PI / 2) : new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const mesh = new THREE.Mesh(geometry, mat);
   mesh.position.copy(o.pos);
   mesh.rotation.y = o.rotation ?? 0;
   const base = o.opacity ?? 1;
   const hold = o.hold ?? 0;
+  const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const local = conform ? Float32Array.from(position.array as ArrayLike<number>) : null;
+  if (conform) mesh.frustumCulled = false; // the vertices move every frame; the unit-quad bounds no longer describe it
+  const cos = Math.cos(mesh.rotation.y);
+  const sin = Math.sin(mesh.rotation.y);
+  const drape = (s: number): void => {
+    if (!conform || !local) return;
+    for (let i = 0; i < position.count; i++) {
+      const lx = local[i * 3]! * s;
+      const lz = local[i * 3 + 2]! * s;
+      // Local -> world on the floor plane (rotation about Y, then the centre's position).
+      const wx = o.pos.x + lx * cos + lz * sin;
+      const wz = o.pos.z - lx * sin + lz * cos;
+      position.setY(i, conform.floorHeightAt(Math.hypot(wx, wz)) + conform.lift - o.pos.y);
+    }
+    position.needsUpdate = true;
+  };
   return {
     object: mesh,
     life: o.life,
-    update(k) {
-      const s = THREE.MathUtils.lerp(o.size[0], o.size[1], ease(Math.min(1, k * (hold > 0 ? 6 : 1))));
+    selfScaled: true, // draped on the floor in world space: the size goes through drape()
+    update(k, _dt, item) {
+      const s = THREE.MathUtils.lerp(o.size[0], o.size[1], ease(Math.min(1, k * (hold > 0 ? 6 : 1)))) * (item.fxScale ?? 1);
       mesh.scale.set(s, 1, s);
+      drape(s);
       mat.opacity = base * (k < hold ? 1 : 1 - (k - hold) / (1 - hold));
     },
   };
@@ -124,10 +154,11 @@ export function debrisFx(o: { pos: THREE.Vector3; vel: THREE.Vector3; size: numb
   return {
     object: mesh,
     life: o.life,
-    update(k, dt) {
+    update(k, dt, item) {
+      const f = item.fxScale ?? 1;
       vel.y -= 9.8 * dt;
-      mesh.position.addScaledVector(vel, dt);
-      const floor = o.floorHeightAt(Math.hypot(mesh.position.x, mesh.position.z)) + o.size * 0.5;
+      mesh.position.addScaledVector(vel, dt * f); // a bigger chip flies as much farther
+      const floor = o.floorHeightAt(Math.hypot(mesh.position.x, mesh.position.z)) + o.size * 0.5 * f;
       if (mesh.position.y < floor) {
         mesh.position.y = floor;
         vel.y = Math.abs(vel.y) * 0.35;
@@ -198,6 +229,7 @@ export function ghostFx(object: THREE.Object3D, material: THREE.Material & { opa
   return {
     object,
     life,
+    unscaled: true, // a copy of the Bey's own model, already at its size
     update(k) {
       material.opacity = startOpacity * (1 - k);
     },
@@ -337,7 +369,9 @@ export function jaggedRingFx(o: {
   return {
     object: holder,
     life: total,
-    update(k) {
+    selfScaled: true, // sits on the floor: its height above it follows its scaled size
+    update(k, _dt, item) {
+      const f = item.fxScale ?? 1;
       const t = k * total;
       if (t < o.delay) {
         holder.visible = false;
@@ -349,7 +383,7 @@ export function jaggedRingFx(o: {
       }
       holder.visible = true;
       const kk = (t - o.delay) / o.life;
-      const s = THREE.MathUtils.lerp(o.size[0], o.size[1], ease(kk));
+      const s = THREE.MathUtils.lerp(o.size[0], o.size[1], ease(kk)) * f;
       mesh.scale.set(s, s, 1);
       holder.position.copy(start).addScaledVector(back, o.drift * ease(kk));
       if (o.groundAt) holder.position.y = o.groundAt(holder.position) + s * 0.46;
@@ -381,13 +415,14 @@ export function wakeStreakFx(o: {
     object: holder,
     life: o.life,
     axisBillboard: axis,
-    update(k) {
+    selfScaled: true, // its length is the path in world space; only the width follows the scale (the caller scales offsets)
+    update(k, _dt, item) {
       if (!frozen) head.copy(o.follow()).add(o.offset);
       if (k > 0.45) frozen = true;
       const len = Math.max(o.minLength, head.distanceTo(tail));
       holder.position.copy(head).addScaledVector(axis, len / 2);
       const grow = ease(Math.min(1, k * 3));
-      mesh.scale.set(len * grow, o.width * (1 - 0.4 * k), 1);
+      mesh.scale.set(len * grow, o.width * (item.fxScale ?? 1) * (1 - 0.4 * k), 1);
       mesh.position.x = -(len * (1 - grow)) / 2; // keep the wide end on the Bey while growing
       mat.opacity = o.look.opacity * (k < 0.55 ? 1 : 1 - (k - 0.55) / 0.45);
     },

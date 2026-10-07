@@ -7,6 +7,7 @@
 // This is the match loop playMode.ts used to own, unchanged in behavior.
 // ============================================================
 
+import type { VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import * as THREE from 'three';
 import type { AppRenderer } from '../bootstrap/createRenderer';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
@@ -30,6 +31,7 @@ import type { DirectionalController, DirectionalDebug } from '../../input/direct
 import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ConditionLayerSetting, type ControlScheme } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
+import type { ImpactFeedbackOptions } from '../../vfx/ImpactFeedback';
 
 export interface MatchRunnerDeps {
   readonly appRenderer: AppRenderer;
@@ -64,6 +66,10 @@ export interface MatchPresentation {
   readonly cameraPreset?: CameraPresetSetting;
   /** Condition languages to show when the conditionVisuals presentation flag is enabled. */
   readonly conditionLayers?: readonly ConditionLayerSetting[];
+  /** Lote 9: the Pregame's visual options. */
+  readonly vfx?: VfxOptions;
+  /** Owner, 2026-10-05: the in-scene game-feel switches (hit flash, hit shake, counter burst). */
+  readonly feel?: ImpactFeedbackOptions;
 }
 
 export interface MatchRunnerEvents {
@@ -90,6 +96,8 @@ export class MatchRunner {
     private readonly directional: DirectionalController,
     private readonly deps: MatchRunnerDeps,
     private readonly events: MatchRunnerEvents,
+    /** MatchConfig.gameSpeed (owner, 2026-10-04): game seconds per real second. */
+    gameSpeed = 1,
   ) {
     const { appRenderer, debugOverlay, attackProfileSettingsPanel, stateMachine, telemetry } = deps;
     this.loop = new FixedTimestepLoop({
@@ -125,7 +133,7 @@ export class MatchRunner {
         console.error(`ChaosBey simulation halted at tick ${tickIndex}:`, error);
         debugOverlay.showFatalError(`SIMULATION HALTED at tick ${tickIndex}: ${error instanceof Error ? error.message : String(error)}`);
       },
-    });
+    }, gameSpeed);
   }
 
   static async start(deps: MatchRunnerDeps, start: MatchRunnerStart, events: MatchRunnerEvents = {}): Promise<MatchRunner> {
@@ -169,12 +177,13 @@ export class MatchRunner {
       arenaTheme: start.arenaTheme,
       cameraPreset: start.presentation?.cameraPreset,
       conditionLayers: start.presentation?.conditionLayers,
+      vfx: start.presentation?.vfx,
       renderer: deps.appRenderer.renderer,
     });
     sessionForJumpBuffer = session;
     // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
     deps.stateMachine.transitionTo(GameState.Combat);
-    const runner = new MatchRunner(session, keyboard, gamepad, directional, deps, events);
+    const runner = new MatchRunner(session, keyboard, gamepad, directional, deps, events, start.matchConfig.gameSpeed ?? 1);
     // The arena's sky: the scene's clear color while this match owns the renderer (restored on stop).
     if (start.arenaTheme) {
       runner.savedBackground = deps.appRenderer.scene.background;
@@ -212,6 +221,7 @@ export class MatchRunner {
     this.session.getVfxManager().setLayerVisible('trails', presentation.trails);
     if (presentation.cameraPreset) this.session.setCameraPreset(presentation.cameraPreset);
     if (presentation.conditionLayers) this.session.setConditionLayers(presentation.conditionLayers);
+    if (presentation.feel) this.session.setGameFeel(presentation.feel);
   }
 
   /** Switches the control scheme live (from the Pause menu's settings). */

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 
 // ============================================================
 // AI RUNTIME SMOKE (MILESTONE 7 PART 2)
@@ -57,7 +58,7 @@ test('AI opponent runs in the real loop through hits, hitstop and (when it happe
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-  await page.goto('/ChaosBey/?mode=play&quick');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play&quick'));
   const overlay = page.locator('#debug-overlay-root pre');
   await expect(overlay).toContainText('Combat', { timeout: 15_000 });
   await expect(overlay).toBeVisible();
@@ -177,7 +178,7 @@ test('AI opponent decides, explains and acts over 600 simulated ticks — intent
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-  await page.goto('/ChaosBey/?mode=play&quick');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play&quick'));
   const overlay = page.locator('#debug-overlay-root pre');
   await expect(overlay).toContainText('-- ai (second, M7) --', { timeout: 15_000 });
 

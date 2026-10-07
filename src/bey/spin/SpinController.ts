@@ -29,7 +29,9 @@ import type { PhysicalCondition } from '../stamina/StaminaSystem';
 import {
   AIR_RECOVERY_ATTITUDE_RETURN_PER_S,
   AIR_RECOVERY_WOBBLE_REDUCTION,
+  AMBIENT_WOBBLE_ENERGY_FLOOR_MAX,
   ATTITUDE_TILT_CLAMP_RAD,
+  axisUnrest,
   BASE_SPIN_RATE_RAD_S,
   DRIFT_LEAN_DEG,
   DRIFT_LEAN_FULL_SLIDE_MPS,
@@ -81,6 +83,8 @@ export class SpinController {
   private leanRate: Vec2 = { x: 0, z: 0 };
   private accel: Vec2 = { x: 0, z: 0 };
   private prevVel: Vec2 | null = null;
+  /** axisUnrest of the latest tick (0 = steady, at/above 70% Stamina and Stability; 1 = empty) — gates the tumble too. */
+  private unrest = 0;
 
   constructor(private readonly motion: MotionParams = motionParams()) {}
 
@@ -99,20 +103,27 @@ export class SpinController {
    * sideways slide (owner playtest, after M11: the drift had no body
    * language at all). Render only, like the rest of the attitude.
    */
-  tick(body: RAPIER.RigidBody, fixedDeltaSeconds: number, staminaCondition: PhysicalCondition, grounded = true, driftHeadingRad: number | null = null): void {
+  /**
+   * `conditionFraction`: the lower of this Bey's Stamina and Stability fractions (owner, 2026-10-02, Lote 6): at or
+   * above 70% the Bey is steady — no ambient wobble, no precession; below it both ramp in to full at 0 (axisUnrest).
+   * Impact wobble is not gated. Omitted = full condition (steady).
+   */
+  tick(body: RAPIER.RigidBody, fixedDeltaSeconds: number, staminaCondition: PhysicalCondition, grounded = true, driftHeadingRad: number | null = null, conditionFraction = 1): void {
     const m = this.motion;
     const dt = fixedDeltaSeconds;
+    const unrest = axisUnrest(conditionFraction);
+    this.unrest = unrest;
 
     this.spinRateRadPerSec *= Math.max(0, 1 - SPIN_DECAY_FRACTION_PER_S * staminaCondition.spinDecayMultiplier * dt);
     this.visualSpinAngleRad += this.spinRateRadPerSec * dt;
 
-    this.wobbleEnergy = Math.max(this.wobbleEnergy * Math.exp(-m.wobbleDecay * dt), staminaCondition.ambientWobbleFloor);
+    this.wobbleEnergy = Math.max(this.wobbleEnergy * Math.exp(-m.wobbleDecay * dt), AMBIENT_WOBBLE_ENERGY_FLOOR_MAX * unrest);
     this.wobbleTimeAccumulatorS += dt;
 
-    this.tickAttitude(body, dt, grounded, staminaCondition.recoveryTorqueFactor, driftHeadingRad);
+    this.tickAttitude(body, dt, grounded, staminaCondition.recoveryTorqueFactor, driftHeadingRad, unrest);
   }
 
-  private tickAttitude(body: RAPIER.RigidBody, dt: number, grounded: boolean, staminaFactor: number, driftHeadingRad: number | null): void {
+  private tickAttitude(body: RAPIER.RigidBody, dt: number, grounded: boolean, staminaFactor: number, driftHeadingRad: number | null, unrest: number): void {
     const m = this.motion;
     this.sinceImpactS += dt;
     this.tumbleRemainingS = Math.max(0, this.tumbleRemainingS - dt);
@@ -153,8 +164,9 @@ export class SpinController {
       fx -= TILT_OVERSHOOT_STOP_GAIN * m.uprightStrength * (this.lean.x / tl) * (tl - maxTilt);
       fz -= TILT_OVERSHOOT_STOP_GAIN * m.uprightStrength * (this.lean.z / tl) * (tl - maxTilt);
     }
-    // Gyroscopic coupling: a tilt rate is turned sideways, scaled by spin.
-    const gyro = m.precession * (this.spinRateRadPerSec / BASE_SPIN_RATE_RAD_S);
+    // Gyroscopic coupling (precession): a tilt rate is turned sideways, scaled by spin — only as the Bey tires
+    // (owner, 2026-10-02, Lote 6: none at/above 70% Stamina and Stability, ramping in to full at 0).
+    const gyro = m.precession * (this.spinRateRadPerSec / BASE_SPIN_RATE_RAD_S) * unrest;
     fx += -gyro * this.leanRate.z;
     fz += gyro * this.leanRate.x;
     this.leanRate = clampLength({ x: this.leanRate.x + fx * dt, z: this.leanRate.z + fz * dt }, m.maxAngularSpeed);
@@ -181,10 +193,13 @@ export class SpinController {
     const push = { x: -impactHorizontalDirection.x, z: -impactHorizontalDirection.z };
     const labSpeed = labImpactSpeed(impactDeltaSpeedMps, m);
     let kick = m.impactAngularImpulse * labSpeed;
-    if (labSpeed > m.tumbleThreshold) {
+    // Owner, 2026-10-02 (Lote 6; audit H2, 2026-10-03): a healthy Bey (Stamina and Stability at/above 70%) never
+    // tumbles — an impact gives it only the transient kick and wobble below. The tumble (weak upright spring, extra
+    // kick) comes in with the same ramp as the wobble/precession, full at 0.
+    if (labSpeed > m.tumbleThreshold && this.unrest > 0) {
       const excess = labSpeed - m.tumbleThreshold;
-      kick += m.tumbleStrength * excess * 0.5;
-      this.tumbleRemainingS = Math.max(this.tumbleRemainingS, TUMBLE_BASE_DURATION_S + TUMBLE_DURATION_PER_MPS * excess);
+      kick += m.tumbleStrength * excess * 0.5 * this.unrest;
+      this.tumbleRemainingS = Math.max(this.tumbleRemainingS, (TUMBLE_BASE_DURATION_S + TUMBLE_DURATION_PER_MPS * excess) * this.unrest);
     }
     this.leanRate = clampLength({ x: this.leanRate.x + push.x * kick, z: this.leanRate.z + push.z * kick }, m.maxAngularSpeed);
 

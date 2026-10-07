@@ -30,6 +30,12 @@ export enum AiIntent {
   CounterAttack = 'CounterAttack',
   /** Use Dodge specifically to trigger air recovery after being knocked airborne (GDD section 21) — distinct from DodgeThreat, which answers an opponent's hitbox rather than the AI's own launched state. */
   AirRecover = 'AirRecover',
+  /**
+   * Owner, 2026-10-04 ("queria que a IA fosse mais dinâmica, se movimentasse mais pelo mapa buildando velocidade,
+   * especialmente as de ataque, não quero ver ela parada independente do tipo"): ride a wide lap of the arena at full
+   * throttle to build speed and momentum before committing — gentle curves keep the speed.
+   */
+  BuildSpeed = 'BuildSpeed',
   /** Do nothing meaningful this tick (used sparingly — patience/whiff-recovery windows, not a default). */
   Wait = 'Wait',
 }

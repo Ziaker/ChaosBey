@@ -92,14 +92,38 @@ interface Recording {
 // arena, slightly different contact physics): replay-0 no longer qualifies;
 // now only replay-58 (1103 ticks, 110 frozen) and replay-26 (1950 ticks, 104
 // frozen, 449 steering ticks after tick 900) do.
+// Re-swept with each gameplay lote of the owner's 2026-10-02 request (ring-out
+// delay and Perfect Dodge once, Dash cooldown, momentum, jump, combat rules):
+// after Lote 5, replay-0..599 has 19 qualifying; replay-56 (2610 ticks, 161
+// frozen) and replay-51 (2304 ticks, 127 frozen, 682 steering ticks after 900).
+// Owner audit fixes, 2026-10-03 (a Dash press kept through a recovery, Dash readiness, body-collision tie/latch,
+// the Bey-Bey bumper filter really running, the jump's deferred launch, the AI's 45-Stamina dodge reserve) change
+// every AI fight from its first jump or contact on. Swept replay-0..239 with the same criteria: 16 qualify;
+// replay-198 (2668 ticks, 151 frozen) and replay-18 (2666 ticks, 119 frozen, 717 steering ticks after 900).
 // Most seeds end within a few hundred ticks.
-const LONG_SEED = 'replay-58';
-const MUTATION_SEED = 'replay-26';
+// Seeds re-picked for item 11 (owner, 2026-10-04): faster hits deal more damage, so 'replay-198' now ends at tick 966
+// and 'replay-18' at ~70 hitstop ticks — under expectSubstantial. These two are long-enough matches under the
+// new rule with a comfortable margin (seed scan replay-0..59: 2448 / 2406 ticks, 137 / 141 hitstop ticks). The checks themselves are unchanged.
+// Re-picked in the owner audit (2026-10-04, hitstop on hits only): replay-37 (2876 ticks, 28 frozen) and replay-3
+// (3118 ticks, 25 frozen, 1382 steering ticks after 900), from a scan of replay-0..79.
+// Re-picked again for 0.39.0 (owner, 2026-10-05: one Perfect Dodge per dodge, no dodge/attack cancels, dodge cooldown
+// 1.25 s changed every fight): replay-40 (2063 ticks, 22 frozen) and replay-11 (2001 ticks, 21 frozen, 538 steering
+// ticks after 900), from a scan of replay-0..119.
+// And for 0.41.0 (owner, 2026-10-05: no Air Recovery after a lost Clash): replay-4 (1945 ticks, 28 frozen) and
+// replay-38 (1794 ticks, 22 frozen, 700 steering ticks after 900), from a scan of replay-0..119.
+// And for 0.42.0 (owner, 2026-10-05: intangible dodge, recovery time, drift): replay-46 (2628 ticks, 22 frozen) and
+// replay-100 (2147 ticks, 21 frozen, 717 steering ticks after 900), from a scan of replay-0..119 (4 qualify).
+// 0.43.1 (owner, 2026-10-05: the drift carves its turns): replay-46 fell to 16 frozen ticks; replay-158 (2516 ticks, 32
+// frozen) from a scan of replay-0..159 (7 qualify). replay-100 still qualifies unchanged.
+const LONG_SEED = 'replay-158';
+const MUTATION_SEED = 'replay-100';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {
   expect(recording.frames.first.length).toBeGreaterThan(1000);
-  expect(recording.advanced.filter((ran) => !ran).length).toBeGreaterThan(100);
+  // 20 (was 100) since the owner audit (2026-10-04): wall/rim impacts and landings no longer freeze the match, only
+  // hits do — the most of replay-0..79 is 28 frozen ticks. Still a real share of hitstop for the replay to reproduce.
+  expect(recording.advanced.filter((ran) => !ran).length).toBeGreaterThanOrEqual(20);
 }
 
 /** Plays a live AI-vs-AI match and records what a replay recorder would: each tick's actions and state hash. */

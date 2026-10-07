@@ -39,11 +39,30 @@ export interface CombatantRawState {
   staminaFraction: number;
   stabilityFraction: number;
   isBroken: boolean;
-  attackEnergyFraction: number;
+  dashReadiness: number;
+  /** 0..1: own momentum (owner, 2026-10-02): fast, sustained movement raises the top speed. */
+  momentum: number;
   /** DodgeController.isAirRecoveryAvailable(): pressing Dodge right now (airborne) would trigger air recovery (GDD section 21) — see that method for why this is not privileged information. */
   airRecoveryAvailable: boolean;
   /** Current Stamina covers a Dodge's cost — the Bey's own resource bar, which a player reads off the HUD. DodgeController silently ignores a Dodge press it cannot pay for. */
   canAffordDodge: boolean;
+  /**
+   * Owner audit, 2026-10-04: the Circular is blocked right now (after a hit or a Clash) / the post-Clash lock ignores
+   * Attack, Dodge and Jump. Both are on screen for a player (the attack simply doesn't come out); without them the AI
+   * kept tapping a refused Circular every other tick (19 presses a second). Optional: absent = not locked.
+   */
+  circularLocked?: boolean;
+  /** Owner, 2026-10-05: this match has no Circular (MatchConfig.circularAttack off) — a Pregame rule both sides see. Optional: absent = it has one. */
+  circularDisabled?: boolean;
+  /** Owner, 2026-10-05: the Bey's in-match size (MatchConfig.beySizeScale, a Pregame rule): its reach follows it. Optional: absent = 1. */
+  sizeScale?: number;
+  actionsLocked?: boolean;
+  /**
+   * DodgeController.isAirRecoveryAvailable(): this flight is a launch (a knockback put the Bey in the air), whether or
+   * not the recovery can be pressed right now — since it spends the dodge, a launch with the dodge recharging is still a
+   * launch (a player sees being thrown). Optional: absent = read airRecoveryAvailable.
+   */
+  launchedFlight?: boolean;
 }
 
 export interface PerceivedCombatant extends CombatantRawState {

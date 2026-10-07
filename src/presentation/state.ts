@@ -21,7 +21,7 @@ import type { ClashPresentationSnapshot } from './clash';
 /** The slice of a BeySnapshot the selector reads (a BeySnapshot satisfies it). */
 export type BeyPresentationFacts = Pick<
   BeySnapshot,
-  'grounded' | 'driftState' | 'dodgeState' | 'attackState' | 'dashChargeFraction' | 'staminaFraction' | 'stabilityFraction' | 'isBroken' | 'attackEnergyFraction'
+  'grounded' | 'driftState' | 'dodgeState' | 'attackState' | 'dashChargeFraction' | 'staminaFraction' | 'stabilityFraction' | 'isBroken' | 'dashReadiness' | 'momentum'
 > & {
   readonly movement: { readonly speedMps: number };
   readonly spin: { readonly spinRateRadPerSec: number; readonly wobbleEnergy: number; readonly tiltRad: number; readonly isTumbling: boolean };
@@ -44,7 +44,8 @@ export interface BeyPresentationState {
   readonly stability: number;
   readonly broken: boolean;
   /** 0..1 */
-  readonly attackEnergy: number;
+  readonly dashReadiness: number;
+  readonly momentum: number;
   /** 0..1 while charging a Dash, else 0. */
   readonly dashCharge: number;
   readonly speedMps: number;
@@ -126,7 +127,8 @@ export function selectBeyPresentationState(facts: BeyPresentationFacts, meta: Be
     stamina,
     stability,
     broken: facts.isBroken,
-    attackEnergy: clamp01(facts.attackEnergyFraction),
+    dashReadiness: clamp01(facts.dashReadiness),
+    momentum: clamp01(facts.momentum),
     dashCharge: charging ? clamp01(facts.dashChargeFraction) : 0,
     speedMps: facts.movement.speedMps,
     speedFraction: meta.maxSpeedMps > 0 ? clamp01(facts.movement.speedMps / meta.maxSpeedMps) : 0,

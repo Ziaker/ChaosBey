@@ -49,7 +49,8 @@ interface RawState {
   dashChargeFraction: number;
   dodgeState: DodgeState;
   staminaFraction: number;
-  attackEnergyFraction: number;
+  dashReadiness: number;
+  momentum: number;
   airRecoveryAvailable: boolean;
   canAffordDodge: boolean;
 }
@@ -64,7 +65,8 @@ function extractRawState(physics: PhysicsWorld, bey: Bey): RawState {
     dashChargeFraction: bey.attack.getChargeFraction(),
     dodgeState: bey.dodge.getState(),
     staminaFraction: bey.stamina.resource.fraction,
-    attackEnergyFraction: bey.attackEnergy.resource.fraction,
+    dashReadiness: bey.attack.getDashReadiness(),
+    momentum: bey.momentum.value,
     airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable(),
     canAffordDodge: bey.stamina.resource.value >= DODGE_STAMINA_COST,
   };
@@ -142,8 +144,10 @@ export class PlayerStandInController implements CombatController {
         } else if (
           distance <= AI_DASH_ATTACK_MAX_RANGE_M &&
           OWN_CHARGE_STATES.has(own.attackState) &&
-          own.attackEnergyFraction > 0 &&
-          (own.dashChargeFraction < PLAYER_DASH_TARGET_CHARGE_FRACTION || !aligned)
+          (own.dashReadiness >= 1 || own.attackState === AttackState.ChargingDash) &&
+          // Off-line, keep charging only until full (as the AI does): with no Attack Energy to run out (owner, 2026-10-02)
+          // a full charge would otherwise be held forever.
+          (own.dashChargeFraction < PLAYER_DASH_TARGET_CHARGE_FRACTION || (!aligned && own.dashChargeFraction < 1))
         ) {
           held.add(Action.Attack);
         }

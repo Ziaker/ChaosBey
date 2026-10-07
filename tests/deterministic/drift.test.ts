@@ -8,10 +8,16 @@ import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepL
 import { TestBeyHarness } from './physicsHarness';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import type { ControllerActions } from '../../src/input/actions/Action';
+import { resolveMatchConfig } from '../../src/config/match/MatchConfig';
 
 const intentArgs = (x: number, z: number) => ({ x, z });
+/**
+ * Directional control as DirectionalController sends it (owner, 2026-10-02): the world intent plus the screen's lateral
+ * key kept in `held` (here the screen's up is +Z, so a direction toward ±X is a right/left key).
+ */
 function intent(x: number, z: number, held: Action[] = [], pressed: Action[] = []): ControllerActions {
-  return { held: new Set(held), pressedThisFrame: new Set(pressed), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0, moveIntent: { x, z } };
+  const lateral = x > 0.3 ? [Action.SteerRight] : x < -0.3 ? [Action.SteerLeft] : [];
+  return { held: new Set([...held, ...lateral]), pressedThisFrame: new Set(pressed), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0, moveIntent: { x, z } };
 }
 
 describe('hop -> hold -> drift -> recover', () => {
@@ -145,7 +151,8 @@ describe('drift grip recovery targets the Bey\'s own archetype grip', () => {
   // Minimal stand-in for the two RAPIER.RigidBody methods DriftController
   // touches (the hop impulse) — grip recovery itself never reads the body.
   function stubBody() {
-    let vel = { x: 0, y: 0, z: 0 };
+    // Moving: the drift rule needs the Bey in motion when X is pressed (owner, 2026-10-02).
+    let vel = { x: 0, y: 0, z: 5 };
     return {
       linvel: () => vel,
       setLinvel: (v: { x: number; y: number; z: number }) => {
@@ -332,11 +339,11 @@ describe('jump vs drift: X + straight = variable jump, X + a real turn = drift (
     for (const [floor, o] of Object.entries(outcomes)) {
       const label = `${floor}: ${JSON.stringify(o)}`;
       expect(o.jumpDrift, label).toBe(false);
-      // The held jump reached the full release window (jump/air-control
-      // hotfix: holding past it commits to the uncut arc, so the tracked
-      // hold-elapsed value saturates there and never exceeds it); the drift
-      // hop (turned 2 ticks after X) almost none.
-      expect(o.jumpAssistS, label).toBeGreaterThan(JUMP_RELEASE_WINDOW_S * 0.8);
+      // The held jump waited the whole hold-for-full time before its one launch (owner, 2026-10-04: the height is
+      // decided before take-off — the tracked hold time saturates there); the drift hop (turned 2 ticks after X)
+      // almost none.
+      // The match's own hold time: the owner's base rules set it to 0.15 s (the 0.2 s constant is the bare default).
+      expect(o.jumpAssistS, label).toBeGreaterThan(resolveMatchConfig().jumpHoldForFullS - 0.02);
       expect(o.driftAssistS, label).toBeLessThan(0.05);
       expect(o.driftTicks, label).toBeGreaterThanOrEqual(35);
     }

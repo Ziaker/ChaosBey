@@ -35,6 +35,22 @@ export interface BeyDefinition {
   readonly particle: BeyParticleProfile;
   readonly audio: BeyAudioProfile;
   readonly appearance: BeyAppearance;
+  /**
+   * Owner, 2026-10-05 (MatchConfig.beySizeScale): the in-match size this definition was scaled to — its collider and
+   * attack reach already include it; the drawn model and effects are scaled by it. Absent = 1 (as designed).
+   */
+  readonly sizeScale?: number;
+}
+
+/** The definition at `scale` × its size: body (same mass) and attack reach. 1 = the definition itself. */
+export function scaledBeyDefinition(definition: BeyDefinition, scale: number): BeyDefinition {
+  if (scale === 1) return definition;
+  return {
+    ...definition,
+    physical: { ...definition.physical, colliderRadiusM: definition.physical.colliderRadiusM * scale, colliderHalfHeightM: definition.physical.colliderHalfHeightM * scale },
+    attack: { ...definition.attack, circularHitboxRadiusM: definition.attack.circularHitboxRadiusM * scale, dashHitboxRadiusM: definition.attack.dashHitboxRadiusM * scale },
+    sizeScale: scale,
+  };
 }
 
 /**

@@ -11,7 +11,7 @@
 import { Action } from '../../input/actions/Action';
 import { AIController } from '../../ai/controllers/AIController';
 import type { MatchSession, Side } from '../../app/session/MatchSession';
-import { ARENA_FLOORS, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
+import { ARENA_FLOORS, floorIdOf, type ArenaFloor } from '../../arena/floor/ArenaFloorProfile';
 import { floorReadout } from '../../arena/floor/floorReadout';
 import { ARENA_CAMERA_RIGS, CAMERA_PRESET_NAMES } from '../../camera/director/CameraRig';
 import { PRESETS, PRESET_IDS } from '../../camera/director/CameraParams';
@@ -27,6 +27,7 @@ import { DodgeState } from '../../dodge/DodgeController';
 import { DriftState } from '../../drift/DriftController';
 import { probeGround } from '../../physics/collision/GroundProbe';
 import { FIXED_DELTA_SECONDS } from '../../physics/fixed-step/FixedTimestepLoop';
+import { axisUnrest } from '../../bey/spin/SpinTuning';
 
 export interface InspectorRow {
   readonly label: string;
@@ -197,14 +198,14 @@ function buildSideSections(session: MatchSession, side: Side): InspectorSection[
         row('Stamina', resource(bey.stamina.resource)),
         row('Stability', `${resource(bey.stability.resource)}${bey.stability.isBroken ? ' — BROKEN' : ''}`),
         row('Stability: since last damage', seconds(bey.stability.getTimeSinceLastDamageS())),
-        row('Attack Energy', resource(bey.attackEnergy.resource)),
-        row('Attack Energy: since last use', seconds(bey.attackEnergy.getTimeSinceLastConsumptionS())),
         row('Cooldown: dodge', `${f(dodge.cooldownRemainingS)} s`),
+        row('Cooldown: Dash', `${f(bey.attack.getDashCooldownRemainingS())} s`),
+        row('Momentum', `${(bey.momentum.value * 100).toFixed(0)}% (top speed ×${f(bey.momentum.topSpeedMultiplier)})`),
         row('Cooldown: post-impact steering', `${f(movementDebug.postImpactCooldownRemainingS)} s`),
         row('Cooldown: Clash (shared)', `${f(session.clash.controller.getCooldownRemainingS())} s`),
         row(
           'Modifier: low-Stamina condition',
-          `accel ×${f(condition.accelFactor)}, recovery ×${f(condition.recoveryTorqueFactor)}, spin decay ×${f(condition.spinDecayMultiplier)}, wobble floor ${f(condition.ambientWobbleFloor)}`,
+          `accel ×${f(condition.accelFactor)}, recovery ×${f(condition.recoveryTorqueFactor)}, spin decay ×${f(condition.spinDecayMultiplier)}, axis wobble/precession ×${f(axisUnrest(Math.min(bey.stamina.resource.fraction, bey.stability.resource.fraction)))}`,
         ),
       ],
     },
@@ -480,10 +481,10 @@ function cameraYawDiagnostic(session: MatchSession): string {
 }
 
 /** M11 lane 4: the floor under this Bey (profile, height, slope, downhill pull). */
-function floorRows(floor: ArenaFloorId, position: { x: number; y: number; z: number }): ReturnType<typeof row>[] {
+function floorRows(floor: ArenaFloor, position: { x: number; y: number; z: number }): ReturnType<typeof row>[] {
   const r = floorReadout(floor, position);
   return [
-    row('Floor profile', ARENA_FLOORS[floor].label),
+    row('Floor profile', `${ARENA_FLOORS[floorIdOf(floor)].label}${typeof floor === 'string' ? '' : ` · ${floor.depthM.toFixed(2)} m deep`}`),
     row('Floor height under / above it', `${f(r.floorHeightM)} m / ${f(r.heightAboveFloorM)} m`),
     row('Floor slope / normal', `${f(r.slopeDeg)}° / (${f(r.normal.x)}, ${f(r.normal.y)}, ${f(r.normal.z)})`),
     row('Downhill pull (g·sin slope)', `${f(r.downhillPullMps2)} m/s² toward the centre`),

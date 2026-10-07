@@ -51,6 +51,10 @@ export interface ArenaGeometry {
   readonly wallRestitution: number;
   /** M11 lane 4: floor profile (flat, or an approved bowl for playtest). Omitted = flat. The wall height is measured from the rim. */
   readonly floor?: ArenaFloorId;
+  /** Lote 9 (item 3): bowl depth (m, rim above centre). Omitted = BOWL_DEPTH_M (2.5 m). */
+  readonly floorDepthM?: number;
+  /** Owner, 2026-10-04: stage size, × the 36 m floor radius. Omitted = 1. */
+  readonly sizeScale?: number;
 }
 
 export interface ArenaPreset {
@@ -62,7 +66,8 @@ export interface ArenaPreset {
 }
 
 /** The arena every milestone before M10 played. */
-export const STANDARD_ARENA_GEOMETRY: ArenaGeometry = { wallHeightM: ARENA_WALL_HEIGHT, wallRestitution: WALL_MATERIAL.restitution };
+/** Owner base rules, 2026-10-04: 2.0 m walls with a 0.80 bounce (was the wall material's 0.55). */
+export const STANDARD_ARENA_GEOMETRY: ArenaGeometry = { wallHeightM: ARENA_WALL_HEIGHT, wallRestitution: 0.8 };
 
 /** Slider ranges on the Pregame screen. */
 export const ARENA_WALL_HEIGHT_RANGE = { min: 0.6, max: 3, step: 0.2 } as const;

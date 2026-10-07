@@ -16,7 +16,7 @@ import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepL
 import { SeededRng } from '../../src/rng/SeededRng';
 import { CombatHarness } from './combatHarness';
 
-const MAX_TICKS = 4000; // ~66 simulated seconds — generous room for a round to resolve.
+const MAX_TICKS = 7200; // 120 simulated seconds (was 4000: since the owner audit, 2026-10-04, this Attack-vs-Defense round ends at 4454).
 
 function assertValidControllerContract(actions: ControllerActions, label: string): void {
   expect(actions.held, `${label}: held must be a Set`).toBeInstanceOf(Set);
@@ -85,7 +85,7 @@ describe('AI vs AI long-run stability', () => {
       ] as const) {
         assertFiniteFraction(snapshot.staminaFraction, `${label} tick ${i} staminaFraction`);
         assertFiniteFraction(snapshot.stabilityFraction, `${label} tick ${i} stabilityFraction`);
-        assertFiniteFraction(snapshot.attackEnergyFraction, `${label} tick ${i} attackEnergyFraction`);
+        assertFiniteFraction(snapshot.dashReadiness, `${label} tick ${i} dashReadiness`);
         assertFiniteFraction(snapshot.dashChargeFraction, `${label} tick ${i} dashChargeFraction`);
         expect(Number.isFinite(snapshot.spin.angularVelocity.x), `${label} tick ${i} angularVelocity.x finite`).toBe(true);
         expect(Number.isFinite(snapshot.spin.angularVelocity.y), `${label} tick ${i} angularVelocity.y finite`).toBe(true);

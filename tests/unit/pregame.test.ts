@@ -105,6 +105,37 @@ describe('match setup rules', () => {
     expect(opponentControllerFor(setup)).toEqual({ kind: 'ai', personality: 'defense', difficulty: 'ace' });
   });
 
+  it('feeds the Ring-out delay (owner, 2026-10-02; provisional 1.5 s) through MatchConfig', () => {
+    expect(createDefaultMatchSetup().rules.ringOutDelayS).toBe(1.5);
+    const setup = { ...createDefaultMatchSetup(), rules: { ...createDefaultMatchSetup().rules, ringOutDelayS: 0.25 } };
+    expect(matchConfigFor(setup)).toEqual({ ...createDefaultMatchConfig(), ringOutDelayS: 0.25 });
+  });
+
+  it('feeds the Dash cooldown (owner, 2026-10-02; provisional 1.5 s) through MatchConfig', () => {
+    expect(createDefaultMatchSetup().rules.dashCooldownS).toBe(1.5);
+    const setup = { ...createDefaultMatchSetup(), rules: { ...createDefaultMatchSetup().rules, dashCooldownS: 4 } };
+    expect(matchConfigFor(setup)).toEqual({ ...createDefaultMatchConfig(), dashCooldownS: 4 });
+  });
+
+  it('feeds momentum and body collision values (owner, 2026-10-02) through MatchConfig', () => {
+    // Owner base rules (2026-10-04).
+    expect(createDefaultMatchSetup().rules).toMatchObject({ momentumGain: 1.7, momentumFillS: 4, momentumDecayS: 2.5, bodyCollisionDamage: 1, momentumLossOnCollision: 0.1 });
+    const rules = { ...createDefaultMatchSetup().rules, momentumGain: 0.5, momentumFillS: 6, momentumDecayS: 1, bodyCollisionDamage: 2, momentumLossOnCollision: 0.25 };
+    expect(matchConfigFor({ ...createDefaultMatchSetup(), rules })).toEqual({ ...createDefaultMatchConfig(), ...rules });
+  });
+
+  it('feeds the jump heights (owner, 2026-10-02) through MatchConfig', () => {
+    expect(createDefaultMatchSetup().rules).toMatchObject({ jumpFullHeightM: 3.25, jumpShortHopHeightM: 0.5 }); // owner base rules
+    const rules = { ...createDefaultMatchSetup().rules, jumpFullHeightM: 4, jumpShortHopHeightM: 0.3 };
+    expect(matchConfigFor({ ...createDefaultMatchSetup(), rules })).toEqual({ ...createDefaultMatchConfig(), ...rules });
+  });
+
+  it('feeds the combat rules (owner, 2026-10-02) through MatchConfig', () => {
+    expect(createDefaultMatchSetup().rules).toMatchObject({ movementStaminaDrain: 0.2, dodgeCooldownS: 1.25, circularLaunchForce: 1 }); // owner base rules
+    const rules = { ...createDefaultMatchSetup().rules, movementStaminaDrain: 0.5, dodgeCooldownS: 1.5, circularLaunchForce: 2 };
+    expect(matchConfigFor({ ...createDefaultMatchSetup(), rules })).toEqual({ ...createDefaultMatchConfig(), ...rules });
+  });
+
   it('builds the arena walls from the preset, and a preset change resets moved sliders', () => {
     const rift = withArenaPreset(createDefaultMatchSetup(), 'rift');
     expect(matchConfigFor(rift)).toMatchObject({ arenaWallHeightM: 1, arenaWallRestitution: 0.4 });

@@ -36,7 +36,9 @@ export interface HudSide {
   readonly stamina: number;
   readonly stability: number;
   readonly broken: boolean;
-  readonly attackEnergy: number;
+  readonly dashReadiness: number;
+  /** 0..1 (owner, 2026-10-02, Lote 3). */
+  readonly momentum: number;
   /** Dash charge 0..1 while charging, else 0. */
   readonly dashCharge: number;
   /** Short state tag for the card ("DASH", "BROKEN"...), or null. */
@@ -47,7 +49,8 @@ export interface TickSideFacts {
   readonly staminaFraction: number;
   readonly stabilityFraction: number;
   readonly isBroken: boolean;
-  readonly attackEnergyFraction: number;
+  readonly dashReadiness: number;
+  readonly momentum: number;
   readonly dashChargeFraction: number;
   readonly attackState: AttackState;
 }
@@ -65,15 +68,17 @@ export function hudSide(facts: TickSideFacts): HudSide {
     stamina: clamp01(facts.staminaFraction),
     stability: clamp01(facts.stabilityFraction),
     broken: facts.isBroken,
-    attackEnergy: clamp01(facts.attackEnergyFraction),
+    dashReadiness: clamp01(facts.dashReadiness),
+    momentum: clamp01(facts.momentum),
     dashCharge: charging ? clamp01(facts.dashChargeFraction) : 0,
     tag,
   };
 }
 
-/** "RING OUT!", "K.O.!" or "DRAW" for the round-end banner. */
+/** "RING OUT!", "K.O.!", "SPIN OUT!" or "DRAW" for the round-end banner. */
 export function roundEndBanner(outcome: string): string | null {
   if (outcome.includes('RingOut')) return 'RING OUT!';
+  if (outcome.includes('SpinOut')) return 'SPIN OUT!';
   if (outcome.includes('Ko')) return 'K.O.!';
   if (outcome === 'Draw') return 'DRAW';
   return null;

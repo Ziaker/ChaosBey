@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 import * as fs from 'fs';
 
 // Owner playtest fix 8 (GDD §§48–50): the in-game camera is a dynamic,
@@ -67,7 +68,7 @@ test('two-fighter camera framing: both fighters visible, low and close, recompos
   test.setTimeout(120_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession() != null), { timeout: 20_000 }).toBe(true);
   fs.mkdirSync('test-results', { recursive: true });
   await page.evaluate(() => {

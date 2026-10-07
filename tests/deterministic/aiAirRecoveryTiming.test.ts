@@ -87,7 +87,9 @@ function reactionTicks(personality: AiPersonality): number {
 describe('AI air recovery — short window vs reaction delay (M7 Part 2b)', () => {
   // [personality, launch speed giving a window just SHORTER than its reaction, one comfortably LONGER]
   for (const [personality, shortV, longV] of [
-    [DEFENSE_AI_PERSONALITY, 1.1, 1.2],
+    // Defense re-picked in the owner audit (2026-10-04): at 1.2 m/s the window now closes one tick before the 10-tick
+    // reaction (open ticks 3–11); 1.4 m/s opens it on tick 2 and keeps it to 11. The reaction timing itself is unchanged.
+    [DEFENSE_AI_PERSONALITY, 1.2, 1.4],
     [ATTACK_AI_PERSONALITY, 1.3, 1.7],
   ] as const) {
     const needed = reactionTicks(personality);

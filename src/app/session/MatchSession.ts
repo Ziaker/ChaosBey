@@ -13,6 +13,7 @@
 // acceleration — GDD section 164) decides how many ticks run.
 // ============================================================
 
+import { effectScaleOf, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import * as THREE from 'three';
 import { createMatchScene, REST_VISUAL_POSE, type BeyVisualPose, type MatchBeys, type MatchScene } from '../bootstrap/createMatchScene';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
@@ -33,12 +34,14 @@ import { buildFightFrame, speedLinesScreenDirection, type FightFrameBey, type Se
 import type { PresetId } from '../../camera/director/CameraParams';
 import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../simulation/impact/ImpactEvents';
 import { CLASH_RESOLVED_MAGNITUDE } from '../simulation/impact/ImpactMagnitude';
-import { arenaGeometryOf, type MatchConfig } from '../../config/match/MatchConfig';
+import { arenaFloorOf, arenaGeometryOf, beyMatchRulesOf, resolveMatchConfig, roundStateOptionsOf, type MatchConfig } from '../../config/match/MatchConfig';
 import { ARENA_PRESETS, FOUNDRY_PIT, type ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { Bey } from '../../bey/core/Bey';
 import type { KnockbackComponents } from '../../combat/knockback/Knockback';
-import type { CombatController, ControllerActions } from '../../input/actions/Action';
+import { Action, type CombatController, type ControllerActions } from '../../input/actions/Action';
+import { AttackState } from '../../combat/attacks/AttackController';
+import { DodgeState } from '../../dodge/DodgeController';
 import { FIXED_DELTA_SECONDS } from '../../physics/fixed-step/FixedTimestepLoop';
 import { checkAngularVelocity, checkLinearVelocity } from '../../physics/diagnostics/physicsSafety';
 import { PhysicsWorld } from '../../physics/world/PhysicsWorld';
@@ -52,17 +55,19 @@ import { selectBeyPresentationState, type CameraPresentationSnapshot, type Recen
 import type { PresentationSide } from '../../presentation/events';
 import { collectSceneStats, type SceneStats } from '../../presentation/sceneStats';
 import { ConditionVisualsSystem, normalizeConditionLayers } from '../../vfx/condition/ConditionVisualsSystem';
+import { RecoveryRingEffect } from '../../vfx/RecoveryRing';
+import { ImpactFeedback, type ImpactFeedbackOptions } from '../../vfx/ImpactFeedback';
 import { HybridVfxSystem } from '../../vfx/hybrid/HybridVfxSystem';
 import { ClashPresentationSystem, clashDustHexFor } from '../../vfx/clash/ClashPresentationSystem';
 import { ArenaVisualsSystem } from '../../arena/visual/ArenaVisualsSystem';
-import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
+import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
 import type { LanguageId } from '../../vfx/condition/types';
 import { HeadingArrow } from '../../vfx/HeadingArrow';
 import { DriftVfx } from '../../vfx/DriftVfx';
 import { VfxManager } from '../../vfx/VfxManager';
 import { ForcedInputController } from '../../automation/scripted-scenarios/ForcedInputController';
 import { AIController } from '../../ai/controllers/AIController';
-import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector, type DetectedAnomaly } from '../../self-test/anomalies/MatchAnomalyDetector';
+import { anomalyThresholdsFor, MatchAnomalyDetector, type DetectedAnomaly } from '../../self-test/anomalies/MatchAnomalyDetector';
 import type { ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
 import { matchSpawnsFor } from '../bootstrap/matchSpawns';
 import { floorHeightAt, floorRimHeight } from '../../arena/floor/ArenaFloorProfile';
@@ -103,6 +108,8 @@ export interface MatchSessionOptions {
   readonly presentationFeatures?: PresentationFeatures;
   /** Which condition languages (A, B, C) show when the `conditionVisuals` flag is on; at least one. Default A. Render only. */
   readonly conditionLayers?: readonly LanguageId[];
+  /** Lote 9: the Pregame's visual options for the Hybrid VFX (presentation only). */
+  readonly vfx?: VfxOptions;
   /** The renderer, for the approved arena art's tone mapping (only touched with the `arenaVisuals` flag, and restored). Render only. */
   readonly renderer?: { toneMapping: THREE.ToneMapping; toneMappingExposure: number };
 }
@@ -141,10 +148,26 @@ export interface SessionRenderView {
   readonly headingArrow?: boolean;
 }
 
+/** Owner, 2026-10-05 (game feel): beats the HUD shows. */
+export type HudFeedbackEvent =
+  | { readonly kind: 'counter'; readonly position: { readonly x: number; readonly y: number; readonly z: number }; readonly attackerSide: Side }
+  | { readonly kind: 'refused'; readonly action: 'dodge' | 'attack' };
+
+const HUD_FEEDBACK_MAX = 16;
+
 const DEFAULT_RENDER_VIEW: SessionRenderView = { cameraView: 'game', cameraEffects: true };
 /** Debug overview camera: high over the arena's near edge, whole bowl in frame. */
 const OVERVIEW_CAMERA_POSITION_M = { x: 0, y: 30, z: 20 } as const;
 const OVERVIEW_CAMERA_FOV_DEG = 55;
+
+/** Owner, 2026-10-04: air tumble tuning (visual only). PROVISIONAL. */
+const TUMBLE_MIN_LAUNCH_UP_MPS = 5;
+const TUMBLE_BASE_RATE_RAD_S = 8;
+const TUMBLE_MAX_RATE_RAD_S = 22;
+const TUMBLE_AXIS_SWING_RAD_S = 2.4;
+
+/** The winner's visual spin during the defeat cutscene (rad/s; render only). */
+const WINNER_SPIN_RAD_PER_S = 40;
 
 export class MatchSession {
   readonly matchId: string;
@@ -152,7 +175,7 @@ export class MatchSession {
   readonly rngStreams: RngStreams;
   readonly physics: PhysicsWorld;
   readonly match: MatchScene;
-  readonly roundState = new RoundState();
+  readonly roundState: RoundState;
   readonly clash: ClashOrchestration;
   readonly matchConfig: MatchConfig;
   readonly telemetry: TelemetryRecorder;
@@ -165,6 +188,22 @@ export class MatchSession {
   private conditionVisuals: ConditionVisualsSystem | null = null;
   /** The approved Hybrid VFX (Cel Cyclone wind), attached only with the `hybridVfx` flag (render only). */
   private hybridVfx: HybridVfxSystem | null = null;
+  /** Owner, 2026-10-04: the expanding ring of an Air Recovery (render only). */
+  private readonly recoveryRings: RecoveryRingEffect;
+  /** Owner, 2026-10-05 (game feel): hit flash, hit shake during the freeze, counter burst. Render only. */
+  private readonly impactFeedback: ImpactFeedback;
+  /** Player-facing feedback beats for the HUD (counter hits, refused presses), drained once per frame. */
+  private hudFeedback: HudFeedbackEvent[] = [];
+  private cutsceneFocus: (() => { x: number; y: number; z: number }) | null = null;
+  private cutsceneCamera: { eye: THREE.Vector3; focus: THREE.Vector3 } | null = null;
+  /**
+   * Owner, 2026-10-04: the simulation freezes at the end of the round, so a winner that was mid-jump hung in the air,
+   * not spinning, for the whole cutscene. During it the winner (render only) keeps spinning and drops onto the floor.
+   */
+  private cutsceneWinner: Side | null = null;
+  private winnerFall: { y: number; vy: number } | null = null;
+  private readonly matchGravityScale: number;
+  private presentationFloorAt: ((x: number, z: number) => number) | null = null;
   /** The approved Clash Overdrive presentation, attached only with the `clashPresentation` flag (render only). */
   private clashPresentation: ClashPresentationSystem | null = null;
   /** The approved arena art, attached only with the `arenaVisuals` flag (render only; colliders untouched). */
@@ -201,7 +240,7 @@ export class MatchSession {
       seedText: this.seedText,
       matchConfig: this.matchConfig,
       attackProfileSettings: this.attackProfileSettings,
-      spawns: matchSpawnsFor(this.matchConfig.arenaFloor ?? 'flat'),
+      spawns: matchSpawnsFor(arenaFloorOf(resolveMatchConfig(this.matchConfig))),
       beys: { first: this.match.first.definition, second: this.match.second.definition },
     });
     // Called inside tick() before this.tickIndex advances, so the count comes from the capture, not from this.tickIndex.
@@ -276,6 +315,40 @@ export class MatchSession {
   private lastVelocity: Record<Side, { x: number; y: number; z: number }>;
   private lastAcceleration: Record<Side, { x: number; y: number; z: number }> = { first: zero3(), second: zero3() };
   private lastVisual: Record<Side, BeyVisualPose> = { first: REST_VISUAL_POSE, second: REST_VISUAL_POSE };
+  /** Owner, 2026-10-04: air tumble per Bey (presentation only, never read by gameplay). */
+  private readonly tumble: Record<Side, { active: boolean; angle: number; axis: { x: number; z: number }; rate: number }> = {
+    first: { active: false, angle: 0, axis: { x: 1, z: 0 }, rate: 0 },
+    second: { active: false, angle: 0, axis: { x: 1, z: 0 }, rate: 0 },
+  };
+
+  /**
+   * Owner, 2026-10-04: "faça os beys rotacionarem em múltiplos ângulos quando são lançados muito alto". A launch (Air
+   * Recovery open) with a strong upward speed starts a tumble about a horizontal axis that itself swings round, so the
+   * Bey turns over on several angles; it stops on landing and eases back upright. Visual only.
+   */
+  private stepTumble(side: Side, grounded: boolean): { angle: number; axis: { x: number; z: number } } {
+    const t = this.tumble[side];
+    const bey = this.getBey(side);
+    const v = bey.body.linvel();
+    const dt = FIXED_DELTA_SECONDS;
+    if (!t.active && !grounded && v.y > TUMBLE_MIN_LAUNCH_UP_MPS && bey.dodge.isAirRecoveryAvailable()) {
+      const h = Math.hypot(v.x, v.z);
+      t.active = true;
+      t.axis = h > 0.5 ? { x: v.z / h, z: -v.x / h } : { x: 1, z: 0 };
+      t.rate = Math.min(TUMBLE_MAX_RATE_RAD_S, TUMBLE_BASE_RATE_RAD_S + Math.hypot(v.x, v.y, v.z) * 0.35);
+    }
+    if (t.active && !grounded) {
+      t.angle += t.rate * dt;
+      const swing = TUMBLE_AXIS_SWING_RAD_S * dt;
+      t.axis = { x: t.axis.x * Math.cos(swing) - t.axis.z * Math.sin(swing), z: t.axis.x * Math.sin(swing) + t.axis.z * Math.cos(swing) };
+    } else {
+      t.active = false;
+      // Back upright: the nearest full turn, quickly.
+      const wrapped = Math.atan2(Math.sin(t.angle), Math.cos(t.angle));
+      t.angle = Math.abs(wrapped) < 0.01 ? 0 : wrapped * 0.6;
+    }
+    return { angle: t.angle, axis: t.axis };
+  }
   private disposed = false;
 
   private constructor(options: MatchSessionOptions, physics: PhysicsWorld) {
@@ -284,6 +357,8 @@ export class MatchSession {
     this.rngStreams = createRngStreams(options.seedText);
     this.physics = physics;
     this.matchConfig = options.matchConfig;
+    // A config without a ring-out delay predates it (instant ring-out).
+    this.roundState = new RoundState(roundStateOptionsOf(resolveMatchConfig(options.matchConfig)));
     this.attackProfileSettings = options.attackProfileSettings;
     this.telemetry = options.telemetry;
     this.stateMachine = options.stateMachine;
@@ -295,11 +370,14 @@ export class MatchSession {
     this.clash = new ClashOrchestration(options.matchConfig, new NullAiMashSource());
 
     options.scene.add(this.root);
+    this.recoveryRings = new RecoveryRingEffect(this.root);
+    this.impactFeedback = new ImpactFeedback(this.root, { hitFlash: true, hitShake: true, counterFeedback: true });
+    this.matchGravityScale = resolveMatchConfig(options.matchConfig).gravityScale ?? 1;
     const presentationFeatures = options.presentationFeatures ?? presentationFeaturesFromLocation();
     this.match = createMatchScene(this.root, physics, options.attackProfileSettings, options.beys, {
       geometry: arenaGeometryOf(options.matchConfig),
       theme: options.arenaTheme ?? FOUNDRY_PIT.theme,
-    }, options.matchConfig.motion ?? 'B', presentationFeatures);
+    }, options.matchConfig.motion ?? 'B', presentationFeatures, beyMatchRulesOf(options.matchConfig));
     this.presentation = new PresentationHub({
       features: presentationFeatures,
       beys: [
@@ -310,16 +388,23 @@ export class MatchSession {
     });
     this.headingArrow = new HeadingArrow(this.root);
     this.camera = options.camera;
-    const arenaFloor = options.matchConfig.arenaFloor ?? 'flat';
+    const arenaFloor = arenaFloorOf(resolveMatchConfig(options.matchConfig)); // Lote 9: profile + depth (the camera's floor guard reads the same h)
     this.initialCameraPreset = options.cameraPreset ?? 'B';
     this.cameraRig =
       options.cameraRig === undefined
-        ? new CameraRig(this.initialCameraPreset, options.camera.aspect, arenaFloor === 'flat' ? undefined : (x, z) => floorHeightAt(arenaFloor, x, z))
+        ? new CameraRig(this.initialCameraPreset, options.camera.aspect, floorRimHeight(arenaFloor) === 0 ? undefined : (x, z) => floorHeightAt(arenaFloor, x, z))
         : options.cameraRig;
     this.vfxManager = new VfxManager(this.root, options.camera, this.match.first.definition.particle, this.match.second.definition.particle);
+    // Owner, 2026-10-05: every effect follows the Bey size (MatchConfig.beySizeScale) × the Pregame's effects size.
+    const effectScale = effectScaleOf(this.match.first.definition, options.vfx);
+    this.vfxManager.effectScale = effectScale;
+    this.recoveryRings.effectScale = effectScale;
+    this.impactFeedback.effectScale = effectScale;
+    this.impactFeedback.effectSize = options.vfx?.effectSize ?? 1;
     const theme = options.arenaTheme ?? FOUNDRY_PIT.theme;
     const floorAt = (x: number, z: number): number => floorHeightAt(arenaFloor, x, z);
-    this.driftVfx = { first: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt), second: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt) };
+    this.presentationFloorAt = floorAt;
+    this.driftVfx = { first: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt, effectScale), second: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt, effectScale) };
     this.root.add(this.driftVfx.first.object3D, this.driftVfx.second.object3D);
     if (presentationFeatures.conditionVisuals) {
       this.conditionVisuals = new ConditionVisualsSystem({
@@ -331,6 +416,7 @@ export class MatchSession {
         },
         floorHeightAt: floorAt,
         layers: normalizeConditionLayers(options.conditionLayers ?? ['A']),
+        effectSize: options.vfx?.effectSize ?? 1,
       });
       this.presentation.attach(this.conditionVisuals);
     }
@@ -344,7 +430,8 @@ export class MatchSession {
         },
         floorHeightAtR: (r) => floorAt(r, 0),
         arenaSparks: [theme.sparkHotHex, theme.sparkCoolHex],
-        arenaRadiusM: ARENA_FLOOR_RADIUS,
+        arenaRadiusM: arenaFloorRadius(),
+        vfx: options.vfx,
       });
       this.presentation.attach(this.hybridVfx);
       // The legacy spark and landing bursts give way to the approved language (the existing layer switch; the tick code is untouched).
@@ -363,6 +450,7 @@ export class MatchSession {
         dustHex: clashDustHexFor(ARENA_PRESETS.find((preset) => preset.theme === theme)?.id),
         // The approved arena art reacts to the Clash itself; the stand-in contact light is only for the temporary arena.
         contactLight: !presentationFeatures.arenaVisuals,
+        effectSize: options.vfx?.effectSize ?? 1,
       });
       this.presentation.attach(this.clashPresentation);
     }
@@ -379,7 +467,7 @@ export class MatchSession {
     }
 
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
-    this.anomalyDetector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(options.matchConfig.arenaFloor ?? 'flat') + options.matchConfig.arenaWallHeightM });
+    this.anomalyDetector = new MatchAnomalyDetector(anomalyThresholdsFor(resolveMatchConfig(options.matchConfig)));
 
     this.controllerSpecs = { first: options.controllers.first, second: options.controllers.second };
     this.drivers = {
@@ -390,7 +478,30 @@ export class MatchSession {
 
   static async create(options: MatchSessionOptions): Promise<MatchSession> {
     const physics = await PhysicsWorld.create();
+    physics.setGravityScale(resolveMatchConfig(options.matchConfig).gravityScale ?? 1);
     return new MatchSession(options, physics);
+  }
+
+  /** Owner, 2026-10-04: the defeated Bey of a KO / spin-out shows none of its own effects any more (presentation only). */
+  setBeyDefeated(side: Side): void {
+    this.conditionVisuals?.setDefeated(side);
+    this.hybridVfx?.setDefeated(side);
+  }
+
+  /**
+   * Owner, 2026-10-04 ("é pra câmera seguir o bey sendo destruído"): while set, the camera leaves the (frozen) fight
+   * director and follows this point — the defeated Bey's flight, then its pieces. Render only. Null hands it back.
+   */
+  setCutsceneFocus(focus: (() => { x: number; y: number; z: number }) | null, winner: Side | null = null): void {
+    this.cutsceneFocus = focus;
+    this.cutsceneCamera = null;
+    this.cutsceneWinner = focus ? winner : null;
+    this.winnerFall = null;
+  }
+
+  /** The arena floor height under (x, z) for presentation (the defeat cutscene's flight). */
+  floorHeightAt(x: number, z: number): number {
+    return this.presentationFloorAt ? this.presentationFloorAt(x, z) : 0;
   }
 
   getTickIndex(): number {
@@ -532,6 +643,8 @@ export class MatchSession {
     // frozen, so a press made during the freeze is buffered (not lost) and
     // delivered once on the first unfrozen sample afterward — see
     // ActionSampleBuffer. Camera/VFX timers below still tick regardless.
+    const previousResult = this.lastMatchResult;
+    const clashActiveBefore = clash.controller.getState() === ClashState.Active;
     const stepStart = performance.now();
     const step = this.stepper.step(this.stepWorld(), this.drivers, fixedDeltaSeconds);
     const { firstActions, secondActions, result } = step;
@@ -544,6 +657,7 @@ export class MatchSession {
       this.lastPhysicsStepTimeMs = performance.now() - stepStart;
       this.lastMatchResult = result;
       this.recordTickDerivedState(tickIndex, result, fixedDeltaSeconds);
+      this.deriveFeedback(result, previousResult, step.firstActions, step.secondActions, clashActiveBefore);
       for (const hit of result.hitEvents) {
         telemetry.record({
           kind: TelemetryEventKind.Hit,
@@ -575,6 +689,11 @@ export class MatchSession {
           case 'perfectDodge':
             telemetry.record({ kind: TelemetryEventKind.PerfectDodge, targetIsFirst: combatEvent.targetIsFirst });
             break;
+          case 'airRecovery': {
+            const p = (combatEvent.targetIsFirst ? match.first : match.second).body.translation();
+            this.recoveryRings.spawn(p);
+            break;
+          }
         }
       }
       // A genuine unmodeled physics impact (wall/floor bounce) — distinct
@@ -658,8 +777,8 @@ export class MatchSession {
     }
 
     this.lastVisual = {
-      first: { spin: result.first.spin.visualSpinAngleRad, wobble: result.first.spin.wobbleOffsetRad, lean: result.first.spin.lean },
-      second: { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad, lean: result.second.spin.lean },
+      first: { spin: result.first.spin.visualSpinAngleRad, wobble: result.first.spin.wobbleOffsetRad, lean: result.first.spin.lean, tumble: this.stepTumble('first', result.first.grounded) },
+      second: { spin: result.second.spin.visualSpinAngleRad, wobble: result.second.spin.wobbleOffsetRad, lean: result.second.spin.lean, tumble: this.stepTumble('second', result.second.grounded) },
     };
 
     this.tickCameraAndVfx(tickIndex, result, isFrozenByHitstop, clashResolvedThisTick, currentClashState, presentationEvents.clashStarted);
@@ -689,10 +808,123 @@ export class MatchSession {
     return { tickIndex, firstActions, secondActions, result, simulationAdvanced: !isFrozenByHitstop };
   }
 
+  /** The winner, during the defeat cutscene: falls (render only) onto the floor if the round froze it in the air. */
+  private settleWinner(side: Side, frameDeltaSeconds: number): void {
+    const bey = this.getBey(side);
+    const group = this.match.visuals[side].visual.group;
+    const t = bey.body.translation();
+    const rest = this.floorHeightAt(t.x, t.z) + bey.definition.physical.colliderHalfHeightM;
+    if (!this.winnerFall) this.winnerFall = { y: t.y, vy: Math.min(0, bey.body.linvel().y) };
+    const fall = this.winnerFall;
+    if (fall.y > rest) {
+      fall.vy -= 9.81 * this.matchGravityScale * Math.max(0, frameDeltaSeconds);
+      fall.y = Math.max(rest, fall.y + fall.vy * Math.max(0, frameDeltaSeconds));
+    }
+    group.position.y = Math.min(group.position.y, fall.y);
+  }
+
+  /** The defeat cutscene's chase camera: keeps the current viewing side, ~8 m back and 4 m up, catching up smoothly. */
+  private followCutscene(camera: THREE.PerspectiveCamera, frameDeltaSeconds: number): void {
+    const p = this.cutsceneFocus!();
+    const target = new THREE.Vector3(p.x, p.y, p.z);
+    if (!this.cutsceneCamera) {
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      this.cutsceneCamera = { eye: camera.position.clone(), focus: camera.position.clone().addScaledVector(forward, camera.position.distanceTo(target)) };
+    }
+    const cam = this.cutsceneCamera;
+    const back = new THREE.Vector3(cam.eye.x - target.x, 0, cam.eye.z - target.z);
+    if (back.lengthSq() < 1e-4) back.set(0, 0, 1);
+    back.setLength(8);
+    let desiredEye = target.clone().add(back).add(new THREE.Vector3(0, 4, 0));
+    // Never through the wall or under the floor: the eye stays inside the arena, above the floor. Near the wall it
+    // swings round to look from the arena's side.
+    const maxR = arenaFloorRadius() - 0.8;
+    if (Math.hypot(desiredEye.x, desiredEye.z) > maxR) {
+      const inward = new THREE.Vector3(-target.x, 0, -target.z);
+      if (inward.lengthSq() > 1e-4) desiredEye = target.clone().add(inward.setLength(8)).add(new THREE.Vector3(0, 4, 0));
+    }
+    const r = Math.hypot(desiredEye.x, desiredEye.z);
+    if (r > maxR) desiredEye.multiply(new THREE.Vector3(maxR / r, 1, maxR / r));
+    desiredEye.y = Math.max(desiredEye.y, this.floorHeightAt(desiredEye.x, desiredEye.z) + 1.5, target.y + 1.5);
+    const k = 1 - Math.exp(-5 * Math.max(0, frameDeltaSeconds));
+    cam.focus.lerp(target, Math.min(1, k * 1.6));
+    cam.eye.lerp(desiredEye, k);
+    camera.position.copy(cam.eye);
+    camera.lookAt(cam.focus);
+  }
+
   /** Syncs visuals, camera and frame-rate VFX to the current state. Call once per rendered frame, before renderer.render(). */
+  /** Owner, 2026-10-05: the game-feel switches that live in the scene (Settings → Game feel). */
+  setGameFeel(options: ImpactFeedbackOptions): void {
+    this.impactFeedback.setOptions(options);
+  }
+
+  /** Counter hits and refused presses since the last call (the HUD reads them once per frame). */
+  drainHudFeedback(): HudFeedbackEvent[] {
+    const events = this.hudFeedback;
+    this.hudFeedback = [];
+    return events;
+  }
+
+  /** Kept short: with no HUD draining it (Debug Lab, headless), only the latest beats are kept. */
+  private pushHudFeedback(event: HudFeedbackEvent): void {
+    this.hudFeedback.push(event);
+    if (this.hudFeedback.length > HUD_FEEDBACK_MAX) this.hudFeedback.shift();
+  }
+
+  /** The side a person plays (keyboard / pad), if any. */
+  getPlayerSide(): Side | null {
+    return this.controllerSpecs.first.kind === 'keyboard' ? 'first' : this.controllerSpecs.second.kind === 'keyboard' ? 'second' : null;
+  }
+
+  /**
+   * Owner, 2026-10-05 (game feel), on a tick the match advanced: the hit flash / shake and the counter burst, and for
+   * the player's side the presses the game refused — Dodge that started neither a dodge nor an Air Recovery, Attack
+   * that started nothing from a neutral attack. A Clash tick is the mash, never a refusal.
+   */
+  private deriveFeedback(result: MatchTickResult, previous: MatchTickResult | null, firstActions: ControllerActions, secondActions: ControllerActions, clashActiveBefore: boolean): void {
+    const a = this.match.first.body.translation();
+    const b = this.match.second.body.translation();
+    for (const hit of result.hitEvents) {
+      this.impactFeedback.onHit(hit.attackerIsFirst ? 'second' : 'first');
+      if (hit.caughtOpponentDashing) {
+        const position = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+        this.impactFeedback.onCounter(position);
+        this.pushHudFeedback({ kind: 'counter', position, attackerSide: hit.attackerIsFirst ? 'first' : 'second' });
+      }
+    }
+    const side = this.getPlayerSide();
+    if (!side || !previous || clashActiveBefore || this.clash.controller.getState() === ClashState.Active || this.roundState.isOver) return;
+    const actions = side === 'first' ? firstActions : secondActions;
+    const now = result[side];
+    const before = previous[side];
+    if (actions.pressedThisFrame.has(Action.Dodge)) {
+      const dodged = now.dodgeState === DodgeState.Dodging && before.dodgeState !== DodgeState.Dodging;
+      const recovered = result.combatEvents.some((e) => e.kind === 'airRecovery' && e.targetIsFirst === (side === 'first'));
+      if (!dodged && !recovered) this.pushHudFeedback({ kind: 'refused', action: 'dodge' });
+    }
+    // Attack refused: a press that started nothing, or a tap / early release that ended in nothing (the Circular
+    // locked or switched off for the match, a hold released before the Dash was ready).
+    if ((actions.pressedThisFrame.has(Action.Attack) && before.attackState === AttackState.Neutral && now.attackState === AttackState.Neutral) || this.match[side].attack.wasPressRefusedThisTick()) {
+      this.pushHudFeedback({ kind: 'refused', action: 'attack' });
+    }
+  }
+
   renderFrame(frameDeltaSeconds: number, camera: THREE.PerspectiveCamera, view: SessionRenderView = DEFAULT_RENDER_VIEW): void {
     const match = this.match;
+    const winner = this.cutsceneWinner;
+    if (winner) {
+      const pose = this.lastVisual[winner];
+      this.lastVisual = { ...this.lastVisual, [winner]: { ...pose, spin: pose.spin + WINNER_SPIN_RAD_PER_S * frameDeltaSeconds, tumble: undefined } };
+    }
     match.syncVisualsToPhysics(this.lastVisual.first, this.lastVisual.second);
+    if (winner) this.settleWinner(winner, frameDeltaSeconds);
+    this.recoveryRings.update(frameDeltaSeconds);
+    this.impactFeedback.update(frameDeltaSeconds, this.stepper.hitstop.isFreezing(), {
+      first: { group: match.visuals.first.visual.group, radiusM: match.first.definition.physical.colliderRadiusM },
+      second: { group: match.visuals.second.visual.group, radiusM: match.second.definition.physical.colliderRadiusM },
+    });
 
     // The player's Bey (the keyboard/pad side) gets the heading arrow.
     const playerSide: Side | null = this.controllerSpecs.first.kind === 'keyboard' ? 'first' : this.controllerSpecs.second.kind === 'keyboard' ? 'second' : null;
@@ -719,6 +951,7 @@ export class MatchSession {
       camera.fov = view.cameraEffects ? cameraOutput.fovDeg : cameraOutput.fovDeg - cameraOutput.fovPunchDeg;
       camera.updateProjectionMatrix();
     }
+    if (this.cutsceneFocus && view.cameraView !== 'overview') this.followCutscene(camera, frameDeltaSeconds);
 
     this.vfxManager.onRenderFrame(
       frameDeltaSeconds,
@@ -804,6 +1037,8 @@ export class MatchSession {
     this.disposed = true;
     this.presentation.dispose();
     this.vfxManager.dispose();
+    this.recoveryRings.dispose();
+    this.impactFeedback.dispose();
     this.driftVfx.first.dispose();
     this.driftVfx.second.dispose();
     this.root.removeFromParent();
@@ -1011,6 +1246,7 @@ export class MatchSession {
         },
         roundOver: this.roundState.isOver,
         roundOutcome: this.roundState.result,
+        positions: { first: this.match.first.body.translation(), second: this.match.second.body.translation() },
       },
       (recentImpact: Readonly<Record<PresentationSide, RecentImpact | null>>) => ({
         tick: tickIndex,

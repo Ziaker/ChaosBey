@@ -27,7 +27,14 @@ import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecord
 // A long fight with many hitstop freezes (see replayPlayback.test.ts, whose
 // header comment explains this seed's re-pinning history).
 // Re-pinned in the arena scale pass: see the seed notes in replayPlayback.test.ts.
-const LONG_SEED = 'replay-58';
+// Re-pinned with replayPlayback.test.ts (ring-out delay, Perfect Dodge once, Dash cooldown, momentum; owner 2026-10-02).
+// Re-picked for item 11 (owner, 2026-10-04): faster hits end 'replay-198' at tick 966; see replayPlayback.test.ts.
+// replay-37 since the owner audit (2026-10-04, hitstop on hits only): 2876 ticks, 28 frozen (see replayPlayback).
+// replay-40 since 0.39.0 (owner, 2026-10-05 dodge rules): 2063 ticks, 22 frozen (see replayPlayback).
+// replay-4 since 0.41.0 (owner, 2026-10-05: no Air Recovery after a lost Clash): 1945 ticks, 28 frozen.
+// replay-46 since 0.42.0 (owner, 2026-10-05: intangible dodge, recovery time, drift): 2628 ticks, 22 frozen.
+// replay-158 since 0.43.1 (owner, 2026-10-05: the drift carves its turns): 2516 ticks, 32 frozen.
+const LONG_SEED = 'replay-158';
 /** The tampered-inputs check flips MoveForward on ticks 300 up to (not including) this. */
 const EDIT_END_TICK = 700;
 
@@ -81,7 +88,7 @@ describe('record → file → playback (M9)', () => {
   it('live AI-vs-AI → file → headless: every per-tick checkpoint reproduced, hitstop freezes included', async () => {
     const fingerprint = await currentRuntimeFingerprint();
     const { text, frozenTicks, hashes } = await recordLiveFile(LONG_SEED, fingerprint);
-    expect(frozenTicks).toBeGreaterThan(100);
+    expect(frozenTicks).toBeGreaterThanOrEqual(20); // 100 before hitstop came from hits only (owner audit, 2026-10-04)
     const replay = decoded(text);
     expect(replay.frames.length).toBeGreaterThan(1000);
     // The checkpoints the hook stored are the live session's own state hashes.

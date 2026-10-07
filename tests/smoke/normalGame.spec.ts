@@ -147,3 +147,33 @@ test('a Perfect Dodge in the normal game gets its Hybrid VFX feedback, with no c
   expect(result.hybrid!.droppedSlowMotion).toBeGreaterThan(0); // the Perfect Dodge's request, received and dropped (no time scaling)
   expect(errors).toEqual([]);
 });
+
+test('every Dash raises dust in the normal game, a short one included (owner, 2026-10-02)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = watchErrors(page);
+  await page.goto('/ChaosBey/?mode=debug-lab');
+  await expect.poll(() => page.evaluate(() => window.__chaosBeyDebugLab?.getSession()?.getTickIndex() ?? 0), { timeout: 20_000 }).toBeGreaterThan(30);
+  const dust = () => page.evaluate(() => (window.__chaosBeyDebugLab!.getSession()!.getPresentationStats().hub.perSystem['hybrid-vfx'] ?? { dust: -1 }).dust ?? -1);
+  await page.evaluate(async () => {
+    const lab = window.__chaosBeyDebugLab!;
+    lab.setPaused(true);
+    await lab.restart('dash-dust-normal');
+    const session = lab.getSession()!;
+    session.setController('first', { kind: 'idle' });
+    session.setController('second', { kind: 'idle' });
+    lab.step(30);
+  });
+  const before = await dust();
+  expect(before).toBeGreaterThanOrEqual(0);
+  // A short Dash: Attack held just past the tap window (no real charge), then released. Step until it is active,
+  // then let real frames draw it (the effects follow the rendered state).
+  await page.evaluate(() => {
+    const lab = window.__chaosBeyDebugLab!;
+    const session = lab.getSession()!;
+    session.forceInput('first', 'short dash', [{ fromTick: 0, held: ['Attack'] as never }, { fromTick: 9, held: [] }], 12);
+    for (let i = 0; i < 20 && session.getBey('first').attack.getState() !== 'DashActive'; i++) lab.step(1);
+  });
+  expect(await page.evaluate(() => window.__chaosBeyDebugLab!.getSession()!.getBey('first').attack.getState())).toBe('DashActive');
+  await expect.poll(dust, { timeout: 20_000 }).toBeGreaterThan(before);
+  expect(errors).toEqual([]);
+});

@@ -50,6 +50,8 @@ export const MECHANICAL: VfxLanguage = {
     let ghostTimer = 0;
     let dustTimer = 0;
     const floorY = (p: THREE.Vector3): number => ctx.floorHeightAt(Math.hypot(p.x, p.z));
+    // Owner, 2026-10-05: offsets from the Bey follow the effects' scale (the Bey size × the effects size).
+    const k = (): number => ctx.layer.scale;
     // All physical sparks go through the live tuning (amount / speed / lifetime).
     const emit = (at: THREE.Vector3, o: SparkOptions): void => {
       const count = stochastic(o.count * TUNING.contactSparks);
@@ -63,7 +65,7 @@ export const MECHANICAL: VfxLanguage = {
         const a = Math.random() * Math.PI * 2;
         ctx.layer.add(spriteFx({
           tex: smokePuff(), color: DUST_COLOR, additive: false, opacity: 0.55,
-          pos: at.clone().add(new THREE.Vector3(Math.cos(a) * 0.2, 0.1, Math.sin(a) * 0.2)),
+          pos: at.clone().add(new THREE.Vector3(Math.cos(a) * 0.2, 0.1, Math.sin(a) * 0.2).multiplyScalar(k())),
           vel: new THREE.Vector3(Math.cos(a) * spread, rand(0.2, 0.8), Math.sin(a) * spread),
           drag: 2.5, size: [size * 0.4, size * rand(1.2, 1.8)], life: life * rand(0.7, 1.2), fadeIn: 0.1, spin: rand(-0.6, 0.6),
         }));
@@ -79,7 +81,7 @@ export const MECHANICAL: VfxLanguage = {
     const scuff = (at: THREE.Vector3, size: number, baseOpacity = 0.55): void => {
       const opacity = baseOpacity * TUNING.scuffs;
       if (opacity <= 0.01) return;
-      ctx.layer.add(flatFx({ tex: scuffMark(), color: 0x000000, pos: new THREE.Vector3(at.x, floorY(at) + 0.02, at.z), size: [size, size], life: DECAL_LIFE, opacity, hold: 0.7, rotation: Math.random() * 6 }));
+      ctx.layer.add(flatFx({ tex: scuffMark(), color: 0x000000, pos: new THREE.Vector3(at.x, floorY(at) + 0.02, at.z), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.02 }, size: [size, size], life: DECAL_LIFE, opacity, hold: 0.7, rotation: Math.random() * 6 }));
     };
     const tipPos = (p: THREE.Vector3): THREE.Vector3 => new THREE.Vector3(p.x, floorY(p) + 0.03, p.z);
 
@@ -113,7 +115,7 @@ export const MECHANICAL: VfxLanguage = {
       dashRelease(e) {
         const back = e.dir.clone().negate();
         const tip = tipPos(e.pos);
-        for (let i = 0; i < 6 + 6 * e.m; i++) dust(tip.clone().addScaledVector(back, 0.3), 1, 2 + 3 * e.m, 0.9 + e.m, 1.1);
+        for (let i = 0; i < 6 + 6 * e.m; i++) dust(tip.clone().addScaledVector(back, 0.3 * k()), 1, 2 + 3 * e.m, 0.9 + e.m, 1.1);
         emit(tip, { count: 20 + 40 * e.m, speed: 4 + 5 * e.m, dir: back, spread: 1.2, life: [0.15, 0.45], hot, cool, upBias: 0.3 });
         scuff(tip, 1 + e.m);
         ctx.shake(0.03 + 0.05 * e.m, 0.12);
@@ -123,7 +125,7 @@ export const MECHANICAL: VfxLanguage = {
         const speed = e.vel.length();
         if (skidTimer <= 0) {
           skidTimer = 0.035;
-          if (TUNING.skidMarks > 0) ctx.layer.add(flatFx({ tex: softDot(), color: 0x000000, pos: new THREE.Vector3(e.pos.x, floorY(e.pos) + 0.015, e.pos.z), size: [0.28, 0.28], life: 2.5, opacity: Math.min(1, 0.35 * TUNING.skidMarks), hold: 0.6 }));
+          if (TUNING.skidMarks > 0) ctx.layer.add(flatFx({ tex: softDot(), color: 0x000000, pos: new THREE.Vector3(e.pos.x, floorY(e.pos) + 0.015, e.pos.z), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.015 }, size: [0.28, 0.28], life: 2.5, opacity: Math.min(1, 0.35 * TUNING.skidMarks), hold: 0.6 }));
         }
         if (Math.random() < Math.min(0.95, (speed / 25) * TUNING.speedSparks)) {
           emit(tipPos(e.pos), { count: 1, speed: 2, dir: e.vel.clone().normalize().negate(), spread: 0.8, life: [0.08, 0.2], hot, cool, upBias: 0.2 });
@@ -133,12 +135,12 @@ export const MECHANICAL: VfxLanguage = {
         const tip = tipPos(e.pos);
         for (let i = 0; i < 4; i++) {
           const a = Math.random() * Math.PI * 2;
-          const p = tip.clone().add(new THREE.Vector3(Math.cos(a) * 0.75, 0.05, Math.sin(a) * 0.75));
+          const p = tip.clone().add(new THREE.Vector3(Math.cos(a) * 0.75, 0.05, Math.sin(a) * 0.75).multiplyScalar(k()));
           emit(p, { count: 1, speed: 4 + 4 * e.m, dir: new THREE.Vector3(-Math.sin(a), 0.1, Math.cos(a)), spread: 0.4, life: [0.15, 0.35], hot, cool, upBias: 0.2 });
         }
         if (t < 0.08) {
           for (let i = 0; i < 10; i++) dust(tip, 1, 2.5 + 2 * e.m, 0.7 + 0.6 * e.m, 0.9);
-          ctx.layer.add(flatFx({ tex: scuffMark(), color: 0x000000, pos: tip.clone().setY(tip.y + 0.005), size: [2.2, 2.2], life: DECAL_LIFE, opacity: 0.4, hold: 0.7 }));
+          ctx.layer.add(flatFx({ tex: scuffMark(), color: 0x000000, pos: new THREE.Vector3(tip.x, floorY(tip) + 0.02, tip.z), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.02 }, size: [2.2, 2.2], life: DECAL_LIFE, opacity: 0.4, hold: 0.7 }));
           ctx.shake(0.02 + 0.04 * e.m, 0.2);
         }
       },
@@ -167,7 +169,7 @@ export const MECHANICAL: VfxLanguage = {
       wobble(e, dt) {
         if (Math.random() < 0.6) {
           const a = Math.random() * Math.PI * 2;
-          emit(tipPos(e.pos).add(new THREE.Vector3(Math.cos(a) * 0.3, 0, Math.sin(a) * 0.3)), { count: 1, speed: 2.5, dir: new THREE.Vector3(Math.cos(a), 0.3, Math.sin(a)), spread: 0.5, life: [0.1, 0.25], hot, cool, upBias: 0.3 });
+          emit(tipPos(e.pos).add(new THREE.Vector3(Math.cos(a) * 0.3 * k(), 0, Math.sin(a) * 0.3 * k())), { count: 1, speed: 2.5, dir: new THREE.Vector3(Math.cos(a), 0.3, Math.sin(a)), spread: 0.5, life: [0.1, 0.25], hot, cool, upBias: 0.3 });
         }
         dustTimer -= dt;
         if (dustTimer <= 0) {
@@ -179,7 +181,7 @@ export const MECHANICAL: VfxLanguage = {
         const tip = tipPos(e.pos);
         for (let i = 0; i < 12; i++) {
           const a = (i / 12) * Math.PI * 2;
-          ctx.layer.add(spriteFx({ tex: smokePuff(), color: DUST_COLOR, additive: false, opacity: 0.55, pos: tip.clone().add(new THREE.Vector3(0, 0.15, 0)), vel: new THREE.Vector3(Math.cos(a) * (3 + 4 * e.m), 0.3, Math.sin(a) * (3 + 4 * e.m)), drag: 3.5, size: [0.4, 1.1 + 1.2 * e.m], life: 1.1, fadeIn: 0.05 }));
+          ctx.layer.add(spriteFx({ tex: smokePuff(), color: DUST_COLOR, additive: false, opacity: 0.55, pos: tip.clone().add(new THREE.Vector3(0, 0.15 * k(), 0)), vel: new THREE.Vector3(Math.cos(a) * (3 + 4 * e.m), 0.3, Math.sin(a) * (3 + 4 * e.m)), drag: 3.5, size: [0.4, 1.1 + 1.2 * e.m], life: 1.1, fadeIn: 0.05 }));
         }
         chips(tip, Math.round(3 + 5 * e.m), new THREE.Vector3(0, 1, 0), 2 + 2 * e.m, 0.05);
         scuff(tip, 1.2 + 1.6 * e.m, 0.6);
@@ -189,13 +191,13 @@ export const MECHANICAL: VfxLanguage = {
         const dir = e.tangent.clone().negate().addScaledVector(e.normal, 0.3);
         emit(e.pos, { count: Math.round(2 + 5 * e.m), speed: 5 + 5 * e.m, dir, spread: 0.7, life: [0.15, 0.5], hot, cool, stretch: 0.03, upBias: 0.5 });
         if (Math.random() < 0.15) ctx.flash(e.pos, 0xffc27a, 8 + 10 * e.m);
-        if (Math.random() < 0.2) scuff(e.pos.clone().addScaledVector(e.normal, 0.3), 0.5, 0.4);
+        if (Math.random() < 0.2) scuff(e.pos.clone().addScaledVector(e.normal, 0.3 * k()), 0.5, 0.4);
       },
       windBurst(e) {
         // Physical reading of a sudden advance: a dust kick behind the Bey.
         const back = e.dir.clone().negate();
         const tip = tipPos(e.pos);
-        for (let i = 0; i < 5 + 5 * e.m; i++) dust(tip.clone().addScaledVector(back, 0.4), 1, 1.5 + 2 * e.m, 0.7 + 0.6 * e.m, 0.9);
+        for (let i = 0; i < 5 + 5 * e.m; i++) dust(tip.clone().addScaledVector(back, 0.4 * k()), 1, 1.5 + 2 * e.m, 0.7 + 0.6 * e.m, 0.9);
       },
       ringOut(e) {
         emit(e.pos, { count: 120, speed: 9, dir: e.dir, spread: 2, life: [0.3, 0.9], hot, cool, upBias: 0.6 });

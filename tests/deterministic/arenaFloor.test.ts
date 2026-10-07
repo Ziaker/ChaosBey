@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { matchSpawnsFor, FIRST_SPAWN, SECOND_SPAWN } from '../../src/app/bootstrap/matchSpawns';
 import { createArenaColliders } from '../../src/arena/colliders/createArenaColliders';
 import { ARENA_FLOOR_RADIUS, ARENA_WALL_HEIGHT } from '../../src/arena/colliders/ArenaTuning';
-import { ARENA_FLOORS, ARENA_FLOOR_IDS, BOWL_C_PLATEAU_RADIUS_M, BOWL_DEPTH_M, DEFAULT_ARENA_FLOOR, floorHeightAt, floorNormalAt, floorRimHeight, floorSlopeDegAt, type ArenaFloorId } from '../../src/arena/floor/ArenaFloorProfile';
+import { ARENA_FLOORS, ARENA_FLOOR_IDS, BOWL_C_PLATEAU_RADIUS_M, BOWL_DEPTH_M, DEFAULT_ARENA_FLOOR, MATCH_BOWL_DEPTH_DEFAULT_M, floorHeightAt, floorNormalAt, floorRimHeight, floorSlopeDegAt, type ArenaFloorId } from '../../src/arena/floor/ArenaFloorProfile';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { createDefaultMatchConfig } from '../../src/config/match/MatchConfig';
 import { decodeReplay, encodeReplay, sealReplay } from '../../src/replay/format/ChaosBeyReplayV1';
@@ -53,21 +53,20 @@ describe('floor profiles (approval §2)', () => {
     expect(floorRimHeight('flat')).toBe(0);
   });
 
-  it('the stage is not flat by default: the default floor is a smooth bowl with the centre 2.5 m below the rim, no hard corner', () => {
-    expect(DEFAULT_ARENA_FLOOR).not.toBe('flat');
-    const rim = floorRimHeight(DEFAULT_ARENA_FLOOR);
-    expect(rim).toBeCloseTo(2.5, 12);
+  it('the stage is not flat by default: the default floor is the funnel, 7 m deep in a match (owner, 2026-10-04)', () => {
+    expect(DEFAULT_ARENA_FLOOR).toBe('bowl-b');
+    // The profile's own unit depth (a bare id) stays 2.5 m; a match scales it to MATCH_BOWL_DEPTH_DEFAULT_M.
+    expect(floorRimHeight(DEFAULT_ARENA_FLOOR)).toBeCloseTo(2.5, 12);
+    expect(floorRimHeight({ id: DEFAULT_ARENA_FLOOR, depthM: MATCH_BOWL_DEPTH_DEFAULT_M })).toBeCloseTo(7, 12);
     expect(floorHeightAt(DEFAULT_ARENA_FLOOR, 0, 0)).toBe(0);
-    // Smooth: the slope is 0 at the centre and rises continuously (no step between neighbouring samples), and the steepest part (the wall end) is a gentle ramp.
+    // A funnel: the slope only ever grows toward the wall, and at 7 m the rim is a real, visible slope (>10°).
     let previous = ARENA_FLOORS[DEFAULT_ARENA_FLOOR].slopeAtRadius(0);
-    expect(previous).toBe(0);
     for (let r = 0.5; r <= R; r += 0.5) {
       const slope = ARENA_FLOORS[DEFAULT_ARENA_FLOOR].slopeAtRadius(r);
       expect(slope).toBeGreaterThanOrEqual(previous);
-      expect(slope - previous).toBeLessThan(0.01);
       previous = slope;
     }
-    expect(floorSlopeDegAt(DEFAULT_ARENA_FLOOR, R, 0)).toBeLessThan(10);
+    expect(floorSlopeDegAt({ id: DEFAULT_ARENA_FLOOR, depthM: MATCH_BOWL_DEPTH_DEFAULT_M }, R, 0)).toBeGreaterThan(10);
   });
 
   it('normals are unit, point up and toward the centre, and match the numerical slope', () => {
@@ -165,7 +164,9 @@ describe('every bowl plays clean (no invalid state)', () => {
   it('AI vs AI, every pairing: rounds resolve, no invalid state', async () => {
     for (const floor of BOWLS) {
       // 7200 ticks (2 min, was 3600): on the 36 m stage one bowl-B pairing was still going at 60 s (arena scale pass: longer rounds).
-      const batch = await runFloorAiBatch(floor, 1, 7200);
+      // 12000 (200 s) since the owner audit (2026-10-04): the bowl-A Defense mirror trades 40 attacks with no idle and no
+      // wedge and ends by spin-out at 8906 ticks (148 s) — a long fight between the two toughest Beys, not a stalemate.
+      const batch = await runFloorAiBatch(floor, 1, 12000);
       expect(batch.matches).toBe(9);
       expect(batch.invalidStates, floor).toBe(0);
       expect(batch.unresolved, floor).toBe(0);

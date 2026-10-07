@@ -81,7 +81,6 @@ export function createDebugLabTools(host: DebugLabToolsHost): DebugLabTools {
   const resourceSelect = select('debug-lab-mut-resource', [
     ['stamina', 'Stamina'],
     ['stability', 'Stability'],
-    ['attackEnergy', 'Attack Energy'],
   ]);
   const percent = numberInput('debug-lab-mut-percent', 100);
   percent.min = '0';

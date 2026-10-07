@@ -53,6 +53,8 @@ export interface ConditionVisualsOptions {
   readonly tuning?: ConditionTuning;
   /** Drawing-buffer height in pixels, for particle size. Defaults to the window. */
   readonly viewportHeightPx?: () => number;
+  /** Owner, 2026-10-05: the Pregame's effects size (× on top of the Bey size, which the rig already follows). */
+  readonly effectSize?: number;
 }
 
 const SIDES: readonly PresentationSide[] = ['first', 'second'];
@@ -113,6 +115,8 @@ export class ConditionVisualsSystem implements PresentationSystem {
       },
     };
     scene.add(this.soft.points, this.glow.points);
+    // Owner, 2026-10-05: particles follow the Bey size × the effects size (the rig's own pieces follow the model).
+    this.glow.effectScale = this.soft.effectScale = (options.beys.first.gameplay.sizeScale ?? 1) * (options.effectSize ?? 1);
     this.entries = { first: this.buildEntry('first'), second: this.buildEntry('second') };
     for (const side of SIDES) this.syncLayers(this.entries[side]);
   }
@@ -196,7 +200,18 @@ export class ConditionVisualsSystem implements PresentationSystem {
     this.soft.update(dt);
   }
 
+  private readonly defeated = new Set<PresentationSide>();
+
+  /** Owner, 2026-10-04: a destroyed Bey keeps none of its condition effects (spin blur, auras, floor instrument). */
+  setDefeated(side: PresentationSide): void {
+    this.defeated.add(side);
+    const entry = this.entries[side];
+    entry.rig.root.visible = false;
+    this.dispatch(entry, { kind: 'reset' });
+  }
+
   private updateBey(entry: BeyEntry, bey: BeyPresentationState, dt: number): void {
+    if (this.defeated.has(entry.side)) return;
     const group = entry.target.visual.group;
     group.updateWorldMatrix(true, false);
     group.matrixWorld.decompose(this.worldPosition, this.worldQuaternion, this.other.set(1, 1, 1));

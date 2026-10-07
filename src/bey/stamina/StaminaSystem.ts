@@ -12,7 +12,6 @@ import {
   STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED,
   STAMINA_MAX,
   STAMINA_MAX_SPIN_DECAY_MULTIPLIER,
-  STAMINA_MAX_WOBBLE_ENERGY_FLOOR,
   STAMINA_MIN_ACCEL_FACTOR,
   STAMINA_MIN_RECOVERY_TORQUE_FACTOR,
   STAMINA_PENALTY_START_FRACTION,
@@ -25,7 +24,6 @@ export interface PhysicalCondition {
   accelFactor: number;
   recoveryTorqueFactor: number;
   spinDecayMultiplier: number;
-  ambientWobbleFloor: number;
 }
 
 /** No penalty at all — for contexts with no Stamina system (e.g. Milestone 1 physics-only tests). */
@@ -33,7 +31,6 @@ export const FULL_PHYSICAL_CONDITION: PhysicalCondition = {
   accelFactor: 1,
   recoveryTorqueFactor: 1,
   spinDecayMultiplier: 1,
-  ambientWobbleFloor: 0,
 };
 
 export class StaminaSystem {
@@ -51,7 +48,13 @@ export class StaminaSystem {
    * only, or a curve instead of a flat divisor) is equally open pending
    * owner balance review.
    */
-  constructor(private readonly staminaStat: number = 1) {
+  constructor(
+    private readonly staminaStat: number = 1,
+    /** MatchConfig.movementStaminaDrain: scales the speed (movement) drain; the base spin drain is unaffected. */
+    private readonly movementDrainScale: number = 1,
+    /** MatchConfig.spinStaminaDrain (owner, 2026-10-04): × the base spin drain. */
+    private readonly spinDrainScale: number = 1,
+  ) {
     this.resource = new Resource(STAMINA_MAX * staminaStat);
   }
 
@@ -59,7 +62,7 @@ export class StaminaSystem {
   tick(currentSpeedMps: number, fixedDeltaSeconds: number): void {
     const speedFraction = currentSpeedMps / INTENDED_MAX_SPEED_MPS;
     const extraEffortFraction = Math.max(0, speedFraction - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION) / (1 - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION);
-    const drainPerS = STAMINA_BASE_DRAIN_PER_S + STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED * Math.min(1, extraEffortFraction);
+    const drainPerS = STAMINA_BASE_DRAIN_PER_S * this.spinDrainScale + STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED * this.movementDrainScale * Math.min(1, extraEffortFraction);
     this.resource.subtract((drainPerS / this.staminaStat) * fixedDeltaSeconds);
   }
 
@@ -69,7 +72,6 @@ export class StaminaSystem {
       accelFactor: lerp(1, STAMINA_MIN_ACCEL_FACTOR, penaltyProgress),
       recoveryTorqueFactor: lerp(1, STAMINA_MIN_RECOVERY_TORQUE_FACTOR, penaltyProgress),
       spinDecayMultiplier: lerp(1, STAMINA_MAX_SPIN_DECAY_MULTIPLIER, penaltyProgress),
-      ambientWobbleFloor: lerp(0, STAMINA_MAX_WOBBLE_ENERGY_FLOOR, penaltyProgress),
     };
   }
 

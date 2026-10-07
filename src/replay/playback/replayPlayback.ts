@@ -20,7 +20,7 @@
 //    the playback reaches.
 // ============================================================
 
-import { ALL_BEY_ARCHETYPES } from '../../bey/archetype/BeyArchetypes';
+import { ALL_CONCEPT_BEY_DEFINITIONS } from '../../bey/archetype/BeyConceptRoster';
 import { DEFAULT_BEY_DEFINITION, type BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import type { Bey } from '../../bey/core/Bey';
 import { NullAiMashSource } from '../../combat/clash/ClashMash';
@@ -35,7 +35,7 @@ import { compareCheckpoints, type CheckpointComparison } from './divergence';
 import { HeadlessReplayRun, type ReplayFrames } from './HeadlessReplayRun';
 
 /** Every Bey definition this build can rebuild a replay with. */
-export const REPLAY_BEY_CATALOG: readonly BeyDefinition[] = [...ALL_BEY_ARCHETYPES, DEFAULT_BEY_DEFINITION];
+export const REPLAY_BEY_CATALOG: readonly BeyDefinition[] = [...ALL_CONCEPT_BEY_DEFINITIONS, DEFAULT_BEY_DEFINITION];
 
 export type ReplayRefusal =
   | { readonly code: 'fingerprint-mismatch'; readonly mismatches: readonly FingerprintMismatch[] }

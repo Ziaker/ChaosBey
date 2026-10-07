@@ -91,6 +91,8 @@ export interface ClashPresentationOptions {
   readonly contactLight?: boolean;
   /** Where the overlay canvas is mounted. Default: the page body. `null`: no DOM. */
   readonly overlayParent?: HTMLElement | null;
+  /** Owner, 2026-10-05: the Pregame's effects size (× on top of the Bey size, which every Clash effect follows). */
+  readonly effectSize?: number;
 }
 
 interface SideState {
@@ -142,6 +144,8 @@ export class ClashPresentationSystem implements PresentationSystem {
     this.dustColor = new THREE.Color(options.dustHex);
     this.sparkColor = new THREE.Color(options.sparkHex);
     this.sides = { first: this.buildSide('first'), second: this.buildSide('second') };
+    // Owner, 2026-10-05: every Clash effect follows the Bey size × the effects size.
+    this.fx.scale = (options.beys.first.gameplay.sizeScale ?? 1) * (options.effectSize ?? 1);
     options.scene.add(this.fx.group);
     if (options.contactLight !== false) options.scene.add(this.light);
     const parent = options.overlayParent === undefined ? (typeof document === 'undefined' ? null : document.body) : options.overlayParent;

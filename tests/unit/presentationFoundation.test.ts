@@ -62,6 +62,7 @@ import {
 } from '../../src/presentation';
 import type { ImpactEvent } from '../../src/app/simulation/impact/ImpactEvents';
 import type { HitEvent } from '../../src/combat/hit-detection/HitDetection';
+import { groundWaveScale, hitMagnitudeFromDamage, OWN_JUMP_LANDING_MAX_M, VFX_HEAVY, VFX_LIGHT, VFX_MEDIUM } from '../../src/vfx/hybrid/intensityTiers';
 
 const POS = { x: 1, y: 0.5, z: -2 };
 
@@ -171,9 +172,10 @@ describe('PresentationEventDeriver', () => {
 
   it('pairs each hit impact with its hit event and keeps attacker and defender straight', () => {
     const d = new PresentationEventDeriver();
-    const events = d.derive(tickInput(5, { result: tickResult({ hitEvents: [dashHit(true)] }), impactEvents: [impact('hit', false, 0.8)] }));
+    // Lote 7 (owner, 2026-10-02): the magnitude comes from the Stability the hit really did (14 → Medium), not the impact's 0.8.
+    const events = d.derive(tickInput(5, { result: tickResult({ hitEvents: [dashHit(true)], combatEvents: [{ kind: 'stabilityDamage', targetIsFirst: false, amount: 14 }] }), impactEvents: [impact('hit', false, 0.8)] }));
     expect(events).toEqual([
-      { kind: 'hitResolved', tick: 5, defenderSide: 'second', attackerSide: 'first', magnitude: 0.8, position: POS, hitboxKind: 'dash', caughtOpponentDashing: false },
+      { kind: 'hitResolved', tick: 5, defenderSide: 'second', attackerSide: 'first', magnitude: VFX_MEDIUM, position: POS, hitboxKind: 'dash', caughtOpponentDashing: false },
     ]);
   });
 
@@ -250,7 +252,8 @@ function facts(overrides: Partial<BeyPresentationFacts> = {}): BeyPresentationFa
     staminaFraction: 0.75,
     stabilityFraction: 0.4,
     isBroken: false,
-    attackEnergyFraction: 1,
+    dashReadiness: 1,
+    momentum: 0,
     movement: { speedMps: 5.5 },
     spin: { spinRateRadPerSec: 22, wobbleEnergy: 0.3, tiltRad: 0.1, isTumbling: false },
     ...overrides,
@@ -483,8 +486,8 @@ describe('PresentationHub lifecycle', () => {
       seen.push(recent);
       return matchState({ recentImpact: recent });
     };
-    hub.onTick(tickInput(2, { result: tickResult({ hitEvents: [dashHit(true)] }), impactEvents: [impact('hit', false, 0.6)] }), build);
-    expect(seen.at(-1)?.second).toMatchObject({ kind: 'hitResolved', tick: 2, magnitude: 0.6 });
+    hub.onTick(tickInput(2, { result: tickResult({ hitEvents: [dashHit(true)], combatEvents: [{ kind: 'stabilityDamage', targetIsFirst: false, amount: 14 }] }), impactEvents: [impact('hit', false, 0.6)] }), build);
+    expect(seen.at(-1)?.second).toMatchObject({ kind: 'hitResolved', tick: 2, magnitude: VFX_MEDIUM });
     hub.reset();
     expect(hub.getState()).toBeNull();
     hub.onTick(tickInput(0), build);
@@ -691,7 +694,7 @@ function importsOf(file: string): string[] {
 }
 
 describe('dependency direction', () => {
-  const GAMEPLAY_DIRS = ['combat', 'physics', 'ai', 'dodge', 'drift', 'input', 'replay', 'rng', 'self-test', 'app/simulation', 'bey/movement', 'bey/spin', 'bey/stamina', 'bey/stability', 'bey/attack-energy', 'bey/motion'];
+  const GAMEPLAY_DIRS = ['combat', 'physics', 'ai', 'dodge', 'drift', 'input', 'replay', 'rng', 'self-test', 'app/simulation', 'bey/movement', 'bey/spin', 'bey/stamina', 'bey/stability', 'bey/motion'];
 
   it('scans real files and sees their imports (so a clean result means something)', () => {
     expect(sourceFiles(join(SRC, 'presentation')).length).toBeGreaterThanOrEqual(10);
@@ -744,5 +747,60 @@ describe('dependency direction', () => {
       expect(specs.filter((spec) => spec === 'three' || spec.startsWith('three/')), file).toEqual([]);
       expect(readFileSync(join(SRC, 'presentation', file), 'utf-8')).not.toMatch(/\b(document|window)\./);
     }
+  });
+});
+
+
+describe('Lote 7 (owner, 2026-10-02; audit J1/J4) — VFX sized by what really happened', () => {
+  it('15: hits of 6, 14 and 25 damage are Light, Medium and Heavy — three distinct sizes, smooth between', () => {
+    const d = new PresentationEventDeriver();
+    const sizeOf = (amount: number): number => {
+      const e = d.derive(tickInput(1, { result: tickResult({ hitEvents: [dashHit(true)], combatEvents: [{ kind: 'stabilityDamage', targetIsFirst: false, amount }] }), impactEvents: [impact('hit', false, 0.2)] }));
+      return (e[0] as { magnitude: number }).magnitude;
+    };
+    expect(sizeOf(6)).toBeCloseTo(VFX_LIGHT, 9);
+    expect(sizeOf(14)).toBeCloseTo(VFX_MEDIUM, 9);
+    expect(sizeOf(25)).toBeCloseTo(VFX_HEAVY, 9);
+    for (let x = 0; x < 30; x += 0.05) expect(Math.abs(hitMagnitudeFromDamage(x + 0.05) - hitMagnitudeFromDamage(x))).toBeLessThan(0.02); // no jump
+  });
+
+  it('J4: the same hitbox against a weak or a strong defender gives the size of the damage it did, not its base force', () => {
+    const d = new PresentationEventDeriver();
+    const size = (amount: number) => (d.derive(tickInput(1, { result: tickResult({ hitEvents: [dashHit(true)], combatEvents: [{ kind: 'stabilityDamage', targetIsFirst: false, amount }] }), impactEvents: [impact('hit', false, 0.5)] }))[0] as { magnitude: number }).magnitude;
+    expect(size(22)).toBeGreaterThan(size(12));
+    expect(size(12)).toBeGreaterThan(size(4));
+  });
+
+  it('a body collision is a hit for the VFX, sized by its damage; a tie makes one effect', () => {
+    const d = new PresentationEventDeriver();
+    const positions = { first: { x: -0.5, y: 0.2, z: 0 }, second: { x: 0.5, y: 0.2, z: 0 } };
+    const e = d.derive(tickInput(1, { positions, result: tickResult({ combatEvents: [{ kind: 'bodyCollision', targetIsFirst: true, damage: 1, speedDifferenceMps: 0 }, { kind: 'bodyCollision', targetIsFirst: false, damage: 1, speedDifferenceMps: 0 }] }) }));
+    expect(e.filter((x) => x.kind === 'hitResolved')).toHaveLength(1);
+    expect(e.some((x) => x.kind === 'collisionResolved')).toBe(false);
+  });
+
+  it('7: an own hop/jump lands small; a landing after a hit or launch is at least Light (dust, rings, crack)', () => {
+    const d = new PresentationEventDeriver();
+    d.derive(tickInput(1, { result: tickResult({ first: { driftState: DriftState.Hopping } }) }));
+    const own = d.derive(tickInput(2, { impactEvents: [impact('landing', true, 0.8)] })).find((x) => x.kind === 'landed') as { magnitude: number; launched?: boolean };
+    expect(own.magnitude).toBeLessThanOrEqual(OWN_JUMP_LANDING_MAX_M);
+    expect(own.launched).toBe(false);
+    d.derive(tickInput(3, { result: tickResult({ combatEvents: [{ kind: 'knockback', targetIsFirst: true, force: 10 }] }) }));
+    const launched = d.derive(tickInput(4, { impactEvents: [impact('landing', true, 0.1)] })).find((x) => x.kind === 'landed') as { magnitude: number; launched?: boolean };
+    expect(launched.magnitude).toBeGreaterThanOrEqual(VFX_LIGHT);
+    expect(launched.launched).toBe(true);
+    // A jump in which the Bey gets hit is a launched landing too.
+    d.derive(tickInput(5, { result: tickResult({ first: { driftState: DriftState.Hopping } }) }));
+    d.derive(tickInput(6, { result: tickResult({ first: { driftState: DriftState.Hopping }, combatEvents: [{ kind: 'knockback', targetIsFirst: true, force: 30 }] }) }));
+    const hitInJump = d.derive(tickInput(7, { impactEvents: [impact('landing', true, 0.9)] })).find((x) => x.kind === 'landed') as { magnitude: number; launched?: boolean };
+    expect(hitInJump.launched).toBe(true);
+    expect(hitInJump.magnitude).toBe(0.9);
+  });
+
+  it('J1: ground waves shrink below Medium, the lab size from Medium up', () => {
+    expect(groundWaveScale(0)).toBeCloseTo(0.3, 9);
+    expect(groundWaveScale(VFX_LIGHT)).toBeLessThan(0.7);
+    expect(groundWaveScale(VFX_MEDIUM)).toBe(1);
+    expect(groundWaveScale(VFX_HEAVY)).toBe(1);
   });
 });

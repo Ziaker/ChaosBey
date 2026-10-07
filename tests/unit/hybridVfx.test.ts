@@ -85,7 +85,7 @@ function harness(): Harness {
     staminaFraction: 1,
     stabilityFraction: 1,
     isBroken: false,
-    attackEnergyFraction: 1,
+    dashReadiness: 1,
     movement: { speedMps: o.speedMps ?? 0 },
     spin: { spinRateRadPerSec: 22, wobbleEnergy: 0, tiltRad: 0, isTumbling: false },
     ...o,
@@ -208,20 +208,65 @@ describe('HybridVfxSystem', () => {
     h.hub.dispose();
   });
 
+  it('every Dash raises visible dust, a zero-charge one at the lab\'s Light intensity at least (owner, 2026-10-02)', () => {
+    const h = harness();
+    const runtime = (h.system as unknown as { runtime: { windBurst(e: { m: number }): void } }).runtime;
+    const seen: number[] = [];
+    const original = runtime.windBurst.bind(runtime);
+    runtime.windBurst = (e) => {
+      seen.push(e.m);
+      original(e);
+    };
+    // A minimum Dash: no charge at all, and a slow frame that never showed the charge (Neutral straight to DashActive).
+    h.setState({ first: { attackState: AttackState.Neutral } });
+    h.frame();
+    const before = h.system.getStats().dust!;
+    h.beys.first.group.position.x += 0.4;
+    h.setState({ first: { attackState: AttackState.DashActive, dashChargeFraction: 0, speedMps: 8 } });
+    h.frame();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBeGreaterThanOrEqual(0.3);
+    expect(h.system.getStats().dust! - before).toBeGreaterThan(0);
+    h.hub.dispose();
+  });
+
+  it('every dodge raises the wind and dust as it starts, Perfect or not (owner, 2026-10-02)', () => {
+    const h = harness();
+    const runtime = (h.system as unknown as { runtime: { windBurst(e: { m: number }): void } }).runtime;
+    const seen: number[] = [];
+    const original = runtime.windBurst.bind(runtime);
+    runtime.windBurst = (e) => {
+      seen.push(e.m);
+      original(e);
+    };
+    h.setState({ first: { dodgeState: DodgeState.Idle } });
+    h.frame();
+    const before = h.system.getStats().dust!;
+    h.setState({ first: { dodgeState: DodgeState.Dodging, speedMps: 12 } });
+    h.frame();
+    h.setState({ first: { dodgeState: DodgeState.Dodging, speedMps: 12 } });
+    h.frame(); // still dodging: no second burst
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBeGreaterThanOrEqual(0.3);
+    expect(h.system.getStats().dust! - before).toBeGreaterThan(0);
+    h.hub.dispose();
+  });
+
   it('wobbles and grinds while broken, drives the circular sweep, and shows dodge afterimages', () => {
-    const fxAfter = (first: Partial<Facts>): number => {
+    const fxAfter = (first: Partial<Facts>, frames = 90): number => {
       const h = harness();
-      for (let i = 0; i < 90; i++) {
+      for (let i = 0; i < frames; i++) {
         h.setState({ first });
         h.frame();
       }
       const stats = h.system.getStats();
       h.hub.dispose();
-      return stats.fx! + stats.sparks!;
+      return stats.fx! + stats.sparks! + stats.vortices!;
     };
     const idle = fxAfter({});
     expect(fxAfter({ isBroken: true, stabilityFraction: 0 })).toBeGreaterThan(idle);
-    expect(fxAfter({ attackState: AttackState.CircularActive })).toBeGreaterThan(idle);
+    // The Circular's vortex (rebuilt 2026-10-04) is its own ~0.9 s animation, counted while it plays.
+    expect(fxAfter({ attackState: AttackState.CircularActive }, 20)).toBeGreaterThan(fxAfter({}, 20));
     expect(fxAfter({ dodgeState: DodgeState.Dodging })).toBeGreaterThan(idle);
   });
 
@@ -271,7 +316,7 @@ describe('HybridVfxSystem', () => {
     h.hub.dispose();
     expect(h.scene.children).toEqual([h.beys.first.group, h.beys.second.group]);
     // Two Beys, plus the spark buffer and the flash light this system adds while attached.
-    expect(childrenBefore).toBe(4);
+    expect(childrenBefore).toBe(6); // + the two Circular vortices (owner, 2026-10-04)
   });
 
   it('never moves a Bey: position and attitude are untouched through a long fight', () => {
@@ -286,6 +331,29 @@ describe('HybridVfxSystem', () => {
     expect([h.beys.first.group, h.beys.second.group].map((g) => g.position.toArray())).toEqual(positions);
     [h.beys.first.group, h.beys.second.group].forEach((g, i) => expect(g.quaternion.equals(attitudes[i]!)).toBe(true));
     expect(h.hub.getStats().systemErrors).toBe(0);
+    h.hub.dispose();
+  });
+});
+
+
+describe('Lote 7 (owner, 2026-10-02; audit J2/J3) — landings and floor scars', () => {
+  it('Heavy hits and hard launched landings leave a floor scar, capped at 10 at once, faded after their life', () => {
+    const h = harness();
+    h.setState();
+    h.frame();
+    h.emit([hit(0.5)]); // Medium-ish: no scar
+    expect(h.system.getStats().floorScars).toBe(0);
+    h.emit([hit(1)]);
+    expect(h.system.getStats().floorScars).toBe(1);
+    h.emit([{ kind: 'landed', tick: 1, side: 'first', magnitude: 0.8, position: POS, launched: true }]);
+    expect(h.system.getStats().floorScars).toBe(2);
+    h.emit([{ kind: 'landed', tick: 1, side: 'first', magnitude: 0.9, position: POS }]); // own/plain landing: no scar
+    expect(h.system.getStats().floorScars).toBe(2);
+    for (let i = 0; i < 15; i++) h.emit([hit(1)]);
+    expect(h.system.getStats().floorScarsMade).toBe(17);
+    expect(h.system.getStats().floorScars).toBeLessThanOrEqual(10);
+    for (let i = 0; i < 16 * 30; i++) h.frame(1 / 30);
+    expect(h.system.getStats().floorScars).toBe(0);
     h.hub.dispose();
   });
 });

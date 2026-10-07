@@ -35,12 +35,12 @@ describe('Clash tug-of-war bar', () => {
 });
 
 describe('HUD side readout', () => {
-  const base = { staminaFraction: 0.8, stabilityFraction: 0.6, isBroken: false, attackEnergyFraction: 0.5, dashChargeFraction: 0.4, attackState: AttackState.Neutral };
+  const base = { staminaFraction: 0.8, stabilityFraction: 0.6, isBroken: false, dashReadiness: 0.5, momentum: 0.25, dashChargeFraction: 0.4, attackState: AttackState.Neutral };
 
   it('clamps the meters and shows the Dash charge only while charging', () => {
-    expect(hudSide(base)).toEqual({ stamina: 0.8, stability: 0.6, broken: false, attackEnergy: 0.5, dashCharge: 0, tag: null });
+    expect(hudSide(base)).toEqual({ stamina: 0.8, stability: 0.6, broken: false, dashReadiness: 0.5, momentum: 0.25, dashCharge: 0, tag: null });
     expect(hudSide({ ...base, attackState: AttackState.ChargingDash })).toMatchObject({ dashCharge: 0.4, tag: 'CHARGING' });
-    expect(hudSide({ ...base, staminaFraction: 1.4, stabilityFraction: -1, attackEnergyFraction: Number.NaN })).toMatchObject({ stamina: 1, stability: 0, attackEnergy: 0 });
+    expect(hudSide({ ...base, staminaFraction: 1.4, stabilityFraction: -1, dashReadiness: Number.NaN })).toMatchObject({ stamina: 1, stability: 0, dashReadiness: 0 });
   });
 
   it('tags a broken Bey above anything else, then the active attack', () => {

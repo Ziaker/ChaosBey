@@ -34,8 +34,10 @@
 import type { Bey } from '../../bey/core/Bey';
 import { WOBBLE_ENERGY_MAX } from '../../bey/spin/SpinTuning';
 import { STABILITY_BROKEN_RECOVERY_FLOOR } from '../../bey/stability/StabilityTuning';
-import { ARENA_FLOOR_RADIUS, ARENA_WALL_HEIGHT, ARENA_WALL_THICKNESS } from '../../arena/colliders/ArenaTuning';
-import { RINGOUT_RADIUS_M } from '../../arena/ringout/RingOutTuning';
+import { ARENA_FLOOR_RADIUS, ARENA_WALL_HEIGHT, ARENA_WALL_THICKNESS, arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
+import { floorRimHeight } from '../../arena/floor/ArenaFloorProfile';
+import { arenaFloorOf, type MatchConfig } from '../../config/match/MatchConfig';
+import { RINGOUT_RADIUS_M, ringOutRadiusM } from '../../arena/ringout/RingOutTuning';
 import type { MatchTickResult } from '../../app/simulation/tickMatch';
 import { ClashState, type ClashController } from '../../combat/clash/ClashController';
 import { CLASH_COOLDOWN_S, CLASH_TARGET_DURATION_S } from '../../combat/clash/ClashTuning';
@@ -101,6 +103,18 @@ export const DEFAULT_ANOMALY_THRESHOLDS: AnomalyThresholds = {
   wobbleOverMaxFactor: 1.001,
   aiInactiveTicks: 10 * FIXED_TICKS_PER_SECOND,
 };
+
+/**
+ * The thresholds for one match's own rules: its wall (M10 arena slider) and its dodge cooldown (Pregame slider, up to 6 s —
+ * a fixed limit flagged any cooldown past the default). The radii follow the stage size on their own (see tick()).
+ */
+export function anomalyThresholdsFor(config: MatchConfig): AnomalyThresholds {
+  return {
+    ...DEFAULT_ANOMALY_THRESHOLDS,
+    wallHeightM: floorRimHeight(arenaFloorOf(config)) + config.arenaWallHeightM,
+    maxDodgeCooldownTicks: Math.round(config.dodgeCooldownS * FIXED_TICKS_PER_SECOND) + SLACK_TICKS,
+  };
+}
 
 export type DetectedAnomalyKind =
   | 'invalid-rotation'
@@ -225,6 +239,8 @@ class Latch {
 export class MatchAnomalyDetector {
   private readonly streaks = new Map<string, Streak>();
   private readonly latches = new Map<string, Latch>();
+  /** Per side: its running ring-out clock started past the floor's edge (left over the wall), see check(). */
+  private readonly offArenaEpisode = { first: false, second: false };
 
   constructor(private readonly thresholds: AnomalyThresholds = DEFAULT_ANOMALY_THRESHOLDS) {}
 
@@ -234,6 +250,13 @@ export class MatchAnomalyDetector {
       found.push({ kind, severity: ANOMALY_SEVERITY[kind], tick: input.tick, side, detail, knownIssue });
     };
     const t = this.thresholds;
+    // The stage-size slider (MatchConfig.arenaSizeScale) moves every radius: the thresholds are the default stage's, so
+    // they grow by how much bigger this match's floor is (0 at the default size, which keeps every limit as it was).
+    const floorRadiusM = arenaFloorRadius();
+    const ringOutM = ringOutRadiusM();
+    const stageGrowthM = floorRadiusM - ARENA_FLOOR_RADIUS;
+    const leftWorldRadiusM = t.leftWorldRadiusM + stageGrowthM;
+    const insideWallRadiusM = t.insideWallRadiusM + stageGrowthM;
     const roundRunning = !input.roundState.isOver;
     // tickMatch does not advance any per-Bey timer while a Clash is Active,
     // hitstop is frozen or the round is over: those ticks can't make a
@@ -256,32 +279,38 @@ export class MatchAnomalyDetector {
 
       const p = bey.body.translation();
       const radius = Math.hypot(p.x, p.z);
-      if (this.latch(key('left'), roundRunning && radius > t.leftWorldRadiusM)) {
-        emit('left-world', side, `centre ${radius.toFixed(2)} m from the arena centre (limit ${t.leftWorldRadiusM.toFixed(2)} m) with no ring-out declared`);
+      // Ring-out delay (owner, 2026-10-02): a Bey whose ring-out clock started past the floor's edge left the arena over
+      // the wall; until the delay elapses it may legitimately be past the radius, falling off the rim or even under the
+      // bowl. Only one the ring-out rule never saw outside left the world, and one whose clock started inside the floor
+      // radius went through the floor.
+      if (input.roundState.ringOutClock[side] === 0) this.offArenaEpisode[side] = false;
+      else if (radius > floorRadiusM) this.offArenaEpisode[side] = true;
+      const ringOutPending = this.offArenaEpisode[side];
+      if (this.latch(key('left'), roundRunning && radius > leftWorldRadiusM && !ringOutPending)) {
+        emit('left-world', side, `centre ${radius.toFixed(2)} m from the arena centre (limit ${leftWorldRadiusM.toFixed(2)} m) with no ring-out declared`);
       }
-      if (this.latch(key('floor'), p.y < t.belowFloorYM)) {
+      if (this.latch(key('floor'), p.y < t.belowFloorYM && !ringOutPending)) {
         // Past the floor's edge (outside the wall) it fell off the rim (what
         // the fixed ext-32 wall gaps used to cause); inside it, it went
         // through the floor.
-        const offTheRim = radius > ARENA_FLOOR_RADIUS;
+        const offTheRim = radius > floorRadiusM;
         emit(
           'below-floor',
           side,
           offTheRim
-            ? `centre height ${p.y.toFixed(3)} m at r = ${radius.toFixed(2)} m: fell off the floor edge outside the wall with no ring-out (ring-out radius ${RINGOUT_RADIUS_M} m > floor radius ${ARENA_FLOOR_RADIUS} m)`
+            ? `centre height ${p.y.toFixed(3)} m at r = ${radius.toFixed(2)} m: fell off the floor edge outside the wall with no ring-out (ring-out radius ${ringOutM} m > floor radius ${floorRadiusM} m)`
             : `centre height ${p.y.toFixed(3)} m is below ${t.belowFloorYM} m — through the floor`,
           null,
         );
       }
-      const insideWall = roundRunning && radius > t.insideWallRadiusM && radius < RINGOUT_RADIUS_M && p.y < t.wallHeightM;
+      const insideWall = roundRunning && radius > insideWallRadiusM && radius < ringOutM && p.y < t.wallHeightM;
       if (this.streak(key('wall'), insideWall, t.stuckInWallTicks, frozen)) {
-        emit('stuck-in-wall', side, `centre inside the wall band (r = ${radius.toFixed(2)} m > ${t.insideWallRadiusM.toFixed(2)} m, y = ${p.y.toFixed(2)} m) for ${t.stuckInWallTicks} ticks`, null);
+        emit('stuck-in-wall', side, `centre inside the wall band (r = ${radius.toFixed(2)} m > ${insideWallRadiusM.toFixed(2)} m, y = ${p.y.toFixed(2)} m) for ${t.stuckInWallTicks} ticks`, null);
       }
 
       for (const [name, resource] of [
         ['Stamina', bey.stamina.resource],
         ['Stability', bey.stability.resource],
-        ['Attack Energy', bey.attackEnergy.resource],
       ] as const) {
         const bad = !Number.isFinite(resource.value) || resource.value < -t.resourceTolerance || resource.value > resource.max + t.resourceTolerance;
         if (this.latch(key(`resource-${name}`), bad)) emit('resource-out-of-range', side, `${name} = ${resource.value} outside [0, ${resource.max}]`);
@@ -296,7 +325,7 @@ export class MatchAnomalyDetector {
         emit('permanent-invulnerability', side, `dodge i-frame state held for ${t.maxDodgingTicks} ticks (expected ≤ ${Math.round(DODGE_ACTIVE_DURATION_S * FIXED_TICKS_PER_SECOND)})`);
       }
       if (this.streak(key('dodge-cooldown'), bey.dodge.getState() === DodgeState.Cooldown, t.maxDodgeCooldownTicks, frozen)) {
-        emit('cooldown-never-ending', side, `dodge cooldown lasted ${t.maxDodgeCooldownTicks} ticks (DODGE_COOLDOWN_S = ${DODGE_COOLDOWN_S})`);
+        emit('cooldown-never-ending', side, `dodge cooldown lasted ${t.maxDodgeCooldownTicks} ticks (limit = the match's dodge cooldown + 1 s)`);
       }
 
       const spin = snapshot.spin;

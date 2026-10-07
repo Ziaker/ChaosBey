@@ -35,6 +35,8 @@ export interface ScenarioTrace {
   stabilityBreaks: ('first' | 'second')[];
   dodges: ('first' | 'second')[];
   perfectDodges: ('first' | 'second')[];
+  /** Targets of the Bey-to-Bey body collisions (tickMatch's own: both are thrown apart; the event names the slower, or both on a tie). */
+  bodyCollisionTargets: Set<'first' | 'second'>;
   maxKnockbackOnSecond: number;
   firstAttackStates: Set<string>;
   finalFirstAttackState: string;
@@ -82,6 +84,7 @@ export function createScenarioTrace(first: Bey): ScenarioTrace {
     stabilityBreaks: [],
     dodges: [],
     perfectDodges: [],
+    bodyCollisionTargets: new Set(),
     maxKnockbackOnSecond: 0,
     firstAttackStates: new Set(),
     finalFirstAttackState: first.attack.getState(),
@@ -147,6 +150,7 @@ export function recordScenarioTick(trace: ScenarioTrace, facts: ScenarioTickFact
       if (event.kind === 'stabilityBreak') trace.stabilityBreaks.push(side);
       if (event.kind === 'dodged') trace.dodges.push(side);
       if (event.kind === 'perfectDodge') trace.perfectDodges.push(side);
+      if (event.kind === 'bodyCollision') trace.bodyCollisionTargets.add(side);
       if (event.kind === 'knockback' && !event.targetIsFirst) trace.maxKnockbackOnSecond = Math.max(trace.maxKnockbackOnSecond, event.force);
     }
   }

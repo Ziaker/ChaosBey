@@ -1,5 +1,6 @@
 // M10 player screens: the pure models behind Character Select and Results.
 
+import { ALL_CONCEPT_BEY_DEFINITIONS } from '../../src/bey/archetype/BeyConceptRoster';
 import { describe, expect, it } from 'vitest';
 import { BEY_ROSTER, findRosterEntry, formatTrait, rosterTraits } from '../../src/app/frontend/beyRoster';
 import { navigationIntent, wrapIndex } from '../../src/app/frontend/listNavigation';
@@ -12,9 +13,12 @@ import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
 import { appModeHref, isQuickPlay, resolveAppMode } from '../../src/app/modes/appMode';
 
 describe('Bey roster', () => {
-  it('lists every playable archetype once, in the archetype order, with its own copy', () => {
-    expect(BEY_ROSTER.map((e) => e.definition)).toEqual(ALL_BEY_ARCHETYPES);
-    expect(BEY_ROSTER.map((e) => e.label)).toEqual(['ATTACK', 'DEFENSE', 'STAMINA']);
+  it('lists the nine approved Beys once (owner, Lote 8), family A..C in order, with their own copy; concept A is the archetype', () => {
+    expect(BEY_ROSTER.map((e) => e.definition)).toEqual(ALL_CONCEPT_BEY_DEFINITIONS);
+    expect(BEY_ROSTER).toHaveLength(9);
+    expect(BEY_ROSTER.map((e) => e.label)).toEqual(['ATTACK A', 'ATTACK B', 'ATTACK C', 'DEFENSE A', 'DEFENSE B', 'DEFENSE C', 'STAMINA A', 'STAMINA B', 'STAMINA C']);
+    expect([BEY_ROSTER[0]!.definition, BEY_ROSTER[3]!.definition, BEY_ROSTER[6]!.definition]).toEqual(ALL_BEY_ARCHETYPES);
+    expect(new Set(BEY_ROSTER.map((e) => e.definition.id)).size).toBe(9);
     for (const entry of BEY_ROSTER) {
       expect(entry.description.length).toBeGreaterThan(40);
       expect(entry.accentCss).toMatch(/^#[0-9a-f]{6}$/);
@@ -51,9 +55,18 @@ describe('match setup', () => {
       opponentBeyId: 'defense-prototype',
       ai: { tier: 'rival', style: 'archetype' },
       roundsToWin: 2,
-      arena: { presetId: 'foundry', geometry: { wallHeightM: 2, wallRestitution: 0.55 } },
+      arena: { presetId: 'foundry', geometry: { wallHeightM: 2, wallRestitution: 0.8 } },
       clashImpactMultiplier: 1,
       motion: 'B',
+      // Owner base rules (2026-10-04) on top of the earlier defaults.
+      rules: {
+        ringOutDelayS: 1.5, dashCooldownS: 1.5, momentumGain: 1.7, momentumFillS: 4, momentumDecayS: 2.5, bodyCollisionDamage: 1, momentumLossOnCollision: 0.1, jumpFullHeightM: 3.25, jumpShortHopHeightM: 0.5, movementStaminaDrain: 0.2, dodgeCooldownS: 1.25, circularLaunchForce: 1,
+        arenaBowlDepthM: 8.5, roundTimeLimitS: 0, winByKo: true, winByRingOut: true, winBySpinOut: true, accelerationScale: 1.9, topSpeedScale: 2.8, airControl: 1.5, jumpStaminaCost: 0, jumpCooldownS: 0,
+        speedDamageGain: 0.5, dashCarriesSpeed: true,
+        turnRateScale: 1.75, turnSpeedRetention: 0.9, jumpHoldForFullS: 0.15, gravityScale: 3.6, contactRepelMps: 16.5, attackRecoilMps: 15.5, highSpeedControl: 1, arenaSizeScale: 1, gameSpeed: 1.2, clashLaunchMps: 28, dodgeStaminaCost: 0, dodgeDistanceScale: 1, contactLiftMps: 4, knockbackScale: 1, spinStaminaDrain: 1, circularLockAfterHitS: 0.6, bodyContactControlLossScale: 0.8,
+        circularAttack: true, beySizeScale: 1, airRecoveryMinDelayS: 0.2,
+      },
+      visual: { intensity: 1, groundWaves: 1, dust: 1, effectSize: 1 },
       seedText: null,
     });
     // The default setup is the Debug Lab / quick-play pairing.

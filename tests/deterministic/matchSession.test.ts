@@ -89,7 +89,7 @@ function fingerprint(session: MatchSession): number[] {
     const bey = session.getBey(side);
     const t = bey.body.translation();
     const v = bey.body.linvel();
-    values.push(t.x, t.y, t.z, v.x, v.y, v.z, bey.stamina.resource.value, bey.stability.resource.value, bey.attackEnergy.resource.value);
+    values.push(t.x, t.y, t.z, v.x, v.y, v.z, bey.stamina.resource.value, bey.stability.resource.value, bey.attack.getDashCooldownRemainingS());
   }
   return values;
 }
@@ -218,7 +218,7 @@ describe('Debug Lab inspection (GDD section 69)', () => {
       }
     }
     const allRows = sections.flatMap((s) => s.rows);
-    for (const label of ['Match ID', 'Seed', 'Tick', 'Elapsed sim time', 'Position', 'Velocity', 'Spin rate', 'Ground normal', 'Stamina', 'Stability', 'Attack Energy', 'Hitbox active', 'Perfect-dodge window', 'Jump force (vertical speed added)', 'Difficulty profile', 'Risk values', 'FOV', 'Event count']) {
+    for (const label of ['Match ID', 'Seed', 'Tick', 'Elapsed sim time', 'Position', 'Velocity', 'Spin rate', 'Ground normal', 'Stamina', 'Stability', 'Cooldown: Dash', 'Hitbox active', 'Perfect-dodge window', 'Jump force (vertical speed added)', 'Difficulty profile', 'Risk values', 'FOV', 'Event count']) {
       expect(allRows.some((r) => r.label === label), label).toBe(true);
     }
     for (const r of allRows) {
@@ -277,12 +277,18 @@ describe('Debug Lab inspection (GDD section 69)', () => {
   });
 
   it('shows the knockback breakdown after a real hit', async () => {
-    const { session } = await createSession('knockback-breakdown');
+    // A normal hit (not a Circular launch, owner 2026-10-02) in an AI match: the first seed of a few that has one.
+    let session!: MatchSession;
     let found = false;
-    for (let i = 0; i < 3600 && !found; i++) {
-      session.tick();
-      const kb = session.getLastKnockback('first') ?? session.getLastKnockback('second');
-      found = kb?.components != null;
+    for (const seed of ['knockback-breakdown', 'knockback-breakdown-2', 'knockback-breakdown-3', 'knockback-breakdown-4']) {
+      session = (await createSession(seed)).session;
+      for (let i = 0; i < 3600 && !found; i++) {
+        session.tick();
+        const kb = session.getLastKnockback('first') ?? session.getLastKnockback('second');
+        found = kb?.components != null;
+      }
+      if (found) break;
+      session.dispose();
     }
     expect(found).toBe(true);
     const side: Side = session.getLastKnockback('first')?.components ? 'first' : 'second';

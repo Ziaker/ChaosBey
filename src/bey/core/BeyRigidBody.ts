@@ -59,7 +59,7 @@ export function createBeyRigidBody(
       // from the direction — see beyColliderRestitution (MULTIPLY rule).
       .setRestitution(beyColliderRestitution(motion))
       .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Multiply)
-      .setFriction(BEY_MATERIAL.friction)
+      .setFriction(BEY_MATERIAL.friction * physics.frictionScale)
       .setCollisionGroups(BEY_BODY_COLLISION_GROUPS),
     body,
   );
@@ -71,7 +71,7 @@ export function createBeyRigidBody(
       .setDensity(0)
       .setRestitution(beyColliderRestitution(motion))
       .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Multiply)
-      .setFriction(BEY_MATERIAL.friction)
+      .setFriction(BEY_MATERIAL.friction * physics.frictionScale)
       .setCollisionGroups(BEY_BUMPER_COLLISION_GROUPS),
     body,
   );

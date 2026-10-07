@@ -7,6 +7,7 @@
 // and tests can read where the player is.
 // ============================================================
 
+import { DefeatCutscene } from './DefeatCutscene';
 import type { AppRenderer } from '../bootstrap/createRenderer';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
 import { appModeHref } from '../modes/appMode';
@@ -25,10 +26,10 @@ import { AUTO_CONTINUE_S } from './AutoContinue';
 import { MatchResultsScreen, type MatchResultsAction } from './MatchResultsScreen';
 import { MatchRunner } from './MatchRunner';
 import { EMPTY_SCORE, matchWinner, roundSeed, scoreRound, type MatchScore } from './matchScore';
-import { createDefaultMatchSetup, matchBeysFor, matchConfigFor, opponentControllerFor, withPlayerBey, type MatchSetup } from './matchSetup';
+import { createDefaultMatchSetup, loadLastSetup, matchBeysFor, matchConfigFor, opponentControllerFor, saveLastSetup, withPlayerBey, type MatchSetup } from './matchSetup';
 import { PregameScreen } from './PregameScreen';
 import { SettingsScreen } from './SettingsScreen';
-import { CombatHud } from './CombatHud';
+import { CombatHud, type HudFeelOptions } from './CombatHud';
 import { roundEndBanner } from './hudModel';
 import { aiDifficultyTier } from '../../ai/difficulty/AiDifficultyTiers';
 import { AI_STYLE_LABELS } from './aiExplanation';
@@ -77,7 +78,8 @@ declare global {
 
 export class PlayFlow {
   private screen: PlayFlowScreen = 'character-select';
-  private setup: MatchSetup = createDefaultMatchSetup();
+  /** Lote 9: the last setup used comes back (validated), else the default. */
+  private setup: MatchSetup = loadLastSetup() ?? createDefaultMatchSetup();
   private characterSelect: CharacterSelectScreen | null = null;
   private pregame: PregameScreen | null = null;
   private results: MatchResultsScreen | null = null;
@@ -90,6 +92,10 @@ export class PlayFlow {
   private readonly padMenu = new GamepadMenuKeys();
   private runner: MatchRunner | null = null;
   private resultsTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Owner, 2026-10-04: the defeated Bey's break, before the winner is announced (null when none is playing). */
+  private defeatCutscene: DefeatCutscene | null = null;
+  /** MatchConfig.gameSpeed of the running round (frame times arrive scaled by it). */
+  private roundGameSpeed = 1;
   private score: MatchScore = EMPTY_SCORE;
   private matchSeed: string | null = null;
   /** Bumped on every screen change, so a round that finishes loading after the player left is dropped. */
@@ -143,6 +149,7 @@ export class PlayFlow {
       setup: this.setup,
       onStart: (setup) => {
         this.setup = setup;
+        saveLastSetup(setup);
         this.startMatch();
       },
       onBack: (setup) => {
@@ -164,6 +171,8 @@ export class PlayFlow {
     const generation = this.generation;
     this.screen = 'loading';
     this.deps.stateMachine.transitionTo(GameState.MatchLoading);
+    this.defeatCutscene = null;
+    this.roundGameSpeed = matchConfigFor(this.setup!).gameSpeed ?? 1;
     const runner = await MatchRunner.start(
       this.deps,
       {
@@ -173,15 +182,52 @@ export class PlayFlow {
         attackProfileSettings: this.deps.attackProfileSettings,
         opponent: opponentControllerFor(this.setup),
         arenaTheme: arenaPreset(this.setup.arena.presetId).theme,
-        presentation: presentationFor(this.settings),
+        presentation: { ...presentationFor(this.settings), vfx: this.setup.visual },
         controlScheme: this.settings.controlScheme,
       },
       {
         onRoundOver: (outcome) => {
+          // Owner, 2026-10-04: a Stability knock-out plays the defeat cutscene first (the Bey flies / bounces, then breaks
+          // in 1.5 s of slow motion); the winner is announced after it.
+          const loser = String(outcome).startsWith('FirstWins') ? 'second' : String(outcome).startsWith('SecondWins') ? 'first' : null;
+          const session = this.runner?.session;
+          // Owner, 2026-10-04 ("a câmera de abate anda surgindo em partidas onde a derrota por estabilidade não está
+          // habilitada"): only a Stability knock-out plays it — a spin-out or a ring-out reads at once.
+          if (loser && session && String(outcome).endsWith('ByKo')) {
+            const generation = this.generation;
+            session.setBeyDefeated(loser);
+            const v = session.getBey(loser).body.linvel();
+            this.defeatCutscene = new DefeatCutscene({
+              visual: session.match.visuals[loser].visual,
+              launchVelocity: { x: v.x, y: v.y, z: v.z },
+              knockedOut: true,
+              awayFrom: (() => {
+                const w = session.getBey(loser === 'first' ? 'second' : 'first').body.translation();
+                return { x: w.x, z: w.z };
+              })(),
+              gravityScale: matchConfigFor(this.setup).gravityScale ?? 1,
+              floorHeightAt: (x, z) => session.floorHeightAt(x, z),
+              onBreak: () => this.hud?.flashBreak('BROKEN'),
+              onDone: () => {
+                if (generation !== this.generation) return;
+                // The cutscene keeps running (its pieces fall and settle, the camera stays on them) until the next round.
+                this.hud?.showBanner(roundEndBanner(outcome) ?? '');
+                this.scheduleRoundResult(outcome);
+              },
+              seed: this.score.rounds + 1,
+            });
+            const cutscene = this.defeatCutscene;
+            session.setCutsceneFocus(() => cutscene.focusPoint(), loser === 'first' ? 'second' : 'first');
+            return;
+          }
           this.hud?.showBanner(roundEndBanner(outcome) ?? '');
           this.scheduleRoundResult(outcome);
         },
-        onFrame: (session, frameDeltaSeconds) => this.hud?.update(session, this.deps.appRenderer.camera, frameDeltaSeconds),
+        onFrame: (session, frameDeltaSeconds) => {
+          this.hud?.update(session, this.deps.appRenderer.camera, frameDeltaSeconds);
+          // The cutscene runs on real time: the Game speed slider must not shorten the owner's 1.5 s slow motion.
+          this.defeatCutscene?.update(frameDeltaSeconds / this.roundGameSpeed);
+        },
         onTick: (session, firstActions) => {
           if (firstActions.pressedThisFrame.has(Action.Pause) && !session.roundState.isOver) queueMicrotask(() => this.openPause());
         },
@@ -203,6 +249,7 @@ export class PlayFlow {
       score: { player: this.score.player, opponent: this.score.opponent },
       roundsToWin: this.setup.roundsToWin,
       controlHints: this.settings.controlHints,
+      feel: hudFeelOf(this.settings),
     });
   }
 
@@ -262,6 +309,7 @@ export class PlayFlow {
     this.runner?.setPresentation(presentationFor(settings));
     this.runner?.setControlScheme(settings.controlScheme);
     this.hud?.setControlHints(settings.controlHints);
+    this.hud?.setFeel(hudFeelOf(settings));
     this.runner?.redraw();
   }
 
@@ -364,4 +412,9 @@ export class PlayFlow {
     this.leaveCurrent();
     this.deps.navigate(appModeHref('menu', this.deps.location));
   }
+}
+
+/** Owner, 2026-10-05: the HUD's game-feel switches from the player's settings. */
+function hudFeelOf(settings: PlayerSettings): HudFeelOptions {
+  return { counterFeedback: settings.counterFeedback, ringOutWarning: settings.ringOutWarning, refusedInputFeedback: settings.refusedInputFeedback };
 }

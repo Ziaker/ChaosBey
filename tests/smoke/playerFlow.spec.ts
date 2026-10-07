@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { BASELINE_MENU_URL, baselineUrl } from './presentationBaseline';
 import { ROUND_WALL_TIMEOUT_MS, describeRun, playRoundToEnd } from './support/playRoundToEnd';
 
 // ============================================================
@@ -15,15 +16,15 @@ test('Character Select and Pregame set up the match that really runs, and Result
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   const select = page.getByTestId('character-select');
   await expect(select).toBeVisible({ timeout: 15_000 });
 
-  // Three Beys; the first is focused and described.
+  // Nine Beys (owner, Lote 8: a 3×3 grid, a row per family); the first is focused and described.
   await expect(page.getByTestId('character-select-option-attack-prototype')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('character-select-detail')).toContainText('Hits hardest');
 
-  // Keyboard: two steps down focuses Stamina; Enter chooses it.
+  // Keyboard: two steps down (two families) focuses Stamina A; Enter chooses it.
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await expect(page.getByTestId('character-select-option-stamina-prototype')).toHaveAttribute('aria-selected', 'true');
@@ -34,7 +35,7 @@ test('Character Select and Pregame set up the match that really runs, and Result
   // Pregame: the explanation follows the choices, from the AI's real numbers.
   const pregame = page.getByTestId('pregame');
   await expect(pregame).toBeVisible();
-  await expect(page.getByTestId('pregame-player')).toHaveText('You play STAMINA');
+  await expect(page.getByTestId('pregame-player')).toHaveText('You play STAMINA A');
   await expect(page.getByTestId('pregame-opponent-bey-attack-prototype')).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByTestId('pregame-ai-level-rival')).toHaveAttribute('aria-checked', 'true');
   const reaction = page.getByTestId('pregame-cap-reaction');
@@ -58,6 +59,14 @@ test('Character Select and Pregame set up the match that really runs, and Result
   await page.getByTestId('pregame-wall-height').fill('0.8');
   await expect(page.getByTestId('pregame-wall-height-value')).toHaveText('0.8 m');
   await expect(page.getByTestId('pregame-rules')).toContainText('Custom walls: 0.8 m high, bounce 0.40');
+  // Owner 2026-10-02: the Ring-out delay slider (0-3 s, provisional default 1.5 s) reaches the match.
+  await expect(page.getByTestId('pregame-ring-out-delay-value')).toHaveText('1.50 s');
+  await page.getByTestId('pregame-ring-out-delay').fill('0.5');
+  await expect(page.getByTestId('pregame-ring-out-delay-value')).toHaveText('0.50 s');
+  // Owner 2026-10-02 (Lote 2): the Dash cooldown slider (0.5-5 s, provisional default 1.5 s).
+  await expect(page.getByTestId('pregame-dash-cooldown-value')).toHaveText('1.50 s');
+  await page.getByTestId('pregame-dash-cooldown').fill('2.5');
+  await expect(page.getByTestId('pregame-dash-cooldown-value')).toHaveText('2.50 s');
   await page.getByTestId('pregame-seed').fill('flow-seed');
   await expect(page.getByTestId('pregame-rules')).toContainText('Fixed seed "flow-seed"');
   await page.getByTestId('pregame-start').click();
@@ -72,6 +81,8 @@ test('Character Select and Pregame set up the match that really runs, and Result
       seed: session.seedText,
       opponent: session.describeController('second'),
       walls: [session.matchConfig.arenaWallHeightM, session.matchConfig.arenaWallRestitution],
+      ringOutDelayS: session.matchConfig.ringOutDelayS,
+      dashCooldownS: session.matchConfig.dashCooldownS,
     };
   });
   // The pick plays first; the default opponent is the next roster entry (no mirror).
@@ -79,6 +90,8 @@ test('Character Select and Pregame set up the match that really runs, and Result
   expect(match.seed).toBe('flow-seed');
   expect(match.opponent).toBe('AI (archetype, ace)');
   expect(match.walls).toEqual([0.8, 0.4]);
+  expect(match.ringOutDelayS).toBe(0.5);
+  expect(match.dashCooldownS).toBe(2.5);
 
   // Play the round for real (F3 shows the overlay the helper reads).
   await page.keyboard.press('F3');
@@ -103,10 +116,10 @@ test('Character Select and Pregame set up the match that really runs, and Result
   expect(rematch).toEqual({ first: 'stamina-prototype', seed: 'flow-seed' });
 
   // Esc on Character Select goes back to the Main Menu.
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await expect(select).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press('Escape');
-  await expect(page).toHaveURL(/\/ChaosBey\/$/);
+  await expect(page).toHaveURL(BASELINE_MENU_URL);
   await expect(page.getByTestId('main-menu')).toBeVisible();
 
   expect(consoleErrors).toEqual([]);

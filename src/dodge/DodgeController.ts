@@ -23,12 +23,15 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import { Action, type ControllerActions } from '../input/actions/Action';
 import { add, fromYaw, normalize, perpendicular, scale, type Vec2 } from '../physics/Vec2';
 import {
+  AIR_RECOVERY_DELAY_PER_FORCE_S,
+  AIR_RECOVERY_FORCE_DELAY_CAP_S,
   DODGE_ACTIVE_DURATION_S,
   DODGE_BURST_SPEED_MPS,
   DODGE_COOLDOWN_S,
   DODGE_GRIP_OVERRIDE_PER_S,
   DODGE_PERFECT_WINDOW_S,
   DODGE_STAMINA_COST,
+  INTANGIBLE_AFTER_DODGE_MAX_S,
   LAUNCH_PENDING_WINDOW_S,
 } from './DodgeTuning';
 import { vec2, type CanonicalRecord } from '../replay/state/CanonicalValue';
@@ -65,6 +68,41 @@ export interface DodgeTickResult {
 }
 
 export class DodgeController {
+  /** MatchConfig.dodgeCooldownS (owner, 2026-10-02: a Pregame slider). */
+  constructor(
+    private readonly cooldownS: number = DODGE_COOLDOWN_S,
+    /** MatchConfig.dodgeStaminaCost (owner, 2026-10-04: 0 — "remover isso completamente"). */
+    private readonly staminaCost: number = DODGE_STAMINA_COST,
+    /** MatchConfig.dodgeDistanceScale (owner, 2026-10-04): × the burst speed, so × the distance (same duration). */
+    private readonly distanceScale: number = 1,
+    /**
+     * Owner, 2026-10-04 ("faça com que o recovery use a barra de dodge e não deixe utilizá-lo caso não tenha dodge
+     * utilizável"): in a match the Air Recovery needs a ready dodge (Idle) and puts it into its cooldown. Bare
+     * constructions keep the old free recovery.
+     */
+    private readonly recoveryUsesDodge: boolean = false,
+    /**
+     * MatchConfig.airRecoveryMinDelayS (owner, 2026-10-05): a launched Bey can't recover before this long (s) after the
+     * launching hit, plus AIR_RECOVERY_DELAY_PER_FORCE_S per unit of its force (capped). null = no wait (bare
+     * constructions keep the old recovery).
+     */
+    private readonly recoveryMinDelayS: number | null = null,
+  ) {}
+
+  /**
+   * The recovery time still to wait (s) and its whole length, for the HUD's "C" alert — 0 / 0 when there is none.
+   * Counted from the launching hit; a press before it ends does nothing.
+   */
+  getRecoveryWait(): { remainingS: number; totalS: number } {
+    return { remainingS: this.recoveryWaitRemainingS, totalS: this.recoveryWaitTotalS };
+  }
+
+  /** 0..1 for the HUD's dodge line: 1 = a dodge can start now, refilling during the cooldown, 0 while dodging. */
+  getReadiness(): number {
+    if (this.state === DodgeState.Cooldown) return this.cooldownS <= 0 ? 1 : Math.max(0, Math.min(1, this.cooldownTimerS / this.cooldownS));
+    return this.state === DodgeState.Idle ? 1 : 0;
+  }
+
   private state = DodgeState.Idle;
   private activeTimerS = 0;
   private cooldownTimerS = 0;
@@ -72,8 +110,22 @@ export class DodgeController {
   private airRecoveryAvailable = false;
   private launchPending = false;
   private launchPendingRemainingS = 0;
+  /** See getRecoveryWait(). */
+  private recoveryWaitRemainingS = 0;
+  private recoveryWaitTotalS = 0;
   /** Direction latched once at the Idle->Dodging transition ("Fix 1" — see dodgeOverride on DodgeTickResult). Null outside Dodging. */
   private latchedDirection: Vec2 | null = null;
+  /** Opponent attacks (by activation id) this dodge has already reported as evaded: the hit is nullified every tick, the event is told once. */
+  private readonly evadedThisDodge = new Set<number>();
+  /** Owner, 2026-10-05 ("perfect dodge ser ativado múltiplas vezes"): one Perfect Dodge per dodge, whatever it evades. */
+  private perfectDodgeThisDodge = false;
+  /**
+   * Owner, 2026-10-05: "durante o dodge, o bey fica invencível e intangível, além de NUNCA deixar os beys tocar um no
+   * outro durante o perfect dodge". True for the whole dodge, and after it while the two Beys still overlap (they
+   * passed through each other), at most INTANGIBLE_AFTER_DODGE_MAX_S: so they never touch on the way out either.
+   */
+  private intangible = false;
+  private intangibleAfterDodgeS = 0;
 
   getState(): DodgeState {
     return this.state;
@@ -89,7 +141,7 @@ export class DodgeController {
   getDebugTimers(): { activeTimerS: number; cooldownRemainingS: number; airRecoveryAvailable: boolean; launchPending: boolean } {
     return {
       activeTimerS: this.state === DodgeState.Dodging ? this.activeTimerS : 0,
-      cooldownRemainingS: this.state === DodgeState.Cooldown ? Math.max(0, DODGE_COOLDOWN_S - this.cooldownTimerS) : 0,
+      cooldownRemainingS: this.state === DodgeState.Cooldown ? Math.max(0, this.cooldownS - this.cooldownTimerS) : 0,
       airRecoveryAvailable: this.isAirRecoveryAvailable(),
       launchPending: this.launchPending,
     };
@@ -113,6 +165,11 @@ export class DodgeController {
    * no Stamina cost and no cooldown, so a player who presses C whenever
    * launched gets the same outcome the AI gets from reading this.
    */
+  /** isAirRecoveryAvailable() and, when the recovery uses the dodge bar, a dodge ready right now: a press would recover. */
+  canAirRecoverNow(): boolean {
+    return this.isAirRecoveryAvailable() && (!this.recoveryUsesDodge || this.state === DodgeState.Idle) && this.recoveryWaitRemainingS <= 0;
+  }
+
   isAirRecoveryAvailable(): boolean {
     // Armed AND already airborne as of the last tick. The armed flag alone
     // survives landing (it is only overwritten inside the next takeoff
@@ -136,7 +193,21 @@ export class DodgeController {
    * arms a short pending window instead, consumed the next time this Bey
    * actually leaves the ground.
    */
-  registerLaunch(currentlyAirborne: boolean): void {
+  /** Owner, 2026-10-05: no Air Recovery for this flight (a lost Clash): closes an open window and a pending one. */
+  cancelAirRecovery(): void {
+    this.airRecoveryAvailable = false;
+    this.launchPending = false;
+    this.launchPendingRemainingS = 0;
+    this.recoveryWaitRemainingS = 0;
+    this.recoveryWaitTotalS = 0;
+  }
+
+  /** `force`: the launching hit's force (the knockback event's), which lengthens the recovery time (see the constructor). */
+  registerLaunch(currentlyAirborne: boolean, force = 0): void {
+    if (this.recoveryMinDelayS !== null) {
+      this.recoveryWaitTotalS = this.recoveryMinDelayS + Math.min(AIR_RECOVERY_FORCE_DELAY_CAP_S, Math.max(0, force) * AIR_RECOVERY_DELAY_PER_FORCE_S);
+      this.recoveryWaitRemainingS = this.recoveryWaitTotalS;
+    }
     if (currentlyAirborne) {
       this.airRecoveryAvailable = true;
       this.launchPending = false;
@@ -156,6 +227,7 @@ export class DodgeController {
   ): DodgeTickResult {
     const dodgePressed = actions.pressedThisFrame.has(Action.Dodge);
 
+    this.recoveryWaitRemainingS = Math.max(0, this.recoveryWaitRemainingS - fixedDeltaSeconds);
     if (this.launchPending) {
       this.launchPendingRemainingS -= fixedDeltaSeconds;
       if (this.launchPendingRemainingS <= 0) this.launchPending = false;
@@ -171,9 +243,15 @@ export class DodgeController {
     this.wasGrounded = grounded;
 
     let triggeredAirRecovery = false;
-    if (!grounded && dodgePressed && this.airRecoveryAvailable) {
+    // Owner, 2026-10-05: not before the recovery time is over (a press during it does nothing).
+    if (!grounded && dodgePressed && this.airRecoveryAvailable && (!this.recoveryUsesDodge || this.state === DodgeState.Idle) && this.recoveryWaitRemainingS <= 0) {
       this.airRecoveryAvailable = false;
       triggeredAirRecovery = true;
+      if (this.recoveryUsesDodge) {
+        // It spends the dodge: the dodge bar empties and refills over the normal cooldown.
+        this.state = DodgeState.Cooldown;
+        this.cooldownTimerS = 0;
+      }
     }
 
     // The ground dodge/cooldown state machine keeps advancing on the fixed
@@ -186,10 +264,12 @@ export class DodgeController {
     let staminaCostThisTick = 0;
     switch (this.state) {
       case DodgeState.Idle:
-        if (grounded && dodgePressed && staminaValue >= DODGE_STAMINA_COST) {
+        if (grounded && dodgePressed && staminaValue >= this.staminaCost) {
           this.state = DodgeState.Dodging;
           this.activeTimerS = 0;
-          staminaCostThisTick = DODGE_STAMINA_COST;
+          this.evadedThisDodge.clear();
+          this.perfectDodgeThisDodge = false;
+          staminaCostThisTick = this.staminaCost;
           this.latchedDirection = this.computeDodgeDirection(actions, headingRad);
         }
         break;
@@ -205,7 +285,7 @@ export class DodgeController {
 
       case DodgeState.Cooldown:
         this.cooldownTimerS += fixedDeltaSeconds;
-        if (this.cooldownTimerS >= DODGE_COOLDOWN_S) {
+        if (this.cooldownTimerS >= this.cooldownS) {
           this.state = DodgeState.Idle;
         }
         break;
@@ -220,17 +300,63 @@ export class DodgeController {
     // velocity. Never set outside Dodging (Idle, Cooldown, or the one-shot
     // airborne recovery path above, which only flips triggeredAirRecovery
     // and never touches latchedDirection).
-    const dodgeOverride = this.state === DodgeState.Dodging && this.latchedDirection ? { velocityMps: scale(this.latchedDirection, DODGE_BURST_SPEED_MPS) } : null;
+    const dodgeOverride = this.state === DodgeState.Dodging && this.latchedDirection ? { velocityMps: scale(this.latchedDirection, DODGE_BURST_SPEED_MPS * this.distanceScale) } : null;
 
     return {
       state: this.state,
       lateralGripOverridePerS: grantsGroundIFrames ? DODGE_GRIP_OVERRIDE_PER_S : null,
       dodgeOverride,
-      hasIFrames: grantsGroundIFrames,
-      isPerfectWindow: grantsGroundIFrames && this.activeTimerS <= DODGE_PERFECT_WINDOW_S,
+      // Owner, 2026-10-05: invincible for the whole dodge, on the ground or carried off it into the air.
+      hasIFrames: this.state === DodgeState.Dodging,
+      isPerfectWindow: this.state === DodgeState.Dodging && this.activeTimerS <= DODGE_PERFECT_WINDOW_S,
       triggeredAirRecovery,
       staminaCostThisTick,
     };
+  }
+
+  /**
+   * Once per tick, before the physics step: `overlappingOpponent` = the two Beys' bodies overlap right now. A dodging
+   * Bey is intangible; once the dodge is over it stays intangible until they no longer overlap (or the cap runs out).
+   */
+  updateIntangibility(overlappingOpponent: boolean, fixedDeltaSeconds: number): void {
+    if (this.state === DodgeState.Dodging) {
+      this.intangible = true;
+      this.intangibleAfterDodgeS = 0;
+      return;
+    }
+    if (!this.intangible) return;
+    this.intangibleAfterDodgeS += fixedDeltaSeconds;
+    if (!overlappingOpponent || this.intangibleAfterDodgeS >= INTANGIBLE_AFTER_DODGE_MAX_S) {
+      this.intangible = false;
+      this.intangibleAfterDodgeS = 0;
+    }
+  }
+
+  /** The two Beys pass through each other: no physical contact, no hit, no body collision (see updateIntangibility). */
+  isIntangible(): boolean {
+    return this.intangible;
+  }
+
+  /**
+   * True the first time this dodge evades the opponent attack `attackActivationId`, false for every later tick of the
+   * same overlap. The hit stays nullified on every tick; only the dodged / perfectDodge events are reported once
+   * (owner, 2026-10-02: the Perfect Dodge effect fired once per overlapping tick, ~7 times for one dodge).
+   */
+  firstEvasionOf(attackActivationId: number): boolean {
+    if (this.evadedThisDodge.has(attackActivationId)) return false;
+    this.evadedThisDodge.add(attackActivationId);
+    return true;
+  }
+
+  /**
+   * True once per dodge: the first evasion inside the perfect window (owner, 2026-10-05: "perfect dodge ser ativado
+   * múltiplas vezes"). A second attack evaded by the same dodge is still a plain dodged event, never a second Perfect
+   * Dodge — and so never a second Perfect Dodge freeze.
+   */
+  claimPerfectDodge(): boolean {
+    if (this.perfectDodgeThisDodge) return false;
+    this.perfectDodgeThisDodge = true;
+    return true;
   }
 
   /** GDD section 22: dodges in the direction currently pressed/selected, relative to the Bey (forward/back/lateral, diagonals normalized) — defaults to forward when no direction is held. Only computes the direction; Fix 1 latches it once and the dodge's own flat speed replaces velocity for the whole Dodging state instead of adding a burst on top of whatever momentum existed at press time (GDD section 15/88 "momentum stays relevant" is now scoped to normal movement only — see DodgeTickResult.dodgeOverride). */
@@ -258,7 +384,13 @@ export class DodgeController {
       airRecoveryAvailable: this.airRecoveryAvailable,
       launchPending: this.launchPending,
       launchPendingRemainingS: this.launchPendingRemainingS,
+      recoveryWaitRemainingS: this.recoveryWaitRemainingS,
+      recoveryWaitTotalS: this.recoveryWaitTotalS,
       latchedDirection: vec2(this.latchedDirection),
+      evadedThisDodge: [...this.evadedThisDodge].sort((a, b) => a - b),
+      perfectDodgeThisDodge: this.perfectDodgeThisDodge,
+      intangible: this.intangible,
+      intangibleAfterDodgeS: this.intangibleAfterDodgeS,
     };
   }
 }

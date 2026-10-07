@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 
 // ============================================================
 // INPUT FOCUS LOSS — STUCK-KEY REGRESSION (M7 ALPHA-READINESS HARDENING)
@@ -11,8 +12,6 @@ import { expect, test } from '@playwright/test';
 // window rather than reaching this page).
 // ============================================================
 
-const RAD_TO_SPEED_FIELD = /^speed\s+([\d.]+) m\/s/m;
-
 test('losing window focus while a movement key is held does not leave the Bey accelerating forever', async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
@@ -20,16 +19,28 @@ test('losing window focus while a movement key is held does not leave the Bey ac
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-  await page.goto('/ChaosBey/?mode=play&quick');
-  const overlay = page.locator('#debug-overlay-root pre');
-  await expect(overlay).toContainText('Combat', { timeout: 15_000 });
+  // The normal play flow (it exposes the session), with the opponent kept out of the way: this checks a stuck key,
+  // and a hit or a body collision from the live AI legitimately raises the speed — seen once on CI (4.4 -> 9 m/s in
+  // 0.5 s) with the quick-play match, which has no handle to idle it.
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
+  await page.getByTestId('character-select').waitFor({ timeout: 20_000 });
+  await page.keyboard.press('Enter');
+  await page.getByTestId('pregame-start').click();
+  await page.waitForFunction(() => window.__chaosBeyPlay?.getScreen() === 'match' && window.__chaosBeyPlay.getSession() != null, null, { timeout: 30_000 });
+  await page.waitForTimeout(1200); // past the FIGHT banner
+  await page.evaluate(() => {
+    const s = window.__chaosBeyPlay!.getSession()!;
+    s.setController('second', { kind: 'idle' });
+    const p = s.getBey('first').body.translation();
+    s.getBey('second').body.setTranslation({ x: p.x, y: p.y + 0.2, z: p.z - 6 }, true);
+    s.getBey('second').body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  });
 
-  const readSpeed = async (): Promise<number> => {
-    const text = (await overlay.textContent()) ?? '';
-    const match = RAD_TO_SPEED_FIELD.exec(text);
-    if (!match) throw new Error(`speed field not found in overlay text: ${text.slice(0, 200)}`);
-    return Number.parseFloat(match[1]!);
-  };
+  const readSpeed = (): Promise<number> =>
+    page.evaluate(() => {
+      const v = window.__chaosBeyPlay!.getSession()!.getBey('first').body.linvel();
+      return Math.hypot(v.x, v.z);
+    });
 
   const initialSpeed = await readSpeed();
 

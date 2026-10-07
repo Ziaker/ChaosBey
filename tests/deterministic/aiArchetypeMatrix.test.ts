@@ -33,6 +33,12 @@ const MAX_STALLED_ATTACK_TICKS = Math.round(0.5 * TICKS_PER_SECOND);
 const MAX_PRESSES_PER_SECOND = 6;
 /** Both sides holding nothing at the same time for longer than this is a stalemate. */
 const MAX_MUTUAL_IDLE_TICKS = 2 * TICKS_PER_SECOND;
+/**
+ * Audit 2026-10-04: a Defense mirror is a long fight, not a stalemate — matrix-3 traded 38 attacks with no mutual
+ * idle and no wedge and ended by KO at 6195 ticks (103 s), just past the old 6000-tick (100 s) ceiling. The round
+ * still has to resolve; it gets 200 s to do it (aiVsPlayerStandIn raised its own ceiling for the same reason).
+ */
+const MATRIX_MAX_TICKS = 200 * TICKS_PER_SECOND;
 /** A Bey wedged in the wall this long (see AiSideStats.longestWedgedTicks) explains a round that never resolved. */
 const WEDGED_EXPLAINS_STALL_TICKS = 5 * TICKS_PER_SECOND;
 
@@ -78,7 +84,7 @@ describe('AI vs AI archetype matrix', () => {
     for (const first of ALL_BEY_ARCHETYPES) {
       for (const second of ALL_BEY_ARCHETYPES) {
         for (const seed of SEEDS) {
-          const stats = await runAiMatch({ seed, firstDefinition: first, secondDefinition: second });
+          const stats = await runAiMatch({ seed, firstDefinition: first, secondDefinition: second, maxTicks: MATRIX_MAX_TICKS });
           matches.push({ label: `${first.id} vs ${second.id} (${seed})`, stats });
           accumulate(stats.first, stats);
           accumulate(stats.second, stats);
@@ -118,7 +124,10 @@ describe('AI vs AI archetype matrix', () => {
     const stamina = archetype('stamina-ai-personality');
     const rate = (t: ArchetypeTotals, n: number) => n / t.minutes;
     expect(rate(attack, attack.attacks)).toBeGreaterThan(1.2 * Math.max(rate(defense, defense.attacks), rate(stamina, stamina.attacks)));
-    expect(rate(attack, attack.dashes)).toBeGreaterThan(2 * Math.max(rate(defense, defense.dashes), rate(stamina, stamina.dashes)));
+    // Dash cooldown (owner, 2026-10-02, 1.5 s, no more Attack Energy): Attack now sits near the cooldown's own cap
+    // (~20 Dashes per minute measured, vs a ~26/min ceiling), so its lead is 1.89x the next archetype (was > 2x).
+    // Lote 5 (spin-out, defensive Circular, cheaper movement): 1.68x measured.
+    expect(rate(attack, attack.dashes)).toBeGreaterThan(1.6 * Math.max(rate(defense, defense.dashes), rate(stamina, stamina.dashes)));
   });
 
   it('Defense counters Dashes far more than Attack and keeps punishing commitment (GDD section 64: uses counter opportunities, punishes commitment)', () => {
@@ -131,7 +140,8 @@ describe('AI vs AI archetype matrix', () => {
     // spend longer in recovery after bounces and landings, so ~1/3 of its attacks start in a window
     // by chance — lowering Attack's punishAffinity from 0.5 to 0.2 left its share at 0.33–0.37.
     // Defense's deliberate punish, the Circular counter, is what separates them (ratio above).
-    expect(defense.punishes / defense.attacks).toBeGreaterThan(0.28);
+    // Lote 5 (owner, 2026-10-02: the Circular now launches on contact, Stamina 0 ends the round): 0.27 measured.
+    expect(defense.punishes / defense.attacks).toBeGreaterThan(0.25);
   });
 
   it('Stamina plays the most patient game, Dashes least and spends its Stamina slowest (GDD section 64: preserves resources, avoids heavy collisions)', () => {
@@ -142,8 +152,12 @@ describe('AI vs AI archetype matrix', () => {
     // directional turning, idle damping), +0.075 with them (Stamina 0.239 vs Defense 0.164); the
     // other identity checks below keep their margins (Dashes 9.4 vs 10.4 per minute, Stamina spent
     // 1.01 vs 1.69 and 1.82 per minute).
-    expect(stamina.passiveShare / stamina.sides).toBeGreaterThan(defense.passiveShare / defense.sides + 0.06);
-    expect(stamina.passiveShare / stamina.sides).toBeGreaterThan(attack.passiveShare / attack.sides + 0.2);
+    // Lote 5 (spin-out ends rounds, so the patient game is shorter): +0.035 measured (Stamina 0.243 vs Defense 0.208).
+    expect(stamina.passiveShare / stamina.sides).toBeGreaterThan(defense.passiveShare / defense.sides + 0.03);
+    // Over Attack (was > +0.2): +0.175 measured in Lote 5 (Stamina 0.243 vs Attack 0.068).
+    // Owner, 2026-10-04 ("não quero ver ela parada independente do tipo"): every AI laps to build speed (BuildSpeed)
+    // instead of waiting, so the patient share shrank for everyone: +0.12 measured (Stamina 0.166 vs Attack 0.043).
+    expect(stamina.passiveShare / stamina.sides).toBeGreaterThan(attack.passiveShare / attack.sides + 0.1);
     expect(stamina.dashes / stamina.minutes).toBeLessThan(defense.dashes / defense.minutes);
     // Per minute of play: matches are short, so end-of-match Stamina alone
     // barely separates anyone.

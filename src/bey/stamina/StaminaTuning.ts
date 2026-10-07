@@ -10,8 +10,8 @@
 export const STAMINA_MAX = 100;
 
 // Owner decision (2026-09-25): Stamina never passively regenerates during
-// a round — it is the long-term wear-down resource (Attack Energy is the
-// fast-recovering offensive one; see AttackEnergyTuning.ts). A Bey always
+// a round — it is the long-term wear-down resource (the Dash is paced by its
+// own cooldown, not a resource: owner, 2026-10-02). A Bey always
 // loses a little Stamina just from continuous spin/combat, on top of
 // extra drain from aggressive movement — structured so additional costs
 // (e.g. per-impact) can be added later without a redesign.
@@ -20,7 +20,12 @@ export const STAMINA_BASE_DRAIN_PER_S = 0.4;
 // Extra drain tied to aggressive movement (GDD section 12): draining
 // faster while moving fast, on top of the baseline above.
 export const STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION = 0.5; // fraction of INTENDED_MAX_SPEED_MPS above which the extra drain kicks in
-export const STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED = 3;
+// Owner, 2026-10-02 (Lote 5, item 14): the movement drain is 30% lower (3 -> 2.1) — with Stamina 0 now a loss
+// (spin-out), sustained speed (momentum) must not empty it in seconds. The base spin drain stays. Pregame slider
+// "Movement stamina drain" scales it (MatchConfig.movementStaminaDrain, 100% = this).
+export const STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED = 2.1;
+export const MOVEMENT_STAMINA_DRAIN_DEFAULT = 1;
+export const MOVEMENT_STAMINA_DRAIN_RANGE = { min: 0, max: 2, step: 0.1 } as const;
 
 // Degradation curve: below this fraction, physical penalties start
 // ramping in linearly down to zero stamina. Above it, no penalty at all —
@@ -32,4 +37,4 @@ export const STAMINA_PENALTY_START_FRACTION = 0.4;
 export const STAMINA_MIN_ACCEL_FACTOR = 0.6;
 export const STAMINA_MIN_RECOVERY_TORQUE_FACTOR = 0.5;
 export const STAMINA_MAX_SPIN_DECAY_MULTIPLIER = 3; // spin decays up to 3x faster at zero stamina.
-export const STAMINA_MAX_WOBBLE_ENERGY_FLOOR = 0.25; // ambient wobble energy floor blended in at zero stamina — a tired Bey never looks perfectly steady.
+// The ambient wobble floor moved to SpinTuning (owner, 2026-10-02, Lote 6: it ramps in below 70% Stamina or Stability).

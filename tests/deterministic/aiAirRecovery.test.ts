@@ -31,7 +31,7 @@ describe('AI air recovery (real physics)', () => {
     // personality) is itself charging a Dash.
     const harness = await CombatHarness.create({ x: 0, y: 0.6, z: -1.2 }, { x: 0, y: 0.6, z: 1.2 }, {}, new NullAiMashSource());
     const personality = { ...ATTACK_AI_PERSONALITY, counterAffinity: 0 };
-    const ai = new AIController(harness.physics, harness.second, harness.first, harness.clash.controller, personality, DEFAULT_AI_DIFFICULTY_PROFILE, SeededRng.fromSeedText('air-recovery-seed'));
+    const ai = new AIController(harness.physics, harness.second, harness.first, harness.clash.controller, personality, DEFAULT_AI_DIFFICULTY_PROFILE, SeededRng.fromSeedText('air-recovery-seed-11'));
     const frames = [];
     for (let start = 0; start < 900; start += 90) {
       frames.push({ fromTick: start, held: [Action.Attack] });
@@ -49,7 +49,9 @@ describe('AI air recovery (real physics)', () => {
     let pressesThisWindow = 0;
 
     for (let tick = 0; tick < 900 && !harness.roundState.isOver; tick++) {
-      const open = !isGrounded(harness.physics, harness.second.collider) && harness.second.dodge.isAirRecoveryAvailable();
+      // Owner, 2026-10-04: the recovery spends the dodge — launched while the dodge recharges, a press does nothing
+      // until it is back. The reaction is counted from the tick a press would really recover (canAirRecoverNow).
+      const open = !isGrounded(harness.physics, harness.second.collider) && harness.second.dodge.canAirRecoverNow();
       if (open && windowOpenedAt === null) {
         windowOpenedAt = tick;
         windowChargingAtOpen = harness.second.attack.getState() === AttackState.ChargingDash;
@@ -73,6 +75,9 @@ describe('AI air recovery (real physics)', () => {
       if (windowOpenedAt !== null && !stillOpen) {
         // One press per window, never more (no mashing, no held button).
         expect(pressesThisWindow).toBeLessThanOrEqual(1);
+        // A window open longer than the reaction is always answered — launched mid-charge included (it used to keep
+        // charging in the air).
+        if (tick - windowOpenedAt > reactionTicks + REACTION_SLACK_TICKS) expect(pressesThisWindow, `window from tick ${windowOpenedAt}`).toBe(1);
         if (pressesThisWindow === 1) {
           recoveries++;
           if (windowChargingAtOpen) recoveredAfterChargingLaunch++;
@@ -83,9 +88,12 @@ describe('AI air recovery (real physics)', () => {
 
     expect(windows).toBeGreaterThan(0);
     expect(recoveries).toBeGreaterThan(0);
-    // The regression case: a launch that caught the AI mid-charge still
-    // got answered (it used to keep charging in the air).
+    // The regression case: a launch that caught the AI mid-charge still got answered (it used to keep charging in the
+    // air). Owner, 2026-10-05 (recovery time: 0.2 s + the hit's force, counted from the hit): this scenario's mid-charge
+    // launch now lands before its recovery can be pressed (24 AI seeds searched: none was still recoverable), so the
+    // answer is checked above for every window long enough, and a recovered mid-charge launch in
+    // aiAirRecoveryDuringCharge.test.ts.
     expect(launchedWhileCharging).toBeGreaterThan(0);
-    expect(recoveredAfterChargingLaunch).toBeGreaterThan(0);
+    void recoveredAfterChargingLaunch;
   }, 60000);
 });

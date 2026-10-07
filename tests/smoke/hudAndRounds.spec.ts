@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 import { ROUND_WALL_TIMEOUT_MS, describeRun, playRoundToEnd } from './support/playRoundToEnd';
 
 // ============================================================
@@ -22,7 +23,7 @@ const widthPercent = async (page: Page, testId: string): Promise<number> => Numb
 test('the HUD reads the live match, a round ends with its banner, and round 2 carries the score', async ({ page }) => {
   test.setTimeout(ROUND_WALL_TIMEOUT_MS + 90_000);
   const errors = watchErrors(page);
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await page.getByTestId('character-select-confirm').click({ timeout: 15_000 });
   await expect(page.getByTestId('pregame-rounds-2')).toHaveAttribute('aria-checked', 'true'); // default: first to 2
   await page.getByTestId('pregame-start').click();
@@ -42,6 +43,15 @@ test('the HUD reads the live match, a round ends with its banner, and round 2 ca
   await expect.poll(() => widthPercent(page, 'hud-first-stamina'), { timeout: 10_000 }).toBeLessThan(100);
   const sessionStamina = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getLastResult()!.first.staminaFraction);
   expect(Math.abs((await widthPercent(page, 'hud-first-stamina')) / 100 - sessionStamina)).toBeLessThan(0.05);
+
+  // Owner 2026-10-02 (Lote 2): the old ATK line is the Dash cooldown (CD), full = Dash ready at the start.
+  await expect(page.getByTestId('hud-first').locator('.cb-hud__meter--dash-cd .cb-hud__meter-name')).toHaveText('DASH');
+  await expect.poll(() => widthPercent(page, 'hud-first-dash-cd'), { timeout: 10_000 }).toBeGreaterThan(99);
+  // Owner 2026-10-02 (Lote 3): the momentum line is on both cards and follows the session.
+  await expect(page.getByTestId('hud-first-momentum')).toBeAttached();
+  await expect(page.getByTestId('hud-second-momentum')).toBeAttached();
+  const sessionMomentum = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getLastResult()!.first.momentum);
+  expect(Math.abs((await widthPercent(page, 'hud-first-momentum')) / 100 - sessionMomentum)).toBeLessThan(0.1);
 
   // Play round 1 for real.
   await page.keyboard.press('F3');
@@ -77,7 +87,7 @@ test('the HUD reads the live match, a round ends with its banner, and round 2 ca
 test('control hints follow the setting', async ({ page }) => {
   const errors = watchErrors(page);
   await page.addInitScript(() => localStorage.setItem('chaosbey.settings.player.v1', JSON.stringify({ controlHints: false })));
-  await page.goto('/ChaosBey/?mode=play');
+  await page.goto(baselineUrl('/ChaosBey/?mode=play'));
   await page.getByTestId('character-select-confirm').click({ timeout: 15_000 });
   await page.getByTestId('pregame-start').click();
   await expect(page.getByTestId('combat-hud')).toBeVisible({ timeout: 15_000 });

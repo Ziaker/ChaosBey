@@ -29,7 +29,9 @@ import { WORLD_CONTROL_REFERENCE, type ControlReference } from './ControlReferen
 import { screenLength, screenToWorld, screenVectorFromDigital, screenVectorFromStick, ZERO_SCREEN, type ScreenVector } from './screenDirection';
 
 /** The four actions directional mode reads as directions (never held in its output). */
-const DIRECTION_ACTIONS: readonly Action[] = [Action.MoveForward, Action.MoveBackward, Action.SteerLeft, Action.SteerRight];
+// SteerLeft/SteerRight stay held: they are the screen's lateral input, which the drift rule reads (owner, 2026-10-02).
+// Nothing else reads them while a moveIntent is present (movement and dodge use the intent).
+const DIRECTION_ACTIONS: readonly Action[] = [Action.MoveForward, Action.MoveBackward];
 
 export interface DirectionalSources {
   /** The gameplay-owned frame the arrows are resolved in. Defaults to the fixed arena frame. */
@@ -78,7 +80,7 @@ export class DirectionalController implements CombatController {
             actions.held.has(Action.SteerLeft),
             actions.held.has(Action.SteerRight),
           );
-    const referenceYawRad = this.reference.yawRad(screenLength(screen) > 0);
+    const referenceYawRad = this.reference.yawRad(screenLength(screen) > 0, screen);
     const world = screenToWorld(screen, referenceYawRad);
     this.last = { screen, world, referenceYawRad };
     const held = new Set(actions.held);

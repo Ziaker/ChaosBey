@@ -95,11 +95,28 @@ function extractRawState(physics: PhysicsWorld, body: RAPIER.RigidBody, bey: Bey
     staminaFraction: bey.stamina.resource.fraction,
     stabilityFraction: bey.stability.resource.fraction,
     isBroken: bey.stability.isBroken,
-    attackEnergyFraction: bey.attackEnergy.resource.fraction,
-    airRecoveryAvailable: bey.dodge.isAirRecoveryAvailable(),
-    canAffordDodge: bey.stamina.resource.value >= DODGE_STAMINA_COST,
+    dashReadiness: bey.attack.getDashReadiness(),
+    momentum: bey.momentum.value,
+    // The post-Clash locks refuse the Dodge, Air Recovery included (the winner's 0.4 s; the loser's stun until it lands).
+    airRecoveryAvailable: bey.dodge.canAirRecoverNow() && !bey.movement.areActionsLocked(),
+    // Owner, 2026-10-05: with the Circular off it is locked for good — no Circular, no counter.
+    circularLocked: bey.attack.getCircularLockS() > 0 || !bey.attack.isCircularEnabled(),
+    circularDisabled: !bey.attack.isCircularEnabled(),
+    sizeScale: bey.definition.sizeScale ?? 1,
+    actionsLocked: bey.movement.areActionsLocked(),
+    launchedFlight: bey.dodge.isAirRecoveryAvailable(),
+    // Owner, 2026-10-02 (Lote 5): Stamina 0 is a spin-out loss, so the AI keeps a reserve and never dodges itself into one.
+    // A free dodge (owner, 2026-10-04: no Stamina cost) needs no reserve either.
+    canAffordDodge: bey.stamina.resource.value >= (bey.rules.dodgeStaminaCost ?? DODGE_STAMINA_COST) + ((bey.rules.dodgeStaminaCost ?? DODGE_STAMINA_COST) > 0 ? AI_DODGE_STAMINA_RESERVE : 0),
   };
 }
+
+/**
+ * Stamina the AI keeps after a dodge (Lote 5: Stamina 0 = spin-out). PROVISIONAL AI tuning. Owner audit, 2026-10-03:
+ * 15 left Ace losing 18 of 72 tier rounds by spin-out (Rookie 2) — it dodged itself empty while winning the fights
+ * (31 KOs to 17); at 45, Ace's spin-outs drop to 5 and it wins 45-25, still dodging 1.6× as often as Rookie.
+ */
+export const AI_DODGE_STAMINA_RESERVE = 45;
 
 const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerability: 0, opportunity: 0, punishWindow: false, edgePressure: 0 };
 
@@ -133,6 +150,7 @@ export class AIController implements CombatController {
   private counterRollForOpponentDash: boolean | null = null;
   /** Simulated time this AI last started an attack (own attackState left Neutral) — feeds the anti-passivity tempo (see IntentSelection.passivityTempo). */
   private lastOwnAttackStartS = 0;
+  private hasAttacked = false;
   private lastOwnAttackState: AttackState = AttackState.Neutral;
   /**
    * "Slow to react" deliberate error (IntentionalError.ts): a fresh
@@ -206,6 +224,7 @@ export class AIController implements CombatController {
 
     if (this.lastOwnAttackState === AttackState.Neutral && ownRaw.attackState !== AttackState.Neutral) {
       this.lastOwnAttackStartS = this.nowS;
+      this.hasAttacked = true;
     }
     this.lastOwnAttackState = ownRaw.attackState;
 
@@ -310,6 +329,7 @@ export class AIController implements CombatController {
     const ideal = selectIntent(world, adjustedPersonality, risk, {
       counterDash: this.counterRollForOpponentDash === true,
       secondsSinceOwnAttack: world.nowS - this.lastOwnAttackStartS,
+      secondsSinceAttackStarted: this.hasAttacked ? world.nowS - this.lastOwnAttackStartS : undefined,
       // From the IDEAL decision: a deliberate hesitation must not make the
       // AI forget it was mid-recovery (the lower release threshold would
       // otherwise be lost and recovery restarted from the entry threshold).

@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { ARENA_FLOOR_RADIUS, ARENA_WALL_THICKNESS } from '../../src/arena/colliders/ArenaTuning';
-import { RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
+import { RING_OUT_DELAY_DEFAULT_S, RINGOUT_RADIUS_M } from '../../src/arena/ringout/RingOutTuning';
 import { AttackState } from '../../src/combat/attacks/AttackController';
 import { ClashState } from '../../src/combat/clash/ClashController';
 import { RoundOutcome } from '../../src/combat/round-rules/RoundState';
@@ -19,6 +19,9 @@ import { ScriptedController, type ScriptedFrame } from '../../src/automation/scr
 import { Action, type ControllerActions } from '../../src/input/actions/Action';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { CombatHarness } from './combatHarness';
+
+/** The RoundEnd freeze tests end a round on a chosen tick: the old instant ring-out (delay 0), so the freeze, not the delay, is what they test. */
+const INSTANT_RING_OUT = { ringOutDelayS: 0 };
 
 const NO_ACTIONS: ControllerActions = {
   held: new Set(),
@@ -33,6 +36,9 @@ const NO_ACTIONS: ControllerActions = {
 // movement prototype it sits on top of.
 const CLOSE_FIRST_SPAWN = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: -0.75 };
 const CLOSE_SECOND_SPAWN = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0.75 };
+// These tests count hits at each attack's own damage (Break / KO bookkeeping), not how speed scales it: item 11's
+// speed → damage is off here (a Circular from a standstill would deal half, under the KO-qualifying minimum).
+const FLAT_ATTACK_DAMAGE = { speedDamageGain: 0 };
 
 function settle(harness: CombatHarness, ticks = 15): void {
   for (let i = 0; i < ticks; i++) {
@@ -141,7 +147,7 @@ describe('Dash Attack', () => {
 
 describe('Stability Break (Model C)', () => {
   it('falls with repeated hits, breaks, and only a later qualifying hit while Broken causes a KO', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN, FLAT_ATTACK_DAMAGE);
     settle(harness);
 
     // Enough taps (well beyond STABILITY_MAX / CIRCULAR_STABILITY_DAMAGE)
@@ -227,11 +233,12 @@ describe('wall collision after knockback', () => {
 });
 
 describe('ring-out', () => {
-  it('ends the round the moment a Bey is beyond the ring-out boundary', async () => {
+  it('ends the round once a Bey has stayed beyond the ring-out boundary for the ring-out delay (owner, 2026-10-02)', async () => {
     const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
     settle(harness);
 
     expect(harness.roundState.isOver).toBe(false);
+    const delayTicks = Math.round(RING_OUT_DELAY_DEFAULT_S / FIXED_DELTA_SECONDS);
 
     // Directly place the second Bey beyond the ring-out radius, exactly
     // like a strong knockback launch would end up (GDD section 130:
@@ -241,10 +248,36 @@ describe('ring-out', () => {
     // does).
     harness.second.body.setTranslation({ x: RINGOUT_RADIUS_M + 1, y: 1, z: 0 }, true);
 
+    // Still outside but short of the delay: no ring-out yet.
+    for (let i = 0; i < delayTicks - 1; i++) {
+      const early = harness.tick(NO_ACTIONS, NO_ACTIONS);
+      expect(early.ringOutSecond).toBe(false);
+    }
+    expect(harness.roundState.isOver).toBe(false);
+
     const result = harness.tick(NO_ACTIONS, NO_ACTIONS);
 
     expect(result.ringOutSecond).toBe(true);
     expect(harness.roundState.isOver).toBe(true);
+    expect(harness.roundState.result).toBe(RoundOutcome.FirstWinsByRingOut);
+  });
+
+  it.each([
+    ['wedged under the rim', { x: -36.6, y: -5.2, z: 0 }],
+    ['fallen under the bowl', { x: 9.1, y: -544, z: -7.4 }],
+  ])('a Bey fallen off the arena (%s), inside the ring-out radius, still rings out (owner, 2026-10-02)', async (_where, fallen) => {
+    // Seen in the browser with the delay: thrown over the wall, the Bey fell and steered back inside the ring-out radius,
+    // under the rim (r = 36.6 m, 5 m down) or under the bowl itself (r = 11.7 m, falling) — the round never ended.
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    settle(harness);
+    const delayTicks = Math.round(RING_OUT_DELAY_DEFAULT_S / FIXED_DELTA_SECONDS);
+    let ended = -1;
+    for (let i = 0; i < delayTicks + 5 && ended < 0; i++) {
+      harness.second.body.setTranslation(fallen, true);
+      harness.second.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      if (harness.tick(NO_ACTIONS, NO_ACTIONS).ringOutSecond) ended = i + 1;
+    }
+    expect(ended).toBe(delayTicks);
     expect(harness.roundState.result).toBe(RoundOutcome.FirstWinsByRingOut);
   });
 
@@ -255,6 +288,10 @@ describe('ring-out', () => {
     harness.first.body.setTranslation({ x: RINGOUT_RADIUS_M + 1, y: 1, z: 0 }, true);
     harness.second.body.setTranslation({ x: -(RINGOUT_RADIUS_M + 1), y: 1, z: 0 }, true);
 
+    // Both clocks started on the same tick, so both reach the delay on the same tick.
+    const delayTicks = Math.round(RING_OUT_DELAY_DEFAULT_S / FIXED_DELTA_SECONDS);
+    for (let i = 0; i < delayTicks - 1; i++) harness.tick(NO_ACTIONS, NO_ACTIONS);
+    expect(harness.roundState.isOver).toBe(false);
     const result = harness.tick(NO_ACTIONS, NO_ACTIONS);
 
     expect(result.ringOutFirst).toBe(true);
@@ -314,7 +351,7 @@ describe('simultaneous double-KO', () => {
 
 describe('RoundEnd freezes the simulation', () => {
   it('stops advancing movement, attacks and resources once the round is over (Combat and RoundEnd are separate states)', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN, INSTANT_RING_OUT);
     settle(harness);
 
     // End the round via ring-out, then keep feeding aggressive input.
@@ -368,9 +405,11 @@ describe('attacking mid-jump', () => {
     // then tap Circular Attack mid-air without letting go of JumpDrift.
     const attacker = new ScriptedController([
       { fromTick: 0, held: [Action.JumpDrift] },
-      { fromTick: 2, held: [Action.JumpDrift, Action.Attack] },
-      { fromTick: 4, held: [Action.JumpDrift] },
-      { fromTick: 16, held: [] },
+      // Owner, 2026-10-04: a held X leaves the floor once the hold is known — the hold-for-full time, 0.2 s here
+      // (launch on tick 12, airborne on 13; it was ~7 when this was first written) — so the Circular is tapped after.
+      { fromTick: 14, held: [Action.JumpDrift, Action.Attack] },
+      { fromTick: 16, held: [Action.JumpDrift] },
+      { fromTick: 21, held: [] },
     ]);
 
     let sawAirborne = false;
@@ -382,7 +421,7 @@ describe('attacking mid-jump', () => {
     // own ground bounce (confirmed by tracing this exact scenario), whose
     // own legitimate velocity discontinuity would otherwise be
     // indistinguishable from "something disrupted the jump".
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 25; i++) {
       const result = harness.tick(attacker.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS }), NO_ACTIONS);
       const verticalVelocity = harness.first.body.linvel().y;
 
@@ -444,7 +483,7 @@ describe('Circular Attack catches Dash Attack', () => {
   });
 
   it('still causes a KO when the caught defender was already Broken (a qualifying hit is a qualifying hit)', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN, FLAT_ATTACK_DAMAGE);
     settle(harness);
 
     // Pre-break the defender directly (a pure system-level operation — it
@@ -479,7 +518,7 @@ describe('RoundEnd freeze is genuinely read-only', () => {
     // playtest, after M11) an idle Bey no longer slides off when pushed, and
     // the first one plowed it all the way to the wall without a detectable
     // impact of its own.
-    const harness = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, { x: -6, y: BEY_SPAWN_HEIGHT_M, z: -6 });
+    const harness = await CombatHarness.create({ x: 0, y: BEY_SPAWN_HEIGHT_M, z: 0 }, { x: -6, y: BEY_SPAWN_HEIGHT_M, z: -6 }, INSTANT_RING_OUT);
     settle(harness);
 
     const driver = new ScriptedController([{ fromTick: 0, held: [Action.MoveForward] }]);
@@ -506,7 +545,7 @@ describe('RoundEnd freeze is genuinely read-only', () => {
   });
 
   it('keeps every frozen tick byte-for-byte identical across many repeats (no observable internal drift)', async () => {
-    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN);
+    const harness = await CombatHarness.create(CLOSE_FIRST_SPAWN, CLOSE_SECOND_SPAWN, INSTANT_RING_OUT);
     settle(harness);
 
     harness.second.body.setTranslation({ x: RINGOUT_RADIUS_M + 1, y: 1, z: 0 }, true);

@@ -152,7 +152,6 @@ describe('AttackProfileSettings — a changed setting reaches the real AttackCon
       0,
       { x: 0, z: 0 },
       opponentFarAway,
-      1,
       1 / 60,
     );
     const result = bey.attack.tick(
@@ -160,7 +159,6 @@ describe('AttackProfileSettings — a changed setting reaches the real AttackCon
       0,
       { x: 0, z: 0 },
       opponentFarAway,
-      1,
       1 / 60,
     );
 

@@ -28,8 +28,8 @@ function fakePad(state: { pressed: number[]; axes?: number[] }): () => (Gamepad 
 }
 
 describe('player settings', () => {
-  it('defaults to Medium quality, camera-independent opponent controls and the presentation defaults', () => {
-    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ quality: QualityPreset.Medium, cameraPreset: 'B', controlScheme: 'opponent', cameraEffects: true, pauseOnFocusLoss: true, controlHints: true, debugOverlayOnStart: false, conditionLayers: ['A'] });
+  it('defaults to Medium quality, the Arena Fighter camera (A), Screen controls, conditions A+B+C and the presentation defaults (owner, 2026-10-04)', () => {
+    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ quality: QualityPreset.Medium, cameraPreset: 'A', controlScheme: 'screen', cameraEffects: true, pauseOnFocusLoss: true, controlHints: true, debugOverlayOnStart: false, conditionLayers: ['A', 'B', 'C'], counterFeedback: true, hitFlash: true, hitShake: true, ringOutWarning: true, refusedInputFeedback: true });
   });
 
   it('falls back field by field on missing or corrupted values', () => {

@@ -8,6 +8,10 @@
 
 /** Distance (m) at/under which a Circular Attack is a realistic choice — mirrors the Circular hitbox's real short reach. */
 export const AI_CIRCULAR_ATTACK_RANGE_M = 2.2;
+/** AI_CIRCULAR_ATTACK_RANGE_M for this AI's Bey at the match's size (owner, 2026-10-05: MatchConfig.beySizeScale — a bigger Bey reaches further). */
+export function aiCircularAttackRangeM(own: { readonly sizeScale?: number }): number {
+  return AI_CIRCULAR_ATTACK_RANGE_M * (own.sizeScale ?? 1);
+}
 /** Distance (m) beyond AI_CIRCULAR_ATTACK_RANGE_M, up to which a Dash Attack's charge-then-close approach is worth committing to. */
 export const AI_DASH_ATTACK_MAX_RANGE_M = 9;
 

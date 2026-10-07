@@ -12,13 +12,16 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { FLOOR_MATERIAL, WALL_MATERIAL } from '../../physics/materials/PhysicsMaterials';
 import { ARENA_COLLISION_GROUPS } from '../../physics/collision/CollisionGroups';
-import { ARENA_FLOORS, floorRimHeight, type ArenaFloorId } from '../floor/ArenaFloorProfile';
+import { BOWL_DEPTH_M, floorHeightAtRadius, floorRimHeight, type ArenaFloor } from '../floor/ArenaFloorProfile';
 import { motionParams, motionRatio, surfaceColliderRestitution, type MotionParams } from '../../bey/motion/MotionPresets';
 import { FOUNDRY_PIT, STANDARD_ARENA_GEOMETRY, type ArenaGeometry, type ArenaTheme } from '../presets/ArenaPresets';
 import {
   ARENA_FLOOR_RADIUS,
+  arenaFloorRadius,
+  setArenaSizeScale,
   ARENA_FLOOR_THICKNESS,
   ARENA_WALL_SEGMENT_COUNT,
+  ARENA_WALL_BOUNCE_MAX,
   ARENA_WALL_SEGMENT_OVERLAP_FACTOR,
   ARENA_WALL_THICKNESS,
 } from './ArenaTuning';
@@ -48,7 +51,7 @@ export function createArenaColliders(
   // bounce every rim contact of a rocking Bey, which at C's 0.55 pumped
   // the rocking until the cylinder lay on its side (measured).
   const floorRestitution = 0;
-  const wallRestitution = surfaceColliderRestitution(geometry.wallRestitution * motionRatio(motion, 'wallBounce'), motion);
+  const wallRestitution = surfaceColliderRestitution(Math.min(geometry.wallRestitution * motionRatio(motion, 'wallBounce'), ARENA_WALL_BOUNCE_MAX), motion);
   const wallFriction = WALL_MATERIAL.friction * motionRatio(motion, 'wallFriction');
   // The floor keeps the game's contact friction. The Motion Lab has none
   // (its drive alone slows a coasting Bey, at 0.6/s: an ~18 m glide from
@@ -57,9 +60,11 @@ export function createArenaColliders(
   // has always played — the Lab built B from the game's values, and the
   // owner's playtest note was that the Bey must not move by itself. The
   // long glide is an open option (docs/design-decisions/motion-approval.md §16).
-  const floorMaterial = (desc: RAPIER.ColliderDesc) => desc.setRestitution(floorRestitution).setFriction(FLOOR_MATERIAL.friction).setCollisionGroups(ARENA_COLLISION_GROUPS);
-  const floor: ArenaFloorId = geometry.floor ?? 'flat';
-  const profile = ARENA_FLOORS[floor];
+  const floorMaterial = (desc: RAPIER.ColliderDesc) => desc.setRestitution(floorRestitution).setFriction(FLOOR_MATERIAL.friction * physics.frictionScale).setCollisionGroups(ARENA_COLLISION_GROUPS);
+  // Lote 9 (item 3): the profile at the match's depth — the same h(r) as everything else that reads the floor.
+  setArenaSizeScale(geometry.sizeScale ?? 1); // owner, 2026-10-04: the stage size slider
+  const floor: ArenaFloor = { id: geometry.floor ?? 'flat', depthM: geometry.floorDepthM ?? BOWL_DEPTH_M };
+  const profile = { heightAtRadius: (r: number) => floorHeightAtRadius(floor, r) };
   // The wall is measured from the rim (visual-prototypes-approval.md §2.3):
   // it runs from y = 0 up to rim + wall height, so on a bowl its inner face
   // still covers the floor all the way up to the edge. Flat: rim = 0, as before.
@@ -74,9 +79,9 @@ export function createArenaColliders(
   scene.add(sun);
 
 
-  if (floor === 'flat') {
+  if (floor.id === 'flat' || floor.depthM <= 0) { // 0 m deep is the flat floor itself (Lote 9)
     const floorMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(ARENA_FLOOR_RADIUS, ARENA_FLOOR_RADIUS, ARENA_FLOOR_THICKNESS, ARENA_VISUAL_SEGMENTS),
+      new THREE.CylinderGeometry(arenaFloorRadius(), arenaFloorRadius(), ARENA_FLOOR_THICKNESS, ARENA_VISUAL_SEGMENTS),
       new THREE.MeshStandardMaterial({ color: theme.floorHex, roughness: theme.floorRoughness, metalness: theme.floorMetalness }),
     );
     floorMesh.position.y = -ARENA_FLOOR_THICKNESS / 2;
@@ -87,7 +92,7 @@ export function createArenaColliders(
     // arena art (prototypes/arena-visual-concepts) is not integrated yet.
     const points: THREE.Vector2[] = [];
     for (let i = 0; i <= BOWL_VISUAL_RADIAL_STEPS; i++) {
-      const r = (i / BOWL_VISUAL_RADIAL_STEPS) * ARENA_FLOOR_RADIUS;
+      const r = (i / BOWL_VISUAL_RADIAL_STEPS) * arenaFloorRadius();
       points.push(new THREE.Vector2(r, profile.heightAtRadius(r)));
     }
     const bowlMesh = new THREE.Mesh(
@@ -101,7 +106,7 @@ export function createArenaColliders(
   // Floor rings: purely painted markings, just above the floor surface
   // (on a bowl a ring of constant r is level, at h(r)).
   const lineMaterial = new THREE.MeshBasicMaterial({ color: theme.floorLineHex, transparent: true, opacity: theme.floorLineOpacity, depthWrite: false });
-  for (const radius of [ARENA_FLOOR_RADIUS * 0.33, ARENA_FLOOR_RADIUS * 0.66, ARENA_FLOOR_RADIUS - 0.35]) {
+  for (const radius of [arenaFloorRadius() * 0.33, arenaFloorRadius() * 0.66, arenaFloorRadius() - 0.35]) {
     const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.04, radius + 0.04, ARENA_VISUAL_SEGMENTS), lineMaterial);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = profile.heightAtRadius(radius) + 0.005;
@@ -110,7 +115,7 @@ export function createArenaColliders(
 
   // Every floor, flat included, is a heightfield sampled from the same h(r) as
   // the visuals. The flat floor used to be one cylinder collider (radius =
-  // ARENA_FLOOR_RADIUS, a thin slab centred at -THICKNESS/2 so its top is
+  // arenaFloorRadius(), a thin slab centred at -THICKNESS/2 so its top is
   // y = 0); at the 3x arena (radius 36 m, 0.5 m thick) Rapier's
   // cylinder-vs-cylinder contact produced ghost obstacles for a rolling Bey
   // 1-2 m inside the wall (a full stop at r = 33.5-34.4 m, measured), which
@@ -123,8 +128,8 @@ export function createArenaColliders(
 
   const wallMesh = new THREE.Mesh(
     new THREE.CylinderGeometry(
-      ARENA_FLOOR_RADIUS + ARENA_WALL_THICKNESS / 2,
-      ARENA_FLOOR_RADIUS + ARENA_WALL_THICKNESS / 2,
+      arenaFloorRadius() + ARENA_WALL_THICKNESS / 2,
+      arenaFloorRadius() + ARENA_WALL_THICKNESS / 2,
       wallHeightM,
       ARENA_WALL_SEGMENT_COUNT,
       1,
@@ -145,7 +150,7 @@ export function createArenaColliders(
 
   // Emissive trim along the top of the wall: shows where the rim is at a glance.
   const rim = new THREE.Mesh(
-    new THREE.TorusGeometry(ARENA_FLOOR_RADIUS + ARENA_WALL_THICKNESS / 2, 0.05, 6, ARENA_VISUAL_SEGMENTS),
+    new THREE.TorusGeometry(arenaFloorRadius() + ARENA_WALL_THICKNESS / 2, 0.05, 6, ARENA_VISUAL_SEGMENTS),
     new THREE.MeshBasicMaterial({ color: theme.rimHex }),
   );
   rim.rotation.x = Math.PI / 2;
@@ -156,7 +161,7 @@ export function createArenaColliders(
   // needs discrete flat colliders instead, since Rapier has no native
   // "inside of a cylinder" shape that stays both cheap and robust — see
   // ArenaTuning.ts.
-  const chordLength = 2 * ARENA_FLOOR_RADIUS * Math.sin(Math.PI / ARENA_WALL_SEGMENT_COUNT);
+  const chordLength = 2 * arenaFloorRadius() * Math.sin(Math.PI / ARENA_WALL_SEGMENT_COUNT);
   const segmentHalfWidth = (chordLength * ARENA_WALL_SEGMENT_OVERLAP_FACTOR) / 2;
   const wallCollider = RAPIER.ColliderDesc.cuboid(segmentHalfWidth, wallHeightM / 2, ARENA_WALL_THICKNESS / 2)
     .setRestitution(wallRestitution)
@@ -165,8 +170,8 @@ export function createArenaColliders(
 
   for (let i = 0; i < ARENA_WALL_SEGMENT_COUNT; i++) {
     const angle = (i / ARENA_WALL_SEGMENT_COUNT) * Math.PI * 2;
-    const x = Math.cos(angle) * ARENA_FLOOR_RADIUS;
-    const z = Math.sin(angle) * ARENA_FLOOR_RADIUS;
+    const x = Math.cos(angle) * arenaFloorRadius();
+    const z = Math.sin(angle) * arenaFloorRadius();
     // Segment's local X axis (its width) must run tangent to the circle at
     // this angle, and its local Z (thickness) radially. A yaw θ about +Y maps
     // local X to (cos θ, 0, −sin θ); the tangent at (cos a, 0, sin a) is
@@ -211,7 +216,7 @@ const ARENA_VISUAL_SEGMENTS = 192;
 /**
  * Past the floor edge the heightfield drops this far below the rim: there
  * is no floor outside the arena (as with the flat floor, which ends at
- * ARENA_FLOOR_RADIUS), only behind the wall.
+ * arenaFloorRadius()), only behind the wall.
  */
 const BOWL_OUTSIDE_DROP_M = 8;
 
@@ -224,15 +229,15 @@ const BOWL_OUTSIDE_DROP_M = 8;
  */
 function bowlHeightfield(heightAtRadius: (r: number) => number): RAPIER.ColliderDesc {
   const n = BOWL_HEIGHTFIELD_CELLS;
-  const half = ARENA_FLOOR_RADIUS + (2 * ARENA_FLOOR_RADIUS) / n;
+  const half = arenaFloorRadius() + (2 * arenaFloorRadius()) / n;
   const heights = new Float32Array((n + 1) * (n + 1));
-  const rim = heightAtRadius(ARENA_FLOOR_RADIUS);
+  const rim = heightAtRadius(arenaFloorRadius());
   for (let i = 0; i <= n; i++) {
     for (let j = 0; j <= n; j++) {
       const x = -half + (2 * half * i) / n;
       const z = -half + (2 * half * j) / n;
       const r = Math.hypot(x, z);
-      heights[i * (n + 1) + j] = r <= ARENA_FLOOR_RADIUS ? heightAtRadius(r) : rim - BOWL_OUTSIDE_DROP_M;
+      heights[i * (n + 1) + j] = r <= arenaFloorRadius() ? heightAtRadius(r) : rim - BOWL_OUTSIDE_DROP_M;
     }
   }
   return RAPIER.ColliderDesc.heightfield(n, n, heights, { x: 2 * half, y: 1, z: 2 * half }, RAPIER.HeightFieldFlags.FIX_INTERNAL_EDGES);

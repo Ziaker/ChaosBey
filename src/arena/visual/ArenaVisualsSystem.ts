@@ -15,6 +15,7 @@
 //     inside the camera's containment radius clear (the camera is not touched, ever).
 // ============================================================
 
+import { arenaSizeScale } from '../colliders/ArenaTuning';
 import * as THREE from 'three';
 import type { PresentationEvent } from '../../presentation/events';
 import type { PresentationFrame, PresentationSystem } from '../../presentation/hub';
@@ -72,7 +73,11 @@ export class ArenaVisualsSystem implements PresentationSystem {
   private readonly point = new THREE.Vector3();
 
   constructor(private readonly options: ArenaVisualsOptions) {
-    this.built = arenaArtFor(options.presetId).build(undefined, options.floorHeightAtR);
+    // Owner, 2026-10-04 (stage size): the art is built for the 36 m floor and stretched to the match's stage size.
+    const size = arenaSizeScale();
+    const floorAt = options.floorHeightAtR;
+    this.built = arenaArtFor(options.presetId).build(undefined, floorAt ? (r: number) => floorAt(r * size) : undefined);
+    this.built.root.scale.set(size, 1, size);
     this.built.root.name = `arena-art-${options.presetId}`;
     options.root.add(this.built.root);
     this.previousFog = options.scene.fog;

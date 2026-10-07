@@ -12,7 +12,7 @@ import { SLIP_GRIP_FLOOR_MULTIPLIER } from '../../src/bey/movement/MovementTunin
 import { ARENA_FLOOR_RADIUS } from '../../src/arena/colliders/ArenaTuning';
 import { describe, expect, it } from 'vitest';
 import { PRESETS as LAB_PRESETS } from '../../prototypes/bey-motion-concepts/src/physics/params';
-import { MOTION_DIRECTIONS, MOTION_DIRECTION_IDS, DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../src/bey/motion/MotionPresets';
+import { LEAN_SCALE, MOTION_DIRECTIONS, MOTION_DIRECTION_IDS, DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../src/bey/motion/MotionPresets';
 import { applyKnockback } from '../../src/combat/knockback/Knockback';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { createDefaultMatchConfig } from '../../src/config/match/MatchConfig';
@@ -35,7 +35,11 @@ async function harness(id: MotionDirectionId, spawn = { x: 0, y: 1, z: -10.5 }):
 
 describe('motion directions — the approved Motion Lab presets', () => {
   it('carry the Lab\'s 33 values exactly, B is the default, and B keeps the game\'s planar numbers', () => {
-    for (const lab of LAB_PRESETS) expect(MOTION_DIRECTIONS[lab.id].params).toEqual(lab.params);
+    // Owner override, 2026-10-02 (Lote 6): the lean — leanStrength, speedTilt, maxTilt — is 25% under the Lab's.
+    for (const lab of LAB_PRESETS) {
+      const lean = { leanStrength: lab.params.leanStrength * LEAN_SCALE, speedTilt: lab.params.speedTilt * LEAN_SCALE, maxTilt: lab.params.maxTilt * LEAN_SCALE };
+      expect(MOTION_DIRECTIONS[lab.id].params).toEqual({ ...lab.params, ...lean });
+    }
     expect(MOTION_DIRECTION_IDS).toEqual(['A', 'B', 'C']);
     expect(DEFAULT_MOTION_DIRECTION).toBe('B');
     expect(createDefaultMatchConfig().motion).toBe('B');
@@ -152,9 +156,14 @@ describe('motion directions — the Lab\'s behaviours in the real simulation', (
     expect(peak.B).toBeLessThan(peak.C!);
   });
 
-  it('tumble: 11 m/s of velocity change (11 / (1 + wallBounce) incoming) tumbles only C, whose threshold is 6 m/s', async () => {
+  it('tumble: 11 m/s of velocity change (11 / (1 + wallBounce) incoming) tumbles only C, whose threshold is 6 m/s — on an emptied Bey; a healthy one never tumbles (owner, Lote 6)', async () => {
     for (const id of MOTION_DIRECTION_IDS) {
+      const healthy = await harness(id, { x: 0, y: 1, z: 0 });
+      healthy.spin.registerImpact(healthy.beyBody, 11, { x: 0, z: 1 });
+      expect(healthy.tick(IDLE).spin.isTumbling, `${id}, healthy`).toBe(false);
       const h = await harness(id, { x: 0, y: 1, z: 0 });
+      h.conditionFraction = 0;
+      h.tick(IDLE);
       h.spin.registerImpact(h.beyBody, 11, { x: 0, z: 1 });
       const r = h.tick(IDLE);
       expect(r.spin.isTumbling, id).toBe(id === 'C');

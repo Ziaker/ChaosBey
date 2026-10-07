@@ -74,11 +74,15 @@ export const SCENARIOS: readonly Scenario[] = [
     // as a flat state) changed fight timing again — 'k' no longer reaches a Clash at all within 15s
     // (Clash at 2.0 s, no round end within 15 s); 'b' since the arena scale pass (floor radius 12 m ->
     // 36 m, the flat floor now a heightfield, then its resolution 288 -> 144 cells, changed every AI fight again: 'r' no longer reaches a
-    // Clash; 'b' is the first of a..z with a Clash and no round end within 15 s).
+    // Clash; 'b' is the first of a..z with a Clash and no round end within 15 s). 'c' since the Dash cooldown
+    // replaced Attack Energy (owner, 2026-10-02): 'b' now ends its round inside 15 s; 'c' is the first of a..z with
+    // a hit, a Clash, no round end and every readability guard holding (seed only; no camera value changed).
+    // 'i' since the owner audit (2026-10-04: speed pass, post-Clash lock, AI no longer pressing into it): 'c' ends its
+    // round at 13.8 s with no Clash; 'i' is the first of a..z with a hit, a Clash (5.8 s) and no round end in 15 s.
     firstSpawn: { x: -3, z: -5 },
     secondSpawn: { x: 3, z: 5 },
-    first: { kind: 'ai', seed: 'duel-p-b' },
-    second: { kind: 'ai', seed: 'duel-o-b' },
+    first: { kind: 'ai', seed: 'duel-p-i' },
+    second: { kind: 'ai', seed: 'duel-o-i' },
     expects: ['hit', 'clashActive'],
   },
   {
@@ -202,7 +206,7 @@ export const SCENARIOS: readonly Scenario[] = [
     firstSpawn: { x: 0, z: -1 + WALL_SHIFT_M },
     secondSpawn: { x: 0, z: 5 + WALL_SHIFT_M },
     setup: ({ second }) => {
-      second.stamina.resource.set(0);
+      second.stamina.resource.set(0.05 * second.stamina.resource.max); // nearly empty: Stamina 0 is a spin-out now (owner, 2026-10-02)
       second.stability.debugSetValue(30);
     },
     first: { kind: 'script', held: (t) => when(t < 1.25, Z) },

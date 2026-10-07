@@ -33,7 +33,8 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     staminaFraction: 1,
     stabilityFraction: 1,
     isBroken: false,
-    attackEnergyFraction: 1,
+    dashReadiness: 1,
+    momentum: 0,
     airRecoveryAvailable: false,
     canAffordDodge: true,
     ...overrides,
@@ -79,7 +80,7 @@ describe('ActionSelector', () => {
       AiIntent.AttackDash,
       // Opponent straight ahead (heading 0 faces +Z) so only the charge
       // target decides — see the alignment test below for the other gate.
-      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.1, attackEnergyFraction: 1 }, { positionXZ: { x: 0, z: 5 } }),
+      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.1, dashReadiness: 1 }, { positionXZ: { x: 0, z: 5 } }),
       ATTACK_AI_PERSONALITY,
       false,
       1 / 60,
@@ -89,7 +90,7 @@ describe('ActionSelector', () => {
 
     const chargedEnough = selector.selectActions(
       AiIntent.AttackDash,
-      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.99, attackEnergyFraction: 1 }, { positionXZ: { x: 0, z: 5 } }),
+      world({ attackState: AttackState.ChargingDash, dashChargeFraction: 0.99, dashReadiness: 1 }, { positionXZ: { x: 0, z: 5 } }),
       ATTACK_AI_PERSONALITY,
       false,
       1 / 60,
@@ -115,7 +116,7 @@ describe('ActionSelector', () => {
     const selector = new ActionSelector();
     const actions = selector.selectActions(
       AiIntent.PressAdvantage,
-      world({ attackState: AttackState.Neutral, attackEnergyFraction: 1 }, { positionXZ: { x: 5, z: 0 }, isBroken: true, stabilityFraction: 0 }),
+      world({ attackState: AttackState.Neutral, dashReadiness: 1 }, { positionXZ: { x: 5, z: 0 }, isBroken: true, stabilityFraction: 0 }),
       ATTACK_AI_PERSONALITY,
       false,
       1 / 60,
@@ -193,11 +194,12 @@ describe('ActionSelector', () => {
     expect(actions.held.has(Action.MoveForward)).toBe(true);
   });
 
-  it('produces no movement/attack/dodge/jump actions for Wait', () => {
+  it('Wait keeps moving (owner, 2026-10-04: "não quero ver ela parada") and presses no attack/dodge/jump', () => {
     const selector = new ActionSelector();
     const actions = selector.selectActions(AiIntent.Wait, world({}), ATTACK_AI_PERSONALITY, false, 1 / 60);
     assertValidContract(actions);
-    expect(actions.held.size).toBe(0);
+    expect([Action.MoveForward, Action.SteerLeft, Action.SteerRight].some((a) => actions.held.has(a))).toBe(true);
+    for (const a of [Action.Attack, Action.Dodge, Action.JumpDrift]) expect(actions.held.has(a)).toBe(false);
   });
 
   it('repeatFrozenActions repeats held with no new presses and does not advance hold-duration clocks', () => {
@@ -275,7 +277,7 @@ describe('ActionSelector — steering discipline (M7 Part 2)', () => {
 describe('ActionSelector — Dash release (M7 Part 2)', () => {
   it('keeps charging past the charge target until the heading is on line, then releases', () => {
     const selector = new ActionSelector();
-    const charged = { attackState: AttackState.ChargingDash, dashChargeFraction: 0.9, attackEnergyFraction: 0.8 };
+    const charged = { attackState: AttackState.ChargingDash, dashChargeFraction: 0.9, dashReadiness: 0.8 };
 
     const offLine = selector.selectActions(AiIntent.AttackDash, world(charged, { positionXZ: { x: 5, z: 0 } }), ATTACK_AI_PERSONALITY, false, DT);
     expect(offLine.held.has(Action.Attack)).toBe(true);
@@ -305,11 +307,11 @@ describe('ActionSelector — Circular counter timing (M7 Part 2)', () => {
     return world({}, { positionXZ: { x: 0, z: distanceM }, velocityXZ: { x: 0, z: -15 }, attackState: AttackState.DashActive, dashChargeFraction: 0.5 });
   }
 
-  it('holds ground (no tap) while the incoming dasher is still too far to be caught', () => {
+  it('no tap while the incoming dasher is still too far to be caught (it keeps moving sideways meanwhile)', () => {
     const selector = new ActionSelector();
     const actions = selector.selectActions(AiIntent.CounterAttack, incomingDash(6), ATTACK_AI_PERSONALITY, false, DT);
     assertValidContract(actions);
-    expect(actions.held.size).toBe(0);
+    expect(actions.held.has(Action.Attack)).toBe(false);
   });
 
   it('taps Circular once the dasher is about to enter reach', () => {

@@ -51,7 +51,8 @@ describe('AI jump/drift — real physics', () => {
         staminaFraction: 1,
         stabilityFraction: 1,
         isBroken: false,
-        attackEnergyFraction: 1,
+        dashReadiness: 1,
+        momentum: 0,
         airRecoveryAvailable: false,
         canAffordDodge: true,
       };
@@ -69,9 +70,11 @@ describe('AI jump/drift — real physics', () => {
     let reachedHopping = false;
     let reachedDrifting = false;
     let recoveredAfterDrifting = false;
-    let intent = AiIntent.UseJumpDrift;
+    // Moving first: X from a standstill is a jump, the drift needs the Bey in motion (owner, 2026-10-02).
+    let intent = AiIntent.Circle;
 
-    for (let i = 0; i < 240; i++) {
+    for (let i = 0; i < 300; i++) {
+      if (i === 60) intent = AiIntent.UseJumpDrift;
       const driftState = harness.second.drift.getState();
       if (driftState === DriftState.Hopping) reachedHopping = true;
       if (driftState === DriftState.Drifting) reachedDrifting = true;

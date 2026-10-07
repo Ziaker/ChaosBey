@@ -58,7 +58,7 @@ export interface DebugOverlayState {
   firstStaminaFraction: number;
   firstStabilityFraction: number;
   firstIsBroken: boolean;
-  firstAttackEnergyFraction: number;
+  firstDashReadiness: number;
   secondAttackState: string;
   secondStaminaFraction: number;
   secondStabilityFraction: number;
@@ -207,7 +207,7 @@ export class DebugOverlay {
       `dash charge      ${(state.firstDashChargeFraction * 100).toFixed(0)}%\n` +
       `stamina          ${(state.firstStaminaFraction * 100).toFixed(0)}%\n` +
       `stability        ${(state.firstStabilityFraction * 100).toFixed(0)}%${state.firstIsBroken ? ' BROKEN' : ''}\n` +
-      `attack energy    ${(state.firstAttackEnergyFraction * 100).toFixed(0)}%\n` +
+      `dash ready       ${(state.firstDashReadiness * 100).toFixed(0)}%\n` +
       `-- combat: second (opponent) --\n` +
       `attack state     ${state.secondAttackState}\n` +
       `stamina          ${(state.secondStaminaFraction * 100).toFixed(0)}%\n` +

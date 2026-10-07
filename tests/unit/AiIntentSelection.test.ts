@@ -31,7 +31,8 @@ function rawState(overrides: Partial<CombatantRawState> = {}): CombatantRawState
     staminaFraction: 1,
     stabilityFraction: 1,
     isBroken: false,
-    attackEnergyFraction: 1,
+    dashReadiness: 1,
+    momentum: 0,
     airRecoveryAvailable: false,
     canAffordDodge: true,
     ...overrides,
@@ -178,7 +179,7 @@ describe('selectIntent — considered scores (M7 Part 2, GDD section 65)', () =>
   it('reports every scored candidate, best first, with the winner on top (M7 Part 2b: all, not just the top 3)', () => {
     const decision = decide({}, { positionXZ: { x: 0, z: 4.5 } }, DEFENSE_AI_PERSONALITY);
     const scores = decision.consideredScores ?? [];
-    expect(scores.length).toBe(8);
+    expect(scores.length).toBe(9); // + BuildSpeed (owner, 2026-10-04)
     expect(new Set(scores.map((entry) => entry.intent)).size).toBe(scores.length);
     expect(scores[0]!.intent).toBe(decision.intent);
     for (let i = 1; i < scores.length; i++) expect(scores[i - 1]!.score).toBeGreaterThanOrEqual(scores[i]!.score);
@@ -264,7 +265,8 @@ describe('clashWillingness (M7 Part 2b, ported from PR #15)', () => {
 
   it('can change the choice, but only while a Clash could start: a cautious attacker declines the exchange when Idle, takes it on Cooldown', () => {
     const cautiousAttacker = { ...ATTACK_AI_PERSONALITY, caution: 0.9 };
-    const base = world({}, opponentCharging);
+    // Full momentum: nothing left to build (BuildSpeed, owner 2026-10-04), so the choice is attack vs not.
+    const base = world({ momentum: 1 }, opponentCharging);
     const risk = evaluateRisk(base, cautiousAttacker);
     expect(selectIntent(withClash(base, ClashState.Cooldown), cautiousAttacker, risk).intent).toBe(AiIntent.AttackDash);
     expect(selectIntent(withClash(base, ClashState.Idle), cautiousAttacker, risk).intent).not.toBe(AiIntent.AttackDash);

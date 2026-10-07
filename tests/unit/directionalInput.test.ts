@@ -163,11 +163,11 @@ describe('DirectionalController: gameplay-owned reference, no camera in the chai
     near(seen.get(Action.SteerRight), 1, 0);
   });
 
-  it('turns arrows into moveIntent and removes the four movement actions', () => {
+  it('turns arrows into moveIntent, removes forward/back and keeps left/right as the lateral input (drift rule, owner 2026-10-02)', () => {
     const controller = new DirectionalController(held(Action.MoveForward, Action.SteerRight, Action.Attack));
     const actions = controller.sampleActions(CONTEXT);
-    expect([...actions.held]).toEqual([Action.Attack]);
-    expect([...actions.pressedThisFrame]).toEqual([Action.Attack]);
+    expect([...actions.held].sort()).toEqual([Action.Attack, Action.SteerRight].sort());
+    expect([...actions.pressedThisFrame].sort()).toEqual([Action.Attack, Action.SteerRight].sort());
     expect(Math.hypot(actions.moveIntent!.x, actions.moveIntent!.z)).toBeLessThanOrEqual(1);
     expect(actions.moveIntent).toEqual(screenToWorld(screenVectorFromDigital(true, false, false, true), WORLD_CONTROL_REFERENCE.yawRad(true)));
     expect(controller.getDebug().screen.x).toBeCloseTo(Math.SQRT1_2, 12);
@@ -225,12 +225,14 @@ describe('opponent reference: up = toward the opponent (gameplay positions only)
 });
 
 describe('latched reference (the opt-in screen scheme): read once per gesture', () => {
-  it('reads its source when a direction is first held and keeps that value until everything is released', () => {
+  it('reads its source when a direction is first held, then follows a turning camera at most 90°/s (owner, 2026-10-04: no lost control when the camera turns), and re-reads after a release', () => {
     let source = 1;
     const ref = createLatchedReference(() => source);
     expect(ref.yawRad(true)).toBe(1);
     source = 2;
-    expect(ref.yawRad(true)).toBe(1);
+    const step = Math.PI / 2 / 60;
+    expect(ref.yawRad(true)).toBeCloseTo(1 + step, 12);
+    expect(ref.yawRad(true)).toBeCloseTo(1 + 2 * step, 12);
     ref.yawRad(false);
     expect(ref.yawRad(true)).toBe(2);
   });
@@ -238,10 +240,9 @@ describe('latched reference (the opt-in screen scheme): read once per gesture', 
 
 describe('control scheme setting', () => {
   it('defaults to the camera-free "opponent" scheme, keeps every valid scheme, preserves the legacy directional behaviour as screen, and falls back on garbage', () => {
-    expect(DEFAULT_PLAYER_SETTINGS.controlScheme).toBe('opponent');
-    for (const scheme of ['opponent', 'classic', 'arena', 'screen'] as const) expect(sanitizePlayerSettings({ controlScheme: scheme }).controlScheme).toBe(scheme);
-    expect(sanitizePlayerSettings({ controlScheme: 'tank' }).controlScheme).toBe('opponent');
-    expect(sanitizePlayerSettings({ controlScheme: 'directional' }).controlScheme).toBe('screen');
-    expect(sanitizePlayerSettings({ quality: 'Low' }).controlScheme).toBe('opponent');
+    // Owner, 2026-10-04: "remova todas opções de controle exceto a Screen (reads camera)" — every saved value reads as Screen.
+    expect(DEFAULT_PLAYER_SETTINGS.controlScheme).toBe('screen');
+    for (const scheme of ['opponent', 'classic', 'arena', 'screen', 'tank', 'directional'] as const) expect(sanitizePlayerSettings({ controlScheme: scheme }).controlScheme).toBe('screen');
+    expect(sanitizePlayerSettings({ quality: 'Low' }).controlScheme).toBe('screen');
   });
 });

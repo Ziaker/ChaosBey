@@ -13,7 +13,7 @@
 // match is seeded or simulated, so every existing seed plays the same fight.
 // ============================================================
 
-import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector, type DetectedAnomaly } from './anomalies/MatchAnomalyDetector';
+import { anomalyThresholdsFor, MatchAnomalyDetector, type DetectedAnomaly } from './anomalies/MatchAnomalyDetector';
 import { AIController } from '../ai/controllers/AIController';
 import { AI_DASH_ATTACK_MAX_RANGE_M } from '../ai/decision/AiCombatRanges';
 import { AiIntent } from '../ai/decision/Intent';
@@ -24,9 +24,9 @@ import { matchSpawnsFor, type SpawnPositionM } from '../app/bootstrap/matchSpawn
 import { floorRimHeight } from '../arena/floor/ArenaFloorProfile';
 import type { ChaosBeyReplayV1 } from '../replay/format/ChaosBeyReplayV1';
 import { startHeadlessCapture, type HeadlessCaptureInput } from '../replay/recording/ReplayCapture';
-import { resolveMatchConfig, type MatchConfig } from '../config/match/MatchConfig';
+import { arenaFloorOf, resolveMatchConfig, type MatchConfig } from '../config/match/MatchConfig';
 import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
-import { ARENA_FLOOR_RADIUS } from '../arena/colliders/ArenaTuning';
+import { arenaFloorRadius } from '../arena/colliders/ArenaTuning';
 import { AttackState } from '../combat/attacks/AttackController';
 import { ClashState } from '../combat/clash/ClashController';
 import { NullAiMashSource } from '../combat/clash/ClashMash';
@@ -56,6 +56,9 @@ export interface AiSideStats {
   counterHits: number;
   /** Mean horizontal distance (m) from the arena center, outside an Active Clash. */
   meanRadiusM: number;
+  /** Owner audit G2 (2026-10-03): mean horizontal speed (m/s) outside Clash, and at the start of each Circular. */
+  meanSpeedMps: number;
+  meanCircularStartSpeedMps: number;
   dodges: number;
   jumps: number;
   hitsLanded: number;
@@ -135,6 +138,9 @@ class SideTracker {
   private stalledAttackStreak = 0;
   private wedgedStreak = 0;
   private radiusSum = 0;
+  private speedSum = 0;
+  private circularSpeedSum = 0;
+  private previousSpeedMps = 0;
   private radiusSamples = 0;
 
   constructor(personalityId: string) {
@@ -146,6 +152,8 @@ class SideTracker {
       punishAttacks: 0,
       counterHits: 0,
       meanRadiusM: 0,
+      meanSpeedMps: 0,
+      meanCircularStartSpeedMps: 0,
       dodges: 0,
       jumps: 0,
       hitsLanded: 0,
@@ -170,11 +178,11 @@ class SideTracker {
     clashActive: boolean,
     radiusM: number,
     opponentOpen: boolean,
-    attackEnergyFraction: number,
+    dashReadiness: number,
     speedMps: number,
   ): void {
     const throttling = actions.held.has(Action.MoveForward) || actions.held.has(Action.MoveBackward);
-    const wedged = !clashActive && radiusM > ARENA_FLOOR_RADIUS && speedMps < WEDGED_MAX_SPEED_MPS && throttling;
+    const wedged = !clashActive && radiusM > arenaFloorRadius() && speedMps < WEDGED_MAX_SPEED_MPS && throttling;
     this.wedgedStreak = wedged ? this.wedgedStreak + 1 : 0;
     this.stats.longestWedgedTicks = Math.max(this.stats.longestWedgedTicks, this.wedgedStreak);
 
@@ -191,7 +199,7 @@ class SideTracker {
       !clashActive &&
       attackIntent &&
       attackState === AttackState.Neutral &&
-      attackEnergyFraction > 0.3 &&
+      dashReadiness >= 1 &&
       debug.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M &&
       !actions.held.has(Action.Attack);
     this.stalledAttackStreak = stalled ? this.stalledAttackStreak + 1 : 0;
@@ -215,6 +223,8 @@ class SideTracker {
       this.radiusSum += radiusM;
       this.radiusSamples++;
       this.stats.meanRadiusM = this.radiusSum / this.radiusSamples;
+      this.speedSum += speedMps;
+      this.stats.meanSpeedMps = this.speedSum / this.radiusSamples;
     }
     const windowTicks = Math.round(1 / FIXED_DELTA_SECONDS);
     while (this.pressTicks.length > 0 && this.pressTicks[0]! <= tick - windowTicks) this.pressTicks.shift();
@@ -222,7 +232,12 @@ class SideTracker {
 
     const startedCircular = attackState === AttackState.CircularActive && this.previousAttackState !== AttackState.CircularActive;
     const startedDash = attackState === AttackState.DashActive && this.previousAttackState !== AttackState.DashActive;
-    if (startedCircular) this.stats.circularAttacks++;
+    if (startedCircular) {
+      this.stats.circularAttacks++;
+      this.circularSpeedSum += this.previousSpeedMps; // the speed it was moving at when it chose to tap
+      this.stats.meanCircularStartSpeedMps = this.circularSpeedSum / this.stats.circularAttacks;
+    }
+    this.previousSpeedMps = speedMps;
     if (startedDash) this.stats.dashAttacks++;
     if ((startedCircular || startedDash) && opponentOpen) this.stats.punishAttacks++;
     if (dodgeState === DodgeState.Dodging && this.previousDodgeState !== DodgeState.Dodging) this.stats.dodges++;
@@ -354,7 +369,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
 
   // Before the first tick: the initial state is the replay's first checkpoint.
   const capture = setup.record
-    ? startHeadlessCapture(world, { matchConfig: resolveMatchConfig(setup.matchConfigOverrides ?? {}), ...setup.record, seedText: setup.seed, spawns: { first: setup.firstSpawn ?? matchSpawnsFor(resolveMatchConfig(setup.matchConfigOverrides ?? {}).arenaFloor).first, second: setup.secondSpawn ?? matchSpawnsFor(resolveMatchConfig(setup.matchConfigOverrides ?? {}).arenaFloor).second } })
+    ? startHeadlessCapture(world, { matchConfig: resolveMatchConfig(setup.matchConfigOverrides ?? {}), ...setup.record, seedText: setup.seed, spawns: { first: setup.firstSpawn ?? matchSpawnsFor(arenaFloorOf(resolveMatchConfig(setup.matchConfigOverrides ?? {}))).first, second: setup.secondSpawn ?? matchSpawnsFor(arenaFloorOf(resolveMatchConfig(setup.matchConfigOverrides ?? {}))).second } })
     : null;
 
   const first = new SideTracker(firstPersonality.id);
@@ -363,7 +378,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
   const anomalies: MatchAnomaly[] = [];
   let anomalyCount = 0;
   const resolvedArena = resolveMatchConfig(setup.matchConfigOverrides ?? {});
-  const detector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(resolvedArena.arenaFloor) + resolvedArena.arenaWallHeightM });
+  const detector = new MatchAnomalyDetector(anomalyThresholdsFor(resolvedArena));
   const detections: DetectedAnomaly[] = [];
   let invalidDetectionCount = 0;
   let warningCount = 0;
@@ -400,8 +415,8 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
     const b = world.second.body.translation();
     const isOpen = (attackState: AttackState, broken: boolean) =>
       broken || attackState === AttackState.DashRecovery || attackState === AttackState.CircularRecovery;
-    first.record(tick, firstAi, firstActions, result.first.attackState, result.first.dodgeState, clashActive, Math.hypot(a.x, a.z), isOpen(previousSecondAttackState, previousSecondBroken), result.first.attackEnergyFraction, result.first.movement.speedMps);
-    second.record(tick, secondAi, secondActions, result.second.attackState, result.second.dodgeState, clashActive, Math.hypot(b.x, b.z), isOpen(previousFirstAttackState, previousFirstBroken), result.second.attackEnergyFraction, result.second.movement.speedMps);
+    first.record(tick, firstAi, firstActions, result.first.attackState, result.first.dodgeState, clashActive, Math.hypot(a.x, a.z), isOpen(previousSecondAttackState, previousSecondBroken), result.first.dashReadiness, result.first.movement.speedMps);
+    second.record(tick, secondAi, secondActions, result.second.attackState, result.second.dodgeState, clashActive, Math.hypot(b.x, b.z), isOpen(previousFirstAttackState, previousFirstBroken), result.second.dashReadiness, result.second.movement.speedMps);
     previousFirstAttackState = result.first.attackState;
     previousSecondAttackState = result.second.attackState;
     previousFirstBroken = result.first.isBroken;

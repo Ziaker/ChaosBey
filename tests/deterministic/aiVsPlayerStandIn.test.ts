@@ -117,7 +117,7 @@ async function runVsPlayerStandIn(archetype: ArchetypeRun, seed: string): Promis
       const stalled =
         attackIntent &&
         result.first.attackState === AttackState.Neutral &&
-        result.first.attackEnergyFraction > 0.3 &&
+        result.first.dashReadiness >= 1 &&
         !aiActions.held.has(Action.Attack);
       stalledStreak = stalled ? stalledStreak + 1 : 0;
       longestStalledAttackTicks = Math.max(longestStalledAttackTicks, stalledStreak);

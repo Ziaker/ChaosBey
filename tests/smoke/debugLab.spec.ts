@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { baselineUrl } from './presentationBaseline';
 
 // Debug Lab smoke (GDD sections 1.2, 69, 70, 144): the production build
 // opens the lab at ?mode=debug-lab, its controls drive the real match, the
@@ -29,7 +30,7 @@ test('Debug Lab: pause, step, restart, seeds, speed and controller switching on 
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   const status = page.getByTestId('debug-lab-status');
   await expect(status).toContainText('RUNNING', { timeout: 15_000 });
   await expect.poll(() => readTick(page), { timeout: 10_000 }).toBeGreaterThan(30);
@@ -126,7 +127,7 @@ test('Debug Lab: pause, step, restart, seeds, speed and controller switching on 
   await page.getByTestId('debug-lab-mut-reset-cooldowns').click();
   await page.getByTestId('debug-lab-mut-force-jump').click();
   await page.getByTestId('debug-lab-mut-prepare-clash').click();
-  await expect.poll(async () => Number(await log.getAttribute('data-count'))).toBeGreaterThanOrEqual(9);
+  await expect.poll(async () => Number(await log.getAttribute('data-count'))).toBeGreaterThanOrEqual(8); // teleport, reset, jump, then Prepare Clash: two teleports, reset (the Dash's included), two forced Dashes
   // Prepare Clash + run: a real Clash starts.
   await page.evaluate(() => window.__chaosBeyDebugLab!.step(240));
   await inspector.locator('[data-section="clash"] summary').click();
@@ -141,7 +142,7 @@ test('Debug Lab: pause, step, restart, seeds, speed and controller switching on 
   const report = JSON.parse(reportText);
   expect(report.format).toBe('ChaosBeyDebugReportV1');
   expect(report.mutated).toBe(true);
-  expect(report.mutations.length).toBeGreaterThanOrEqual(10);
+  expect(report.mutations.length).toBeGreaterThanOrEqual(9); // the 8 above + set Stability
   expect(report.replay.status).toBe('idle');
   expect(report.replay.stateHash).toMatch(/^[0-9a-f]{16}$/);
   expect(reportText).not.toMatch(/NaN|Infinity/);
@@ -166,7 +167,7 @@ test('Debug Lab: restart() with an empty/whitespace seed does not crash or stran
   // stay robust on its own. An empty/blank string reaching
   // normalizeSeedText() throws ("seed text must not be empty"), which used
   // to escape createSession() uncaught and leave `session` stuck at null.
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   await page.waitForFunction(() => window.__chaosBeyDebugLab?.getSession() !== null);
 
   for (const blank of ['', '   ']) {
@@ -193,7 +194,7 @@ test('Debug Lab: record a match, download the replay, import it and watch it ver
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
-  await page.goto('/ChaosBey/?mode=debug-lab');
+  await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
   await page.waitForFunction(() => window.__chaosBeyDebugLab?.getSession() !== null);
   const status = page.getByTestId('debug-lab-status');
 

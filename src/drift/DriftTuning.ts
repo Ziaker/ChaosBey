@@ -28,7 +28,25 @@
 // this can only ever cut the arc short, never add to it — satisfying
 // "vy(t+1) <= vy(t) + tolerance" and "exactly one apex" by construction,
 // not by a separate check bolted on after the fact.
-export const JUMP_LAUNCH_VELOCITY_MPS = 5;
+// Owner, 2026-10-02 (Lote 4): the full jump's height is a match value (Pregame
+// "Full jump height", PROVISIONAL default 2.5 m, 1-5 m), and the launch
+// velocity is derived from it with the world's real gravity (v0 = √(2·g·h)),
+// so the apex is the asked height exactly. JUMP_LAUNCH_VELOCITY_MPS is the
+// default's launch speed (was a fixed 5 m/s ≈ 1.19 m apex).
+import { GRAVITY_MPS2 } from '../physics/world/PhysicsWorld';
+
+export const JUMP_FULL_HEIGHT_DEFAULT_M = 2.5;
+export const JUMP_FULL_HEIGHT_RANGE = { min: 1, max: 5, step: 0.25 } as const;
+export function jumpLaunchVelocityForApexM(apexM: number): number {
+  return Math.sqrt(2 * GRAVITY_MPS2 * apexM);
+}
+export const JUMP_LAUNCH_VELOCITY_MPS = jumpLaunchVelocityForApexM(JUMP_FULL_HEIGHT_DEFAULT_M);
+/**
+ * The pre-2026-10-02 full jump (a fixed 5 m/s launch, ≈1.19 m apex). A DriftController (or a createBey()) built
+ * without a match's rules keeps it — the same way a bare RoundState keeps the instant ring-out: every match passes
+ * MatchConfig (2.5 m by default), while bare constructions (the Camera Lab prototype, mechanism tests) are unchanged.
+ */
+export const LEGACY_JUMP_FULL_HEIGHT_M = (5 * 5) / (2 * GRAVITY_MPS2);
 // Jump/air-control hotfix FOLLOW-UP (owner review): the first version of
 // this release cut targeted a fixed VELOCITY floor (JUMP_SHORT_RELEASE_FLOOR_MPS,
 // since removed), which only gave a genuinely consistent short hop for a
@@ -52,6 +70,8 @@ export const JUMP_LAUNCH_VELOCITY_MPS = 5;
 // of linear-in-velocity-from-tick-1. 0.2036 m = the movement/weight/dodge
 // pass's own measured baseline apex (0.177 m) x1.15.
 export const JUMP_SHORT_HOP_TARGET_APEX_M = 0.1265;
+// Owner, 2026-10-02 (Lote 4): Pregame "Short hop height", default the value above, 0.05-0.5 m.
+export const JUMP_SHORT_HOP_HEIGHT_RANGE = { min: 0.05, max: 2, step: 0.01 } as const; // owner, 2026-10-04: up to 2 m
 // How long, from the press, a release still shapes the jump's height at
 // all: release before this and computeJumpReleaseCapMps's ramp (fixed
 // target, then smoothly toward the natural arc) applies; hold at least
@@ -95,7 +115,8 @@ export const DRIFT_LATERAL_GRIP_PER_S = 1.1;
 // How long, after releasing JumpDrift, it takes lateral grip to ease back
 // to normal — an instant snap back would feel like the slide never
 // happened.
-export const DRIFT_GRIP_RECOVERY_DURATION_S = 0.5;
+// Owner, 2026-10-05 ("ajeite o drift para que seja mais responsivo"): 0.5 → 0.25 s, the grip is back sooner.
+export const DRIFT_GRIP_RECOVERY_DURATION_S = 0.25;
 // While drifting, time (s) the Bey may be off the ground — the landing
 // bounce right after the hop, a bump — before the drift ends. Longer than
 // the Motion Lab landing bounce (a hop landing at ~4 m/s leaves at
@@ -134,3 +155,49 @@ export const JUMP_INPUT_BUFFER_WINDOW_S = 0.1;
 // GDD-approved exact number, just enough range for a bare hop to read as
 // weak and a big jump (or a hard knockback fall) to read as strong.
 export const LANDING_INTENSITY_REFERENCE_DESCENT_SPEED_MPS = 10;
+
+/**
+ * Owner, 2026-10-04: "o jogo tá decidindo quando quer pular alto e quando quer dar short hop". One rule, nothing else:
+ * X always starts a short hop at once; still held this long after the press = it becomes the full jump (fixed height).
+ * Released before = the short hop. Steering never changes the height. Pregame slider; PROVISIONAL 0.12 s.
+ */
+// 0.12 → 0.2 s (owner, 2026-10-04, after playtesting 0.27.0: "nunca vai ajeitar o problema dos pulos"): a normal key
+// tap lasts ~80–150 ms, right across 0.12 s, so the same gesture came out a hop one time and a full jump the next.
+// 0.2 s leaves a clear gap between a tap and a deliberate hold. PROVISIONAL.
+export const JUMP_HOLD_FOR_FULL_DEFAULT_S = 0.2;
+export const JUMP_HOLD_FOR_FULL_RANGE = { min: 0.08, max: 0.4, step: 0.01 } as const;
+
+/**
+ * Owner, 2026-10-04: after a short hop lands, an X press within this window is the drift (tap + hold), never a new jump.
+ * 0.35 → 1 s (owner audit: "toque + segurar MESMO SE CAIR NO CHÃO = drift" — pressing 0.43 s after the landing gave a
+ * 3.2 m full jump; the hop itself lasts ~0.4 s). PROVISIONAL.
+ */
+export const DRIFT_FOLLOW_UP_WINDOW_S = 1;
+
+// ============================================================
+// REWARDING DRIFT (owner, 2026-10-04: "o controle de movimento do drift está completamente defasado comparado com o
+// controle de movimento de agora, corrija ele para ser mais recompensador"): the drift's movement control follows the
+// current handling. Match Beys only (a bare construction keeps
+// the fixed DRIFT_LATERAL_GRIP_PER_S slide above). PROVISIONAL values.
+// ============================================================
+
+/** While drifting the lateral grip is this share of the Bey's own (speed-scaled) grip — it slides, but the arc follows the
+ * stick at any speed (the fixed 1.1 /s was ~10× weaker than the normal grip at the new speeds: the drift barely turned). */
+export const DRIFT_GRIP_FRACTION = 0.35;
+/** The heading turns this much faster while drifting: a drift is the sharp turn. */
+export const DRIFT_TURN_RATE_MULTIPLIER = 1.35;
+
+/**
+ * Owner, 2026-10-05 ("ajeite o drift para que seja mais responsivo e mais útil para build-up de velocidade"): the drift
+ * press made while the short hop is still in the air drops the Bey to the floor at least this fast (m/s), so the drift
+ * starts at once instead of when the hop happens to come down. PROVISIONAL.
+ */
+export const DRIFT_FAST_DROP_MPS = 9;
+
+/**
+ * Owner, 2026-10-05 ("PQ TÁ IMPOSSÍVEL DE DOBRAR NO DRIFT? … ERA PRA FICAR MAIS FÁCIL DE FAZER CURVAS EM ARCO"): while
+ * drifting, the Bey's direction of travel carves toward where it faces at up to this rate (rad/s), keeping its speed —
+ * an arc, not a slide. (The drift used to slide on a third of the grip: a full-stick 90° took 1.0–1.25 s and 6–22 m of
+ * width, against 0.35–0.4 s for a plain turn.) PROVISIONAL.
+ */
+export const DRIFT_CARVE_RATE_RAD_S = 6;

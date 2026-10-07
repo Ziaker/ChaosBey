@@ -12,12 +12,48 @@ import type { BeyDefinition } from '../../src/bey/archetype/BeyDefinition';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import type { ClashAiMashSource } from '../../src/combat/clash/ClashMash';
 import { floorHeightAt } from '../../src/arena/floor/ArenaFloorProfile';
-import { resolveMatchConfig, type MatchConfig } from '../../src/config/match/MatchConfig';
+import { arenaFloorOf, resolveMatchConfig, type MatchConfig } from '../../src/config/match/MatchConfig';
 import { SelfTestMatchWorld } from '../../src/self-test/SelfTestMatchWorld';
 
 /** The test suite's default spawns: closer than the live game's (±4 m), so scripted scenarios reach contact quickly. */
 export const HARNESS_FIRST_SPAWN = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: -2 };
 export const HARNESS_SECOND_SPAWN = { x: 0, y: BEY_SPAWN_HEIGHT_M, z: 2 };
+
+/**
+ * The mechanism tests built on this harness (dodge, air recovery, AI reactions, collisions, combat timing) were
+ * calibrated on the handling, jump timing and floor before the owner's 2026-10-04 feel pass. They keep running on
+ * that baseline so each still isolates its own mechanism; the shipped defaults (×1.45 speed/acceleration/turning,
+ * 85% speed kept in turns, +150% momentum, the 7 m funnel) are covered by
+ * ownerFeel20261004.test.ts (which passes createDefaultMatchConfig() explicitly) and by every AI / replay / scenario
+ * simulation, which use the real defaults. A test overrides any of these by passing them.
+ */
+export const MECHANISM_BASELINE: Partial<MatchConfig> = {
+  topSpeedScale: 1,
+  accelerationScale: 1,
+  turnRateScale: 1,
+  turnSpeedRetention: 0,
+  highSpeedControl: 0,
+  momentumGain: 1,
+  gravityScale: 1,
+  contactRepelMps: 0,
+  attackRecoilMps: 0,
+  momentumDecayS: 2,
+  momentumLossOnCollision: 0.5,
+  jumpFullHeightM: 2.5,
+  jumpShortHopHeightM: 0.1265,
+  movementStaminaDrain: 1,
+  dodgeCooldownS: 3,
+  airControl: 1,
+  dodgeStaminaCost: 20,
+  arenaWallRestitution: 0.55,
+  jumpHoldForFullS: 0.2,
+  arenaFloor: 'bowl-a',
+  arenaBowlDepthM: 2.5,
+  clashLaunchMps: 0,
+  // Owner, 2026-10-05: the recovery time's minimum (0.2 s shipped; ownerRules20261005 covers it). 0 here: the Air
+  // Recovery tests isolate the recovery itself (a launch's force still adds its share).
+  airRecoveryMinDelayS: 0,
+};
 
 export class CombatHarness extends SelfTestMatchWorld {
   /**
@@ -41,7 +77,8 @@ export class CombatHarness extends SelfTestMatchWorld {
     // the ground); on a bowl floor (the default since the arena scale pass)
     // they are lifted onto it, the same way matchSpawnsFor() lifts the live
     // game's spawns. Flat: unchanged.
-    const floor = resolveMatchConfig(matchConfigOverrides).arenaFloor;
+    matchConfigOverrides = { ...MECHANISM_BASELINE, ...matchConfigOverrides };
+    const floor = arenaFloorOf(resolveMatchConfig(matchConfigOverrides)); // Lote 9: profile + depth
     const lift = (s: { x: number; y: number; z: number }) => ({ x: s.x, y: s.y + floorHeightAt(floor, s.x, s.z), z: s.z });
     const parts = await SelfTestMatchWorld.buildParts({
       firstSpawn: lift(firstSpawn),

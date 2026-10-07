@@ -15,5 +15,11 @@ export function applyQuality(appRenderer: AppRenderer, settings: PlayerSettings)
 }
 
 export function presentationFor(settings: PlayerSettings): MatchPresentation {
-  return { cameraEffects: settings.cameraEffects, trails: QUALITY_PROFILES[settings.quality].trails, cameraPreset: settings.cameraPreset, conditionLayers: settings.conditionLayers };
+  return {
+    cameraEffects: settings.cameraEffects,
+    trails: QUALITY_PROFILES[settings.quality].trails,
+    cameraPreset: settings.cameraPreset,
+    conditionLayers: settings.conditionLayers,
+    feel: { hitFlash: settings.hitFlash, hitShake: settings.hitShake, counterFeedback: settings.counterFeedback },
+  };
 }

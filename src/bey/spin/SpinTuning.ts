@@ -36,6 +36,21 @@ export const ATTITUDE_TILT_CLAMP_RAD = (80 * Math.PI) / 180;
 // MotionPresets.ts; B = the game's former 6°, 7 Hz, 0.12, 1.2).
 export const WOBBLE_ENERGY_MAX = 1;
 
+// Owner, 2026-10-02 (Lote 6, item 10): above this Stamina AND Stability
+// fraction the Bey is steady — no ambient wobble and no precession (the
+// axis does not circle). Below it, both ramp in smoothly to full at 0
+// (whichever resource is lower drives it). Impacts still add a momentary
+// wobble that decays, at any condition.
+export const AXIS_UNREST_START_FRACTION = 0.7;
+// Ambient wobble energy at the bottom of that ramp (the former Stamina
+// floor's value — it used to start at 40% Stamina only).
+export const AMBIENT_WOBBLE_ENERGY_FLOOR_MAX = 0.25;
+
+/** 0 at/above AXIS_UNREST_START_FRACTION, rising linearly to 1 at 0 (the lower of Stamina and Stability fractions). */
+export function axisUnrest(conditionFraction: number): number {
+  return Math.min(1, Math.max(0, (AXIS_UNREST_START_FRACTION - conditionFraction) / AXIS_UNREST_START_FRACTION));
+}
+
 // Motion Lab tilt model (prototypes/bey-motion-concepts/src/physics/model.ts):
 // a hit above the direction's tumble threshold tumbles the Bey for
 // BASE + PER_MPS × excess seconds, with the upright spring at this

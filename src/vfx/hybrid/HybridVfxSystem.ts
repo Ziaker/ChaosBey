@@ -24,12 +24,14 @@
 // Observes only: no body, collider, stat, input or camera is written.
 // ============================================================
 
+import { effectScaleOf, FLOOR_SCAR_HIT_MIN_M, FLOOR_SCAR_LANDING_MIN_M, VFX_LIGHT, type VfxOptions } from './intensityTiers';
+import { FloorScars } from './FloorScars';
 import * as THREE from 'three';
+import { CircularVortex } from './fx/CircularVortex';
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import type { BeyVisual } from '../../bey/procedural-model/createBeyMesh';
 import { getConceptVisualModel } from '../../bey/visual/conceptBeyVisual';
 import { AttackState } from '../../combat/attacks/AttackController';
-import { CIRCULAR_ACTIVE_DURATION_S } from '../../combat/attacks/AttackTuning';
 import { DodgeState } from '../../dodge/DodgeController';
 import type { PresentationEvent, PresentationSide } from '../../presentation/events';
 import type { PresentationFrame, PresentationSystem } from '../../presentation/hub';
@@ -77,6 +79,8 @@ export interface HybridVfxOptions {
   readonly arenaRadiusM: number;
   /** Where the screen overlay is mounted. Default: the page body. `null`: no DOM. */
   readonly overlayParent?: HTMLElement | null;
+  /** Lote 9: the Pregame's visual options (omitted = the approved look). */
+  readonly vfx?: VfxOptions;
 }
 
 /** What the language asked of the camera and the clock: counted, never applied. */
@@ -99,6 +103,8 @@ interface BeyTrack {
   dodgeState: DodgeState;
   lastCharge: number;
   circularElapsed: number;
+  /** Owner, 2026-10-04: the Circular's helical vortex. */
+  readonly vortex: CircularVortex;
 }
 
 export class HybridVfxSystem implements PresentationSystem {
@@ -106,6 +112,7 @@ export class HybridVfxSystem implements PresentationSystem {
 
   readonly dropped: DroppedRequests = { shake: 0, hitstop: 0, slowMotion: 0 };
   private readonly layer: FxLayer;
+  private readonly scars: FloorScars;
   private readonly sparks: StreakSparks;
   private readonly overlay: ScreenOverlay;
   private readonly flashLight = new THREE.PointLight(0xffffff, 0, 10, 2);
@@ -115,16 +122,24 @@ export class HybridVfxSystem implements PresentationSystem {
   private readonly tracks: Record<PresentationSide, BeyTrack>;
   private hitstopActive = false;
   private frames = 0;
+  private dustSpawned = 0;
   private readonly up = new THREE.Vector3();
   private readonly quaternion = new THREE.Quaternion();
   private readonly scale = new THREE.Vector3();
   private readonly dir = new THREE.Vector3();
+  /** × the size of every effect (see effectScaleOf). */
+  private readonly effectScale: number;
 
   constructor(private readonly options: HybridVfxOptions) {
     const { scene, camera } = options;
     this.layer = new FxLayer(scene, camera);
+    this.scars = new FloorScars(this.layer, options.floorHeightAtR);
     this.sparks = new StreakSparks(SPARK_CAPACITY, options.floorHeightAtR);
     this.overlay = new ScreenOverlay(camera, options.overlayParent);
+    // Owner, 2026-10-05: every effect follows the Bey size × the Pregame's effects size (both Beys share the size).
+    this.effectScale = effectScaleOf(options.beys.first.gameplay, options.vfx);
+    this.layer.scale = this.effectScale;
+    this.sparks.scale = this.effectScale;
     scene.add(this.sparks.object, this.flashLight);
     this.tracks = { first: this.buildTrack('first'), second: this.buildTrack('second') };
     this.runtime = makeHybrid('cel').create(this.context());
@@ -147,7 +162,22 @@ export class HybridVfxSystem implements PresentationSystem {
       dodgeState: DodgeState.Idle,
       lastCharge: 0,
       circularElapsed: 0,
+      vortex: this.addVortex(new THREE.Color(palette?.glow ?? target.gameplay.particle.sparkTintHex), effectScaleOf(target.gameplay, this.options.vfx)),
     };
+  }
+
+  private addVortex(color: THREE.Color, sizeScale: number): CircularVortex {
+    const vortex = new CircularVortex(color, sizeScale);
+    this.options.scene.add(vortex.object);
+    return vortex;
+  }
+
+  private readonly defeated = new Set<PresentationSide>();
+
+  /** Owner, 2026-10-04: a destroyed Bey raises no more effects of its own (vortex, trails, dust, sparks). */
+  setDefeated(side: PresentationSide): void {
+    this.defeated.add(side);
+    this.tracks[side].vortex.stop();
   }
 
   /** The language runtime (tests and visual checks drive its handlers directly). */
@@ -181,6 +211,9 @@ export class HybridVfxSystem implements PresentationSystem {
         this.flashPeak = intensity * TUNING.flash;
         this.flashT = 1;
       },
+      countDust: (n) => void (this.dustSpawned += n),
+      groundWaveScale: this.options.vfx?.groundWaves ?? 1,
+      dustScale: this.options.vfx?.dust ?? 1,
       ghost: (slot, material) => {
         const source = this.track(slot).target.visual.group;
         const copy = source.clone(true);
@@ -226,7 +259,10 @@ export class HybridVfxSystem implements PresentationSystem {
 
   onEvents(events: readonly PresentationEvent[], _state: MatchPresentationState): void {
     const windThisCall = new Set<PresentationSide>();
-    for (const event of events) {
+    const intensity = this.options.vfx?.intensity ?? 1;
+    for (const original of events) {
+      // Lote 9: the Pregame's effects intensity scales every event's magnitude (1 = the approved sizes).
+      const event = intensity !== 1 && 'magnitude' in original ? ({ ...original, magnitude: Math.min(1, original.magnitude * intensity) } as PresentationEvent) : original;
       switch (event.kind) {
         case 'hitResolved': {
           const defender = this.tracks[event.defenderSide];
@@ -237,6 +273,7 @@ export class HybridVfxSystem implements PresentationSystem {
           if (normal.lengthSq() < 1e-8) normal.set(1, 0, 0);
           normal.normalize().setY(0.2).normalize();
           this.runtime.hit({ pos: contact, normal, m: event.magnitude, attacker: SLOT[attacker.side] });
+          if (event.magnitude >= FLOOR_SCAR_HIT_MIN_M) this.scars.scar(contact, event.magnitude);
           break;
         }
         case 'dodged': {
@@ -262,6 +299,7 @@ export class HybridVfxSystem implements PresentationSystem {
           break;
         case 'landed':
           this.runtime.landing({ pos: this.tracks[event.side].pos.clone(), m: event.magnitude, slot: SLOT[event.side] });
+          if (event.launched && event.magnitude >= FLOOR_SCAR_LANDING_MIN_M) this.scars.scar(this.tracks[event.side].pos.clone(), event.magnitude);
           break;
         case 'ringOut': {
           const track = this.tracks[event.side];
@@ -277,7 +315,7 @@ export class HybridVfxSystem implements PresentationSystem {
           const outward = new THREE.Vector3(track.pos.x, 0, track.pos.z).normalize();
           const normal = outward.clone().negate();
           const tangent = new THREE.Vector3(-outward.z, 0, outward.x);
-          this.runtime.scrape({ pos: track.pos.clone().addScaledVector(outward, 0.7).setY(track.pos.y - 0.1), normal, tangent, m: event.magnitude, slot: SLOT[event.side] }, ONE_SHOT_DT);
+          this.runtime.scrape({ pos: track.pos.clone().addScaledVector(outward, 0.7 * (track.target.gameplay.sizeScale ?? 1)).setY(track.pos.y - 0.1 * (track.target.gameplay.sizeScale ?? 1)), normal, tangent, m: event.magnitude, slot: SLOT[event.side] }, ONE_SHOT_DT);
           break;
         }
         default:
@@ -293,7 +331,7 @@ export class HybridVfxSystem implements PresentationSystem {
     for (const side of SIDES) this.measure(this.tracks[side], rawDt);
     if (state) {
       this.hitstopActive = state.camera?.hitstopActive ?? false;
-      for (const side of SIDES) this.driveContinuous(this.tracks[side], state[side], rawDt);
+      for (const side of SIDES) if (!this.defeated.has(side)) this.driveContinuous(this.tracks[side], state[side], rawDt);
     }
     // The language's own hitstop is dropped (HitstopClock owns it), but while the game is frozen the effects slow like the lab's.
     const fxDt = this.hitstopActive ? rawDt * HITSTOP_FX_RATE : rawDt;
@@ -313,20 +351,25 @@ export class HybridVfxSystem implements PresentationSystem {
       track.lastCharge = bey.dashCharge;
       this.runtime.dashCharge({ pos, progress: bey.dashCharge, m: bey.dashCharge, slot }, dt);
     }
-    if (track.attackState === AttackState.ChargingDash && bey.attackState === AttackState.DashActive) {
+    // Every Dash releases its wind and dust (owner, 2026-10-02): on any edge into DashActive (a slow frame can skip the
+    // charge), never weaker than the lab's Light intensity, so a short Dash still raises visible dust.
+    if (track.attackState !== AttackState.DashActive && bey.attackState === AttackState.DashActive) {
       const dir = this.travelDirection(track, this.dir).clone();
-      this.runtime.dashRelease({ pos, dir, m: track.lastCharge, slot });
-      this.runtime.windBurst({ pos: pos.clone(), dir, m: track.lastCharge, slot });
+      const charge = track.attackState === AttackState.ChargingDash ? track.lastCharge : bey.dashCharge;
+      const m = Math.max(VFX_LIGHT, charge);
+      this.runtime.dashRelease({ pos, dir, m, slot });
+      this.runtime.windBurst({ pos: pos.clone(), dir, m, slot });
     }
-    // Circular: the sweep, with its own progress.
-    if (bey.attackState === AttackState.CircularActive) {
-      if (track.attackState !== AttackState.CircularActive) track.circularElapsed = 0;
-      const t = Math.min(1, track.circularElapsed / CIRCULAR_ACTIVE_DURATION_S);
-      track.circularElapsed += dt;
-      this.runtime.circularSweep({ pos, m: 0.6, slot }, t, dt);
-    }
+    // Circular (owner, 2026-10-04: rebuilt from scratch): the vortex is its own ~0.9 s animation, started on the
+    // attack's first frame and always played to the end — the attack itself is only 0.25 s active.
+    if (bey.attackState === AttackState.CircularActive && track.attackState !== AttackState.CircularActive) track.vortex.trigger(pos);
+    track.vortex.update(pos, dt);
     track.attackState = bey.attackState;
-    // Dodge: afterimages while dodging.
+    // Dodge: every dodge raises the Cel Cyclone wind and dust as it starts (owner, 2026-10-02; it used to show only
+    // on an evaded hit, strongly only on a Perfect Dodge), at the lab's Light intensity; afterimages while dodging.
+    if (track.dodgeState !== DodgeState.Dodging && bey.dodgeState === DodgeState.Dodging) {
+      this.runtime.windBurst({ pos: pos.clone(), dir: this.travelDirection(track, this.dir).clone(), m: VFX_LIGHT, slot });
+    }
     if (bey.dodgeState === DodgeState.Dodging) this.runtime.dodgeMove({ pos, vel: track.vel.clone(), m: 0.6, slot }, dt);
     track.dodgeState = bey.dodgeState;
     // Speed sparks and skid marks.
@@ -349,6 +392,7 @@ export class HybridVfxSystem implements PresentationSystem {
       t.dodgeState = DodgeState.Idle;
       t.lastCharge = 0;
       t.circularElapsed = 0;
+      t.vortex.stop();
     }
   }
 
@@ -357,12 +401,16 @@ export class HybridVfxSystem implements PresentationSystem {
     return {
       fx: this.layer.count(),
       sparks: this.sparks.count(),
+      vortices: SIDES.filter((side) => this.tracks[side].vortex.isPlaying).length,
       focusLines: screen.focusLines,
       impactFrame: screen.impactFrame,
       droppedShake: this.dropped.shake,
       droppedHitstop: this.dropped.hitstop,
       droppedSlowMotion: this.dropped.slowMotion,
       frames: this.frames,
+      dust: this.dustSpawned,
+      floorScars: this.scars.count(),
+      floorScarsMade: this.scars.made,
     };
   }
 
@@ -370,6 +418,7 @@ export class HybridVfxSystem implements PresentationSystem {
     this.layer.clear();
     this.sparks.clear();
     this.sparks.object.removeFromParent();
+    for (const side of SIDES) this.tracks[side].vortex.dispose();
     this.sparks.object.geometry.dispose();
     (this.sparks.object.material as THREE.Material).dispose();
     this.flashLight.removeFromParent();

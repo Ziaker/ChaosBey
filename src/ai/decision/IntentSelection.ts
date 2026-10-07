@@ -27,12 +27,35 @@ import { CLASH_STAMINA_FACTOR_MAX, CLASH_STAMINA_FACTOR_MIN } from '../../combat
 import { DodgeState } from '../../dodge/DodgeController';
 import { DriftState } from '../../drift/DriftController';
 import type { AiPersonality } from '../personalities/AiPersonality';
-import { AI_CIRCULAR_ATTACK_RANGE_M, AI_COUNTER_MIN_CLOSING_SPEED_MPS, AI_DASH_ATTACK_MAX_RANGE_M } from './AiCombatRanges';
+import { aiCircularAttackRangeM, AI_COUNTER_MIN_CLOSING_SPEED_MPS, AI_DASH_ATTACK_MAX_RANGE_M } from './AiCombatRanges';
 import { AiIntent } from './Intent';
 import type { RiskAssessment } from './RiskEvaluation';
 import type { WorldState } from './WorldState';
 
 /** Above this edgeRisk, recovering toward the center overrides normal intent scoring entirely (GDD section 129). */
+/**
+ * Owner, 2026-10-02 (Lote 3): how much full momentum boosts committing (Approach, Dash) (PROVISIONAL). Its straight
+ * approaches are what build momentum; a bonus for circling to build it was tried and made patient AIs orbit each other
+ * without ever resolving the round (defense vs defense, matrix-2/-4), so it is not used.
+ */
+const MOMENTUM_COMMIT_BONUS = 0.5;
+/**
+ * Owner, 2026-10-04: BuildSpeed's score = (1 − momentum) × (BASE + aggression × AGGRESSION) — an AI without momentum
+ * takes a lap first (attack personalities most of all), one with momentum commits. PROVISIONAL.
+ */
+const BUILD_SPEED_SCORE_BASE = 0.35;
+const BUILD_SPEED_SCORE_AGGRESSION = 0.45;
+/** × patience taken off BuildSpeed: a patient personality circles its opponent more (still moving), an aggressive one laps. */
+const BUILD_SPEED_PATIENCE_DAMPING = 0.4;
+/**
+ * Owner, 2026-10-04 ("o inimigo NÃO ESTÁ se movimentando mais pelo cenário"): hit and run — for this long after
+ * starting an attack, BuildSpeed gets up to this bonus (fading out), so the AI rides off on a lap and comes back with
+ * speed instead of hovering around the opponent. PROVISIONAL.
+ */
+const HIT_AND_RUN_S = 2.2;
+const HIT_AND_RUN_BONUS = 0.45;
+/** In Circular range there is no room for a lap: BuildSpeed keeps this share of its score. */
+const BUILD_SPEED_IN_CIRCULAR_RANGE = 0.4;
 const EDGE_RISK_OVERRIDE_THRESHOLD = 0.55;
 /** Once recovering, keep recovering until edgeRisk falls below this (hysteresis). Without it the AI stopped the moment it crossed back under the override threshold, turned to re-engage, and drifted straight back into danger. */
 const EDGE_RISK_RELEASE_THRESHOLD = 0.3;
@@ -121,6 +144,8 @@ export interface DecisionContext {
   readonly counterDash: boolean;
   /** Seconds since this AI last started an attack (or since the match began) — drives the anti-passivity tempo. */
   readonly secondsSinceOwnAttack: number;
+  /** Seconds since this AI last started an attack; absent until its first attack (drives the hit-and-run lap). */
+  readonly secondsSinceAttackStarted?: number;
   /** Whether the previous fresh decision was part of an edge recovery (IntentDecision.edgeRecovery) — selects the lower release threshold (hysteresis). */
   readonly recoveringFromEdge: boolean;
 }
@@ -223,7 +248,7 @@ export function selectIntent(
       edgeRecovery: true,
     };
   }
-  if (context.counterDash && isCounterableDash(world)) {
+  if (context.counterDash && isCounterableDash(world) && !world.own.circularLocked && !world.own.actionsLocked) {
     return {
       intent: AiIntent.CounterAttack,
       reason: `reading opponent ${world.opponent.attackState} at ${world.distanceToOpponentM.toFixed(1)} m — Circular counter`,
@@ -268,13 +293,18 @@ export function selectIntent(
   // states resolve on their own timers) — the AI simply keeps whatever
   // ActionSelection.ts derives for holding the attack button, not a fresh
   // intent every tick.
+  // Owner audit, 2026-10-04: no attack while the post-Clash lock ignores it, no Circular while it is blocked.
+  const cannotAttack = world.own.actionsLocked === true;
+  const circularBlocked = cannotAttack || world.own.circularLocked === true;
   const alreadyAttacking =
     world.own.attackState !== AttackState.Neutral &&
     world.own.attackState !== AttackState.DashRecovery &&
     world.own.attackState !== AttackState.CircularRecovery;
 
-  const inCircularRange = world.distanceToOpponentM <= AI_CIRCULAR_ATTACK_RANGE_M;
-  const inDashRange = world.distanceToOpponentM > AI_CIRCULAR_ATTACK_RANGE_M && world.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M;
+  const circularRangeM = aiCircularAttackRangeM(world.own);
+  const inCircularRange = world.distanceToOpponentM <= circularRangeM;
+  // Owner, 2026-10-05: in a match without the Circular the Dash is the only attack, at close range too.
+  const inDashRange = (world.own.circularDisabled === true || world.distanceToOpponentM > circularRangeM) && world.distanceToOpponentM <= AI_DASH_ATTACK_MAX_RANGE_M;
 
   // GDD section 64 Stamina "avoids unnecessary heavy collisions": closing
   // in and Dash commitments lose appeal unless the opponent is actually open
@@ -301,14 +331,14 @@ export function selectIntent(
 
   scores.set(
     AiIntent.AttackCircular,
-    inCircularRange && !alreadyAttacking
+    inCircularRange && !alreadyAttacking && !circularBlocked
       ? (0.4 + personality.aggression * 0.4 - personality.caution * 0.2 + punishBonus * PUNISH_CIRCULAR_SCORE_BONUS) * willingness
       : 0,
   );
 
   scores.set(
     AiIntent.AttackDash,
-    inDashRange && !alreadyAttacking && world.own.attackEnergyFraction > 0.25
+    inDashRange && !alreadyAttacking && !cannotAttack && world.own.dashReadiness >= 1
       ? (0.3 + personality.aggression * 0.5 - personality.patience * 0.2 + punishBonus * PUNISH_DASH_SCORE_BONUS) *
           willingness *
           (1 - collisionReluctance * COLLISION_AVOIDANCE_DASH_DAMPING)
@@ -337,8 +367,27 @@ export function selectIntent(
     AiIntent.Circle,
     ((!tooClose && !tooFar ? 0.35 + personality.patience * 0.3 : 0.1) + collisionReluctance * COLLISION_AVOIDANCE_CIRCLE_BONUS) * passiveDamping,
   );
+  // Momentum (owner, 2026-10-02, Lote 3): "build-up de velocidade, não ataques um atrás do outro" — with momentum
+  // built (a raised top speed, harder body collisions and Dashes) the AI commits more.
+  const own = world.own.momentum;
+  scores.set(AiIntent.Approach, (scores.get(AiIntent.Approach) ?? 0) * (1 + own * MOMENTUM_COMMIT_BONUS));
+  scores.set(AiIntent.AttackDash, (scores.get(AiIntent.AttackDash) ?? 0) * (1 + own * MOMENTUM_COMMIT_BONUS));
 
   scores.set(AiIntent.Wait, alreadyAttacking ? 0 : personality.patience * 0.15 * passiveDamping);
+
+  // Owner, 2026-10-04: never parked — without momentum, build it with a lap before committing.
+  scores.set(
+    AiIntent.BuildSpeed,
+    alreadyAttacking || risk.punishWindow
+      ? 0
+      : (1 - own) *
+          (BUILD_SPEED_SCORE_BASE + personality.aggression * BUILD_SPEED_SCORE_AGGRESSION) *
+          (1 - personality.patience * BUILD_SPEED_PATIENCE_DAMPING) *
+          (inCircularRange ? BUILD_SPEED_IN_CIRCULAR_RANGE : 1) +
+        (context.secondsSinceAttackStarted !== undefined && context.secondsSinceAttackStarted < HIT_AND_RUN_S
+          ? HIT_AND_RUN_BONUS * (1 - context.secondsSinceAttackStarted / HIT_AND_RUN_S)
+          : 0),
+  );
 
   // Below the hard override threshold, a milder threat with Dodge already
   // on cooldown still nudges normal scoring toward a preemptive jump — the

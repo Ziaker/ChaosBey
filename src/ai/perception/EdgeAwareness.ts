@@ -10,11 +10,11 @@
 // ============================================================
 
 import { length, normalize, scale, type Vec2 } from '../../physics/Vec2';
-import { RINGOUT_RADIUS_M } from '../../arena/ringout/RingOutTuning';
+import { ringOutRadiusM } from '../../arena/ringout/RingOutTuning';
 
 /** Remaining distance (m) to the ring-out boundary along the straight line from the arena center; negative once already past it. */
 export function distanceToEdgeM(positionXZ: Vec2): number {
-  return RINGOUT_RADIUS_M - length(positionXZ);
+  return ringOutRadiusM() - length(positionXZ);
 }
 
 /** Unit vector pointing from `positionXZ` back toward the arena center (0,0); the zero vector only when already exactly at the center. */

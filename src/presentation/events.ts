@@ -15,13 +15,14 @@
 // Only events with a real source today exist. What the master list in the
 // brief maps to:
 //   BeySpawned                       → PresentationSystem.create(context)
-//   Stamina/Stability/AttackEnergy
+//   Stamina/Stability/Dash readiness
 //   Changed                          → state (BeyPresentationState), not events
 //   MovementStateChanged             → driftStarted/driftEnded/jumpStarted + state
 //   CollisionResolved                → collisionResolved (movement impacts today)
 //   MatchEnded                       → owned by the play flow (matchScore), outside a session
 // ============================================================
 
+import { hitMagnitudeFromDamage, OWN_JUMP_LANDING_MAX_M, VFX_LIGHT } from '../vfx/hybrid/intensityTiers';
 import type { MatchTickResult } from '../app/simulation/tickMatch';
 import type { ClashMashInputEdge } from '../app/simulation/ClashPresentationTracker';
 import type { ImpactEvent, WorldPositionM } from '../app/simulation/impact/ImpactEvents';
@@ -37,7 +38,18 @@ interface EventBase {
 
 export type PresentationEvent =
   | (EventBase & { readonly kind: 'jumpStarted' | 'driftStarted' | 'driftEnded'; readonly side: PresentationSide })
-  | (EventBase & { readonly kind: 'landed'; readonly side: PresentationSide; readonly magnitude: number; readonly position: WorldPositionM })
+  | (EventBase & {
+      readonly kind: 'landed';
+      readonly side: PresentationSide;
+      /**
+       * VFX magnitude (Lote 7): a landing from the Bey's own hop/jump is capped small; one after a hit or launch is at
+       * least Light; any other fall keeps the landing's own magnitude.
+       */
+      readonly magnitude: number;
+      readonly position: WorldPositionM;
+      /** The flight began with a hit or launch (knockback). Omitted = false. */
+      readonly launched?: boolean;
+    })
   | (EventBase & {
       readonly kind: 'hitResolved';
       /** The Bey that was hit. */
@@ -86,6 +98,8 @@ export interface PresentationTickInput {
   readonly roundOver: boolean;
   /** The RoundOutcome name while over. */
   readonly roundOutcome: string;
+  /** The Beys' positions this tick, for events not carried by an ImpactEvent (a body collision). */
+  readonly positions?: { readonly first: WorldPositionM; readonly second: WorldPositionM };
 }
 
 const sideOf = (isFirst: boolean): PresentationSide => (isFirst ? 'first' : 'second');
@@ -99,10 +113,16 @@ const sideOf = (isFirst: boolean): PresentationSide => (isFirst ? 'first' : 'sec
 export class PresentationEventDeriver {
   private previousDrift: Record<PresentationSide, DriftState> = { first: DriftState.Idle, second: DriftState.Idle };
   private previousRoundOver = false;
+  /** Lote 7: the current flight is the Bey's own hop/jump (began Hopping, no knockback since). */
+  private ownFlight: Record<PresentationSide, boolean> = { first: false, second: false };
+  /** Lote 7: a knockback/launch happened since the last landing. */
+  private launchedFlight: Record<PresentationSide, boolean> = { first: false, second: false };
 
   reset(): void {
     this.previousDrift = { first: DriftState.Idle, second: DriftState.Idle };
     this.previousRoundOver = false;
+    this.ownFlight = { first: false, second: false };
+    this.launchedFlight = { first: false, second: false };
   }
 
   derive(input: PresentationTickInput): PresentationEvent[] {
@@ -112,10 +132,22 @@ export class PresentationEventDeriver {
     if (input.result) {
       this.deriveMovementEdges(tick, input.result, events);
       this.deriveFromImpacts(tick, input.result, input.impactEvents, events);
+      let body: { targetIsFirst: boolean; damage: number } | null = null;
       for (const combat of input.result.combatEvents) {
         if (combat.kind === 'knockback') {
           events.push({ kind: 'knockbackStarted', tick, side: sideOf(combat.targetIsFirst), force: combat.force, directionXZ: combat.directionXZ ?? null });
+        } else if (combat.kind === 'bodyCollision' && (body === null || combat.damage > body.damage)) {
+          body = { targetIsFirst: combat.targetIsFirst, damage: combat.damage };
         }
+      }
+      if (body && input.positions) {
+        // Owner, 2026-10-02 (Lote 3/7, item 15): a body collision is a hit for the VFX, sized by the Stability damage it
+        // did (one per contact; a tie's two equal events make one). Its own event, not an ImpactEvent: those also drive
+        // the camera, which stays exactly as it is.
+        const a = input.positions.first;
+        const b = input.positions.second;
+        const position = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+        events.push({ kind: 'hitResolved', tick, defenderSide: sideOf(body.targetIsFirst), attackerSide: null, magnitude: hitMagnitudeFromDamage(body.damage), position, hitboxKind: null, caughtOpponentDashing: false });
       }
     }
 
@@ -143,7 +175,11 @@ export class PresentationEventDeriver {
       const previous = this.previousDrift[side];
       const current = result[side].driftState;
       if (current === previous) continue;
-      if (current === DriftState.Hopping) events.push({ kind: 'jumpStarted', tick, side });
+      if (current === DriftState.Hopping) {
+        events.push({ kind: 'jumpStarted', tick, side });
+        this.ownFlight[side] = true;
+        this.launchedFlight[side] = false;
+      }
       if (current === DriftState.Drifting) events.push({ kind: 'driftStarted', tick, side });
       if (previous === DriftState.Drifting) events.push({ kind: 'driftEnded', tick, side });
       this.previousDrift[side] = current;
@@ -151,6 +187,16 @@ export class PresentationEventDeriver {
   }
 
   private deriveFromImpacts(tick: number, result: PresentationTickResult, impacts: readonly ImpactEvent[], events: PresentationEvent[]): void {
+    // A knockback/launch this tick: the Bey's flight is no longer its own jump (Lote 7 landing sizes).
+    for (const combat of result.combatEvents) {
+      if (combat.kind !== 'knockback') continue;
+      const side = sideOf(combat.targetIsFirst);
+      this.ownFlight[side] = false;
+      this.launchedFlight[side] = true;
+    }
+    // Stability each Bey really lost this tick (the hit's resolved damage, after stats, speed and angle).
+    const damage: Record<PresentationSide, number> = { first: 0, second: 0 };
+    for (const combat of result.combatEvents) if (combat.kind === 'stabilityDamage') damage[sideOf(combat.targetIsFirst)] += combat.amount;
     // The impact list builds one 'hit' per entry of result.hitEvents, in order.
     const hitImpacts = impacts.filter((impact) => impact.kind === 'hit');
     hitImpacts.forEach((impact, index) => {
@@ -160,7 +206,9 @@ export class PresentationEventDeriver {
         tick,
         defenderSide: sideOf(impact.isFirst),
         attackerSide: hit ? sideOf(hit.attackerIsFirst) : null,
-        magnitude: impact.magnitude,
+        // Owner, 2026-10-02 (Lote 7, item 15; audit J4): sized by the damage the hit really did, on the lab's tiers —
+        // not the hitbox's base force (impact.magnitude, which the frozen camera keeps reading).
+        magnitude: hitMagnitudeFromDamage(damage[sideOf(impact.isFirst)]),
         position: impact.worldPositionM,
         hitboxKind: hit ? hit.hitbox.kind : null,
         caughtOpponentDashing: hit ? hit.caughtOpponentDashing : false,
@@ -173,9 +221,17 @@ export class PresentationEventDeriver {
         case 'wallImpact':
           events.push({ kind: 'collisionResolved', tick, side, magnitude: impact.magnitude, position: impact.worldPositionM });
           break;
-        case 'landing':
-          events.push({ kind: 'landed', tick, side, magnitude: impact.magnitude, position: impact.worldPositionM });
+        case 'landing': {
+          // Lote 7 (item 7): an own hop/jump lands small; a landing after a hit or launch is at least Light (dust,
+          // rings, crack); any other fall keeps its own size.
+          const own = this.ownFlight[side] && !this.launchedFlight[side];
+          const launched = this.launchedFlight[side];
+          const magnitude = own ? Math.min(impact.magnitude, OWN_JUMP_LANDING_MAX_M) : launched ? Math.max(VFX_LIGHT, impact.magnitude) : impact.magnitude;
+          events.push({ kind: 'landed', tick, side, magnitude, position: impact.worldPositionM, launched });
+          this.ownFlight[side] = false;
+          this.launchedFlight[side] = false;
           break;
+        }
         case 'stabilityBreak':
           events.push({ kind: 'stabilityBroken', tick, side, magnitude: impact.magnitude, position: impact.worldPositionM });
           break;

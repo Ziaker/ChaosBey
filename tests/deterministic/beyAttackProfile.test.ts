@@ -29,21 +29,21 @@ function actionsWith(held: boolean, pressedThisFrame: boolean): ControllerAction
 
 /** Drives one AttackController through a full tap (Circular Attack) and returns its active hitbox. */
 function tapAndGetCircularHitbox(attack: AttackController) {
-  attack.tick(actionsWith(true, true), 0, ORIGIN, FAR_AWAY, 1, FIXED_DELTA_S);
-  const result = attack.tick(actionsWith(false, false), 0, ORIGIN, FAR_AWAY, 1, FIXED_DELTA_S);
+  attack.tick(actionsWith(true, true), 0, ORIGIN, FAR_AWAY, FIXED_DELTA_S);
+  const result = attack.tick(actionsWith(false, false), 0, ORIGIN, FAR_AWAY, FIXED_DELTA_S);
   expect(result.state).toBe(AttackState.CircularActive);
   return result.activeHitbox!;
 }
 
 /** Drives one AttackController through a full max-charge hold-and-release (Dash Attack) and returns its active hitbox. */
 function dashAndGetHitbox(attack: AttackController) {
-  attack.tick(actionsWith(true, true), 0, ORIGIN, FAR_AWAY, 1, FIXED_DELTA_S);
+  attack.tick(actionsWith(true, true), 0, ORIGIN, FAR_AWAY, FIXED_DELTA_S);
   const chargeTicks = Math.ceil(DASH_MAX_CHARGE_S / FIXED_DELTA_S) + 5;
-  let result = attack.tick(actionsWith(true, false), 0, ORIGIN, FAR_AWAY, 1, FIXED_DELTA_S);
+  let result = attack.tick(actionsWith(true, false), 0, ORIGIN, FAR_AWAY, FIXED_DELTA_S);
   for (let i = 0; i < chargeTicks; i++) {
-    result = attack.tick(actionsWith(true, false), 0, ORIGIN, FAR_AWAY, 1, FIXED_DELTA_S);
+    result = attack.tick(actionsWith(true, false), 0, ORIGIN, FAR_AWAY, FIXED_DELTA_S);
   }
-  result = attack.tick(actionsWith(false, false), 0, ORIGIN, FAR_AWAY, 1, FIXED_DELTA_S);
+  result = attack.tick(actionsWith(false, false), 0, ORIGIN, FAR_AWAY, FIXED_DELTA_S);
   expect(result.state).toBe(AttackState.DashActive);
   return { hitbox: result.activeHitbox!, chargeFraction: result.chargeFraction };
 }

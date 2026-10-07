@@ -60,10 +60,11 @@ export interface DriftVfxInput {
   readonly grounded: boolean;
 }
 
-let softDotTexture: THREE.CanvasTexture | null = null;
-/** The VFX Lab's soft round dot (textures.ts `softDot`), drawn once. */
+let softDotTexture: THREE.Texture | null = null;
+/** The VFX Lab's soft round dot (textures.ts `softDot`), drawn once. Headless (no DOM, e.g. a Node test of a real session): a blank texture. */
 function softDot(): THREE.Texture {
   if (softDotTexture) return softDotTexture;
+  if (typeof document === 'undefined') return (softDotTexture = new THREE.Texture());
   const size = 64;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
@@ -98,7 +99,13 @@ export class DriftVfx {
   private starts = 0;
   private ends = 0;
 
-  constructor(hotHex: number, coolHex: number, private readonly floorHeightAt: (x: number, z: number) => number = () => 0) {
+  constructor(
+    hotHex: number,
+    coolHex: number,
+    private readonly floorHeightAt: (x: number, z: number) => number = () => 0,
+    /** Owner, 2026-10-05: × every drift mark and spark (the Bey size × the effects size). 1 = the approved look. */
+    private readonly effectScale = 1,
+  ) {
     this.hot = new THREE.Color(hotHex);
     this.cool = new THREE.Color(coolHex);
     const g = new THREE.BufferGeometry();
@@ -179,9 +186,10 @@ export class DriftVfx {
     });
     const mesh = new THREE.Mesh(PLANE, material);
     mesh.position.copy(pos);
-    mesh.scale.set(size[0], 1, size[0]);
+    const scaled: [number, number] = [size[0] * this.effectScale, size[1] * this.effectScale];
+    mesh.scale.set(scaled[0], 1, scaled[0]);
     this.object3D.add(mesh);
-    this.decals.push({ mesh, material, age: 0, life, hold, baseOpacity: opacity, size });
+    this.decals.push({ mesh, material, age: 0, life, hold, baseOpacity: opacity, size: scaled });
   }
 
   private tickDecals(dt: number): void {
@@ -209,7 +217,7 @@ export class DriftVfx {
         .clone()
         .add(new THREE.Vector3(this.random() - 0.5, this.random() - 0.5 + upBias, this.random() - 0.5).multiplyScalar(spread))
         .normalize()
-        .multiplyScalar(speed * (0.35 + this.random() * 0.9));
+        .multiplyScalar(speed * this.effectScale * (0.35 + this.random() * 0.9));
       const l = life[0] + this.random() * (life[1] - life[0]);
       this.sparks.push({ p: at.clone(), v, life: l, max: l });
     }

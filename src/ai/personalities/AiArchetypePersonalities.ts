@@ -10,6 +10,7 @@
 
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../bey/archetype/BeyArchetypes';
 import type { AiPersonality } from './AiPersonality';
+import { familyArchetypeOf } from '../../bey/archetype/BeyConceptRoster';
 
 /** Attack AI (GDD section 64): more aggressive — seeks engagement, uses charge opportunities, pressures broken Stability, takes more positional risk. */
 export const ATTACK_AI_PERSONALITY: AiPersonality = {
@@ -101,7 +102,8 @@ export const DEFAULT_AI_PERSONALITY: AiPersonality = {
 
 /** Looked up by BeyDefinition.id — the same key AttackProfileSettings.ts matches archetypes by. */
 export function personalityForBeyDefinitionId(definitionId: string): AiPersonality {
-  switch (definitionId) {
+  // Lote 8: a concept B/C plays its family's personality (provisional, like its gameplay).
+  switch (familyArchetypeOf(definitionId)?.id ?? definitionId) {
     case ATTACK_ARCHETYPE.id:
       return ATTACK_AI_PERSONALITY;
     case DEFENSE_ARCHETYPE.id:

@@ -145,7 +145,9 @@ describe('slow to react vs a new critical edge situation (real physics)', () => 
     // non-critical band (5 stays below 0.55, 6.5 is critical). Arena scale pass:
     // on the bowl floor (default) the downhill pull toward the centre trims the
     // kick's reach, so 5.75 read 0.544 (< 0.55); 6 is back inside the band.
-    const { pendingIntent, after } = await run(6);
+    // 4.5 since the owner audit (2026-10-04, faster movement): 5.5 and up now turn critical during the delay; 4.5 reads
+    // 0.581 at the reaction read and never goes past 0.807.
+    const { pendingIntent, after } = await run(4.5);
     // At the reaction read the AI is in edge danger (>= the 0.55 entry) but not critical.
     const read = after.find((t) => t.tick === reactionTicks)!;
     expect(read.edgeRisk).toBeGreaterThanOrEqual(0.55);

@@ -29,7 +29,7 @@ import { resolveMatchConfig } from '../config/match/MatchConfig';
 import type { CombatController, ControllerActions } from '../input/actions/Action';
 import { IdleController } from '../automation/scripted-scenarios/IdleController';
 import { FIXED_DELTA_SECONDS } from '../physics/fixed-step/FixedTimestepLoop';
-import { DEFAULT_ANOMALY_THRESHOLDS, MatchAnomalyDetector } from './anomalies/MatchAnomalyDetector';
+import { anomalyThresholdsFor, MatchAnomalyDetector } from './anomalies/MatchAnomalyDetector';
 import { simulateAiMatch } from './AiMatchSimulation';
 import { runScenario } from './scenarios/ScenarioRunner';
 import { findScenarioPreset } from './scenarios/ScenarioPresets';
@@ -161,7 +161,7 @@ async function probeWorld(floor: ArenaFloorId): Promise<SelfTestMatchWorld> {
 async function probe(floor: ArenaFloorId, ticks: number, setup: (first: Bey) => void, controller: CombatController, each: (tick: number, first: Bey, grounded: boolean) => void): Promise<number> {
   const world = await probeWorld(floor);
   const config = resolveMatchConfig({ arenaFloor: floor });
-  const detector = new MatchAnomalyDetector({ ...DEFAULT_ANOMALY_THRESHOLDS, wallHeightM: floorRimHeight(floor) + config.arenaWallHeightM });
+  const detector = new MatchAnomalyDetector(anomalyThresholdsFor(config));
   setup(world.first);
   const idle = new IdleController();
   let invalid = 0;

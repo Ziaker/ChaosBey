@@ -27,7 +27,7 @@
 // the rim (approval §2.3).
 // ============================================================
 
-import { ARENA_FLOOR_RADIUS } from '../colliders/ArenaTuning';
+import { ARENA_FLOOR_RADIUS, arenaSizeScale } from '../colliders/ArenaTuning';
 
 export type ArenaFloorId = 'flat' | 'bowl-a' | 'bowl-b' | 'bowl-c';
 
@@ -65,14 +65,14 @@ export const ARENA_FLOORS: Readonly<Record<ArenaFloorId, ArenaFloorProfile>> = {
   'bowl-a': {
     id: 'bowl-a',
     label: 'Bowl A — Parabolic dish',
-    description: 'Gentle centre, slope growing toward the wall (2.5 m rim).',
+    description: 'Gentle centre, slope growing toward the wall. The depth is the Bowl depth slider.',
     heightAtRadius: (r) => D * (clampR(r) / R) ** 2,
     slopeAtRadius: (r) => (2 * D * clampR(r)) / (R * R),
   },
   'bowl-b': {
     id: 'bowl-b',
     label: 'Bowl B — Funnel',
-    description: 'Slopes almost all the way to the centre (2.5 m rim).',
+    description: 'Slopes almost all the way to the centre. The depth is the Bowl depth slider.',
     heightAtRadius: (r) => D * (clampR(r) / R) ** 1.3,
     slopeAtRadius: (r) => {
       const x = clampR(r);
@@ -82,7 +82,7 @@ export const ARENA_FLOORS: Readonly<Record<ArenaFloorId, ArenaFloorProfile>> = {
   'bowl-c': {
     id: 'bowl-c',
     label: 'Bowl C — Central plateau',
-    description: 'A flat 7.8 m plateau in the middle, then a curve up to the wall (2.5 m rim).',
+    description: 'A flat 7.8 m plateau in the middle, then a curve up to the wall. The depth is the Bowl depth slider.',
     heightAtRadius: (r) => {
       const x = clampR(r);
       return x <= P ? 0 : D * ((x - P) / (R - P)) ** 1.4;
@@ -95,27 +95,63 @@ export const ARENA_FLOORS: Readonly<Record<ArenaFloorId, ArenaFloorProfile>> = {
 };
 
 export const ARENA_FLOOR_IDS: readonly ArenaFloorId[] = ['flat', 'bowl-a', 'bowl-b', 'bowl-c'];
-/** The stage is never flat by default: the parabolic dish (smooth everywhere, slope 0 at the centre, steepest at the wall). */
-export const DEFAULT_ARENA_FLOOR: ArenaFloorId = 'bowl-a';
+/** The stage is never flat by default: the funnel (owner, 2026-10-04 — slopes almost all the way to the centre). */
+export const DEFAULT_ARENA_FLOOR: ArenaFloorId = 'bowl-b';
+/**
+ * Owner, 2026-10-04: "cadê o afunilamento dos stages?" — a 2.5 m rim over the 36 m floor radius is a ~4° slope nobody
+ * sees. A match's default is the Funnel profile at 7 m (rim ~14° steep). Pregame slider 0–12 m. PROVISIONAL.
+ */
+export const MATCH_BOWL_DEPTH_DEFAULT_M = 7;
 
 export function isArenaFloorId(value: unknown): value is ArenaFloorId {
   return typeof value === 'string' && (ARENA_FLOOR_IDS as readonly string[]).includes(value);
 }
 
-/** Floor height under (x, z). Past the floor edge it is the rim height (the wall sits there). */
-export function floorHeightAt(floor: ArenaFloorId, x: number, z: number): number {
-  return ARENA_FLOORS[floor].heightAtRadius(Math.hypot(x, z));
+/**
+ * Owner, 2026-10-02 (Lote 9, item 3 — "funilamento do stage"): a floor is a profile AND a depth. Every bowl is its
+ * shape scaled by depth / BOWL_DEPTH_M, so the collider heightfield, the arena art, spawns, VFX and the camera's floor
+ * guard all read the same h(r) for any depth (0 m = flat). A bare profile id means the default depth (2.5 m).
+ */
+export interface ArenaFloorSpec {
+  readonly id: ArenaFloorId;
+  readonly depthM: number;
+}
+export type ArenaFloor = ArenaFloorId | ArenaFloorSpec;
+
+export function floorIdOf(floor: ArenaFloor): ArenaFloorId {
+  return typeof floor === 'string' ? floor : floor.id;
 }
 
-/** Height of the rim (the floor at its edge) above the centre: 0 flat, 2.5 m (BOWL_DEPTH_M) for a bowl. */
-export function floorRimHeight(floor: ArenaFloorId): number {
-  return ARENA_FLOORS[floor].heightAtRadius(R);
+/** Depth scale of a floor relative to the profiles' own BOWL_DEPTH_M (1 for a bare id). */
+function depthScale(floor: ArenaFloor): number {
+  return typeof floor === 'string' ? 1 : Math.max(0, floor.depthM) / D;
+}
+
+/** Floor height (m) at distance r from the centre, depth included. */
+export function floorHeightAtRadius(floor: ArenaFloor, r: number): number {
+  // Owner, 2026-10-04: the profile is drawn for the 36 m floor; a bigger/smaller stage stretches it to its own radius.
+  return ARENA_FLOORS[floorIdOf(floor)].heightAtRadius(r / arenaSizeScale()) * depthScale(floor);
+}
+
+/** dh/dr at r, depth included. */
+export function floorSlopeAtRadius(floor: ArenaFloor, r: number): number {
+  return (ARENA_FLOORS[floorIdOf(floor)].slopeAtRadius(r / arenaSizeScale()) / arenaSizeScale()) * depthScale(floor);
+}
+
+/** Floor height under (x, z). Past the floor edge it is the rim height (the wall sits there). */
+export function floorHeightAt(floor: ArenaFloor, x: number, z: number): number {
+  return floorHeightAtRadius(floor, Math.hypot(x, z));
+}
+
+/** Height of the rim (the floor at its edge) above the centre: 0 flat, the depth (2.5 m default) for a bowl. */
+export function floorRimHeight(floor: ArenaFloor): number {
+  return floorHeightAtRadius(floor, R * arenaSizeScale());
 }
 
 /** Unit floor normal under (x, z) (points up and toward the centre on a slope). */
-export function floorNormalAt(floor: ArenaFloorId, x: number, z: number): { x: number; y: number; z: number } {
+export function floorNormalAt(floor: ArenaFloor, x: number, z: number): { x: number; y: number; z: number } {
   const r = Math.hypot(x, z);
-  const s = ARENA_FLOORS[floor].slopeAtRadius(r);
+  const s = floorSlopeAtRadius(floor, r);
   if (r < 1e-9 || s === 0) return { x: 0, y: 1, z: 0 };
   // Surface y = h(r): gradient = s · (x/r, z/r); normal ∝ (−∇h, 1).
   const nx = (-s * x) / r;
@@ -125,6 +161,6 @@ export function floorNormalAt(floor: ArenaFloorId, x: number, z: number): { x: n
 }
 
 /** Slope angle (degrees) under (x, z). */
-export function floorSlopeDegAt(floor: ArenaFloorId, x: number, z: number): number {
-  return (Math.atan(ARENA_FLOORS[floor].slopeAtRadius(Math.hypot(x, z))) * 180) / Math.PI;
+export function floorSlopeDegAt(floor: ArenaFloor, x: number, z: number): number {
+  return (Math.atan(floorSlopeAtRadius(floor, Math.hypot(x, z))) * 180) / Math.PI;
 }

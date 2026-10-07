@@ -5,6 +5,8 @@
 // (GDD section 1.4); each Bey's systems still own their own logic.
 // ============================================================
 
+import { BOWL_DEPTH_M, type ArenaFloor } from '../../arena/floor/ArenaFloorProfile';
+import { beyMatchRulesOf, createDefaultMatchConfig, type BeyMatchRules } from '../../config/match/MatchConfig';
 import * as THREE from 'three';
 import { createArenaColliders } from '../../arena/colliders/createArenaColliders';
 import { FOUNDRY_PIT, STANDARD_ARENA_GEOMETRY, type ArenaGeometry, type ArenaTheme } from '../../arena/presets/ArenaPresets';
@@ -43,6 +45,8 @@ export interface BeyVisualPose {
   readonly wobble: number;
   /** Which way the top leans (world XZ), magnitude = angle (rad). */
   readonly lean: Vec2;
+  /** Owner, 2026-10-04: a Bey launched high tumbles on several axes (angle rad about a horizontal axis). Visual only. */
+  readonly tumble?: { readonly angle: number; readonly axis: Vec2 };
 }
 
 export const REST_VISUAL_POSE: BeyVisualPose = { spin: 0, wobble: 0, lean: { x: 0, z: 0 } };
@@ -53,6 +57,8 @@ function createSyncFn(body: Bey['body'], visual: BeyVisual) {
   const wobbleAxis = new THREE.Vector3(1, 0, 0);
   const leanQuaternion = new THREE.Quaternion();
   const leanAxis = new THREE.Vector3();
+  const tumbleQuaternion = new THREE.Quaternion();
+  const tumbleAxis = new THREE.Vector3();
   return (pose: BeyVisualPose): void => {
     const t = body.translation();
     const r = body.rotation();
@@ -63,7 +69,9 @@ function createSyncFn(body: Bey['body'], visual: BeyVisual) {
     const leanAngle = Math.hypot(pose.lean.x, pose.lean.z);
     if (leanAngle > 1e-6) leanQuaternion.setFromAxisAngle(leanAxis.set(pose.lean.z / leanAngle, 0, -pose.lean.x / leanAngle), leanAngle);
     else leanQuaternion.identity();
-    visual.group.quaternion.copy(leanQuaternion).multiply(tiltQuaternion).multiply(wobbleQuaternion);
+    if (pose.tumble && Math.abs(pose.tumble.angle) > 1e-4) tumbleQuaternion.setFromAxisAngle(tumbleAxis.set(pose.tumble.axis.x, 0, pose.tumble.axis.z), pose.tumble.angle);
+    else tumbleQuaternion.identity();
+    visual.group.quaternion.copy(tumbleQuaternion).multiply(leanQuaternion).multiply(tiltQuaternion).multiply(wobbleQuaternion);
     visual.spinGroup.rotation.y = pose.spin;
   };
 }
@@ -104,6 +112,7 @@ export function createMatchScene(
   arena: MatchArena = { geometry: STANDARD_ARENA_GEOMETRY, theme: FOUNDRY_PIT.theme },
   motion: MotionDirectionId = 'B',
   features: PresentationFeatures = PRESENTATION_FEATURES_OFF,
+  rules: BeyMatchRules = beyMatchRulesOf(createDefaultMatchConfig()),
 ): MatchScene {
   const motionValues = motionParams(motion);
   // arenaVisuals: createArenaColliders builds the colliders AND its temporary visuals (floor, wall, rings, two lights) in one call, and it is
@@ -111,10 +120,12 @@ export function createMatchScene(
   // approved arena art is built separately by the presentation system. Flag off: the same call on the same scene as always.
   createArenaColliders(features.arenaVisuals ? discardedVisualHolder(scene) : scene, physics, arena.geometry, arena.theme, motionValues);
 
-  const floor = arena.geometry.floor ?? 'flat';
+  const floor: ArenaFloor = { id: arena.geometry.floor ?? 'flat', depthM: arena.geometry.floorDepthM ?? BOWL_DEPTH_M }; // Lote 9: profile + depth
   const spawns = matchSpawnsFor(floor);
-  const first = createBey(physics, spawns.first, applyAttackProfileSettings(beys.first, attackProfileSettings), floor, motionValues);
-  const second = createBey(physics, spawns.second, applyAttackProfileSettings(beys.second, attackProfileSettings), floor, motionValues);
+  const firstBase = applyAttackProfileSettings(beys.first, attackProfileSettings);
+  const secondBase = applyAttackProfileSettings(beys.second, attackProfileSettings);
+  const first = createBey(physics, spawns.first, firstBase, floor, motionValues, rules);
+  const second = createBey(physics, spawns.second, secondBase, floor, motionValues, rules);
 
   // The same resolution Character Select's preview uses (beyVisualDefinitionFor):
   // the approved concept with `newBeyVisuals` on, the legacy placeholder
@@ -122,8 +133,12 @@ export function createMatchScene(
   // reaches the body or the stats.
   const firstVisualDefinition = beyVisualDefinitionFor(first.definition, features);
   const secondVisualDefinition = beyVisualDefinitionFor(second.definition, features);
-  const firstVisual = firstVisualDefinition.create(first.definition);
-  const secondVisual = secondVisualDefinition.create(second.definition);
+  // Owner, 2026-10-05 (MatchConfig.beySizeScale): the model is built at its designed size and its group scaled, so it
+  // matches the scaled body (the model's own offsets scale with it).
+  const firstVisual = firstVisualDefinition.create(firstBase);
+  const secondVisual = secondVisualDefinition.create(secondBase);
+  firstVisual.group.scale.setScalar(first.definition.sizeScale ?? 1);
+  secondVisual.group.scale.setScalar(second.definition.sizeScale ?? 1);
   const visuals = {
     first: { definition: firstVisualDefinition, anchors: new BeyVisualAnchors(firstVisual, firstVisualDefinition.anchors), visual: firstVisual },
     second: { definition: secondVisualDefinition, anchors: new BeyVisualAnchors(secondVisual, secondVisualDefinition.anchors), visual: secondVisual },

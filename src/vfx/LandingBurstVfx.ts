@@ -28,8 +28,9 @@ export interface ActiveLandingBurst {
   maxRadiusM: number;
 }
 
-export function createLandingBurst(magnitude: number, positionM: WorldPositionM, tintHex: number = LANDING_RING_COLOR_HEX): ActiveLandingBurst {
-  const maxRadiusM = LANDING_RING_BASE_RADIUS_M + magnitude * LANDING_RING_MAX_EXTRA_RADIUS_M;
+/** `effectScale` (owner, 2026-10-05): the Bey size × the effects size; 1 = the approved ring. */
+export function createLandingBurst(magnitude: number, positionM: WorldPositionM, tintHex: number = LANDING_RING_COLOR_HEX, effectScale = 1): ActiveLandingBurst {
+  const maxRadiusM = (LANDING_RING_BASE_RADIUS_M + magnitude * LANDING_RING_MAX_EXTRA_RADIUS_M) * effectScale;
   const geometry = new THREE.RingGeometry(UNIT_RING_INNER_RADIUS, UNIT_RING_OUTER_RADIUS, UNIT_RING_SEGMENTS);
   const material = new THREE.MeshBasicMaterial({ color: tintHex, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
   const mesh = new THREE.Mesh(geometry, material);
