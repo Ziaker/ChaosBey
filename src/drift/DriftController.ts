@@ -389,6 +389,11 @@ export class DriftController {
         // ends it.
         this.driftAirborneS = grounded ? 0 : this.driftAirborneS + fixedDeltaSeconds;
         if (!jumpDriftHeld || this.driftAirborneS > DRIFT_AIRBORNE_GRACE_S) {
+          // Owner polish, 2026-10-07: a drift broken by a launch (a wall or a hit throwing the Bey into the air) with X
+          // still held is OVER — it used to re-arm itself on landing and start again by itself, so a drift ran into the
+          // wall, "broke" and restarted with no input (the HUD flickered DRIFT, GRIP, DRIFT). Drifting again takes a
+          // fresh tap + hold: release X and press it again.
+          if (jumpDriftHeld) this.driftArmed = false;
           this.state = DriftState.Recovering;
           this.recoveryTimerS = 0;
         }

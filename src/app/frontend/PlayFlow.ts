@@ -27,7 +27,7 @@ import { AUTO_CONTINUE_S } from './AutoContinue';
 import { MatchResultsScreen, type MatchResultsAction } from './MatchResultsScreen';
 import { MatchRunner } from './MatchRunner';
 import { EMPTY_SCORE, matchWinner, roundSeed, scoreRound, type MatchScore } from './matchScore';
-import { createDefaultMatchSetup, loadLastSetup, matchBeysFor, matchConfigFor, opponentControllerFor, saveLastSetup, withPlayerBey, type MatchSetup } from './matchSetup';
+import { activeRuleLines, createDefaultMatchSetup, loadLastSetup, matchBeysFor, matchConfigFor, opponentControllerFor, saveLastSetup, withDefaultRules, withPlayerBey, type MatchSetup } from './matchSetup';
 import { PregameScreen } from './PregameScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { CombatHud, type HudFeelOptions } from './CombatHud';
@@ -85,6 +85,8 @@ export class PlayFlow {
   private pregame: PregameScreen | null = null;
   private results: MatchResultsScreen | null = null;
   private pauseMenu: MatchResultsScreen | null = null;
+  /** The Pause menu's "Default rules" was used: the menu says they apply from the next round (cleared when a round starts). */
+  private rulesResetNote = false;
   private settingsScreen: SettingsScreen | null = null;
   private hud: CombatHud | null = null;
   private settings: PlayerSettings;
@@ -168,6 +170,7 @@ export class PlayFlow {
   }
 
   private async startRound(): Promise<void> {
+    this.rulesResetNote = false; // the new round is built from the setup as it is now
     this.leaveCurrent();
     const generation = this.generation;
     this.screen = 'loading';
@@ -272,21 +275,34 @@ export class PlayFlow {
     this.padMenu.start();
     const player = rosterEntry(this.setup.playerBeyId);
     const opponent = rosterEntry(this.setup.opponentBeyId);
+    const custom = activeRuleLines(this.setup);
     this.pauseMenu = new MatchResultsScreen(this.deps.screenRoot, {
       tone: 'neutral',
       headline: 'PAUSED',
       subline: `Round ${this.score.rounds + 1} · ${this.score.player} – ${this.score.opponent} · first to ${this.setup.roundsToWin}`,
-      details: [`You (${player.label}) vs CPU (${opponent.label})`],
+      // Polish idea 10 (owner, 2026-10-07): what this match plays differently from the defaults, and a way back.
+      details: [`You (${player.label}) vs CPU (${opponent.label})`, ...(custom.length > 0 ? [`Custom rules: ${custom.join('; ')}.`] : []), ...(this.rulesResetNote ? ['Default rules apply from the next round.'] : [])],
       testId: 'pause-menu',
       onBack: () => this.resume(),
       actions: [
         { id: 'resume', label: 'Resume', primary: true, run: () => this.resume() },
         { id: 'restart', label: 'Restart round', run: () => void this.startRound() },
+        ...(custom.length > 0 ? [{ id: 'default-rules', label: 'Default rules', run: () => this.resetRulesToDefault() }] : []),
         { id: 'settings', label: 'Settings', run: () => this.openPauseSettings() },
         { id: 'leave', label: 'Leave match', run: () => this.openPregame() },
         { id: 'main-menu', label: 'Main Menu', run: () => this.goToMainMenu() },
       ],
     });
+  }
+
+  /** Pause menu → "Default rules": the setup goes back to the defaults (saved too), from the next round on; this round keeps playing the rules it started with. */
+  private resetRulesToDefault(): void {
+    this.setup = withDefaultRules(this.setup);
+    saveLastSetup(this.setup);
+    this.rulesResetNote = true;
+    this.pauseMenu?.close();
+    this.pauseMenu = null;
+    this.showPauseMenu();
   }
 
   private openPauseSettings(): void {

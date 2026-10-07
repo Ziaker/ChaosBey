@@ -20,11 +20,12 @@
 
 import * as THREE from 'three';
 import type { MatchSession } from '../session/MatchSession';
+import { Action } from '../../input/actions/Action';
 import { ClashState } from '../../combat/clash/ClashController';
 import { computeClashPower } from '../../combat/clash/ClashFormula';
 import { currentGamepads, readFirstGamepad } from '../../input/devices/gamepadMapping';
 import { el, ensureFrontendStyle } from './frontendStyle';
-import { clashBarShare, followClashBar, hudSide, type HudSide } from './hudModel';
+import { UP_CUE_S, clashBarShare, followClashBar, hudSide, stepUpCue, type HudSide } from './hudModel';
 import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
 import { isOutOfArena } from '../../arena/ringout/RingOut';
 
@@ -54,6 +55,7 @@ const COUNTER_WORD_S = 0.9;
 
 /** How long the round-start banner stays up. */
 const START_BANNER_MS = 1300;
+
 /** How long the Clash bar stays on the real result after the Clash resolves. */
 const CLASH_BAR_HOLD_S = 0.45;
 
@@ -73,6 +75,9 @@ export class CombatHud {
   private readonly cards: { readonly first: CardParts; readonly second: CardParts };
   private readonly banner = el('div', 'cb-hud__banner', 'hud-banner');
   private readonly hints = el('div', 'cb-hud__hints', 'hud-hints');
+  /** Owner polish, 2026-10-07 (idea 6): at the start of a round, a short cue of what the arrows mean (Screen control: ↑ goes up the screen, away from the camera). */
+  private readonly upCue = el('div', 'cb-hud__upcue', 'hud-up-cue');
+  private upCueLeftS = UP_CUE_S;
   /**
    * Temporary functional indicator (owner playtest, after M11): "DRIFT"
    * while the player's Bey is Drifting, "GRIP" while grip comes back — so a
@@ -95,6 +100,8 @@ export class CombatHud {
   private bannerTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly projected = new THREE.Vector3();
   private clashActive = false;
+  private previousDriftState = '';
+  private driftLost = false;
   private clashShare = 0.5;
   private clashFirstOnLeft = true;
   private clashHoldS = 0;
@@ -131,7 +138,9 @@ export class CombatHud {
     this.counterWord.textContent = 'COUNTER!';
     this.hintsOn = options.controlHints;
     this.hints.hidden = !options.controlHints;
-    this.root.append(this.cards.first.root, center, this.cards.second.root, this.clashBar, this.banner, this.hints, this.driftTag, this.recoverAlert, this.breakFlash, this.ringOutVignette, this.counterWord);
+    this.upCue.textContent = '▲ UP THE SCREEN';
+    this.upCue.hidden = !options.controlHints;
+    this.root.append(this.cards.first.root, center, this.cards.second.root, this.clashBar, this.banner, this.hints, this.upCue, this.driftTag, this.recoverAlert, this.breakFlash, this.ringOutVignette, this.counterWord);
     mount.append(this.root);
     this.refreshHints();
     this.showBanner(`ROUND ${options.roundNumber}`, 'FIGHT!', START_BANNER_MS);
@@ -139,15 +148,21 @@ export class CombatHud {
 
   /** Call after each rendered frame. */
   update(session: MatchSession, camera: THREE.PerspectiveCamera, frameDeltaSeconds: number): void {
+    this.updateUpCue(session, frameDeltaSeconds);
     const result = session.getLastResult();
     if (result) {
       this.fillCard(this.cards.first, hudSide(result.first));
       this.fillCard(this.cards.second, hudSide(result.second));
       const drift = result.first.driftState;
+      // A drift that ends while X is still held was broken (a wall, a hit), not released: "DRIFT LOST" for the grip recovery.
+      if (this.previousDriftState === 'Drifting' && drift === 'Recovering') this.driftLost = session.getLastActions('first')?.held.has(Action.JumpDrift) ?? false;
+      else if (drift !== 'Recovering') this.driftLost = false;
+      this.previousDriftState = drift;
       this.driftTag.dataset['state'] = drift;
-      this.driftTag.textContent = drift === 'Drifting' ? 'DRIFT' : drift === 'Recovering' ? 'GRIP' : '';
+      this.driftTag.textContent = drift === 'Drifting' ? 'DRIFT' : drift === 'Recovering' ? (this.driftLost ? 'DRIFT LOST' : 'GRIP') : '';
       this.driftTag.classList.toggle('is-drifting', drift === 'Drifting');
       this.driftTag.classList.toggle('is-recovering', drift === 'Recovering');
+      this.driftTag.classList.toggle('is-lost', drift === 'Recovering' && this.driftLost);
     }
     this.updateClashBar(session, camera, frameDeltaSeconds);
     this.updateRecoverAlert(session, camera);
@@ -388,6 +403,19 @@ export class CombatHud {
     return this.projected.set(position.x, position.y, position.z).project(camera).x;
   }
 
+  /**
+   * The round-start cue: "▲ UP THE SCREEN", on while the hints are on, until the player first steers or UP_CUE_S have gone,
+   * fading over its last second. Presentation only (it reads the player's held arrows; nothing reaches the match).
+   */
+  private updateUpCue(session: MatchSession, dt: number): void {
+    const intent = session.getLastActions('first')?.moveIntent;
+    const steering = intent !== undefined && Math.hypot(intent.x, intent.z) > 0.2;
+    const cue = stepUpCue(this.upCueLeftS, steering, this.hintsOn, dt);
+    this.upCueLeftS = cue.leftS;
+    this.upCue.hidden = !cue.visible;
+    this.upCue.style.opacity = String(cue.opacity);
+  }
+
   private refreshHints(): void {
     const pad = readFirstGamepad(currentGamepads()) !== null;
     const key = `${pad}|${this.hintsCircular}`;
@@ -395,8 +423,8 @@ export class CombatHud {
     this.hintsKey = key;
     const attack = this.hintsCircular ? 'attack · hold: Dash' : 'hold: Dash';
     const items = pad
-      ? [['Stick', 'move'], ['A', attack], ['X', 'tap: hop · hold: jump · tap + hold: drift'], ['B', 'dodge'], ['Start', 'pause']]
-      : [['← → ↑ ↓', 'move'], ['Z', attack], ['X', 'tap: hop · hold: jump · tap + hold: drift'], ['C', 'dodge'], ['Esc', 'pause']];
+      ? [['Stick', 'move (up = up the screen)'], ['A', attack], ['X', 'tap: hop · hold: jump · tap + hold: drift'], ['B', 'dodge'], ['Start', 'pause']]
+      : [['← → ↑ ↓', 'move (↑ = up the screen)'], ['Z', attack], ['X', 'tap: hop · hold: jump · tap + hold: drift'], ['C', 'dodge'], ['Esc', 'pause']];
     this.hints.replaceChildren(
       ...items.map(([key, meaning]) => {
         const item = el('span', 'cb-hud__hint');
@@ -481,6 +509,8 @@ function injectHudStyle(): void {
     .cb-hud__banner-sub { margin-top: 4px; font-size: clamp(16px, 3vw, 26px); font-weight: 800; letter-spacing: 0.4em; color: var(--cb-warn); }
     .cb-hud__hints { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--cb-text-dim); background: rgba(8, 10, 16, 0.5); padding: 6px 12px; border-radius: 5px; max-width: calc(100vw - 32px); box-sizing: border-box; }
     .cb-hud__hints[hidden] { display: none; }
+    .cb-hud__upcue { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); font-size: 15px; font-weight: 700; letter-spacing: 0.14em; color: #fff; background: rgba(8, 10, 16, 0.55); border: 1px solid rgba(255, 255, 255, 0.35); padding: 6px 14px; border-radius: 999px; pointer-events: none; }
+    .cb-hud__upcue[hidden] { display: none; }
     .cb-hud__break { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 900 72px/1 var(--cb-font); letter-spacing: 0.2em; color: #ffffff; text-shadow: 0 0 30px rgba(255, 80, 80, 0.9); opacity: 0; pointer-events: none; }
     .cb-hud__break.is-on { animation: cb-hud-break 1.5s ease-out forwards; }
     @keyframes cb-hud-break { 0% { opacity: 1; background: rgba(255, 255, 255, 0.85); } 12% { background: rgba(255, 255, 255, 0); } 80% { opacity: 1; } 100% { opacity: 0; background: rgba(255, 255, 255, 0); } }
@@ -491,6 +521,7 @@ function injectHudStyle(): void {
     .cb-hud__drift { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); font: 900 22px/1 var(--cb-font); letter-spacing: 0.3em; padding: 6px 14px; border-radius: 4px; opacity: 0; transition: opacity 90ms linear; }
     .cb-hud__drift.is-drifting { opacity: 1; color: #1a1206; background: #ffcf4a; box-shadow: 0 0 18px rgba(255, 207, 74, 0.6); }
     .cb-hud__drift.is-recovering { opacity: 0.8; color: #ffcf4a; background: rgba(8, 10, 16, 0.6); border: 1px solid #ffcf4a; }
+    .cb-hud__drift.is-recovering.is-lost { opacity: 1; color: #ffd9d9; background: rgba(120, 16, 16, 0.75); border-color: #ff5c5c; box-shadow: 0 0 14px rgba(255, 92, 92, 0.55); }
     .cb-hud__clash { position: absolute; top: 0; left: 0; width: 320px; height: 22px; display: flex; border-radius: 3px; overflow: hidden; box-shadow: 0 0 16px rgba(255, 224, 102, 0.55), 0 0 0 2px rgba(0, 0, 0, 0.6); }
     .cb-hud__clash[hidden] { display: none; }
     .cb-hud__clash.is-swapped { flex-direction: row-reverse; }

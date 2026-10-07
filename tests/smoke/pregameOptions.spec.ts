@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { baselineUrl } from './presentationBaseline';
+import { bowlDepthText } from './gameDefaults';
 
 // Owner, 2026-10-02 (Lote 9): the Pregame's Advanced rules are grouped (Movement, Jump, Combat, Arena, Round rules,
 // Visual), every value shows its default, Reset to defaults restores them, a moved value reaches the real match, and
@@ -16,7 +17,7 @@ test('Pregame advanced rules: groups, defaults, reset, into the match, remembere
   await page.getByTestId('pregame-advanced').locator('summary').click();
 
   for (const group of ['movement', 'jump', 'combat', 'arena', 'round', 'visual']) await expect(page.getByTestId(`pregame-group-${group}`)).toBeVisible();
-  await expect(page.getByTestId('pregame-bowl-depth-default')).toHaveText('default 8.50 m');
+  await expect(page.getByTestId('pregame-bowl-depth-default')).toHaveText(`default ${bowlDepthText()}`);
   await expect(page.getByTestId('pregame-round-time-limit-value')).toHaveText('no timer');
 
   await page.getByTestId('pregame-bowl-depth').fill('4');
@@ -29,7 +30,7 @@ test('Pregame advanced rules: groups, defaults, reset, into the match, remembere
 
   // Reset to defaults brings everything back.
   await page.getByTestId('pregame-reset-defaults').click();
-  await expect(page.getByTestId('pregame-bowl-depth-value')).toHaveText('8.50 m');
+  await expect(page.getByTestId('pregame-bowl-depth-value')).toHaveText(bowlDepthText());
   await expect(page.getByTestId('pregame-win-spin-out')).toBeChecked();
 
   // Move two values again and play: they reach the match.

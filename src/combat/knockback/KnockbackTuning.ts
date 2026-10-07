@@ -44,3 +44,11 @@ export const KNOCKBACK_UPWARD_LAUNCH_FRACTION = 0.35; // GDD section 27: "upward
 // exactly on the midpoint.
 export const COLLISION_ANGLE_MIN_FACTOR = 0.85; // attacker moving away from/across the hit direction
 export const COLLISION_ANGLE_MAX_FACTOR = 1.2; // attacker moving straight into the hit direction
+
+/**
+ * Polish (owner, 2026-10-07, idea 5): the fastest a Bey may fly, m/s (3D), whatever launched it. The driven speed is
+ * already held under 60 m/s (MovementController's numerical clamp) and the best momentum run reaches ~83; Knockback x4 (and
+ * Clash knockback 60 m/s x4) used to throw a Bey past 260 m/s, more than 4 m per tick against a 0.6 m wall. Applied once
+ * per tick after the physics step, so a launch above it is cut to it and normal play (under it) is untouched. PROVISIONAL.
+ */
+export const LAUNCH_SPEED_CEILING_MPS = 100;

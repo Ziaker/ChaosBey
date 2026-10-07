@@ -83,3 +83,19 @@ export function roundEndBanner(outcome: string): string | null {
   if (outcome === 'Draw') return 'DRAW';
   return null;
 }
+
+/** How long the round-start arrow cue ("UP THE SCREEN") stays (it fades over the last second). */
+export const UP_CUE_S = 3.2;
+/** What is left of the cue once the player steers: a short fade, not an abrupt cut. */
+export const UP_CUE_AFTER_STEER_S = 0.4;
+
+/**
+ * Owner polish, 2026-10-07 (idea 6): the round-start cue of what the arrows mean under Screen control. It stays UP_CUE_S, or
+ * until the player first steers (then a short fade), fading over its last second; off with the control hints.
+ */
+export function stepUpCue(leftS: number, steering: boolean, hintsOn: boolean, dt: number): { readonly leftS: number; readonly visible: boolean; readonly opacity: number } {
+  if (!hintsOn || leftS <= 0) return { leftS: Math.max(0, leftS), visible: false, opacity: 0 };
+  const capped = steering ? Math.min(leftS, UP_CUE_AFTER_STEER_S) : leftS;
+  const next = Math.max(0, capped - dt);
+  return { leftS: next, visible: next > 0, opacity: Math.min(1, next) };
+}

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { baselineUrl } from './presentationBaseline';
+import { GAME_DEFAULTS } from './gameDefaults';
 
 // ============================================================
 // SETTINGS, PAUSE, FOCUS LOSS, GAMEPAD (M10 lane D), production build.
@@ -78,10 +79,12 @@ test('Esc pauses and resumes, focus loss pauses, Settings apply from Pause, Leav
   // Settings from Pause: a change applies live and is saved.
   await page.getByTestId('pause-menu-settings').click();
   await expect(page.getByTestId('settings')).toBeVisible();
-  await page.getByTestId('settings-quality-High').click();
+  // A quality that is not the default, so the click is a real change whatever the default is.
+  const picked = GAME_DEFAULTS.quality === 'High' ? 'Medium' : 'High';
+  await page.getByTestId(`settings-quality-${picked}`).click();
   await page.getByTestId('settings-back').click();
   await expect(pause).toBeVisible();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('chaosbey.settings.player.v2') ?? '{}').quality)).toBe('High');
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}').quality, GAME_DEFAULTS.settingsStorageKey)).toBe(picked);
 
   // Resume by button, then Leave match from a new pause.
   await page.getByTestId('pause-menu-resume').click();
