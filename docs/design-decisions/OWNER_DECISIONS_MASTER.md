@@ -415,6 +415,10 @@ Decisões fechadas:
 - presets salvos pelo usuário continuam separados dos presets oficiais;
 - sem VS cinematográfico, grandes previews 3D, arena-showcase ou animações pesadas.
 
+**Implementação (0.47.0):** duas colunas, seções Preset/Opponent/AI/Arena/Match/Advanced, resumo curto, Advanced em 6 abas com `MODIFIED`, contagens, Reset category / Reset all, cinco presets oficiais + Custom derivado, área Saved. Os números iniciais dos quatro presets alternativos são **PROVISÓRIOS** e ficam numa só tabela para revisão.
+
+**Futuro (pedido do owner, 2026-10-07, adiado):** um **seletor de paleta para cada uma das quatro peças** do Bey, com qualquer cor — fica para um pedido futuro; ver `bey-colors-plan.md`. Não faz parte do Pregame overhaul.
+
 Esta aprovação é específica do Pregame. Ela **não** fecha o tratamento visual final de Main Menu, Character Select, Pause, Results ou Settings.
 
 ---
@@ -485,7 +489,7 @@ Isto é uma pendência estreita de UI/legibilidade, não uma licença para repro
 
 ## 13.2 UI visual
 
-- **Pregame:** direção visual/UX aprovada em 2026-10-07; ver `pregame-overhaul.md`. Não reabrir a direção aprovada; a integração ainda pode estar pendente.
+- **Pregame:** direção visual/UX aprovada em 2026-10-07; ver `pregame-overhaul.md`. Não reabrir a direção aprovada. **Implementado na 0.47.0** (tabelas dos presets Realistic/Epic/Smooth/Strategic PROVISÓRIAS, em `pregamePresets.ts`).
 - continuam abertos, quando não houver decisão posterior: tema visual final de Main Menu / Character Select / Pause / Results / Settings.
 
 ## 13.3 Intro / Launch

@@ -38,3 +38,7 @@ Hoje as quatro peças são pintadas a partir de uma única `ConceptPalette` por 
 5. **Regra de distinção:** a regra "nenhum Bey repete a cor de outro" passa a valer para a **cor de UI derivada** (a que aparece na barra de Clash), e o fallback do espelho continua valendo.
 
 Perguntas em aberto para o owner antes de implementar: as peças terão cores fixas por Bey ou escolhidas pelo jogador? A barra de Clash segue o anel, ou a peça dominante?
+
+## Pedido futuro (owner, 2026-10-07): seletor de paleta por peça, qualquer cor
+
+O owner esclareceu que colorir as quatro peças é algo **futuro**: um **seletor de paleta para cada peça** (topo, anel, disco, driver), podendo escolher **qualquer cor**. Fica para um pedido futuro — **não** é parte do Pregame overhaul (0.47.0) nem está em andamento. As etapas acima continuam sendo o plano; este pedido responde parcialmente às perguntas em aberto: as cores serão **escolhidas pelo jogador** (não fixas por Bey), e então a regra de "nenhum Bey repete a cor de outro" precisará de uma exceção para cores escolhidas (os padrões continuam distintos). Seguem em aberto: onde fica o editor (Character Select?), se a barra de Clash segue o anel, e a persistência (`localStorage`, nunca no estado do jogo nem no replay).
