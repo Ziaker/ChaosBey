@@ -22,6 +22,7 @@ Este diretório contém decisões de design que agentes **não devem reabrir** s
 | Câmera × Gameplay (a câmera nunca move o Bey; quatro esquemas de controle; única exceção opt-in `screen`) | `camera-gameplay-separation.md` |
 | Câmera de combate atual — azimute inercial, composição screen-space e escala da arena 36 m | `inertial-duel-camera.md` |
 | Movimento / Motion Lab | `motion-approval.md` |
+| Rail Grinding — direção futura e pendências | `../planning/RAIL_GRINDING_FUTURE_UPDATE.md` |
 | Apresentação do Clash | `clash-presentation-approval.md` |
 | Inventário/histórico de labs | `visual-prototype-inventory.md` |
 
