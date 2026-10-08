@@ -63,7 +63,11 @@ import { HybridVfxSystem } from '../../vfx/hybrid/HybridVfxSystem';
 import { ClashPresentationSystem, clashDustHexFor } from '../../vfx/clash/ClashPresentationSystem';
 import { ArenaVisualsSystem } from '../../arena/visual/ArenaVisualsSystem';
 import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
-import { createRailVisuals } from '../../presentation/railVisual';
+import { createRailGateMarkers, createRailVisuals } from '../../presentation/railVisual';
+import { RAIL_TUNING } from '../../arena/rails/RailTraversal';
+
+/** The rail's tube in a match (m): thick enough to read across the arena. */
+const RAIL_TUBE_RADIUS_M = 0.14;
 import type { LanguageId } from '../../vfx/condition/types';
 import { HeadingArrow } from '../../vfx/HeadingArrow';
 import { DriftVfx } from '../../vfx/DriftVfx';
@@ -385,7 +389,11 @@ export class MatchSession {
       geometry: arenaGeometryOf(options.matchConfig),
       theme: options.arenaTheme ?? FOUNDRY_PIT.theme,
     }, options.matchConfig.motion ?? 'B', presentationFeatures, beyMatchRulesOf(options.matchConfig));
-    if (this.match.rails.length > 0) this.root.add(createRailVisuals(this.match.rails));
+    if (this.match.rails.length > 0) {
+      const railFloor = arenaFloorOf(resolveMatchConfig(options.matchConfig));
+      this.root.add(createRailVisuals(this.match.rails, RAIL_TUBE_RADIUS_M));
+      this.root.add(createRailGateMarkers(this.match.rails, RAIL_TUNING.captureRadiusM, (x, z) => floorHeightAt(railFloor, x, z)));
+    }
     this.presentation = new PresentationHub({
       features: presentationFeatures,
       beys: [

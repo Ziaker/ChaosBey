@@ -1,6 +1,6 @@
 # Rails — percursos longos para fora da arena
 
-**Status:** PROTOTIPADO (Rail Course Lab, 0.55.0); **formato, entradas e números NÃO APROVADOS**. O jogo continua com os rails curtos da 0.53.0 até o owner escolher um percurso. Nada do lab está lido por `src/` além do módulo puro `src/arena/rails/RailCourse.ts` (gerador e medidas), que o jogo ainda não usa.
+**Status:** **ESCOLHIDO pelo owner (2026-10-08): ideia A, com os números dele, 2 rails, e implementado no jogo na 0.56.0** (ver §5). Os demais números e o visual continuam provisórios. Antes: PROTOTIPADO (Rail Course Lab, 0.55.0). Nada do lab está lido por `src/` além do módulo puro `src/arena/rails/RailCourse.ts` (gerador e medidas), que o jogo ainda não usa.
 **Data:** 2026-10-08
 **Lab:** `prototypes/rail-course-lab/` (página `/prototypes/rail-course-lab/`).
 
@@ -43,3 +43,15 @@ Um percurso tem **duas entradas dentro da parede**, uma em cada ponta (padrão 0
 - O tempo de passeio (6–12 s, intocável e fora da arena) é o que se quer, ou os rails devem ser mais curtos/rápidos?
 - A regra "pulou fora da arena → volta pelo mesmo caminho" é a desejada?
 - Os portões ficam mais perto ou mais longe da parede (hoje a 0,8 do raio)?
+
+## 5. Escolha do owner e o que entrou no jogo (0.56.0)
+
+O owner copiou do lab: **ideia A, stage Foundry, 2 rails**, `sweepDeg −110`, `gateRadiusU 0,88`, `outerRadiusU 1,4`, `insideHeightM 1,8`, `outsideHeightM 7,5`, 240 pontos, sem ondas, e pediu **um slider no jogo para a velocidade do Bey no trajeto**.
+
+- **Percurso:** `OWNER_COURSE` em `StageRails.ts` (dois rails, o mesmo percurso girado 180°, nos três stages — o stage ainda não está no `MatchConfig`).
+- **Entrada só pelos portões** (`gateZoneM` = 4 m de cada ponta); a direção do passeio é a que se afasta do portão usado.
+- **Fora da arena:** colisão do corpo desligada no trilho (`BEY_RAIL_COLLISION_GROUPS`), **ring-out ignorado** enquanto estiver nele, detector de anomalias ciente.
+- **Pular dentro da parede** sai do trilho; **pular fora da arena** vira o Bey e o traz pelo mesmo caminho ao portão por onde entrou (uma vez).
+- **Slider "Rail speed"** (Advanced › Arena, ×0,25–×3, ×1 padrão): escala as velocidades do passeio (8 → 32 m/s, teto 40) e a aceleração.
+- **AI:** `RailPilot` mira os portões; no trecho de fora só segue o percurso.
+- **Abertos:** câmera enquanto o Bey está fora da arena (não trabalhada), visual final do tubo e dos portões, HUD e áudio, um percurso por stage, velocidade e altura dos portões (a 1,8 m só o pulo cheio alcança).

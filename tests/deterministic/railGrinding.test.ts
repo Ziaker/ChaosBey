@@ -6,13 +6,15 @@ import { describe, expect, it } from 'vitest';
 import { floorHeightAt } from '../../src/arena/floor/ArenaFloorProfile';
 import { RailController, type RailTickInput } from '../../src/arena/rails/RailController';
 import { resolveRail, type RailBlueprint } from '../../src/arena/rails/RailBlueprint';
-import { RAIL_TUNING } from '../../src/arena/rails/RailTraversal';
+import { RAIL_TUNING, scaleRailTuning } from '../../src/arena/rails/RailTraversal';
 import { Action, type CombatController, type ControllerActions } from '../../src/input/actions/Action';
 import { ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { BEY_SPAWN_HEIGHT_M } from '../../src/bey/core/BeyTuning';
 import { NullAiMashSource } from '../../src/combat/clash/ClashMash';
 import { IdleController } from '../../src/automation/scripted-scenarios/IdleController';
 import { SelfTestMatchWorld } from '../../src/self-test/SelfTestMatchWorld';
+import { arenaFloorRadius } from '../../src/arena/colliders/ArenaTuning';
+import { BEY_BODY_COLLISION_GROUPS, BEY_RAIL_COLLISION_GROUPS } from '../../src/physics/collision/CollisionGroups';
 
 const DT = 1 / 60;
 
@@ -25,7 +27,7 @@ const BLUEPRINT: RailBlueprint = { id: 'line', label: 'Line', points: [{ u: -0.2
 const rail = resolveRail(BLUEPRINT, { floor: { id: 'flat', depthM: 0 }, floorRadiusM: 40 });
 
 function input(over: Partial<RailTickInput>): RailTickInput {
-  return { actions: actions(), position: { x: -3, y: 1.2, z: 0.5 }, velocity: { x: 6, y: 1, z: 0 }, headingRad: Math.PI / 2, grounded: false, inOwnHop: true, attachBlocked: false, dt: DT, ...over };
+  return { actions: actions(), position: { x: -9, y: 1.2, z: 0.5 }, velocity: { x: 6, y: 1, z: 0 }, headingRad: Math.PI / 2, grounded: false, inOwnHop: true, attachBlocked: false, dt: DT, ...over };
 }
 
 describe('rail grab: jumping toward a rail', () => {
@@ -43,6 +45,17 @@ describe('rail grab: jumping toward a rail', () => {
       expect(c.tick(input(over)).entered, JSON.stringify(over)).toBe(false);
       expect(c.isOnRail()).toBe(false);
     }
+  });
+
+  it('enters only through a gate: the middle of the course is no entrance, and the direction is away from the gate used', () => {
+    const middle = new RailController([rail]);
+    expect(middle.tick(input({ position: { x: 0, y: 1.2, z: 0.5 }, velocity: { x: 3, y: 1, z: -5 } })).entered).toBe(false);
+    const atStart = new RailController([rail]);
+    expect(atStart.tick(input({ position: { x: -9.5, y: 1.2, z: 0.5 }, velocity: { x: -3, y: 1, z: -5 } })).entered).toBe(true);
+    expect(atStart.getState().direction).toBe(1); // even moving the other way along the line: it is the gate that decides
+    const atEnd = new RailController([rail]);
+    expect(atEnd.tick(input({ position: { x: 9.5, y: 1.2, z: 0.5 }, velocity: { x: 3, y: 1, z: -5 } })).entered).toBe(true);
+    expect(atEnd.getState().direction).toBe(-1);
   });
 
   it('does not grab a rail that is out of reach', () => {
@@ -95,6 +108,45 @@ describe('on a rail', () => {
     expect(Math.hypot(out.launch!.x, out.launch!.z)).toBeCloseTo(speed * RAIL_TUNING.exitSpeedCarry, 6);
   });
 
+  it('a Jump press OUTSIDE the arena turns the Bey round: it comes back along the same route to the gate it entered by, and leaves there', () => {
+    const smallArena = { ...rail, arenaRadiusM: 5 }; // only |x| < 5 of the line is "inside the wall"
+    const c = new RailController([smallArena], { jumpExitLiftMps: 3 });
+    c.tick(input({ velocity: { x: 6, y: 1, z: -4 } })); // grabs at the start gate (x = -10 → -9)
+    const jump = actions([Action.JumpDrift], [Action.JumpDrift]);
+    for (let i = 0; i < 600 && c.getState().progressM < 12; i++) c.tick(input({ velocity: { x: 10, y: 0, z: 0 } }));
+    expect(c.getState().progressM).toBeGreaterThan(12); // x > 2? progress 12 = x +2: still inside; ride further out
+    for (let i = 0; i < 600 && c.getState().progressM < 16; i++) c.tick(input({ velocity: { x: 10, y: 0, z: 0 } }));
+    expect(c.getRoute()!.insideArena).toBe(false);
+    const turned = c.tick(input({ actions: jump, velocity: { x: 10, y: 0, z: 0 } }));
+    expect(turned.exitReason).toBeNull(); // it did not leave
+    expect(turned.launch).toBeNull();
+    expect(c.isOnRail()).toBe(true);
+    expect(c.getState().direction).toBe(-1);
+    expect(c.getRoute()!.returning).toBe(true);
+    // A second press while coming back does nothing.
+    c.tick(input({ actions: jump, velocity: { x: -10, y: 0, z: 0 } }));
+    expect(c.getState().direction).toBe(-1);
+    let out = turned;
+    for (let i = 0; i < 1200 && c.isOnRail(); i++) out = c.tick(input({ velocity: { x: -10, y: 0, z: 0 } }));
+    expect(out.exitReason).toBe('end');
+    expect(out.launch!.x).toBeLessThan(0); // leaving at the gate it entered by, heading back into the arena
+    expect(c.getState().progressM).toBe(0);
+  });
+
+  it('the Rail speed scales every speed of the ride', () => {
+    const slow = new RailController([rail]);
+    const fast = new RailController([rail], { tuning: scaleRailTuning(RAIL_TUNING, 2) });
+    slow.tick(input({ velocity: { x: 0, y: 0, z: -2 } }));
+    fast.tick(input({ velocity: { x: 0, y: 0, z: -2 } }));
+    expect(fast.getState().speedMps).toBeCloseTo(slow.getState().speedMps * 2, 6);
+    for (let i = 0; i < 20; i++) {
+      slow.tick(input({ velocity: { x: 10, y: 0, z: 0 } }));
+      fast.tick(input({ velocity: { x: 10, y: 0, z: 0 } }));
+    }
+    expect(fast.getState().speedMps).toBeGreaterThan(slow.getState().speedMps * 1.5);
+    expect(scaleRailTuning(RAIL_TUNING, 1)).toBe(RAIL_TUNING);
+  });
+
   it('leaves at the end of an open rail with the route\'s tangent velocity', () => {
     const c = grabbed();
     let out = c.tick(input({ velocity: { x: 10, y: 0, z: 0 } }));
@@ -112,11 +164,11 @@ describe('on a rail', () => {
     expect(c.tick(input({ velocity: { x: 3, y: 1, z: -5 } })).entered).toBe(false);
   });
 
-  it('the way back is the same route: grabbed going the other way, the direction flips and the same rail is used', () => {
+  it('the way back is the same route: either gate is an entrance, and the Bey travels the course away from it', () => {
     const forward = new RailController([rail]);
     const back = new RailController([rail]);
-    forward.tick(input({ position: { x: 0, y: 1.2, z: 0.5 }, velocity: { x: 4, y: 0, z: -5 } }));
-    back.tick(input({ position: { x: 0, y: 1.2, z: 0.5 }, velocity: { x: -4, y: 0, z: -5 } }));
+    forward.tick(input({ position: { x: -9.5, y: 1.2, z: 0.5 }, velocity: { x: 4, y: 0, z: -5 } }));
+    back.tick(input({ position: { x: 9.5, y: 1.2, z: 0.5 }, velocity: { x: -4, y: 0, z: -5 } }));
     expect(forward.getState().railId).toBe(back.getState().railId);
     expect(forward.getState().direction).toBe(1);
     expect(back.getState().direction).toBe(-1);
@@ -132,8 +184,8 @@ describe('rails in a real match', () => {
   async function build(railsEnabled: boolean) {
     const world = await SelfTestMatchWorld.build({ firstDefinition: ATTACK_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE, aiMashSource: new NullAiMashSource(), matchConfigOverrides: { railsEnabled } as never });
     const b = world.first;
-    // Run-up toward the east rail (x = 0.6 of the floor radius), the opponent parked still on the far side.
-    b.body.setTranslation({ x: 15, y: BEY_SPAWN_HEIGHT_M + floorHeightAt(b.arenaFloor, 15, 0), z: 0 }, true);
+    // Run-up toward the east rail's first gate (x = 0.88 of the floor radius = 31.7 m), the opponent parked still on the far side.
+    b.body.setTranslation({ x: 26, y: BEY_SPAWN_HEIGHT_M + floorHeightAt(b.arenaFloor, 26, 0), z: 0 }, true);
     b.body.setLinvel({ x: 8, y: 0, z: 0 }, true);
     return world;
   }
@@ -156,17 +208,93 @@ describe('rails in a real match', () => {
       expect(grabbedAt).toBeGreaterThanOrEqual(0);
       expect(world.first.rail.getState().railId).toBe('rail-east');
       const speedAtGrab = world.first.rail.getState().speedMps;
-      for (let t = 0; t < 30; t++) {
+      for (let t = 0; t < 8; t++) {
         park(world);
         world.step({ first: pressing([], [], { x: 0, z: 0 }), second: idle });
       }
       expect(world.first.rail.isOnRail()).toBe(true);
       expect(world.first.rail.getState().speedMps).toBeGreaterThan(speedAtGrab);
+      expect(world.first.rail.getRoute()!.insideArena).toBe(true); // still between the gate and the wall: a jump leaves for the arena
       // A jump press leaves it early.
       park(world);
       world.step({ first: pressing([Action.JumpDrift], [Action.JumpDrift], { x: 0, z: 0 }), second: idle });
       expect(world.first.rail.isOnRail()).toBe(false);
       expect(world.first.rail.getState().exitReason).toBe('voluntary');
+    } finally {
+      world.dispose();
+    }
+  });
+
+  async function grabEastGate(world: Awaited<ReturnType<typeof build>>, idle: IdleController): Promise<void> {
+    for (let t = 0; t < 240 && !world.first.rail.isOnRail(); t++) {
+      park(world);
+      world.step({ first: pressing(t === 0 ? [Action.JumpDrift] : [], [Action.JumpDrift], { x: 1, z: 0 }), second: idle });
+    }
+    expect(world.first.rail.isOnRail()).toBe(true);
+  }
+
+  it('the whole course: out over the wall and back in, the arena\'s colliders off on the way, never a ring-out', async () => {
+    const world = await build(true);
+    try {
+      const idle = new IdleController();
+      await grabEastGate(world, idle);
+      const R = arenaFloorRadius();
+      let maxRadius = 0;
+      let offTicks = 0;
+      for (let t = 0; t < 1200 && world.first.rail.isOnRail(); t++) {
+        park(world);
+        world.step({ first: pressing([], [], { x: 0, z: 0 }), second: idle });
+        const p = world.first.body.translation();
+        maxRadius = Math.max(maxRadius, Math.hypot(p.x, p.z));
+        if (world.first.rail.isOnRail()) {
+          expect(world.first.collider.collisionGroups()).toBe(BEY_RAIL_COLLISION_GROUPS);
+          offTicks++;
+        }
+        expect(world.roundState.isOver).toBe(false);
+      }
+      expect(maxRadius).toBeGreaterThan(R * 1.3); // it really went round the OUTSIDE of the arena
+      expect(offTicks).toBeGreaterThan(200);
+      expect(world.first.rail.isOnRail()).toBe(false);
+      expect(world.first.rail.getState().exitReason).toBe('end');
+      expect(world.first.collider.collisionGroups()).toBe(BEY_BODY_COLLISION_GROUPS); // back in the arena's collision
+      const p = world.first.body.translation();
+      expect(Math.hypot(p.x, p.z)).toBeLessThan(R); // and back inside the wall
+      // The ring-out delay (1.5 s) has long passed over the ride: had it counted, the round would be over.
+      for (let t = 0; t < 30; t++) {
+        park(world);
+        world.step({ first: pressing([], [], { x: 0, z: 0 }), second: idle });
+      }
+      expect(world.roundState.isOver).toBe(false);
+    } finally {
+      world.dispose();
+    }
+  });
+
+  it('a Jump outside the arena brings the Bey back along the same route to the gate it entered by', async () => {
+    const world = await build(true);
+    try {
+      const idle = new IdleController();
+      await grabEastGate(world, idle);
+      const R = arenaFloorRadius();
+      for (let t = 0; t < 1200 && Math.hypot(world.first.body.translation().x, world.first.body.translation().z) < R * 1.25; t++) {
+        park(world);
+        world.step({ first: pressing([], [], { x: 0, z: 0 }), second: idle });
+      }
+      expect(world.first.rail.getRoute()!.insideArena).toBe(false);
+      park(world);
+      world.step({ first: pressing([Action.JumpDrift], [Action.JumpDrift], { x: 0, z: 0 }), second: idle });
+      expect(world.first.rail.isOnRail()).toBe(true); // it did not fall into the void
+      expect(world.first.rail.getRoute()!.returning).toBe(true);
+      for (let t = 0; t < 1500 && world.first.rail.isOnRail(); t++) {
+        park(world);
+        world.step({ first: pressing([], [], { x: 0, z: 0 }), second: idle });
+      }
+      expect(world.first.rail.isOnRail()).toBe(false);
+      expect(world.first.rail.getState().exitReason).toBe('end');
+      const p = world.first.body.translation();
+      expect(Math.hypot(p.x, p.z)).toBeLessThan(R);
+      expect(p.x).toBeGreaterThan(R * 0.7); // at the east gate it came in by (x ≈ 0.88 R)
+      expect(world.roundState.isOver).toBe(false);
     } finally {
       world.dispose();
     }
@@ -192,7 +320,7 @@ describe('a Bey on a rail is out of the arena (owner, 2026-10-08)', () => {
     const world = await SelfTestMatchWorld.build({ firstDefinition: ATTACK_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE, aiMashSource: new NullAiMashSource(), matchConfigOverrides: { railsEnabled: true } as never });
     try {
       const a = world.first;
-      a.body.setTranslation({ x: 15, y: BEY_SPAWN_HEIGHT_M + floorHeightAt(a.arenaFloor, 15, 0), z: 0 }, true);
+      a.body.setTranslation({ x: 26, y: BEY_SPAWN_HEIGHT_M + floorHeightAt(a.arenaFloor, 26, 0), z: 0 }, true);
       a.body.setLinvel({ x: 8, y: 0, z: 0 }, true);
       const idle = new IdleController();
       const press = (pressed: Action[], held: Action[], move: { x: number; z: number }): CombatController => ({ sampleActions: () => ({ held: new Set(held), pressedThisFrame: new Set(pressed), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0, moveIntent: move }) });
@@ -201,8 +329,10 @@ describe('a Bey on a rail is out of the arena (owner, 2026-10-08)', () => {
       const stabilityBefore = world.second.stability.resource.value;
       for (let t = 0; t < 120; t++) {
         // Until the first Bey is on the rail the opponent waits far away; then it stands right under the rider, every tick.
-        const p = a.rail.isOnRail() ? a.body.translation() : { x: 0, y: 0, z: -33 };
-        world.second.body.setTranslation({ x: p.x, y: a.rail.isOnRail() ? a.body.translation().y : BEY_SPAWN_HEIGHT_M + floorHeightAt(world.second.arenaFloor, p.x, p.z), z: p.z }, true);
+        const rider = a.body.translation();
+        const together = a.rail.isOnRail() && Math.hypot(rider.x, rider.z) < 34; // while the ride is inside the wall (the opponent never leaves the arena)
+        const p = together ? rider : { x: 0, y: 0, z: -33 };
+        world.second.body.setTranslation({ x: p.x, y: together ? rider.y : BEY_SPAWN_HEIGHT_M + floorHeightAt(world.second.arenaFloor, p.x, p.z), z: p.z }, true);
         world.second.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
         world.step({ first: press(t === 0 ? [Action.JumpDrift] : [], a.rail.isOnRail() ? [Action.Attack] : [Action.JumpDrift], { x: 1, z: 0 }), second: idle });
         if (a.rail.isOnRail()) {

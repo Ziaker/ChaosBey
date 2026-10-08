@@ -120,8 +120,10 @@ interface Recording {
 // after 900) from a scan of replay-0..119 (30 qualify).
 // 0.53.0 (owner, 2026-10-08: the AI rides the rails, so every AI fight changed): replay-107 (2935 ticks, 37 frozen) and
 // replay-10 (3212 ticks, 29 frozen, 1359 steering ticks after 900) from a scan of replay-0..119 (31 qualify).
-const LONG_SEED = 'replay-107';
-const MUTATION_SEED = 'replay-10';
+// 0.56.0 (the AI runs the rail courses through the gates): replay-107 fell to 19 frozen ticks; replay-4 (3246 ticks, 43 frozen) and
+// replay-40 (3286 ticks, 25 frozen, 1139 steering ticks after 900) from a scan of replay-0..119 (39 qualify).
+const LONG_SEED = 'replay-4';
+const MUTATION_SEED = 'replay-40';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {

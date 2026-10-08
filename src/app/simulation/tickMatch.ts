@@ -56,6 +56,7 @@ import type { SpinSnapshot } from '../../bey/spin/SpinController';
 import { DriftState } from '../../drift/DriftController';
 import { DodgeState } from '../../dodge/DodgeController';
 import { isGrounded } from '../../physics/collision/GroundCheck';
+import { BEY_BODY_COLLISION_GROUPS, BEY_RAIL_COLLISION_GROUPS } from '../../physics/collision/CollisionGroups';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import { beyBodiesOverlapVertically } from '../../physics/world/PhysicsWorld';
 import { dot, length, normalize, subtract, type Vec2 } from '../../physics/Vec2';
@@ -184,6 +185,16 @@ function withHeld(actions: ControllerActions, added: Action): ControllerActions 
  * charging but does not fire until the Bey is off the rail (the release is held back). Returns the actions to use and the
  * route's velocity for MovementController, if any.
  */
+/** Whether each Bey's body is currently out of every collision pair (on a rail): the groups are only rewritten when that changes. */
+const bodiesOutOfArena = new WeakMap<Bey, boolean>();
+
+function syncRailCollision(bey: Bey): void {
+  const onRail = bey.rail.isOnRail();
+  if ((bodiesOutOfArena.get(bey) ?? false) === onRail) return;
+  bodiesOutOfArena.set(bey, onRail);
+  bey.collider.setCollisionGroups(onRail ? BEY_RAIL_COLLISION_GROUPS : BEY_BODY_COLLISION_GROUPS);
+}
+
 function railStep(bey: Bey, actions: ControllerActions, grounded: boolean, dt: number): { actions: ControllerActions; override: { velocity: { x: number; y: number; z: number }; headingRad: number } | null } {
   const out = bey.rail.tick({
     actions,
@@ -197,6 +208,7 @@ function railStep(bey: Bey, actions: ControllerActions, grounded: boolean, dt: n
   });
   if (out.entered) bey.drift.abortForRail();
   if (out.launch) bey.body.setLinvel(out.launch, true);
+  syncRailCollision(bey);
   let result = out.actions;
   if (bey.rail.isOnRail()) {
     bey.attack.blockCircularFor(dt * 2);
@@ -459,6 +471,8 @@ export function tickMatch(
   // Anything that still touches a Bey on its rail (not the other Bey: it is intangible there) takes it off.
   if (firstMovement.impactDeltaSpeedMps > 0) first.rail.interrupt('hit');
   if (secondMovement.impactDeltaSpeedMps > 0) second.rail.interrupt('hit');
+  syncRailCollision(first);
+  syncRailCollision(second);
 
   // Note: a wall/floor bounce does NOT call dodge.registerLaunch() — GDD
   // section 21 grants Air Recovery only for being launched/knocked
@@ -808,7 +822,7 @@ export function tickMatch(
   }
 
   // Outside the ring-out radius only counts after the match's ring-out delay (owner, 2026-10-02).
-  const ringedOut = roundState.trackRingOut(isOutOfArena(first.body.translation(), first.arenaFloor), isOutOfArena(second.body.translation(), second.arenaFloor), fixedDeltaSeconds);
+  const ringedOut = roundState.trackRingOut(!first.rail.isOnRail() && isOutOfArena(first.body.translation(), first.arenaFloor), !second.rail.isOnRail() && isOutOfArena(second.body.translation(), second.arenaFloor), fixedDeltaSeconds); // a Bey on a rail is out over the wall BY DESIGN: never a ring-out
   const ringOutFirst = ringedOut.first;
   const ringOutSecond = ringedOut.second;
   if (ringOutFirst) combatEvents.push({ kind: 'ringOut', targetIsFirst: true });

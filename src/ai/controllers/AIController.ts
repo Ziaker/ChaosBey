@@ -226,7 +226,7 @@ export class AIController implements CombatController {
     this.lastWorld = world;
 
     // Rail Grinding (0.53.0, owner: "a AI deve usar rails"): a rail run is its own short plan (RailPilot) — while it has the
-    // controls the intent pipeline waits, and decides afresh the tick the run is over.
+    // controls the intent pipeline waits (its timers stand still) and carries on when the run is over.
     const railPlan = this.railPilot.step({
       dt: context.fixedDeltaSeconds,
       rail: this.ownBey.rail,
@@ -246,7 +246,6 @@ export class AIController implements CombatController {
       roll: (probability) => this.rng.nextBool(probability),
     });
     if (railPlan !== null) {
-      this.decisionTimerS = Number.MAX_SAFE_INTEGER;
       const railActions = this.actionSelector.selectRailActions(railPlan, ownRaw.headingRad, context.fixedDeltaSeconds);
       this.lastActionSummary = `rail run (${this.railPilot.getStage()})`;
       return railActions;

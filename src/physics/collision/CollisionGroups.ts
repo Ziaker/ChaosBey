@@ -27,3 +27,9 @@ const groups = (membership: number, filter: number): number => ((membership << 1
 export const ARENA_COLLISION_GROUPS = groups(ARENA, BEY_BODY | ARENA);
 export const BEY_BODY_COLLISION_GROUPS = groups(BEY_BODY, ARENA);
 export const BEY_BUMPER_COLLISION_GROUPS = groups(BEY_BUMPER, BEY_BUMPER);
+
+/**
+ * A Bey on a rail (Rail Grinding, 0.56.0) is out of the arena: its body touches nothing — not the floor, not the wall it is
+ * carried over — until it is off the rail. Membership 0 / filter 0 pairs with no collider.
+ */
+export const BEY_RAIL_COLLISION_GROUPS = 0;
