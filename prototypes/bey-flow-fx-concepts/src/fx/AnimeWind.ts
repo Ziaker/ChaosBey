@@ -1,20 +1,25 @@
 // ============================================================
 // BEY FLOW FX LAB — ANIME WIND AND DUST
-// The continuous "epic" layer the owner asked for: anime dust behind the
-// tip (three ideas, see AnimeDust), torn wind streaks streaming behind the
-// Bey, and, on a Dash release or a hit, jagged shock rings, a floor crown and
-// a dust burst.
-// All of it is built from the approved Cel Cyclone pieces (src/vfx/hybrid/fx:
-// wakeStreakFx, jaggedRingFx and their textures), so it lives
-// in the same cel look; the dust is the lab's own (AnimeDust).
+// The continuous "epic" layer the owner asked for:
+//   * anime dust in real volume behind the tip (three compositions, see AnimeDust);
+//   * torn wind streaks streaming behind the Bey;
+//   * on a Dash release AND on the contact of a hit: jagged shock rings born in the
+//     middle of the Bey (or of the contact), facing the way the attack goes and
+//     flying backward; at the contact also the floor crowns and the flat star;
+//   * and a dust burst with both.
+// The rings, crowns, star and streaks are the approved Cel Cyclone pieces
+// (src/vfx/hybrid/fx); the dust is the lab's own (AnimeDust).
+//
+// Every direction here is the Bey's own heading (the way it moves, or the way it
+// is being fired) or the direction of the attack: never an unrelated vector.
 //
 // Presentation only: it reads a FlowBey and emits effects into an FxLayer.
 // ============================================================
 
 import * as THREE from 'three';
-import { jaggedRingFx, wakeStreakFx, type WindLook } from '../../../../src/vfx/hybrid/fx/primitives';
+import { burstFx, flatFx, jaggedRingFx, wakeStreakFx, type WindLook } from '../../../../src/vfx/hybrid/fx/primitives';
 import type { FxLayer } from '../../../../src/vfx/hybrid/fx/FxLayer';
-import { jaggedRing, tornStreak } from '../../../../src/vfx/hybrid/fx/textures';
+import { impactStar, jaggedRing, tornStreak } from '../../../../src/vfx/hybrid/fx/textures';
 import { floorHeight, type FlowBey } from '../sim/FlowSim';
 import type { Tuning } from '../tuning';
 import { AnimeDust, type DustStyle } from './AnimeDust';
@@ -34,6 +39,12 @@ const DASH_FAN_RAD = 0.7;
 const BURST_LIFE_S = 1;
 const BURST_COUNT_MIN = 6;
 const BURST_COUNT_MAX = 12;
+const CROWN_LIFE_S = 0.55;
+const CROWN_LIFT_M = 0.05;
+const CROWN_COUNT = 2;
+const STAR_LIFE_S = 0.25;
+const STAR_HEIGHT_M = 1;
+const STAR_SPIKES = 10;
 // -----------------------------------------
 
 export interface WindFlags {
@@ -58,6 +69,19 @@ function makeRng(seed: number): () => number {
   };
 }
 
+function perpendicular(dir: THREE.Vector3): [THREE.Vector3, THREE.Vector3] {
+  const up = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  const u = new THREE.Vector3().crossVectors(dir, up).normalize();
+  const v = new THREE.Vector3().crossVectors(u, dir).normalize();
+  return [u, v];
+}
+
+/** A unit horizontal vector from (x, z), or +x when it is (almost) zero. */
+function unit(x: number, z: number): THREE.Vector3 {
+  const len = Math.hypot(x, z);
+  return len > 1e-6 ? new THREE.Vector3(x / len, 0, z / len) : new THREE.Vector3(1, 0, 0);
+}
+
 export class AnimeWind {
   private readonly rng: () => number;
   private readonly dustCarry = [0, 0];
@@ -69,18 +93,14 @@ export class AnimeWind {
   constructor(
     private readonly layer: FxLayer,
     camera: THREE.Camera,
+    scene: THREE.Object3D,
     seed = 7,
   ) {
     this.rng = makeRng(seed);
-    this.dust = new AnimeDust(layer, camera, this.rng);
+    this.dust = new AnimeDust(scene, camera, this.rng);
   }
 
-  /** The colour the dust cutouts are multiplied by (the arena's light). */
-  get dustTint(): THREE.Color {
-    return this.dust.tint;
-  }
-
-  /** The dust idea in use (roll, bubbles or shards). */
+  /** The dust composition in use (wave, crown or cloud). */
   get dustStyle(): DustStyle {
     return this.dust.style;
   }
@@ -94,20 +114,46 @@ export class AnimeWind {
     return this.dust.emitted;
   }
 
+  /** Dust puffs alive and the lumps (instances) they draw. */
+  get dustPuffs(): number {
+    return this.dust.puffCount;
+  }
+
+  get dustLumps(): number {
+    return this.dust.lumpCount;
+  }
+
+  /** The instanced mesh the dust is drawn with (for the tests). */
+  get dustMesh(): THREE.InstancedMesh {
+    return this.dust.mesh;
+  }
+
+  /** Ages the dust one frame, with the opacity, fade and shrink the tuning asks for. */
+  update(dt: number, tuning: Tuning): void {
+    this.dust.update(dt, { opacity: tuning.dustOpacity, fade: tuning.dustFade, shrink: tuning.dustShrink });
+  }
+
+  clear(): void {
+    this.dust.clear();
+  }
+
+  dispose(): void {
+    this.dust.dispose();
+  }
+
   private rand(a: number, b: number): number {
     return a + this.rng() * (b - a);
   }
 
   /** Per rendered frame, per Bey: dust and wind streaks in proportion to the speed. `tip` is the contact point. */
   trail(i: 0 | 1, b: FlowBey, tip: THREE.Vector3, dt: number, tuning: Tuning, flags: WindFlags): void {
-    const rimY = tip.y + 0.55;
-    this.follow[i]!.set(tip.x, rimY, tip.z);
+    this.follow[i]!.set(tip.x, tip.y + BEY_MID_HEIGHT_M, tip.z);
     if (b.speed < TRAIL_MIN_SPEED_MPS || dt <= 0) return;
     const speedK = smoothstep(TRAIL_MIN_SPEED_MPS, TRAIL_FULL_SPEED_MPS, b.speed);
     const dashK = b.dashing ? tuning.dustDashBoost : 0;
-    const dir = new THREE.Vector3(b.vx / b.speed, 0, b.vz / b.speed);
+    // The Bey's own heading (its Dash direction while it dashes), not the velocity that lags behind it.
+    const dir = unit(b.headX, b.headZ);
     const back = dir.clone().negate();
-    const side = new THREE.Vector3(-dir.z, 0, dir.x);
 
     if (flags.dust) {
       this.dustCarry[i] = this.dustCarry[i]! + tuning.dustRate * tuning.intensity * speedK * (1 + dashK) * dt;
@@ -149,23 +195,16 @@ export class AnimeWind {
   }
 
   /**
-   * A Dash was released: jagged shock rings born in the middle of the Bey, facing the way it is being fired (toward the
-   * target, not along its old orbit velocity) and flying backward, plus a fan of dust behind it.
+   * Jagged shock rings born at `origin` (already at the height of the middle of the body), facing `dir` (the way the attack
+   * goes) and flying backward along it.
    */
-  dashStart(i: 0 | 1, b: FlowBey, tuning: Tuning, flags: WindFlags): void {
-    if (!flags.crown) return;
-    const len = Math.hypot(b.dashDirX, b.dashDirZ);
-    const dir = len > 1e-6 ? new THREE.Vector3(b.dashDirX / len, 0, b.dashDirZ / len) : new THREE.Vector3(1, 0, 0);
-    const back = dir.clone().negate();
-    const floor = floorHeight(Math.hypot(b.x, b.z));
-    // The simulation is ahead of the last rendered frame: place the rings from the Bey's own position.
-    const head = this.follow[i]!.set(b.x, floor + BEY_MID_HEIGHT_M, b.z);
+  private shockRings(origin: THREE.Vector3, dir: THREE.Vector3, tuning: Tuning): void {
     const rings = Math.round(tuning.crownCount);
     for (let n = 0; n < rings; n++) {
       this.layer.add(
         jaggedRingFx({
           tex: jaggedRing(),
-          follow: () => head,
+          follow: () => origin,
           dir,
           color: WIND_WHITE,
           size: [0.6, tuning.crownSizeM * tuning.intensity * (1 - n * RING_SHRINK_PER_RING)],
@@ -176,21 +215,59 @@ export class AnimeWind {
         }),
       );
     }
-    this.dust.burst(new THREE.Vector3(b.x, floor, b.z), back, DASH_FAN_RAD, DASH_BURST, tuning.burstSizeM * tuning.intensity, BURST_LIFE_S);
   }
 
-  /** A hit: the dust burst of the chosen composition (its crowns and clouds), flung outward from the contact point. */
-  impact(x: number, z: number, m: number, tuning: Tuning, flags: WindFlags): void {
+  /**
+   * A Dash was released: the shock rings born in the middle of the Bey, facing the way it is being fired (toward the
+   * target) and flying backward, plus a fan of dust behind it.
+   */
+  dashStart(i: 0 | 1, b: FlowBey, tuning: Tuning, flags: WindFlags): void {
+    if (!flags.crown) return;
+    const dir = unit(b.dashDirX, b.dashDirZ);
+    const floor = floorHeight(Math.hypot(b.x, b.z));
+    // The simulation is ahead of the last rendered frame: place the rings from the Bey's own position.
+    const head = this.follow[i]!.set(b.x, floor + BEY_MID_HEIGHT_M, b.z);
+    this.shockRings(head.clone(), dir, tuning);
+    this.dust.burst(new THREE.Vector3(b.x, floor, b.z), dir.clone().negate(), DASH_FAN_RAD, DASH_BURST, tuning.burstSizeM * tuning.intensity, BURST_LIFE_S);
+  }
+
+  /**
+   * A hit, at the contact of the two Beys: the shock rings born at the contact and facing the attack, the crowns on the
+   * floor and the flat star (the approved impact), plus the dust burst of the chosen composition.
+   */
+  impact(x: number, z: number, m: number, dirX: number, dirZ: number, tuning: Tuning, flags: WindFlags): void {
     if (!flags.crown) return;
     const y = floorHeight(Math.hypot(x, z));
+    const dir = unit(dirX, dirZ);
+    this.shockRings(new THREE.Vector3(x, y + BEY_MID_HEIGHT_M, z), dir, tuning);
+    const size = tuning.crownSizeM * tuning.intensity * (0.7 + 0.6 * m);
+    for (let n = 0; n < CROWN_COUNT; n++) {
+      this.layer.add(
+        flatFx({
+          tex: jaggedRing(),
+          color: WIND_WHITE,
+          pos: new THREE.Vector3(x, y + CROWN_LIFT_M, z),
+          size: [0.8, size * (1 - n * 0.3)],
+          life: CROWN_LIFE_S * (1 - n * 0.2),
+          opacity: 1,
+          additive: false,
+          rotation: this.rng() * Math.PI,
+          conform: { floorHeightAt: (r) => floorHeight(r), lift: CROWN_LIFT_M },
+        }),
+      );
+    }
+    this.layer.add(
+      burstFx({
+        tex: impactStar(STAR_SPIKES),
+        color: 0xffffff,
+        pos: new THREE.Vector3(x, y + STAR_HEIGHT_M, z),
+        size: [1, tuning.burstSizeM * 0.9 * (0.8 + 0.5 * m)],
+        life: STAR_LIFE_S,
+        rotation: this.rng() * Math.PI,
+        additive: false,
+      }),
+    );
     const n = Math.round(BURST_COUNT_MIN + (BURST_COUNT_MAX - BURST_COUNT_MIN) * m);
     this.dust.burst(new THREE.Vector3(x, y, z), null, 0, n, tuning.burstSizeM * (0.8 + 0.5 * m) * tuning.intensity, BURST_LIFE_S);
   }
-}
-
-function perpendicular(dir: THREE.Vector3): [THREE.Vector3, THREE.Vector3] {
-  const up = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-  const u = new THREE.Vector3().crossVectors(dir, up).normalize();
-  const v = new THREE.Vector3().crossVectors(u, dir).normalize();
-  return [u, v];
 }

@@ -9,6 +9,7 @@
 //       ├ spin   drawn rotation of the pieces
 //       │ └ model
 //       └ blur shell (smeared disc; fades as the spin dies)
+//   shadow  a plain black disc on the floor under the tip (one draw call, no shadow map)
 //
 // The dust, streaks and crowns that stay behind in the world are not
 // here: they belong to AnimeWind. Presentation only: the rig reads a
@@ -24,6 +25,8 @@ import type { Tuning } from '../tuning';
 // ---------------- RIG TUNING ----------------
 const SPIN_VISUAL_RAD_PER_S = 16;     // drawn spin at full spin
 const BLUR_MAX_OPACITY = 0.6;
+const SHADOW_LIFT_M = 0.03;           // above the floor, so it never z-fights with it
+const SHADOW_SEGMENTS = 24;
 // --------------------------------------------
 
 export interface FxFlags {
@@ -32,6 +35,7 @@ export interface FxFlags {
   dust: boolean;
   wind: boolean;
   crown: boolean;
+  shadow: boolean;
 }
 
 const BLUR_VERT = /* glsl */ `
@@ -85,6 +89,8 @@ export class FlowRig {
   private readonly ringMidY: number;
   private readonly blurMesh: THREE.Mesh;
   private readonly blurMat: THREE.ShaderMaterial;
+  private readonly shadowMesh: THREE.Mesh;
+  private readonly shadowMat: THREE.MeshBasicMaterial;
 
   private leanRad = 0;
   private spinAngle = 0;
@@ -133,6 +139,14 @@ export class FlowRig {
     this.lean.add(this.blurMesh);
 
     scene.add(this.root);
+
+    // Blob shadow: a unit disc lying on the floor, scaled to the Bey; it lives in the slope group so it follows the funnel.
+    this.shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false, fog: false, toneMapped: false });
+    this.shadowMesh = new THREE.Mesh(new THREE.CircleGeometry(0.5, SHADOW_SEGMENTS), this.shadowMat);
+    this.shadowMesh.rotation.x = -Math.PI / 2;
+    this.shadowMesh.position.y = SHADOW_LIFT_M;
+    this.shadowMesh.renderOrder = -1;
+    this.slope.add(this.shadowMesh);
   }
 
   /** Current inward lean in degrees (signed: negative = leaning left of travel). */
@@ -186,11 +200,19 @@ export class FlowRig {
     this.blurMat.uniforms.uOpacity!.value = blurAlpha;
     this.blurMesh.visible = blurAlpha > 0.003;
 
+    // Blob shadow.
+    const shadowAlpha = flags.shadow ? tuning.shadowOpacity : 0;
+    this.shadowMat.opacity = shadowAlpha;
+    this.shadowMesh.visible = shadowAlpha > 0.003;
+    this.shadowMesh.scale.setScalar(BEY_DIAMETER_M * tuning.shadowScale * 1.1);
+
   }
 
   dispose(): void {
     this.model.dispose();
     this.blurMat.dispose();
     this.blurMesh.geometry.dispose();
+    this.shadowMat.dispose();
+    this.shadowMesh.geometry.dispose();
   }
 }
