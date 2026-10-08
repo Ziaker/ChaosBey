@@ -13,6 +13,7 @@ import { CAMERA_PRESET_NAMES, CAMERA_PRESET_NOTES } from '../../camera/director/
 import { QualityPreset } from '../../config/runtime/QualityPreset';
 import { GAMEPAD_BINDINGS, currentGamepads, readFirstGamepad } from '../../input/devices/gamepadMapping';
 import { button, el, ensureFrontendStyle, keyHint, segmentedControl } from './frontendStyle';
+import { DUST_STYLE_IDS, DUST_STYLE_LABELS, FLOW_FX_GROUP_ORDER, FLOW_FX_GROUP_TITLES, FLOW_FX_SPEC, DEFAULT_FLOW_FX_SETTINGS, withFlowFxValue, type DustStyle, type FlowFxSpec } from '../../vfx/flow/flowFxTuning';
 import { isFullscreen, isFullscreenSupported, toggleFullscreen } from './fullscreen';
 import { navigationIntent, wrapIndex } from './listNavigation';
 
@@ -36,6 +37,8 @@ interface Row {
   readonly buttons: HTMLButtonElement[];
   refresh(settings: PlayerSettings): void;
   step(settings: PlayerSettings, delta: number): PlayerSettings;
+  /** Puts the keyboard focus on the row's control (the chosen segment, or the slider). */
+  focus(): void;
 }
 
 const KEYBOARD_BINDINGS: readonly { readonly label: string; readonly keys: string }[] = [
@@ -170,6 +173,28 @@ export class SettingsScreen {
       this.toggleRow('refused-input', 'Refused press feedback on the HUD', 'refusedInputFeedback'),
     );
 
+    // Owner, 2026-10-08 ("Fluxo do Bey"): every new visual effect has its sliders here (presentation only).
+    const effects = this.section('Visual effects');
+    effects.append(
+      this.choiceRow<DustStyle>(
+        'flow-dust-style',
+        'Dust style',
+        DUST_STYLE_IDS.map((id) => ({ value: id, label: DUST_STYLE_LABELS[id] })),
+        (s) => s.flowFx.dustStyle,
+        (s, v) => ({ ...s, flowFx: { ...s.flowFx, dustStyle: v } }),
+      ),
+      this.choiceRow<boolean>('flow-comic-words', 'Comic words ("HIT", "COUNTER!")', [{ value: true, label: 'On' }, { value: false, label: 'Off' }], (s) => s.flowFx.comicWords, (s, v) => ({ ...s, flowFx: { ...s.flowFx, comicWords: v } })),
+    );
+    for (const group of FLOW_FX_GROUP_ORDER) {
+      const heading = el('h3', 'cb-settings__subheading');
+      heading.textContent = FLOW_FX_GROUP_TITLES[group];
+      effects.append(heading);
+      for (const spec of FLOW_FX_SPEC.filter((s) => s.group === group)) effects.append(this.sliderRow(spec));
+    }
+    const effectsNote = el('p', 'cb-hint', 'settings-effects-note');
+    effectsNote.textContent = 'Defaults are the owner\'s own numbers from the Bey Flow lab. They only change how the match is drawn. Set a slider to its minimum (or an amount to 0) to switch that effect off.';
+    effects.append(effectsNote, button('Reset visual effects', '', 'settings-reset-effects', () => this.change({ ...this.settings, flowFx: DEFAULT_FLOW_FX_SETTINGS })));
+
     const controls = this.section('Controls');
     const table = el('table', 'cb-settings__controls', 'settings-controls');
     const head = el('tr');
@@ -205,13 +230,13 @@ export class SettingsScreen {
 
     const body = el('div', 'cb-settings__body');
     // The condition section sits between Play and Controls, in the same order as its rows in the keyboard navigation.
-    body.append(...(condition ? [graphics, play, condition, feel, controls] : [graphics, play, feel, controls]));
+    body.append(...(condition ? [graphics, play, condition, feel, effects, controls] : [graphics, play, feel, effects, controls]));
     panel.append(eyebrow, title, body, footer);
     this.root.append(panel);
     mount.append(this.root);
 
     this.refresh();
-    this.rows[0]?.buttons.find((b) => b.getAttribute('aria-checked') === 'true')?.focus();
+    this.rows[0]?.focus();
     window.addEventListener('keydown', this.handleKey);
     document.addEventListener('fullscreenchange', this.refreshFullscreen);
     this.padTimer = setInterval(() => this.refreshPadStatus(), 1000);
@@ -251,8 +276,50 @@ export class SettingsScreen {
         const index = choices.findIndex((c) => c.value === read(s));
         return write(s, choices[wrapIndex(index, delta, choices.length)]!.value);
       },
+      focus: () => control.buttons.find((b) => b.getAttribute('aria-checked') === 'true')?.focus(),
     });
     wrapper.append(labelNode, control.group);
+    return wrapper;
+  }
+
+  /** A slider for one Visual effects value (owner, 2026-10-08): ←/→ step it from the keyboard, the mouse drags it. */
+  private sliderRow(spec: FlowFxSpec): HTMLElement {
+    const id = `flow-${spec.key}`;
+    const wrapper = el('div', 'cb-settings__row');
+    const labelNode = el('span', 'cb-field-label');
+    labelNode.id = `settings-label-${id}`;
+    labelNode.textContent = spec.label;
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.className = 'cb-settings__slider';
+    input.id = `settings-${id}`;
+    input.min = String(spec.min);
+    input.max = String(spec.max);
+    input.step = String(spec.step);
+    input.setAttribute('aria-labelledby', labelNode.id);
+    input.dataset['testid'] = `settings-${id}`;
+    const readout = el('output', 'cb-settings__readout');
+    readout.setAttribute('for', input.id);
+    const rowIndex = this.rows.length;
+    const decimals = spec.step >= 1 ? 0 : spec.step >= 0.1 ? 1 : 2;
+    const show = (v: number): string => `${v.toFixed(decimals)}${spec.unit ? (spec.unit === 'x' ? '×' : spec.unit === '°' ? '°' : ` ${spec.unit}`) : ''}`;
+    input.addEventListener('input', () => {
+      this.focusRow = rowIndex;
+      this.change({ ...this.settings, flowFx: withFlowFxValue(this.settings.flowFx, spec.key, Number(input.value)) });
+    });
+    this.rows.push({
+      buttons: [],
+      refresh: (st) => {
+        const v = st.flowFx.values[spec.key];
+        input.value = String(v);
+        readout.textContent = show(v);
+      },
+      step: (st, delta) => ({ ...st, flowFx: withFlowFxValue(st.flowFx, spec.key, st.flowFx.values[spec.key] + delta * spec.step) }),
+      focus: () => input.focus(),
+    });
+    const control = el('div', 'cb-settings__slider-cell');
+    control.append(input, readout);
+    wrapper.append(labelNode, control);
     return wrapper;
   }
 
@@ -300,7 +367,7 @@ export class SettingsScreen {
     if (!intent) return;
     if (intent === 'confirm' && event.target instanceof HTMLButtonElement && !event.target.classList.contains('cb-segment')) return; // Enter on Fullscreen/Reset/Back clicks it.
     event.preventDefault();
-    const focusChecked = (): void => this.rows[this.focusRow]?.buttons.find((b) => b.getAttribute('aria-checked') === 'true')?.focus();
+    const focusChecked = (): void => this.rows[this.focusRow]?.focus();
     switch (intent) {
       case 'previous':
         this.focusRow = wrapIndex(this.focusRow, -1, this.rows.length);
@@ -339,6 +406,10 @@ function injectSettingsStyle(): void {
     .cb-settings__heading { margin: 0; font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--cb-accent); font-weight: 600; border-bottom: 1px solid var(--cb-line); padding-bottom: 6px; }
     .cb-settings__row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(0, 1.4fr); gap: 12px; align-items: center; }
     .cb-settings__row .cb-field-label { letter-spacing: 0.08em; text-transform: none; font-size: 14px; color: var(--cb-text); }
+    .cb-settings__subheading { margin: 6px 0 0; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cb-text-dim); font-weight: 600; }
+    .cb-settings__slider-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .cb-settings__slider { flex: 1; min-width: 0; accent-color: var(--cb-accent); }
+    .cb-settings__readout { min-width: 64px; text-align: right; font-family: var(--cb-mono); font-size: 13px; color: var(--cb-text-dim); }
     .cb-settings__controls { border-collapse: collapse; font-size: 13px; width: 100%; }
     .cb-settings__controls th { text-align: left; color: var(--cb-text-dim); font-weight: 600; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; padding: 4px 8px 6px 0; }
     .cb-settings__controls td { padding: 5px 8px 5px 0; border-top: 1px solid var(--cb-line); }

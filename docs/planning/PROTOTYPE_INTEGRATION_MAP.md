@@ -20,7 +20,7 @@ Provisional, not owner choices: each gameplay archetype wears concept A of its f
 | Foundation (hub, events, flags) | #72 | — | **INTEGRATED** |
 | 1 — Bey 4-piece concepts (3 archetypes) | #82 | `newBeyVisuals` | **ON in normal play** (0.16.0), also on Character Select; gameplay for the other 6 concepts still **OWNER CHOICE REQUIRED** |
 | 2 — Condition languages A/B/C | #84 | `conditionVisuals` | **ON in normal play** (0.16.0); Settings shows A/B/C (1–3, never none); default A is provisional, the owner's default combination still open |
-| 3 — Hybrid VFX + Cel Cyclone | #85 | `hybridVfx` | **ON in normal play** (0.16.0); shake ×1.35 still pending metadata (no bridge), no time scaling |
+| 3 — Hybrid VFX + Cel Cyclone | #85 | `hybridVfx` | **ON in normal play** (0.16.0); shake ×1.35 still pending metadata (no bridge), no time scaling. Since 0.54.0 the same flag also attaches **Flow FX** (`src/vfx/flow`: lean, shadow, volume dust, wind, impact rings, comic words; sliders in Settings → Visual effects; spec `docs/design-decisions/flow-fx-effects.md`) |
 | 4 — Clash Overdrive | #86 (v0.13.0) | `clashPresentation` | **ON in normal play** (0.16.0); tie style (ASK FIRST), entry slow motion, per-mash hitstop, Clash shake and the "overdrive" bar style still frozen/open |
 | 5 — Arena art (Foundry, Rift, Tournament) | #87 (v0.14.0) | `arenaVisuals` | **ON in normal play** (0.16.0), fitted to the 36 m stage (horizontal footprint ×3, real-size parts, light rigs/sky/haze scaled as a whole); default arena still **OWNER CHOICE REQUIRED** |
 | HUD | ~~#64~~ closed | `newHud` (unused) | **NO LAB, NO A/B/C CHOICE** — owner 2026-10-02: the Combat HUD Lab is not needed; the HUD is the existing `CombatHud` |

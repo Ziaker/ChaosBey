@@ -1,6 +1,6 @@
 # Fluxo do Bey — efeitos contínuos, texto de combate e modo "Bey Real"
 
-**Status:** PROTOTIPADO (5ª rodada), **NÃO APROVADO**. Decidido: o texto no estilo A como opção nas Configurações; ficam o borrão de giro, a inclinação, os riscos de vento e as argolas. A **poeira anime** foi refeita na 5ª rodada como **volume 3D de verdade** (as rodadas 2–4 eram imagens planas, rejeitadas como "papel") e espera o julgamento do owner. Nada disto está em `src/`.
+**Status:** PROTOTIPADO (5ª rodada) e **INTEGRADO no jogo como apresentação com sliders nas Configurações (0.54.0, pedido do owner)**; valores finais e composição da poeira **NÃO APROVADOS**. A especificação detalhada do que existe é [`flow-fx-effects.md`](flow-fx-effects.md). Decidido: o texto no estilo A como opção nas Configurações; ficam o borrão de giro, a inclinação, os riscos de vento e as argolas. A **poeira anime** foi refeita na 5ª rodada como **volume 3D de verdade** (as rodadas 2–4 eram imagens planas, rejeitadas como "papel") e espera o julgamento do owner. Nada disto está em `src/`.
 **Data:** 2026-10-08
 **Origem:** pedido do owner com capturas de jogos de Beyblade como referência (estádio amarelo claro, estádio de gelo, Metal Fight e Burst Rivals).
 **Lab:** `prototypes/bey-flow-fx-concepts/` (página `/prototypes/bey-flow-fx-concepts/`).
@@ -42,6 +42,12 @@
 - **Sombra pequena sob os Beys:** só um círculo preto, que não prejudique o desempenho.
 - **Configurações de opacidade da nuvem** e um **slider de opacidade ao longo da vida** ("reduzindo até zero o quão rápido a nuvem fica transparente").
 
+**Pedido da 6ª rodada (2026-10-08) — decisões fechadas:**
+- O owner colou seu painel de ajuste (borrão 1,35 / inclinação 26° / sombra 0,5 e 0,9× / poeira: opacidade 1, fade 0,95, encolhe 0,5, 4 por s, 0,4 m, 0,3 s, reforço 2,5 / vento 30 por s, 1,1 m, 0,25 m, 0,25 s / argolas 2, 6,1 m, explosão 1,4 m / texto 0,55 e 0,55 s) e pediu: **"faça todas essas mudanças e novidades de efeitos visuais serem configurações também com sliders nas configurações"** e **"inicie o documento extremamente detalhado dos efeitos"**, deixando a física e o gameplay novo para outra mensagem.
+- **Feito:** os números viram o padrão (lab e jogo); os efeitos entram no jogo como `FlowFxSystem` (anexado com a flag `hybridVfx`), cada valor é um slider em **Settings → Visual effects** (23 sliders + escolha da composição da poeira + chave das palavras), aplicados ao vivo; o documento detalhado é `flow-fx-effects.md`.
+- **Fora desta entrega (continua ASK FIRST):** a palavra **BLOCK** (o jogo não tem regra de bloqueio) e o modo "Bey Real" (física e gameplay).
+- **Não foi o owner quem escolheu** a composição da poeira: o jogo começa na Q (onda com cauda, a que ele chamou de aceitável) e os três estilos ficam selecionáveis nas Configurações.
+
 ## 2. O que o lab mostra hoje (quinta rodada)
 
 Movimento **coreografado** (não é o jogo, nada em `src/` o lê): dois Beys que orbitam numa cuba parabólica, carregam e dão Dash um no outro, com colisões que disparam os textos em sequência.
@@ -81,7 +87,9 @@ Reaproveita as peças aprovadas de `src/vfx/hybrid/fx` (`FxLayer`, `wakeStreakFx
 - Câmera do modo: alta e fixa (recomendada) ou uma câmera atrás do Bey. Esta última **contradiz a decisão do fix 8** em `camera-approval.md` (a câmera não fica permanentemente atrás do jogador), então só entra se o owner pedir explicitamente.
 - Outras ideias vistas nas referências e **não** pedidas, portanto fora do escopo: marcações neon no piso, botões de ação em tela / toque, tema de arena de gelo, pickups de energia.
 
-## 4. Plano de integração (depois da aprovação)
+## 4. Plano de integração
+
+> **Estado (0.54.0):** o item 1 abaixo (VFX, apresentação) foi **feito a pedido do owner** como `src/vfx/flow` + sliders nas Configurações, antes da aprovação final dos valores; a palavra BLOCK, o piloto automático, a física e a câmera continuam não feitos.
 
 1. **VFX** (só apresentação): portar os efeitos aprovados para `src/vfx/`, lendo eventos e estado do jogo (GDD 158: VFX nunca decide resultado), com respeito ao preset de qualidade / reduzir efeitos. **Texto de combate:** estilo A no HUD, atrás de uma opção nas Configurações (hoje o HUD só tem "COUNTER!", sob `counterFeedback`), depois de definido o que é BLOCK.
 2. **Modo "Bey Real" — controle:** um controlador de piloto automático na camada de controladores (mesmo canal da IA: `ControllerActions.moveIntent`), que mistura a intenção automática com o stick do jogador e repassa Ataque, Pulo e Esquiva sem mudança. Opção de pré-jogo, independente do `controlScheme`.
@@ -98,10 +106,12 @@ Cada etapa é uma PR própria, com testes determinísticos e de replay onde mexe
 | `src/main.ts` | Ligação da UI, atalhos e painel de ajuste |
 | `src/tuning.ts` | Todos os valores, faixas e a proposta inicial |
 | `src/sim/FlowSim.ts` | Movimento coreografado (puro, sem Three.js) |
-| `src/fx/dustVolume.ts` | A poeira como volume: blocos (esferas e elipsoides) por semente, `InstancedMesh` toon com opacidade por instância, opacidade ao longo da vida e encolhimento |
-| `src/fx/AnimeDust.ts` | As três composições (onda, coroa, nuvem): o que nasce e onde, seguindo a direção do Bey |
-| `src/fx/AnimeWind.ts` | Riscos de vento, argolas e coroas de impacto; entrega a poeira ao `AnimeDust` |
+| `src/vfx/flow/dustVolume.ts` | A poeira como volume: blocos (esferas e elipsoides) por semente, `InstancedMesh` toon com opacidade por instância, opacidade ao longo da vida e encolhimento |
+| `src/vfx/flow/AnimeDust.ts` | As três composições (onda, coroa, nuvem): o que nasce e onde, seguindo a direção do Bey (compartilhado com o jogo desde a 6ª rodada) |
+| `src/vfx/flow/FlowWind.ts` | Riscos de vento, argolas e coroas de impacto; entrega a poeira ao `AnimeDust` (era `AnimeWind`; compartilhado com o jogo) |
 | `src/stage/FlowRig.ts` | Um Bey + borrão, inclinação e sombra |
 | `src/stage/FlowStage.ts` | Cena do jogo (arena real, chão em funil, neblina), três câmeras, `FxLayer` do jogo e ligação dos eventos |
 | `src/ui/callouts.ts` | Os três estilos de texto e a camada de textos |
-| `tests/unit/beyFlowFxLab.test.ts` | Verificações do lab (não são testes de gameplay) |
+| `tests/unit/beyFlowFxLab.test.ts` | Verificações do lab e dos módulos compartilhados (não são testes de gameplay) |
+| `src/vfx/flow/` | **O jogo:** valores e sliders (`flowFxTuning.ts`), `FlowFxSystem`, palavras de quadrinho; ver `flow-fx-effects.md` |
+| `tests/unit/flowFx.test.ts`, `tests/smoke/flowFxSettings.spec.ts` | Verificações da integração no jogo |

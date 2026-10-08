@@ -32,6 +32,7 @@ import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ConditionLayerS
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 import type { ImpactFeedbackOptions } from '../../vfx/ImpactFeedback';
+import type { FlowFxSettings } from '../../vfx/flow/flowFxTuning';
 
 export interface MatchRunnerDeps {
   readonly appRenderer: AppRenderer;
@@ -70,6 +71,8 @@ export interface MatchPresentation {
   readonly vfx?: VfxOptions;
   /** Owner, 2026-10-05: the in-scene game-feel switches (hit flash, hit shake, counter burst). */
   readonly feel?: ImpactFeedbackOptions;
+  /** Owner, 2026-10-08: the Visual effects sliders (spin blur, lean, shadow, dust, wind, impact rings, comic words). */
+  readonly flowFx?: FlowFxSettings;
 }
 
 export interface MatchRunnerEvents {
@@ -178,6 +181,7 @@ export class MatchRunner {
       cameraPreset: start.presentation?.cameraPreset,
       conditionLayers: start.presentation?.conditionLayers,
       vfx: start.presentation?.vfx,
+      flowFx: start.presentation?.flowFx,
       renderer: deps.appRenderer.renderer,
     });
     sessionForJumpBuffer = session;
@@ -222,6 +226,7 @@ export class MatchRunner {
     if (presentation.cameraPreset) this.session.setCameraPreset(presentation.cameraPreset);
     if (presentation.conditionLayers) this.session.setConditionLayers(presentation.conditionLayers);
     if (presentation.feel) this.session.setGameFeel(presentation.feel);
+    if (presentation.flowFx) this.session.setFlowFx(presentation.flowFx);
   }
 
   /** Switches the control scheme live (from the Pause menu's settings). */

@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { afterAll, describe, expect, it } from 'vitest';
 import { CONCEPTS } from '../../prototypes/bey-visual-concepts/src/concepts/conceptDefinitions';
 import { FxLayer } from '../../src/vfx/hybrid/fx/FxLayer';
-import { AnimeWind, type WindFlags } from '../../prototypes/bey-flow-fx-concepts/src/fx/AnimeWind';
-import { DUST_STYLES, yawToward, type DustStyle } from '../../prototypes/bey-flow-fx-concepts/src/fx/AnimeDust';
-import { DustVolume, VOLUME_KINDS, growFactor, lifeOpacity, lumpsFor, rng, shrinkFactor, type VolumeKind } from '../../prototypes/bey-flow-fx-concepts/src/fx/dustVolume';
+import { FlowWind as AnimeWind, type WindFlags } from '../../src/vfx/flow/FlowWind';
+import { DUST_STYLES, yawToward, type DustStyle } from '../../src/vfx/flow/AnimeDust';
+import { DustVolume, VOLUME_KINDS, growFactor, lifeOpacity, lumpsFor, rng, shrinkFactor, type VolumeKind } from '../../src/vfx/flow/dustVolume';
 import { ARENA_RADIUS_M, BEY_DIAMETER_M, CALLOUT_CYCLE, FlowSim, floorHeight, floorSlope, type FlowBey, type FlowEvent } from '../../prototypes/bey-flow-fx-concepts/src/sim/FlowSim';
 import { FlowRig, type FxFlags } from '../../prototypes/bey-flow-fx-concepts/src/stage/FlowRig';
 import { PROPOSED, TUNING, TUNING_SPEC, applyTuning, resetTuning } from '../../prototypes/bey-flow-fx-concepts/src/tuning';
@@ -16,6 +16,7 @@ import { CALLOUT_MEANING, CALLOUT_STYLES, CALLOUT_WORDS } from '../../prototypes
 // the owner's sliders, and the rig and the anime wind emitter react to that motion.
 
 const DT = 1 / 60;
+const FLOOR = { heightAt: floorHeight, slopeAt: floorSlope };
 const ALL_ON: FxFlags = { blur: true, lean: true, dust: true, wind: true, crown: true, shadow: true };
 const WIND_ON: WindFlags = { dust: true, wind: true, crown: true };
 
@@ -140,24 +141,33 @@ describe('flow lab — dust and shadow sliders', () => {
 });
 
 describe('flow lab — owner tuning', () => {
-  it("starts from the owner's own numbers for everything they tuned", () => {
-    expect(PROPOSED.blurStrength).toBe(1.35);
-    expect(PROPOSED.blurFadeSpin).toBe(0.2);
-    expect(PROPOSED.leanMaxDeg).toBe(26);
-    expect(PROPOSED.leanAccelRefMps2).toBe(13);
-    expect(PROPOSED.dustRate).toBe(17);
-    expect(PROPOSED.dustSizeM).toBe(0.55); // was 0.7 for flat sprites; a heap of real volume reads bigger
-    expect(PROPOSED.dustLifeS).toBe(0.55);
-    expect(PROPOSED.dustDashBoost).toBe(0.6);
-    expect(PROPOSED.windRate).toBe(30);
-    expect(PROPOSED.windLengthM).toBe(1.1);
-    expect(PROPOSED.windWidthM).toBe(0.25);
-    expect(PROPOSED.windLifeS).toBe(0.25);
-    expect(PROPOSED.crownCount).toBe(2);
-    expect(PROPOSED.crownSizeM).toBe(5.4);
-    expect(PROPOSED.burstSizeM).toBe(1); // was 1.3, same reason
-    expect(PROPOSED.calloutScale).toBe(0.55);
-    expect(PROPOSED.calloutLifeS).toBe(0.55);
+  it("starts from the owner's own numbers for everything they tuned (tuning panel, 2026-10-08)", () => {
+    expect(PROPOSED).toMatchObject({
+      intensity: 1,
+      blurStrength: 1.35,
+      blurFadeSpin: 0.2,
+      leanMaxDeg: 26,
+      leanAccelRefMps2: 13,
+      leanSmooth: 9,
+      shadowOpacity: 0.5,
+      shadowScale: 0.9,
+      dustOpacity: 1,
+      dustFade: 0.95,
+      dustShrink: 0.5,
+      dustRate: 4,
+      dustSizeM: 0.4,
+      dustLifeS: 0.3,
+      dustDashBoost: 2.5,
+      windRate: 30,
+      windLengthM: 1.1,
+      windWidthM: 0.25,
+      windLifeS: 0.25,
+      crownCount: 2,
+      crownSizeM: 6.1,
+      burstSizeM: 1.4,
+      calloutScale: 0.55,
+      calloutLifeS: 0.55,
+    });
   });
 
   it('no longer has the crescent wind blades the owner asked to remove', () => {
@@ -319,7 +329,7 @@ describe('flow lab — anime wind', () => {
     const cam = new THREE.PerspectiveCamera(40, 1.6, 0.1, 300);
     cam.position.set(0, 15, 11);
     const layer = new FxLayer(scene, cam);
-    const wind = new AnimeWind(layer, cam, scene);
+    const wind = new AnimeWind(layer, cam, scene, FLOOR);
     wind.dustStyle = style;
     return { layer, wind, scene };
   }
@@ -339,7 +349,7 @@ describe('flow lab — anime wind', () => {
     const { layer, wind } = setup(style);
     const b = fastBey();
     for (let i = 0; i < 60; i++) wind.trail(0, b, tip, DT, TUNING, WIND_ON);
-    expect(wind.emittedDust).toBeGreaterThan(3);
+    expect(wind.emittedDust).toBeGreaterThan(1);
     expect(layer.count()).toBeGreaterThan(8);
 
     const slow = setup(style);
@@ -695,7 +705,7 @@ describe('flow lab — rig', () => {
     expect(shadow.visible).toBe(true);
     // Cheap: one flat disc, no shadow map, a little wider than the Bey but not huge.
     expect(shadow.castShadow).toBe(false);
-    expect(shadow.scale.x).toBeGreaterThan(BEY_DIAMETER_M);
+    expect(shadow.scale.x).toBeGreaterThan(BEY_DIAMETER_M * 0.8);
     expect(shadow.scale.x).toBeLessThan(BEY_DIAMETER_M * 2);
     // Off by the flag; size follows the slider.
     rig.update(sim.beys[0], DT, TUNING, { ...ALL_ON, shadow: false });

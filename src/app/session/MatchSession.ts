@@ -14,6 +14,8 @@
 // ============================================================
 
 import { effectScaleOf, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
+import { FlowFxSystem } from '../../vfx/flow/FlowFxSystem';
+import { DEFAULT_FLOW_FX_SETTINGS, type FlowFxSettings } from '../../vfx/flow/flowFxTuning';
 import * as THREE from 'three';
 import { createMatchScene, REST_VISUAL_POSE, type BeyVisualPose, type MatchBeys, type MatchScene } from '../bootstrap/createMatchScene';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
@@ -111,6 +113,8 @@ export interface MatchSessionOptions {
   readonly conditionLayers?: readonly LanguageId[];
   /** Lote 9: the Pregame's visual options for the Hybrid VFX (presentation only). */
   readonly vfx?: VfxOptions;
+  /** Owner, 2026-10-08: the Visual effects sliders (Flow FX); attached with the `hybridVfx` flag. Render only. */
+  readonly flowFx?: FlowFxSettings;
   /** The renderer, for the approved arena art's tone mapping (only touched with the `arenaVisuals` flag, and restored). Render only. */
   readonly renderer?: { toneMapping: THREE.ToneMapping; toneMappingExposure: number };
 }
@@ -189,6 +193,8 @@ export class MatchSession {
   private conditionVisuals: ConditionVisualsSystem | null = null;
   /** The approved Hybrid VFX (Cel Cyclone wind), attached only with the `hybridVfx` flag (render only). */
   private hybridVfx: HybridVfxSystem | null = null;
+  /** The Fluxo do Bey effects (lean, shadow, dust, wind, impact rings, comic words), attached with the `hybridVfx` flag (render only). */
+  private flowFx: FlowFxSystem | null = null;
   /** Owner, 2026-10-04: the expanding ring of an Air Recovery (render only). */
   private readonly recoveryRings: RecoveryRingEffect;
   /** Owner, 2026-10-05 (game feel): hit flash, hit shake during the freeze, counter burst. Render only. */
@@ -408,6 +414,21 @@ export class MatchSession {
     this.presentationFloorAt = floorAt;
     this.driftVfx = { first: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt, effectScale), second: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt, effectScale) };
     this.root.add(this.driftVfx.first.object3D, this.driftVfx.second.object3D);
+    if (presentationFeatures.hybridVfx) {
+      // Attached BEFORE the condition visuals: its lean tilts the Bey's visual group, and the condition rig copies that attitude each frame.
+      this.flowFx = new FlowFxSystem({
+        scene: this.root,
+        camera: options.camera,
+        beys: {
+          first: { visual: this.match.visuals.first.visual, gameplay: this.match.first.definition },
+          second: { visual: this.match.visuals.second.visual, gameplay: this.match.second.definition },
+        },
+        floorHeightAtR: (r) => floorAt(r, 0),
+        vfx: options.vfx,
+        settings: options.flowFx ?? DEFAULT_FLOW_FX_SETTINGS,
+      });
+      this.presentation.attach(this.flowFx);
+    }
     if (presentationFeatures.conditionVisuals) {
       this.conditionVisuals = new ConditionVisualsSystem({
         scene: this.root,
@@ -421,6 +442,7 @@ export class MatchSession {
         effectSize: options.vfx?.effectSize ?? 1,
       });
       this.presentation.attach(this.conditionVisuals);
+      this.conditionVisuals.setBlurScale((options.flowFx ?? DEFAULT_FLOW_FX_SETTINGS).values.blurStrength);
     }
     if (presentationFeatures.hybridVfx) {
       this.hybridVfx = new HybridVfxSystem({
@@ -860,6 +882,18 @@ export class MatchSession {
   /** Owner, 2026-10-05: the game-feel switches that live in the scene (Settings → Game feel). */
   setGameFeel(options: ImpactFeedbackOptions): void {
     this.impactFeedback.setOptions(options);
+    this.flowFx?.setCounterWord(options.counterFeedback);
+  }
+
+  /** Owner, 2026-10-08: the Visual effects sliders, live (Settings). The spin blur is the condition blur × its slider. */
+  setFlowFx(settings: FlowFxSettings): void {
+    this.flowFx?.setSettings(settings);
+    this.conditionVisuals?.setBlurScale(settings.values.blurStrength * (settings.values.intensity > 0 ? 1 : 0));
+  }
+
+  /** The Fluxo do Bey system, or null while the `hybridVfx` flag is off (tests and visual checks). */
+  getFlowFx(): FlowFxSystem | null {
+    return this.flowFx;
   }
 
   /** Counter hits and refused presses since the last call (the HUD reads them once per frame). */

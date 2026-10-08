@@ -19,8 +19,16 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { floorHeight, floorSlope } from '../sim/FlowSim';
 import { DustVolume, type VolumeKind, type VolumeParams } from './dustVolume';
+import type { DustStyle } from './flowFxTuning';
+
+export type { DustStyle } from './flowFxTuning';
+
+/** The floor the dust stands on: radial height and slope (dh/dr), from the arena's own profile. */
+export interface FlowFloor {
+  heightAt(r: number): number;
+  slopeAt(r: number): number;
+}
 
 // ---------------- TUNING ----------------
 const WAVE_HEIGHT_TRAIL = [1.3, 1.9] as const;   // × the dust size
@@ -37,8 +45,6 @@ const WAVE_SPEED_BURST = [2, 4] as const;
 const CLOUD_SPEED_BURST = [1.5, 3.5] as const;
 const SEED_RANGE = 1_000_000;
 // -----------------------------------------
-
-export type DustStyle = 'wave' | 'crown' | 'cloud';
 
 export interface DustStyleInfo {
   readonly id: DustStyle;
@@ -69,6 +75,7 @@ export class AnimeDust {
     scene: THREE.Object3D,
     private readonly camera: THREE.Camera,
     private readonly rng: () => number,
+    private readonly floor: FlowFloor,
   ) {
     this.volume = new DustVolume(scene);
   }
@@ -106,7 +113,7 @@ export class AnimeDust {
   }
 
   private onFloor(p: THREE.Vector3): THREE.Vector3 {
-    p.y = floorHeight(Math.hypot(p.x, p.z));
+    p.y = this.floor.heightAt(Math.hypot(p.x, p.z));
     return p;
   }
 
@@ -123,7 +130,7 @@ export class AnimeDust {
   /** The tilt that lays a puff on the floor under `p` (the funnel is not flat). */
   private floorTilt(p: THREE.Vector3): THREE.Quaternion {
     const r = Math.hypot(p.x, p.z);
-    const slope = floorSlope(r);
+    const slope = this.floor.slopeAt(r);
     const rx = r > 1e-6 ? p.x / r : 0;
     const rz = r > 1e-6 ? p.z / r : 0;
     const normal = new THREE.Vector3(-rx * slope, 1, -rz * slope).normalize();

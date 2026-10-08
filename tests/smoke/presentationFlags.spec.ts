@@ -44,8 +44,8 @@ test('no ?pfx is the normal game, ?pfx= is an allowlist (all, one, empty, a typo
 
   for (const run of seen) {
     expect(run.errors).toEqual([]);
-    // conditionVisuals, hybridVfx, clashPresentation and arenaVisuals are the only flags that attach a system so far.
-    expect(run.stats).toMatchObject({ systems: (run.features.conditionVisuals ? 1 : 0) + (run.features.hybridVfx ? 1 : 0) + (run.features.clashPresentation ? 1 : 0) + (run.features.arenaVisuals ? 1 : 0), systemErrors: 0 });
+    // conditionVisuals, hybridVfx (which also attaches Flow FX), clashPresentation and arenaVisuals are the only flags that attach a system so far.
+    expect(run.stats).toMatchObject({ systems: (run.features.conditionVisuals ? 1 : 0) + (run.features.hybridVfx ? 2 : 0) + (run.features.clashPresentation ? 1 : 0) + (run.features.arenaVisuals ? 1 : 0), systemErrors: 0 });
     expect(run.ids).toEqual(run.features.newBeyVisuals ? ['concept:attack-a', 'concept:defense-a'] : ['placeholder:attack-prototype', 'placeholder:defense-prototype']);
   }
   // No ?pfx: the normal game.
@@ -86,7 +86,7 @@ test('a restart builds a fresh presentation hub and disposes what was attached t
   expect(after.probe.creates).toBe(1);
   expect(after.probe.disposes).toBe(1);
   // The restarted session builds its own flag systems again; the probe is gone.
-  expect(after.systemIds).toEqual(['condition-visuals', 'hybrid-vfx', 'clash-presentation', 'arena-visuals']);
+  expect(after.systemIds).toEqual(['flow-fx', 'condition-visuals', 'hybrid-vfx', 'clash-presentation', 'arena-visuals']);
   // The restarted session reads the same page flags again.
   expect(Object.values(after.features).every(Boolean)).toBe(true);
   expect(errors).toEqual([]);

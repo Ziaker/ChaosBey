@@ -145,6 +145,11 @@ export class ConditionVisualsSystem implements PresentationSystem {
     return this.wanted;
   }
 
+  /** × the approved spin-blur strength, live (Settings → Visual effects → Spin blur). 1 = the approved look, 0 = no blur shell. */
+  setBlurScale(scale: number): void {
+    for (const side of SIDES) this.entries[side].rig.blurScale = Math.max(0, scale);
+  }
+
   /** Changes which layers show, live (the Settings screen). At least one stays on. */
   setLayers(layers: readonly LanguageId[]): void {
     this.wanted = normalizeConditionLayers(layers);

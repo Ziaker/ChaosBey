@@ -264,6 +264,7 @@ describe('presentation lifecycle on a real session', () => {
       expect(session.getPresentationStats().hub.systems).toBe(0);
       expect(session.getConditionLayers()).toBeNull();
       expect(session.getHybridVfx()).toBeNull();
+      expect(session.getFlowFx()).toBeNull();
       expect(session.getClashPresentation()).toBeNull();
       expect(session.getArenaVisuals()).toBeNull();
       expect(session.getVfxManager().isLayerVisible('impactBursts')).toBe(true);
@@ -272,8 +273,8 @@ describe('presentation lifecycle on a real session', () => {
       session.dispose();
     }
     const { session } = await createSession(ALL_ON);
-    // The only systems a flag attaches by itself so far: the condition languages, the hybrid VFX, the Clash presentation and the arena art.
-    expect(session.getPresentation().systemIds()).toEqual(['condition-visuals', 'hybrid-vfx', 'clash-presentation', 'arena-visuals']);
+    // The only systems a flag attaches by itself so far: the Flow FX (with hybridVfx, first: its lean runs before the condition rig copies the attitude), the condition languages, the hybrid VFX, the Clash presentation and the arena art.
+    expect(session.getPresentation().systemIds()).toEqual(['flow-fx', 'condition-visuals', 'hybrid-vfx', 'clash-presentation', 'arena-visuals']);
     expect(session.getConditionLayers()).toEqual(['A']);
     // The legacy impact bursts give way to the approved hybrid language, through the existing layer switch.
     expect(session.getVfxManager().isLayerVisible('impactBursts')).toBe(false);
@@ -345,7 +346,7 @@ describe('presentation lifecycle on a real session', () => {
 
     const second = await createSession(ALL_ON, `${SEED}-restart`);
     expect(second.session.getPresentation()).not.toBe(first.session.getPresentation());
-    expect(second.session.getPresentation().systemIds()).toEqual(['condition-visuals', 'hybrid-vfx', 'clash-presentation', 'arena-visuals']);
+    expect(second.session.getPresentation().systemIds()).toEqual(['flow-fx', 'condition-visuals', 'hybrid-vfx', 'clash-presentation', 'arena-visuals']);
     const newRecorder = new Recorder();
     second.session.getPresentation().attach(newRecorder);
     for (let i = 0; i < 10; i++) second.session.tick();

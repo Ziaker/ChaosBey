@@ -21,5 +21,6 @@ export function presentationFor(settings: PlayerSettings): MatchPresentation {
     cameraPreset: settings.cameraPreset,
     conditionLayers: settings.conditionLayers,
     feel: { hitFlash: settings.hitFlash, hitShake: settings.hitShake, counterFeedback: settings.counterFeedback },
+    flowFx: settings.flowFx,
   };
 }
