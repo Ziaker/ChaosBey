@@ -593,7 +593,7 @@ A arquitetura de yaw/composição inercial **não está aberta**. Permanecem ape
 
 ## 13.8 Rail Grinding — atualização futura
 
-**Fechado (owner, 2026-10-08):** quando os Rails forem implementados, eles **devem ser uma opção no Pregame** (liga/desliga no Advanced). Isso responde ao item 26 abaixo e à lista de decisões abertas em `RAIL_GRINDING_FUTURE_UPDATE.md`; o resto continua ASK FIRST.
+**Fechado (owner, 2026-10-08):** quando os Rails forem implementados, eles **devem ser uma opção no Pregame** (liga/desliga no Advanced). **Preparação feita na 0.50.0** (modelo de rota, assentamento no piso, estado, tuning nomeado e a opção `Rails` no Pregame; nenhum layout/controle inventado — ver §16 de `RAIL_GRINDING_FUTURE_UPDATE.md`). Isso responde ao item 26 abaixo e à lista de decisões abertas em `RAIL_GRINDING_FUTURE_UPDATE.md`; o resto continua ASK FIRST.
 
 A direção do sistema está aprovada, mas os detalhes de implementação listados em `docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md` continuam **ASK FIRST** até nova decisão do owner.
 

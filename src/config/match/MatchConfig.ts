@@ -181,6 +181,12 @@ export interface MatchConfig {
    * velocity the handling model does not damp). 0 = none (the pre-0.48 behaviour); 1 = gravity as it is. Pregame slider.
    */
   funnelPull: number;
+  /**
+   * Owner, 2026-10-08 ("quando for implementar os Rails, eles devem ser opção no pré jogo"): the stages' rails are on / off
+   * (docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md). Off = the match is played as if the stages had none. No stage has a rail
+   * yet (the layouts are an owner decision), so today this changes nothing. Pregame switch (Advanced › Arena). PROVISIONAL: on.
+   */
+  railsEnabled: boolean;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
@@ -281,6 +287,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     beySizeScale: 1,
     airRecoveryMinDelayS: AIR_RECOVERY_MIN_DELAY_DEFAULT_S,
     funnelPull: FUNNEL_PULL_DEFAULT,
+    railsEnabled: true,
   });
 }
 
