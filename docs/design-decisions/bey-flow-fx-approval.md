@@ -1,6 +1,6 @@
 # Fluxo do Bey — efeitos contínuos, texto de combate e modo "Bey Real"
 
-**Status:** PROTOTIPADO (4ª rodada), **NÃO APROVADO**. Decidido: o texto no estilo A como opção nas Configurações; ficam o borrão de giro, a inclinação, os riscos de vento e as argolas. A **poeira anime** foi refeita do zero na 4ª rodada (as três ideias da 3ª foram rejeitadas) e espera o julgamento do owner. Nada disto está em `src/`.
+**Status:** PROTOTIPADO (5ª rodada), **NÃO APROVADO**. Decidido: o texto no estilo A como opção nas Configurações; ficam o borrão de giro, a inclinação, os riscos de vento e as argolas. A **poeira anime** foi refeita na 5ª rodada como **volume 3D de verdade** (as rodadas 2–4 eram imagens planas, rejeitadas como "papel") e espera o julgamento do owner. Nada disto está em `src/`.
 **Data:** 2026-10-08
 **Origem:** pedido do owner com capturas de jogos de Beyblade como referência (estádio amarelo claro, estádio de gelo, Metal Fight e Burst Rivals).
 **Lab:** `prototypes/bey-flow-fx-concepts/` (página `/prototypes/bey-flow-fx-concepts/`).
@@ -33,9 +33,16 @@
 **Feedback da terceira rodada do lab (2026-10-08) — decisões fechadas:**
 - **As três ideias de poeira (rolo, bolhas, lascas) foram rejeitadas:** "TODAS péssimas, nem parecem que estão no jogo, parecem enfiadas por cima, e as imagens de exemplo vc nem levou em conta".
 - Causas reconhecidas: (1) as formas eram invenção minha (círculos agrupados com contorno azul-escuro, bolhas, pétalas), e não a linguagem das folhas (silhuetas brancas lisas, **sem contorno**, gomos recortados de tamanhos muito diferentes, línguas recortadas, caudas varridas, coroa de espinhos); (2) os efeitos eram adesivos opacos que apareciam e sumiam sobre um chão bege inventado, fora da cena do jogo.
-- **Correção (4ª rodada):** a poeira é desenhada a partir dessa linguagem (`fx/dustArt.ts`), dissolve por erosão e o lab roda na **cena do jogo** (arena real, chão em funil de 7 m, neblina, câmera de jogo). Mantidos sem mudança: borrão de giro, inclinação, riscos de vento, argolas do Dash.
+- **Correção (4ª rodada, depois substituída pela 5ª):** a poeira era desenhada a partir dessa linguagem como recortes planos que dissolviam por erosão e o lab roda na **cena do jogo** (arena real, chão em funil de 7 m, neblina, câmera de jogo). Mantidos sem mudança: borrão de giro, inclinação, riscos de vento, argolas do Dash.
 
-## 2. O que o lab mostra hoje (quarta rodada)
+**Feedback da quarta rodada do lab (2026-10-08) — decisões fechadas:**
+- A **coroa com onda (Q)** é aceitável, mas a poeira também tem que seguir a **orientação do Bey**, como as argolas e coroas de impacto.
+- **Voltam as argolas/coroas no contato dos Dashes** ("eu não pedi pra tirar"): eu as havia removido ao reescrever o impacto. Restauradas: argolas serrilhadas nascidas no meio do contato, de frente para a direção do ataque e correndo para trás, as duas coroas no chão e a estrela chata.
+- **As nuvens ainda eram "papel"**: imagens por cima do jogo. Têm que ter **profundidade e volume dentro do jogo, como os Beys**. Resposta: a poeira passou a ser geometria (5ª rodada, seção 2).
+- **Sombra pequena sob os Beys:** só um círculo preto, que não prejudique o desempenho.
+- **Configurações de opacidade da nuvem** e um **slider de opacidade ao longo da vida** ("reduzindo até zero o quão rápido a nuvem fica transparente").
+
+## 2. O que o lab mostra hoje (quinta rodada)
 
 Movimento **coreografado** (não é o jogo, nada em `src/` o lê): dois Beys que orbitam numa cuba parabólica, carregam e dão Dash um no outro, com colisões que disparam os textos em sequência.
 
@@ -43,28 +50,31 @@ Movimento **coreografado** (não é o jogo, nada em `src/` o lê): dois Beys que
 |---|---|
 | Borrão de giro | Casca com bandas concêntricas que some conforme o giro cai |
 | Inclinação | O topo pende para dentro da curva, a partir da aceleração lateral |
-| Poeira anime (3 ideias) | Ver abaixo. Atrás da ponta, mais no Dash; e nas explosões do Dash e dos golpes |
+| Poeira anime (3 ideias) | Volume 3D, ver abaixo. Atrás da ponta (na direção do Bey), mais no Dash; e nas explosões do Dash e dos golpes |
 | Vento: riscos | Riscos rasgados brancos/cinza que acompanham a trajetória (`wakeStreakFx` + `tornStreak` do Cel Cyclone) |
-| Argolas e coroas | No Dash: anéis serrilhados (`jaggedRingFx`) nascidos no meio do Bey, de frente para a direção do disparo, correndo para trás. Num golpe: coroa serrilhada no piso e estrela |
+| Argolas e coroas | No Dash: anéis serrilhados (`jaggedRingFx`) nascidos no meio do Bey, de frente para a direção do disparo, correndo para trás. No contato de um golpe: os mesmos anéis (de frente para a direção do ataque), duas coroas serrilhadas no piso e a estrela chata |
+| Sombra | Disco preto pequeno e achatado sob a ponta (um desenho só, sem shadow map), com opacidade e tamanho ajustáveis (tecla `6`) |
 | Texto de combate | HIT / BLOCK / COUNTER! no estilo A (quadrinho), projetado da posição do impacto |
 
-**A poeira anime** (`fx/dustArt.ts`, `fx/AnimeDust.ts`): uma só linguagem de desenho, três composições (teclas Q, W, E), todas servindo à trilha atrás da ponta e às explosões do Dash e dos golpes:
+**A poeira anime** (`fx/dustVolume.ts`, `fx/AnimeDust.ts`): é **geometria dentro da cena**, não imagem. Cada nuvem é um monte de esferas e elipsoides alongados (as correntes de bolhas da terceira folha), em **tom de desenho de três degraus** (`MeshToonMaterial` com `gradientMap`), desenhada num único `InstancedMesh` (uma chamada de desenho). Recebe a luz e a neblina da arena, **entra no teste de profundidade**: o Bey passa na frente de uma nuvem e atrás de outra, e a nuvem afunda no chão. A opacidade é por nuvem, em alpha picotado (`alphaHash`, com escrita de profundidade), então centenas de blocos sobrepostos continuam ordenados. Morre **encolhendo**: os blocos pequenos e as agulhas somem primeiro, como nas folhas. Uma só linguagem, três composições (teclas Q, W, E), todas servindo à trilha atrás da ponta e às explosões do Dash e dos golpes:
 
 | Composição | Trilha | Dash e golpe |
 |---|---|---|
-| Q · Onda com cauda | Ondas de poeira com cauda varrida escorrem atrás do Bey | Ondas rolam para fora + coroa no chão |
-| W · Coroa de respingo | Pequenas coroas de espinhos ficam no chão atrás da ponta | Três coroas grandes empilhadas |
-| E · Nuvem de explosão | Nuvens recortadas em gomos atrás do Bey | Nuvens de explosão com agulhas + coroa |
+| Q · Onda com cauda | Ondas de blocos rentes ao chão, com caudas varridas, escorrem atrás do Bey | Ondas rolam para fora (para trás no Dash) |
+| W · Coroa de respingo | Pequenas coroas de espinhos deitadas no chão atrás da ponta, na inclinação do funil | Três coroas deitadas empilhadas |
+| E · Nuvem de explosão | Montes de nuvem atrás do Bey | Monte de explosão com agulhas |
 
-Como é feita: silhuetas **brancas e lisas, sem contorno**, com um segundo tom cinza suave por baixo; contorno recortado em gomos de tamanhos muito diferentes (as cúspides entre eles ficam), línguas recortadas dentro da massa, caudas finas varridas, agulhas, coroa em anel. **Dissolve por erosão:** o alpha vira uma rampa de distância da borda e um alpha-test que sobe come a forma pela borda (caudas e espinhos somem primeiro), no lugar de um fade. São recortes opacos (os Beys e a arena os ocultam certo), pegam a neblina e um leve tom da arena, ficam em pé no chão (viram para a câmera só em torno do eixo vertical) e a coroa deita no chão acompanhando a inclinação do funil. Explosões que apontam para a câmera encolhem, e uma onda ao longo da linha de visão vira uma nuvem em pé, para a poeira nunca esconder a luta.
+**Direção:** tudo segue a orientação do Bey (`headX/headZ` na coreografia: a direção do Dash enquanto ele dispara; senão a da velocidade), igual às argolas; a explosão de um golpe sai ao longo da direção do ataque. Explosões que apontam para a câmera encolhem, para a poeira nunca esconder a luta.
+
+**Sliders (painel "Ajuste fino", grupo Poeira anime):** *Opacidade da nuvem* (0,1–1); *Opacidade ao longo da vida* (0 = só some no fim … 1 = começa a sumir desde o início; sempre chega a zero no fim da vida); *Quanto os blocos encolhem* (0–1); mais taxa, tamanho, vida e reforço no Dash. Grupo *Sombra no chão*: opacidade e tamanho. Os tamanhos de poeira baixaram (0,7 → 0,55 m; explosão 1,3 → 1,0 m) porque um monte em volume ocupa mais que a imagem plana.
 
 **A cena** é a do jogo: a arte aprovada das arenas (`arenaArtFor`, teclas Z/X/C: Foundry Pit, Rift Crater, Tournament Stadium) no chão em funil de 7 m do jogo (`src/arena/floor`), com a neblina e o tone mapping dela. Câmeras (V): "do jogo" (baixa e próxima, como a Arena Fighter, mantendo os dois Beys no quadro), alta e fixa, livre.
 
-Reaproveita as peças aprovadas de `src/vfx/hybrid/fx` (`FxLayer`, `wakeStreakFx`, `jaggedRingFx`, `flatFx`, `burstFx`, texturas `jaggedRing`/`tornStreak`/`impactStar`); só a poeira é nova (`fx/dustArt.ts`, `fx/animeTextures.ts`, `fx/AnimeDust.ts`). O painel "Ajuste fino" expõe todos os valores (`src/tuning.ts`). Atalhos: `1`–`5` efeitos, `Q`/`W`/`E` composição da poeira, `Z`/`X`/`C` arena, `7`/`8`/`9` estilo do texto, `H`/`J`/`K` disparam HIT/BLOCK/COUNTER, `G` dispara as argolas do Dash na direção do outro Bey, `D` Dashes, `Espaço` pausa, `S` câmera lenta, `R` reinicia, `V` câmera (jogo, alta, livre), `P` painel.
+Reaproveita as peças aprovadas de `src/vfx/hybrid/fx` (`FxLayer`, `wakeStreakFx`, `jaggedRingFx`, `flatFx`, `burstFx`, texturas `jaggedRing`/`tornStreak`/`impactStar`); só a poeira é nova (`fx/dustVolume.ts`, `fx/AnimeDust.ts`). O painel "Ajuste fino" expõe todos os valores (`src/tuning.ts`). Atalhos: `1`–`6` efeitos, `Q`/`W`/`E` composição da poeira, `Z`/`X`/`C` arena, `7`/`8`/`9` estilo do texto, `H`/`J`/`K` disparam HIT/BLOCK/COUNTER, `G` dispara as argolas do Dash na direção do outro Bey, `D` Dashes, `Espaço` pausa, `S` câmera lenta, `R` reinicia, `V` câmera (jogo, alta, livre), `P` painel.
 
 ## 3. Em aberto (nada disto está decidido)
 
-- **Se a poeira da 4ª rodada acerta o estilo das folhas** (qual composição Q/W/E, ou uma mistura) e os valores finais de poeira, vento e argolas. Os tamanhos de poeira que o owner ajustou na 2ª/3ª rodada eram para as formas antigas e podem precisar de novo ajuste. O lab foi verificado em renderização por software (poucos quadros por segundo); a sensação de movimento precisa ser avaliada ao vivo.
+- **Se a poeira em volume da 5ª rodada acerta** (qual composição Q/W/E, ou uma mistura) e os valores finais de poeira, sombra, vento e argolas. O alpha picotado do `alphaHash` pode mostrar granulado nas bordas que somem; se incomodar, trocamos por outra técnica de transparência. O lab foi verificado em renderização por software (poucos quadros por segundo); a sensação de movimento precisa ser avaliada ao vivo.
 - **Quando cada palavra aparece no jogo.** O jogo hoje só tem "COUNTER!" (Circular que pega um Dash). **BLOCK não existe como regra do jogo**: é preciso definir o que conta como bloqueio antes de integrar. HIT e COUNTER têm correspondência direta.
 - Se a poeira, o vento e as coroas entram para todos os modos ou só para o "Bey Real"; e a relação com os efeitos do Cel Cyclone já integrados (não duplicar).
 - No "Bey Real": o que acontece com drift e momentum (não estavam na lista de botões), o nome do modo, a autoridade de movimento do jogador (referência 30%) e o snap de redirecionamento ao atacar.
@@ -88,11 +98,10 @@ Cada etapa é uma PR própria, com testes determinísticos e de replay onde mexe
 | `src/main.ts` | Ligação da UI, atalhos e painel de ajuste |
 | `src/tuning.ts` | Todos os valores, faixas e a proposta inicial |
 | `src/sim/FlowSim.ts` | Movimento coreografado (puro, sem Three.js) |
-| `src/fx/dustArt.ts` | O desenho da poeira a partir das folhas (formas puras + canvas), a rampa de erosão |
-| `src/fx/animeTextures.ts` | Texturas da poeira com o alpha de erosão |
-| `src/fx/AnimeDust.ts` | As três composições (onda, coroa, nuvem), recortes em pé e coroas no chão |
+| `src/fx/dustVolume.ts` | A poeira como volume: blocos (esferas e elipsoides) por semente, `InstancedMesh` toon com opacidade por instância, opacidade ao longo da vida e encolhimento |
+| `src/fx/AnimeDust.ts` | As três composições (onda, coroa, nuvem): o que nasce e onde, seguindo a direção do Bey |
 | `src/fx/AnimeWind.ts` | Riscos de vento, argolas e coroas de impacto; entrega a poeira ao `AnimeDust` |
-| `src/stage/FlowRig.ts` | Um Bey + borrão e inclinação |
+| `src/stage/FlowRig.ts` | Um Bey + borrão, inclinação e sombra |
 | `src/stage/FlowStage.ts` | Cena do jogo (arena real, chão em funil, neblina), três câmeras, `FxLayer` do jogo e ligação dos eventos |
 | `src/ui/callouts.ts` | Os três estilos de texto e a camada de textos |
 | `tests/unit/beyFlowFxLab.test.ts` | Verificações do lab (não são testes de gameplay) |
