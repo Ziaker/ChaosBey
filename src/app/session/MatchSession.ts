@@ -61,6 +61,7 @@ import { HybridVfxSystem } from '../../vfx/hybrid/HybridVfxSystem';
 import { ClashPresentationSystem, clashDustHexFor } from '../../vfx/clash/ClashPresentationSystem';
 import { ArenaVisualsSystem } from '../../arena/visual/ArenaVisualsSystem';
 import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
+import { createRailVisuals } from '../../presentation/railVisual';
 import type { LanguageId } from '../../vfx/condition/types';
 import { HeadingArrow } from '../../vfx/HeadingArrow';
 import { DriftVfx } from '../../vfx/DriftVfx';
@@ -378,6 +379,7 @@ export class MatchSession {
       geometry: arenaGeometryOf(options.matchConfig),
       theme: options.arenaTheme ?? FOUNDRY_PIT.theme,
     }, options.matchConfig.motion ?? 'B', presentationFeatures, beyMatchRulesOf(options.matchConfig));
+    if (this.match.rails.length > 0) this.root.add(createRailVisuals(this.match.rails));
     this.presentation = new PresentationHub({
       features: presentationFeatures,
       beys: [

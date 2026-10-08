@@ -101,6 +101,7 @@ describe('CanonicalMatchStateV1 coverage', () => {
       StabilitySystem: world.first.stability,
       AttackController: world.first.attack,
       MomentumSystem: world.first.momentum,
+      RailController: world.first.rail,
       ClashController: world.clash.controller,
       ClashOrchestration: world.clash,
       RoundState: world.roundState,

@@ -66,6 +66,7 @@ function beyState(bey: Bey): CanonicalRecord {
     stability: bey.stability.getDeterministicState(),
     attack: bey.attack.getDeterministicState(),
     momentum: bey.momentum.getDeterministicState(),
+    rail: bey.rail.getDeterministicState(),
   };
 }
 
@@ -128,6 +129,12 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
   StaminaSystem: { staminaStat: 'build-time config (resolved Bey stat)', movementDrainScale: 'build-time config: MatchConfig.movementStaminaDrain (replay config snapshot)', spinDrainScale: 'build-time config: MatchConfig.spinStaminaDrain (replay config snapshot)' },
   StabilitySystem: {},
   AttackController: { profile: 'build-time config (attack profile settings, in the replay config snapshot)', dashCooldownS: 'build-time config: MatchConfig.dashCooldownS (replay config snapshot)', dashCarriesSpeed: 'build-time config: MatchConfig.dashCarriesSpeed (replay config snapshot)', dashSpeedScale: 'build-time config: MatchConfig.topSpeedScale (replay config snapshot)', circularEnabled: 'build-time config: MatchConfig.circularAttack (replay config snapshot)' },
+  RailController: {
+    rails: 'build-time config: the stage\'s rails, from the floor and MatchConfig.railsEnabled (replay config snapshot)',
+    tuning: 'build-time constant: RAIL_TUNING',
+    jumpExitLiftMps: 'build-time config: derived from MatchConfig.gravityScale and jumpShortHopHeightM (replay config snapshot)',
+    state: 'hashed field by field (railId, progressM, direction, speedMps, entrySpeedMps, timeOnRailS, entryReason, exitReason)',
+  },
   MomentumSystem: { rules: 'build-time config: MatchConfig momentum values (replay config snapshot)' },
   ClashController: {},
   ClashOrchestration: {

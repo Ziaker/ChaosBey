@@ -596,6 +596,8 @@ A arquitetura de yaw/composição inercial **não está aberta**. Permanecem ape
 
 **Fechado (owner, 2026-10-08):** quando os Rails forem implementados, eles **devem ser uma opção no Pregame** (liga/desliga no Advanced). **Preparação feita na 0.50.0** (modelo de rota, assentamento no piso, estado, tuning nomeado e a opção `Rails` no Pregame; nenhum layout/controle inventado — ver §16 de `RAIL_GRINDING_FUTURE_UPDATE.md`). Isso responde ao item 26 abaixo e à lista de decisões abertas em `RAIL_GRINDING_FUTURE_UPDATE.md`; o resto continua ASK FIRST.
 
+**Owner, 2026-10-08 (0.52.0, respostas):** entrada **ao pular em direção** ao rail; ida e volta pela **mesma rota**; no rail **só carregar ataque e pular — pular sai antes do fim e volta à arena**; **2 rails por stage** para começar, layout à escolha do agente (provisório). Jogável na 0.51.0; suposições abertas (fim do rail, golpes no rail, AI, visual, números) em `RAIL_GRINDING_FUTURE_UPDATE.md` §17.
+
 A direção do sistema está aprovada, mas os detalhes de implementação listados em `docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md` continuam **ASK FIRST** até nova decisão do owner.
 
 Não tratar a frase “similar a Dissidia” como autorização para copiar automaticamente controles, interrupções, colisões, UI ou apresentação do jogo de referência.

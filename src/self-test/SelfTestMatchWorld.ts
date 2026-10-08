@@ -20,6 +20,8 @@ import { tickMatch, type MatchTickResult } from '../app/simulation/tickMatch';
 import { createArenaColliders } from '../arena/colliders/createArenaColliders';
 import type { BeyDefinition } from '../bey/archetype/BeyDefinition';
 import { createBey, type Bey } from '../bey/core/Bey';
+import { arenaFloorRadius } from '../arena/colliders/ArenaTuning';
+import { railsOfMatch } from '../arena/rails/StageRails';
 import type { ClashAiMashSource } from '../combat/clash/ClashMash';
 import { RoundState } from '../combat/round-rules/RoundState';
 import { arenaFloorOf, arenaGeometryOf, beyMatchRulesOf, resolveMatchConfig, roundStateOptionsOf, type MatchConfig } from '../config/match/MatchConfig';
@@ -73,8 +75,9 @@ export class SelfTestMatchWorld {
     createArenaColliders(new THREE.Scene(), physics, arenaGeometryOf(config), undefined, motion); // detached scene: colliders only, never rendered.
     const floor = arenaFloorOf(config); // Lote 9: profile + depth
     const spawns = matchSpawnsFor(floor);
-    const first = createBey(physics, options.firstSpawn ?? spawns.first, options.firstDefinition, floor, motion, beyMatchRulesOf(config));
-    const second = createBey(physics, options.secondSpawn ?? spawns.second, options.secondDefinition, floor, motion, beyMatchRulesOf(config));
+    const rails = railsOfMatch(config.railsEnabled, floor, arenaFloorRadius()); // the same rails createMatchScene builds
+    const first = createBey(physics, options.firstSpawn ?? spawns.first, options.firstDefinition, floor, motion, beyMatchRulesOf(config), rails);
+    const second = createBey(physics, options.secondSpawn ?? spawns.second, options.secondDefinition, floor, motion, beyMatchRulesOf(config), rails);
     const clash = options.aiMashSource !== undefined ? new ClashOrchestration(config, options.aiMashSource) : new ClashOrchestration(config);
     return { physics, first, second, roundState: new RoundState(roundStateOptionsOf(config)), clash };
   }
