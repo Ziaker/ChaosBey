@@ -30,6 +30,7 @@ Documentos detalhados:
 - `motion-approval.md` — movimento e Motion Lab;
 - `clash-presentation-approval.md` — apresentação do Clash;
 - `pregame-overhaul.md` — overhaul visual/UX aprovado do Pregame e presets oficiais de Advanced;
+- `launch-system-approval.md` — Launch System A Timing Snap, launcher/ponto de entrada/chegada e início imediato do Combat;
 - `m10-status.md` / `m11-status.md` — integração de player flow e pós-M11.
 - `docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md` — direção futura aprovada e contrato de preparação do Rail Grinding; gameplay/visual ainda não integrados.
 
@@ -468,6 +469,7 @@ As seguintes formulações antigas não devem ser lidas literalmente quando entr
 - “Arena/VFX/Condition/Camera/Clash não existem” → **SUPERSEDED**;
 - “RingOut/Finisher/Clash camera ainda precisam de lab” → **SUPERSEDED**;
 - “Clash presentation completa ainda falta” → **SUPERSEDED**;
+- “Launch/minigame ainda precisa de escolha A/B/C ou countdown pós-pouso” → **SUPERSEDED: A Timing Snap aprovado; Combat começa no primeiro quique dos dois Beys, sem countdown**;
 - “Motion não integrado” → usar o estado posterior do `motion-approval.md` / M11;
 - “VFX detalhado de ataques é totalmente aberto” → o pacote Híbrido aprovado cobre os momentos listados na seção 6;
 - “Condition C é o HUD final” → falso: é elemento diegético;
@@ -528,10 +530,25 @@ Isto é uma pendência estreita de UI/legibilidade, não uma licença para repro
 - **Pregame:** direção visual/UX aprovada em 2026-10-07; ver `pregame-overhaul.md`. Não reabrir a direção aprovada. **Implementado na 0.47.0** (tabelas dos presets Realistic/Epic/Smooth/Strategic PROVISÓRIAS, em `pregamePresets.ts`).
 - continuam abertos, quando não houver decisão posterior: tema visual final de Main Menu / Character Select / Pause / Results / Settings.
 
-## 13.3 Intro / Launch
+## 13.3 Launch — OWNER APPROVED 2026-10-07
 
-- apresentação final de Intro / Countdown / Launch;
-- mecânica final do minigame de launch continua separada.
+A direção final do Launch está fechada em `launch-system-approval.md` e no protótipo `prototypes/launch-system-concepts/index.html`.
+
+Decisões fechadas:
+
+- **A — Timing Snap** é a opção final aprovada;
+- B — Power Pull e C — Vector Draw ficam somente como histórico de exploração e **não** são alternativas finais;
+- cada Bey começa visivelmente encaixado em um **launcher físico 3D**;
+- antes do Timing Snap, o jogador **escolhe onde jogar/aterrar o próprio Bey** dentro da área válida da arena;
+- o input final é um toque de timing: o marcador atravessa a janela e o jogador aperta Launch uma vez;
+- preservar a **animação simultânea dos dois Beys saindo dos launchers e chegando ao stage** mostrada no protótipo aprovado;
+- quando os dois Beys completam o primeiro contato/quique na arena, **Combat começa imediatamente**;
+- **não existe 3 / 2 / 1 / GO depois do pouso** e não pode existir lockout oculto equivalente;
+- landing VFX pode continuar durante o início do Combat, mas apresentação nunca atrasa gameplay.
+
+Os readouts numéricos de Power / Spin / Control / Entry speed do Lab são instrumentação/tuning de protótipo; a direção aprovada acima não transforma silenciosamente esses números em balance final.
+
+Ainda aberto sem reabrir esta aprovação: tuning exato da janela/efeitos do timing, política da IA para escolher ponto/qualidade de launch, input final de gamepad, replay/telemetry e detalhes de implementação.
 
 ## 13.4 Câmera — integrações específicas ainda registradas como abertas
 
