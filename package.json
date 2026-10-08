@@ -1,6 +1,6 @@
 {
   "name": "chaosbey",
-  "version": "0.48.1",
+  "version": "0.49.1",
   "private": true,
   "description": "ChaosBey - 3D spinning-top arena combat simulator (browser, GitHub Pages)",
   "type": "module",

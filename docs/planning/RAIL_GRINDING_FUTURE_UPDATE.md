@@ -383,7 +383,7 @@ O owner **não decidiu ainda**:
 23. materiais/cores/formato visual dos rails em cada stage;
 24. câmera específica para rail;
 25. HUD/feedback ao jogador;
-26. opção de habilitar/desabilitar rail em Pregame, caso exista.
+26. ~~opção de habilitar/desabilitar rail em Pregame, caso exista~~ — **FECHADO (owner, 2026-10-08): os Rails DEVEM ser uma opção no Pregame** (liga/desliga, na seção Advanced; o padrão e a categoria exata ficam para a implementação). Fica no estado do setup/MatchConfig como as outras regras do Advanced (replay, salvo com as configurações, resetável, contado como MODIFIED), e o preset Normal Original segue o padrão do jogo.
 
 Nenhum agente deve transformar a referência Dissidia em resposta automática para esses itens.
 

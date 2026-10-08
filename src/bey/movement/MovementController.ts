@@ -25,6 +25,8 @@ import {
   DIRECTIONAL_TURN_RATE_MULTIPLIER,
   GRIP_RECOVERY_MULTIPLIER,
   IDLE_DAMPING_PER_S,
+  SLIDE_FRICTION_PER_S,
+  SLIDE_ROLLING_RESISTANCE_MPS2,
   IMPACT_TANGENTIAL_TRANSFER,
   IMPACT_VELOCITY_DELTA_THRESHOLD_MPS,
   LANDING_BOUNCE_MIN_AIRBORNE_TICKS,
@@ -41,6 +43,8 @@ import { DEFAULT_HANDLING_PROFILE, type BeyHandlingProfile } from '../archetype/
 import { labImpactSpeed, motionParams, motionRatio, type MotionParams } from '../motion/MotionPresets';
 import { vec2, type CanonicalRecord } from '../../replay/state/CanonicalValue';
 import { headingErrorRad, intentMagnitude } from './directionalIntent';
+
+import { GRAVITY_MPS2 } from '../../physics/world/PhysicsWorld';
 
 export interface MovementPreStepInput {
   actions: ControllerActions;
@@ -193,6 +197,10 @@ export class MovementController {
   /** Owner, 2026-10-04 (MatchConfig.highSpeedControl): 1 = control does not fall with speed (no slip loss, grip scales with speed). */
   private readonly highSpeedControl: number;
   private readonly thrustCalibration: ThrustCalibration | null;
+  /** Gravity's pull along a slope at full tilt (m/s²) = g × MatchConfig.gravityScale × MatchConfig.funnelPull; 0 = no funnel pull (see FUNNEL_PULL_DEFAULT). */
+  private readonly funnelPullMps2: number;
+  /** The funnel's slide velocity (m/s, horizontal): the part of the body's velocity the slope's pull put there. Not driven by the handling model. */
+  private slide: Vec2 = { x: 0, z: 0 };
   /**
    * Owner, 2026-10-04 ("não é pra ser possível realizar nenhum movimento (no caso do perdedor) até se recuperar no
    * ar"): the Clash loser takes no input at all — the only thing it can do is the Air Recovery — until it recovers in
@@ -208,12 +216,13 @@ export class MovementController {
     handling: BeyHandlingProfile = DEFAULT_HANDLING_PROFILE,
     private readonly motion: MotionParams = motionParams(),
     /** Owner, 2026-10-02 (Lote 9 / GDD 12): the match's acceleration, top speed and air control multipliers (1 = as designed). */
-    scales: { readonly acceleration: number; readonly topSpeed: number; readonly airControl: number; readonly turnRate?: number; readonly turnSpeedRetention?: number; readonly highSpeedControl?: number; readonly thrustCalibration?: ThrustCalibration } = { acceleration: 1, topSpeed: 1, airControl: 1 },
+    scales: { readonly acceleration: number; readonly topSpeed: number; readonly airControl: number; readonly turnRate?: number; readonly turnSpeedRetention?: number; readonly highSpeedControl?: number; readonly thrustCalibration?: ThrustCalibration; readonly funnelPull?: number; readonly gravityScale?: number } = { acceleration: 1, topSpeed: 1, airControl: 1 },
   ) {
     this.airControl = scales.airControl;
     this.turnSpeedRetention = Math.max(0, Math.min(1, scales.turnSpeedRetention ?? 0));
     this.highSpeedControl = Math.max(0, Math.min(1, scales.highSpeedControl ?? 0));
     this.thrustCalibration = scales.thrustCalibration ?? null;
+    this.funnelPullMps2 = Math.max(0, scales.funnelPull ?? 0) * GRAVITY_MPS2 * Math.max(1, scales.gravityScale ?? 1);
     this.handling = {
       ...handling,
       accelerationMps2: handling.accelerationMps2 * motionRatio(motion, 'accel') * scales.acceleration,
@@ -449,7 +458,9 @@ export class MovementController {
       : actions.held.has(Action.MoveForward) || actions.held.has(Action.MoveBackward) || actions.held.has(Action.SteerLeft) || actions.held.has(Action.SteerRight);
 
     const currentVel = body.linvel();
-    const velHoriz: Vec2 = { x: currentVel.x, z: currentVel.z };
+    // The funnel's slide (see stepSlide) is not the handling model's to damp or steer: it works on the DRIVEN part only.
+    const slideBefore = this.postImpactCooldownRemainingS > 0 ? { x: 0, z: 0 } : this.slide;
+    const velHoriz: Vec2 = { x: currentVel.x - slideBefore.x, z: currentVel.z - slideBefore.z };
     const longitudinalSpeed = dot(velHoriz, headingForward);
     const longitudinalVec = scale(headingForward, longitudinalSpeed);
     const lateralVec: Vec2 = { x: velHoriz.x - longitudinalVec.x, z: velHoriz.z - longitudinalVec.z };
@@ -592,6 +603,7 @@ export class MovementController {
       // reference for impact detection, so a second collision inside the
       // window (a knockback into the wall) is still felt (M11).
       this.postImpactCooldownRemainingS = Math.max(0, this.postImpactCooldownRemainingS - fixedDeltaSeconds);
+      this.slide = { x: 0, z: 0 };
       this.intendedVelocityThisTick = velHoriz;
       // A bounce off the wall (or a Bey) with no movement input settles
       // like any other idle motion (owner playtest, after M11: released at
@@ -604,13 +616,38 @@ export class MovementController {
       }
       if (this.postImpactCooldownRemainingS === 0) this.knockbackPlaying = false;
     } else {
-      const vertical = this.verticalFor(newVelHoriz, currentVel, grounded ? floorNormal : null);
-      body.setLinvel({ x: newVelHoriz.x, y: vertical, z: newVelHoriz.z }, true);
+      const withSlide = add(newVelHoriz, this.stepSlide(grounded, floorNormal, fixedDeltaSeconds));
+      const vertical = this.verticalFor(withSlide, currentVel, grounded ? floorNormal : null);
+      body.setLinvel({ x: withSlide.x, y: vertical, z: withSlide.z }, true);
       this.preStepVerticalMps = vertical;
-      this.intendedVelocityThisTick = newVelHoriz;
+      this.intendedVelocityThisTick = withSlide;
     }
     const carried = body.linvel();
     this.preStepHorizontal = { x: carried.x, z: carried.z };
+  }
+
+  /**
+   * Funnel pull (see FUNNEL_PULL_DEFAULT): advances the slide velocity one tick and returns it. Grounded on a slope it
+   * gains the horizontal part of gravity's pull along the floor, g · n_y · (n_x, n_z) × the match's pull; it loses a
+   * viscous share and a constant rolling resistance, so a gentle slope (the funnel's bottom) lets it rest. Off the
+   * ground, on flat ground, or with no pull configured it is zero.
+   */
+  private stepSlide(grounded: boolean, n: { x: number; y: number; z: number } | null | undefined, dt: number): Vec2 {
+    if (!grounded || !n || this.funnelPullMps2 <= 0) {
+      this.slide = { x: 0, z: 0 };
+      return this.slide;
+    }
+    const decay = Math.exp(-SLIDE_FRICTION_PER_S * dt);
+    let sx = this.slide.x * decay + this.funnelPullMps2 * n.y * n.x * dt;
+    let sz = this.slide.z * decay + this.funnelPullMps2 * n.y * n.z * dt;
+    const speed = Math.hypot(sx, sz);
+    if (speed > 0) {
+      const kept = Math.max(0, speed - SLIDE_ROLLING_RESISTANCE_MPS2 * dt) / speed;
+      sx *= kept;
+      sz *= kept;
+    }
+    this.slide = { x: sx, z: sz };
+    return this.slide;
   }
 
   /**
@@ -634,8 +671,9 @@ export class MovementController {
       this.postImpactCooldownRemainingS = Math.max(0, this.postImpactCooldownRemainingS - fixedDeltaSeconds);
     }
     const currentVel = body.linvel();
-    const newVelHoriz = dodgeOverride.velocityMps;
-    this.lastHeadingForward = length(newVelHoriz) > 1e-6 ? scale(newVelHoriz, 1 / length(newVelHoriz)) : this.lastHeadingForward;
+    const dodgeVelocity = dodgeOverride.velocityMps;
+    const newVelHoriz = add(dodgeVelocity, this.stepSlide(grounded, floorNormal, fixedDeltaSeconds));
+    this.lastHeadingForward = length(dodgeVelocity) > 1e-6 ? scale(dodgeVelocity, 1 / length(dodgeVelocity)) : this.lastHeadingForward;
     this.lastLateralGripPerS = 0;
     const vertical = this.verticalFor(newVelHoriz, currentVel, grounded ? floorNormal : null);
     body.setLinvel({ x: newVelHoriz.x, y: vertical, z: newVelHoriz.z }, true);
@@ -696,6 +734,8 @@ export class MovementController {
       };
       const delta = length(deltaVec);
       if (delta > IMPACT_VELOCITY_DELTA_THRESHOLD_MPS) {
+        // A collision stops the slide (what is left of the velocity is the body's own): it builds up again from the slope.
+        this.slide = { x: 0, z: 0 };
         // Owner, 2026-10-04 ("do nada ele perde o controle e para de responder meus comandos de movimentação pelas
         // setas quando fica muito rápido"): at speed every curve runs up the funnel into the rim's wall, and each of
         // those plain impacts took the controls away for 0.35 s and cut the grip to a third (~32% of a fast lap was
@@ -833,6 +873,7 @@ export class MovementController {
       clashStunElapsedS: this.clashStunElapsedS,
       clashStunLeftGround: this.clashStunLeftGround,
       actionLockS: this.actionLockS,
+      slide: vec2(this.slide),
     };
   }
 }

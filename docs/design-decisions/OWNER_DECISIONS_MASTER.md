@@ -454,6 +454,8 @@ Decisões fechadas:
 
 **Implementação (0.47.0):** duas colunas, seções Preset/Opponent/AI/Arena/Match/Advanced, resumo curto, Advanced em 6 abas com `MODIFIED`, contagens, Reset category / Reset all, cinco presets oficiais + Custom derivado, área Saved. Os números iniciais dos quatro presets alternativos são **PROVISÓRIOS** e ficam numa só tabela para revisão.
 
+**Owner, 2026-10-08 (0.49.0):** (a) **física do funil aplicada** — o Bey só pode ficar completamente parado na parte plana (fundo) do funil; o funil influencia velocidade e direção em tudo (movimento, combate, knockback) sem estragar os controles; slider **Funnel pull** (Advanced › Movement, ×1 padrão, PROVISÓRIO). (b) **Realistic** = fisicamente realista **e rápido** (nunca mais lento que o Normal), com forte pull do funil, knockback e colisões duros. (c) Os **Rails** futuros **devem ser uma opção no Pregame**.
+
 **Futuro (pedido do owner, 2026-10-07, adiado):** um **seletor de paleta para cada uma das quatro peças** do Bey, com qualquer cor — fica para um pedido futuro; ver `bey-colors-plan.md`. Não faz parte do Pregame overhaul.
 
 Esta aprovação é específica do Pregame. Ela **não** fecha o tratamento visual final de Main Menu, Character Select, Pause, Results ou Settings.
@@ -590,6 +592,8 @@ A arquitetura de yaw/composição inercial **não está aberta**. Permanecem ape
 ---
 
 ## 13.8 Rail Grinding — atualização futura
+
+**Fechado (owner, 2026-10-08):** quando os Rails forem implementados, eles **devem ser uma opção no Pregame** (liga/desliga no Advanced). Isso responde ao item 26 abaixo e à lista de decisões abertas em `RAIL_GRINDING_FUTURE_UPDATE.md`; o resto continua ASK FIRST.
 
 A direção do sistema está aprovada, mas os detalhes de implementação listados em `docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md` continuam **ASK FIRST** até nova decisão do owner.
 
