@@ -1,123 +1,72 @@
 // ============================================================
 // BEY FLOW FX LAB — STAGE
-// Renderer, camera and scene: a light-yellow stadium bowl (the owner's
-// reference), two Beys on the choreographed sim, every continuous effect,
-// and the glue that turns sim events into callouts. Two views: a fixed
-// high "overview" camera (like the references) and a free orbit camera.
+// Renderer, camera and scene. The scene is the GAME's: the approved arena art
+// the game builds for each preset (Foundry Pit, Rift Crater, Tournament Stadium),
+// on the game's own floor profile (the 7 m funnel), with the game's tone mapping
+// and fog, so an effect is judged where it will live and not over an invented
+// floor. Two Beys move on the choreographed sim; every continuous effect and
+// the glue that turns sim events into callouts is here too.
+//
+// Three views: "game" (a low, close camera like the game's Arena Fighter that
+// keeps both Beys in frame), "overview" (high and fixed, like the references)
+// and "free" (orbit).
 // ============================================================
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { ArenaVisualsSystem } from '../../../../src/arena/visual/ArenaVisualsSystem';
+import type { ArenaPresetId } from '../../../../src/arena/presets/ArenaPresets';
 import { CONCEPTS } from '../../../bey-visual-concepts/src/concepts/conceptDefinitions';
 import { FxLayer } from '../../../../src/vfx/hybrid/fx/FxLayer';
 import { AnimeWind } from '../fx/AnimeWind';
 import type { DustStyle } from '../fx/AnimeDust';
-import { ARENA_RADIUS_M, CALLOUT_CYCLE, FlowSim, floorHeight, type CalloutKind, type FlowEvent } from '../sim/FlowSim';
+import { CALLOUT_CYCLE, FlowSim, floorHeight, type CalloutKind, type FlowEvent } from '../sim/FlowSim';
 import { TUNING } from '../tuning';
 import { FlowRig, type FxFlags } from './FlowRig';
 
 // ---------------- TUNING ----------------
 const FIXED_DT = 1 / 60;
 const MAX_FRAME_DT = 0.05;
-const CAMERA_FOV = 40;
-const OVERVIEW_POS = new THREE.Vector3(0, 15.5, 11.5); // ~53° pitch, the whole bowl in frame
+const CAMERA_FOV = 60;
+const CAMERA_NEAR = 0.1;
+const CAMERA_FAR = 800;
+const OVERVIEW_POS = new THREE.Vector3(0, 20, 15);
 const OVERVIEW_TARGET = new THREE.Vector3(0, 0.4, 0);
-const BACKGROUND = 0x16301f;
-const FLOOR_RADIAL_SEGMENTS = 64;
-const FLOOR_ANGULAR_SEGMENTS = 128;
-const WALL_HEIGHT_M = 1.5;
-const WALL_OUTSET_M = 0.7;
+// The game's Arena Fighter (camera-approval.md): 5.8 m minimum distance, 13 m maximum, 2.4 m high, rising 0.3 m per extra metre.
+const GAME_MIN_DISTANCE_M = 6.5;
+const GAME_MAX_DISTANCE_M = 13;
+const GAME_SEPARATION_RESPONSE = 0.7;
+const GAME_HEIGHT_M = 2.6;
+const GAME_HEIGHT_PER_M = 0.3;
+const GAME_AZIMUTH_RAD = 0.35;     // the camera sits behind the arena's +z side, a little to the side
+const GAME_FOCUS_Y_M = 0.5;
+const GAME_FOLLOW_PER_S = 4;
 const BEY_IDS = ['attack-a', 'stamina-b'] as const;
+const DEFAULT_ARENA: ArenaPresetId = 'foundry';
+/** How much of the arena's fog colour the dust takes on: white is not the same white in every arena. */
+const DUST_FOG_TINT = 0.12;
 // -----------------------------------------
 
-export type ViewMode = 'overview' | 'free';
-
-function floorTexture(): THREE.CanvasTexture {
-  const size = 1024;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const g = canvas.getContext('2d')!;
-  const c = size / 2;
-  const grad = g.createRadialGradient(c, c, 0, c, c, c);
-  grad.addColorStop(0, '#ecdfae');
-  grad.addColorStop(0.7, '#d8c78c');
-  grad.addColorStop(1, '#bba66a');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, size, size);
-  // Concentric dish lines.
-  g.strokeStyle = 'rgba(120,98,50,0.35)';
-  g.lineWidth = 3;
-  for (const k of [0.3, 0.55, 0.78]) {
-    g.beginPath();
-    g.arc(c, c, c * k, 0, Math.PI * 2);
-    g.stroke();
-  }
-  // Centre emblem: a plain red diamond on a pale disc (a stand-in, not a brand).
-  g.fillStyle = 'rgba(250,244,220,0.85)';
-  g.beginPath();
-  g.arc(c, c, c * 0.2, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#b0322b';
-  g.beginPath();
-  g.moveTo(c, c - c * 0.15);
-  g.lineTo(c + c * 0.15, c);
-  g.lineTo(c, c + c * 0.15);
-  g.lineTo(c - c * 0.15, c);
-  g.closePath();
-  g.fill();
-  // Hazard strip at the rim.
-  const inner = c * 0.93;
-  const outer = c * 0.995;
-  const segments = 72;
-  for (let i = 0; i < segments; i++) {
-    g.fillStyle = i % 2 === 0 ? '#e8b923' : '#27221a';
-    g.beginPath();
-    g.arc(c, c, outer, (i / segments) * Math.PI * 2, ((i + 1) / segments) * Math.PI * 2);
-    g.arc(c, c, inner, ((i + 1) / segments) * Math.PI * 2, (i / segments) * Math.PI * 2, true);
-    g.closePath();
-    g.fill();
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
-  return tex;
-}
-
-function buildFloor(): THREE.Mesh {
-  const geo = new THREE.RingGeometry(0.001, ARENA_RADIUS_M, FLOOR_ANGULAR_SEGMENTS, FLOOR_RADIAL_SEGMENTS);
-  geo.rotateX(-Math.PI / 2); // keeps the planar UVs; XY -> XZ
-  const pos = geo.attributes.position as THREE.BufferAttribute;
-  for (let i = 0; i < pos.count; i++) {
-    pos.setY(i, floorHeight(Math.hypot(pos.getX(i), pos.getZ(i))));
-  }
-  geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ map: floorTexture(), roughness: 0.82, metalness: 0, side: THREE.DoubleSide });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.receiveShadow = false;
-  return mesh;
-}
-
-function buildWall(): THREE.Mesh {
-  const rim = floorHeight(ARENA_RADIUS_M);
-  const geo = new THREE.CylinderGeometry(ARENA_RADIUS_M + WALL_OUTSET_M, ARENA_RADIUS_M + WALL_OUTSET_M, WALL_HEIGHT_M, 96, 1, true);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xcdbb83, roughness: 0.9, side: THREE.BackSide });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.y = rim + WALL_HEIGHT_M / 2;
-  return mesh;
-}
+export type ViewMode = 'game' | 'overview' | 'free';
 
 export class FlowStage {
   readonly renderer: THREE.WebGLRenderer;
-  readonly camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 300);
+  readonly camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, CAMERA_NEAR, CAMERA_FAR);
   readonly controls: OrbitControls;
   readonly scene = new THREE.Scene();
   readonly flags: FxFlags = { blur: true, lean: true, dust: true, wind: true, crown: true };
   sim = new FlowSim();
   timeScale = 1;
   paused = false;
-  private view: ViewMode = 'overview';
+  private view: ViewMode = 'game';
+  private arena: ArenaVisualsSystem | null = null;
+  private arenaId: ArenaPresetId = DEFAULT_ARENA;
+  private readonly arenaRoot = new THREE.Group();
+  private arenaTime = 0;
+  private readonly camFocus = new THREE.Vector3();
+  private camDistance = GAME_MIN_DISTANCE_M;
+  private camReady = false;
   private readonly rigs: [FlowRig, FlowRig];
   private readonly layer: FxLayer;
   private readonly wind: AnimeWind;
@@ -135,16 +84,10 @@ export class FlowStage {
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
-    this.scene.environmentIntensity = 0.55;
-    this.scene.background = new THREE.Color(BACKGROUND);
-
-    this.scene.add(new THREE.HemisphereLight(0xfff4d6, 0x6d5f3a, 0.9));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.3);
-    sun.position.set(-6, 14, 8);
-    this.scene.add(sun);
-    this.scene.add(buildFloor(), buildWall());
+    this.scene.add(this.arenaRoot);
     this.layer = new FxLayer(this.scene, this.camera);
-    this.wind = new AnimeWind(this.layer);
+    this.wind = new AnimeWind(this.layer, this.camera);
+    this.setArena(DEFAULT_ARENA);
 
     const [idA, idB] = BEY_IDS;
     const defA = CONCEPTS.find((c) => c.id === idA)!;
@@ -159,7 +102,7 @@ export class FlowStage {
     this.controls.maxPolarAngle = Math.PI * 0.49;
     this.controls.minDistance = 4;
     this.controls.maxDistance = 60;
-    this.setView('overview');
+    this.setView('game');
 
     new ResizeObserver(() => this.resize()).observe(host);
     this.resize();
@@ -170,14 +113,54 @@ export class FlowStage {
     this.onEvent = cb;
   }
 
+  /** Swaps the arena for one of the game's three approved ones (the same art, floor profile, fog and tone mapping the game uses). */
+  setArena(id: ArenaPresetId): void {
+    this.arena?.dispose();
+    this.arenaId = id;
+    this.arena = new ArenaVisualsSystem({ scene: this.scene, root: this.arenaRoot, presetId: id, floorHeightAtR: floorHeight, renderer: this.renderer });
+    const built = this.arena.built;
+    this.scene.environmentIntensity = built.environmentIntensity;
+    const fog = built.fog?.color ?? new THREE.Color(0x05070a);
+    this.scene.background = fog.clone();
+    // The dust takes a little of the arena's haze so it sits in the scene instead of on it.
+    this.wind.dustTint.setRGB(1, 1, 1).lerp(fog, DUST_FOG_TINT);
+  }
+
+  get arenaPreset(): ArenaPresetId {
+    return this.arenaId;
+  }
+
   setView(view: ViewMode): void {
     this.view = view;
     this.controls.enabled = view === 'free';
+    this.camReady = false;
     if (view === 'overview') {
       this.camera.position.copy(OVERVIEW_POS);
       this.controls.target.copy(OVERVIEW_TARGET);
       this.camera.lookAt(OVERVIEW_TARGET);
     }
+  }
+
+  /** The game's Arena Fighter in miniature: close and low, both Beys in frame, the angle fixed, distance and height following their separation. */
+  private updateGameCamera(dt: number): void {
+    const [a, b] = this.sim.beys;
+    const mx = (a.x + b.x) / 2;
+    const mz = (a.z + b.z) / 2;
+    const sep = Math.hypot(a.x - b.x, a.z - b.z);
+    const wantDist = Math.min(GAME_MAX_DISTANCE_M, GAME_MIN_DISTANCE_M + GAME_SEPARATION_RESPONSE * Math.max(0, sep - 3));
+    const k = this.camReady ? 1 - Math.exp(-GAME_FOLLOW_PER_S * dt) : 1;
+    this.camReady = true;
+    this.camFocus.x += (mx - this.camFocus.x) * k;
+    this.camFocus.z += (mz - this.camFocus.z) * k;
+    this.camFocus.y = floorHeight(Math.hypot(this.camFocus.x, this.camFocus.z)) + GAME_FOCUS_Y_M;
+    this.camDistance += (wantDist - this.camDistance) * k;
+    const height = GAME_HEIGHT_M + GAME_HEIGHT_PER_M * (this.camDistance - GAME_MIN_DISTANCE_M);
+    this.camera.position.set(
+      this.camFocus.x + Math.sin(GAME_AZIMUTH_RAD) * this.camDistance,
+      this.camFocus.y + height,
+      this.camFocus.z + Math.cos(GAME_AZIMUTH_RAD) * this.camDistance,
+    );
+    this.camera.lookAt(this.camFocus);
   }
 
   get viewMode(): ViewMode {
@@ -264,6 +247,11 @@ export class FlowStage {
       for (const e of this.sim.events) this.handleEvent(e);
     }
     if (this.view === 'free') this.controls.update();
+    else if (this.view === 'game') this.updateGameCamera(real);
+    if (this.arena) {
+      this.arenaTime += real;
+      this.arena.built.update({ time: this.arenaTime, dt: real, clash: 0 });
+    }
 
     this.rigs.forEach((rig, i) => {
       const b = this.sim.beys[i]!;
@@ -278,6 +266,7 @@ export class FlowStage {
     this.renderer.setAnimationLoop(null);
     this.rigs.forEach((r) => r.dispose());
     this.layer.clear();
+    this.arena?.dispose();
     this.renderer.dispose();
   }
 }
