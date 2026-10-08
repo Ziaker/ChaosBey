@@ -1,5 +1,6 @@
 // M10 lane D: player settings, quality profiles and the gamepad action layer.
 
+import { DEFAULT_FLOW_FX_SETTINGS } from '../../src/vfx/flow/flowFxTuning';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PLAYER_SETTINGS, QUALITY_PROFILES, sanitizePlayerSettings } from '../../src/config/settings/PlayerSettings';
 import { QualityPreset } from '../../src/config/runtime/QualityPreset';
@@ -29,7 +30,7 @@ function fakePad(state: { pressed: number[]; axes?: number[] }): () => (Gamepad 
 
 describe('player settings', () => {
   it('defaults to Medium quality, the Arena Fighter camera (A), Screen controls, conditions A+B+C and the presentation defaults (owner, 2026-10-04)', () => {
-    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ quality: QualityPreset.Medium, cameraPreset: 'A', controlScheme: 'screen', cameraEffects: true, pauseOnFocusLoss: true, controlHints: true, debugOverlayOnStart: false, conditionLayers: ['A', 'B', 'C'], counterFeedback: true, hitFlash: true, hitShake: true, ringOutWarning: true, refusedInputFeedback: true });
+    expect(DEFAULT_PLAYER_SETTINGS).toEqual({ quality: QualityPreset.Medium, cameraPreset: 'A', controlScheme: 'screen', cameraEffects: true, pauseOnFocusLoss: true, controlHints: true, debugOverlayOnStart: false, conditionLayers: ['A', 'B', 'C'], counterFeedback: true, hitFlash: true, hitShake: true, ringOutWarning: true, refusedInputFeedback: true, flowFx: DEFAULT_FLOW_FX_SETTINGS });
   });
 
   it('falls back field by field on missing or corrupted values', () => {
