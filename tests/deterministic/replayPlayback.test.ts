@@ -115,8 +115,11 @@ interface Recording {
 // replay-100 (2147 ticks, 21 frozen, 717 steering ticks after 900), from a scan of replay-0..119 (4 qualify).
 // 0.43.1 (owner, 2026-10-05: the drift carves its turns): replay-46 fell to 16 frozen ticks; replay-158 (2516 ticks, 32
 // frozen) from a scan of replay-0..159 (7 qualify). replay-100 still qualifies unchanged.
-const LONG_SEED = 'replay-158';
-const MUTATION_SEED = 'replay-100';
+// 0.48.0 (owner, 2026-10-08: the funnel pull — Beys slide down the slope — changed every fight): replay-158 and replay-100
+// fell to 18 and 17 frozen ticks; replay-46 (2912 ticks, 37 frozen) and replay-35 (3253 ticks, 33 frozen, 1206 steering ticks
+// after 900) from a scan of replay-0..119 (30 qualify).
+const LONG_SEED = 'replay-46';
+const MUTATION_SEED = 'replay-35';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {

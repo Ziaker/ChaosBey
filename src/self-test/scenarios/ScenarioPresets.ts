@@ -322,7 +322,9 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     supported: true,
     durationTicks: 4 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
-      placeBey(first, 0, -3, 0);
+      // 5 m back (was 3): the funnel's pull (0.48.0) slides the dasher ~1 m toward the defender while the Dash charges,
+      // and a touch before the Dash fired ended the scenario on a weak contact knockback.
+      placeBey(first, 0, -5, 0);
       placeBey(second, 0, 0, Math.PI);
       second.stamina.resource.set(0.05 * second.stamina.resource.max); // nearly empty: Stamina 0 is a spin-out now (owner, 2026-10-02)
       second.stability.debugSetValue(10);
