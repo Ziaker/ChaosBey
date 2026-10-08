@@ -22,8 +22,24 @@ import { GamepadMenuKeys } from './input/devices/GamepadMenuKeys';
 import { startPlayMode } from './app/modes/playMode';
 import { startSettingsMode } from './app/modes/settingsMode';
 import { isQuickPlay, resolveAppMode } from './app/modes/appMode';
+import { DEFAULT_PLAYER_SETTINGS, QUALITY_PROFILES, hasSavedPlayerSettings, loadPlayerSettings, savePlayerSettings } from './config/settings/PlayerSettings';
+import type { QualityPreset } from './config/runtime/QualityPreset';
+import { detectDefaultQuality, probeDevice } from './config/runtime/deviceCapability';
 import { startDebugLabMode } from './debug/lab/DebugLabMode';
 import { startSelfTestMode } from './debug/self-test-ui/SelfTestMode';
+
+/**
+ * The quality preset the renderer is built for. A first launch (no saved Settings) on a clearly modest machine starts on Low and
+ * remembers it (the player can change it in Settings); automated browsers keep the default so tests stay comparable.
+ */
+function startingQuality(): QualityPreset {
+  if (!hasSavedPlayerSettings() && !navigator.webdriver) {
+    const quality = detectDefaultQuality(probeDevice());
+    if (quality !== DEFAULT_PLAYER_SETTINGS.quality) savePlayerSettings({ ...DEFAULT_PLAYER_SETTINGS, quality });
+    return quality;
+  }
+  return loadPlayerSettings().quality;
+}
 
 async function bootstrap(): Promise<void> {
   showVersionBadge();
@@ -54,7 +70,7 @@ async function bootstrap(): Promise<void> {
     await startSelfTestMode(debugOverlayRoot);
     return;
   }
-  const appRenderer = createRenderer(canvas);
+  const appRenderer = createRenderer(canvas, { antialias: QUALITY_PROFILES[startingQuality()].antialias });
   if (mode === 'debug-lab') {
     await startDebugLabMode(appRenderer, debugOverlayRoot);
   } else {

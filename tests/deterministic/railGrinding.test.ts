@@ -270,6 +270,37 @@ describe('rails in a real match', () => {
     }
   });
 
+  it('at the top of the Rail speed slider (×3: 96 m/s, 120 m/s cap) the Bey still keeps to the route and finishes the course', async () => {
+    const world = await SelfTestMatchWorld.build({ firstDefinition: ATTACK_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE, aiMashSource: new NullAiMashSource(), matchConfigOverrides: { railsEnabled: true, railSpeed: 3 } as never });
+    try {
+      const b = world.first;
+      b.body.setTranslation({ x: 26, y: BEY_SPAWN_HEIGHT_M + floorHeightAt(b.arenaFloor, 26, 0), z: 0 }, true);
+      b.body.setLinvel({ x: 8, y: 0, z: 0 }, true);
+      const idle = new IdleController();
+      for (let t = 0; t < 240 && !b.rail.isOnRail(); t++) {
+        park(world);
+        world.step({ first: pressing(t === 0 ? [Action.JumpDrift] : [], [Action.JumpDrift], { x: 1, z: 0 }), second: idle });
+      }
+      expect(b.rail.isOnRail()).toBe(true);
+      const path = b.rail.getRails()[0]!.path;
+      let worstLagM = 0;
+      let topSpeed = 0;
+      for (let t = 0; t < 600 && b.rail.isOnRail(); t++) {
+        park(world);
+        world.step({ first: pressing([], [], { x: 0, z: 0 }), second: idle });
+        if (!b.rail.isOnRail()) break;
+        const p = b.body.translation();
+        worstLagM = Math.max(worstLagM, path.project(p).distanceM);
+        topSpeed = Math.max(topSpeed, b.rail.getState().speedMps);
+      }
+      expect(topSpeed).toBeGreaterThan(80); // the slider's speed was really reached
+      expect(worstLagM).toBeLessThan(3); // the body kept to the route (it was clipped by the 100 m/s launch ceiling and fell behind)
+      expect(b.rail.getState().exitReason).toBe('end');
+    } finally {
+      world.dispose();
+    }
+  });
+
   it('a Jump outside the arena brings the Bey back along the same route to the gate it entered by', async () => {
     const world = await build(true);
     try {

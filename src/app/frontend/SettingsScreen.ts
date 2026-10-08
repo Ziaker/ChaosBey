@@ -11,6 +11,7 @@ import { CAMERA_PRESET_SETTINGS, QUALITY_PROFILES, DEFAULT_PLAYER_SETTINGS, togg
 import { presentationFeaturesFromLocation } from '../../presentation/features';
 import { CAMERA_PRESET_NAMES, CAMERA_PRESET_NOTES } from '../../camera/director/CameraRig';
 import { QualityPreset } from '../../config/runtime/QualityPreset';
+import { FRAME_LIMIT_SETTINGS, type FrameLimitSetting } from '../../config/settings/FrameLimit';
 import { GAMEPAD_BINDINGS, currentGamepads, readFirstGamepad } from '../../input/devices/gamepadMapping';
 import { button, el, ensureFrontendStyle, keyHint, segmentedControl } from './frontendStyle';
 import { DUST_STYLE_IDS, DUST_STYLE_LABELS, FLOW_FX_GROUP_ORDER, FLOW_FX_GROUP_TITLES, FLOW_FX_SPEC, DEFAULT_FLOW_FX_SETTINGS, withFlowFxValue, type DustStyle, type FlowFxSpec } from '../../vfx/flow/flowFxTuning';
@@ -31,7 +32,7 @@ const CONDITION_LAYER_LABELS: readonly (readonly [ConditionLayerSetting, string]
   ['C', 'C · Floor instrument'],
 ];
 
-type BooleanKey = 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart' | GameFeelSettingKey;
+type BooleanKey = 'cameraEffects' | 'pauseOnFocusLoss' | 'controlHints' | 'debugOverlayOnStart' | 'adaptiveResolution' | GameFeelSettingKey;
 
 interface Row {
   readonly buttons: HTMLButtonElement[];
@@ -74,15 +75,24 @@ const CONTROL_TEXT: Readonly<Record<ControlScheme, { readonly note: string; read
 };
 
 const QUALITY_NOTES: Readonly<Record<QualityPreset, string>> = {
-  [QualityPreset.Low]: 'Lowest resolution, no speed trails. For slow machines.',
+  [QualityPreset.Low]: 'For slow machines: lower resolution, simpler Bey models (about 60% fewer triangles), no speed trails, no antialiasing.',
   [QualityPreset.Medium]: 'Balanced resolution with every effect.',
   [QualityPreset.High]: 'Full resolution on high-density screens.',
+};
+
+const FRAME_LIMIT_LABELS: Readonly<Record<FrameLimitSetting, string>> = { off: 'No limit', '60': '60 fps', '30': '30 fps' };
+const FRAME_LIMIT_NOTES: Readonly<Record<FrameLimitSetting, string>> = {
+  off: 'Draws as fast as the screen refreshes. The game moves at 60 steps a second, so above that it only redraws the same picture.',
+  '60': 'Draws at most 60 frames a second: the game moves at 60 steps a second, so more only costs power on 120/144 Hz screens.',
+  '30': 'Half the drawing work, for slow machines. The game itself still runs at full speed; only the picture is redrawn less often.',
 };
 
 export class SettingsScreen {
   private readonly root: HTMLElement;
   private readonly rows: Row[] = [];
   private readonly qualityNote = el('p', 'cb-hint', 'settings-quality-note');
+  private readonly adaptiveNote = el('p', 'cb-hint', 'settings-adaptive-note');
+  private readonly frameLimitNote = el('p', 'cb-hint', 'settings-frame-limit-note');
   private readonly controlNote = el('p', 'cb-hint', 'settings-control-note');
   private readonly cameraNote = el('p', 'cb-hint', 'settings-camera-note');
   /** The first two rows of the controls table (movement), which depend on the control scheme. */
@@ -115,6 +125,10 @@ export class SettingsScreen {
     graphics.append(
       this.choiceRow<QualityPreset>('quality', 'Quality', [QualityPreset.Low, QualityPreset.Medium, QualityPreset.High].map((q) => ({ value: q, label: q })), (s) => s.quality, (s, v) => ({ ...s, quality: v })),
       this.qualityNote,
+      this.toggleRow('adaptive-resolution', 'Adaptive resolution', 'adaptiveResolution'),
+      this.adaptiveNote,
+      this.choiceRow<FrameLimitSetting>('frame-limit', 'Frame limit', FRAME_LIMIT_SETTINGS.map((f) => ({ value: f, label: FRAME_LIMIT_LABELS[f] })), (s) => s.frameLimit, (s, v) => ({ ...s, frameLimit: v })),
+      this.frameLimitNote,
       this.choiceRow<CameraPresetSetting>(
         'camera',
         'Camera',
@@ -336,7 +350,11 @@ export class SettingsScreen {
   private refresh(): void {
     for (const row of this.rows) row.refresh(this.settings);
     const profile = QUALITY_PROFILES[this.settings.quality];
-    this.qualityNote.textContent = `${QUALITY_NOTES[this.settings.quality]} (pixel ratio up to ${profile.maxPixelRatio}, speed trails ${profile.trails ? 'on' : 'off'})`;
+    this.qualityNote.textContent = `${QUALITY_NOTES[this.settings.quality]} (pixel ratio up to ${profile.maxPixelRatio}, speed trails ${profile.trails ? 'on' : 'off'}, antialiasing ${profile.antialias ? 'on' : 'off'}; antialiasing changes after a reload)`;
+    this.adaptiveNote.textContent = this.settings.adaptiveResolution
+      ? `On: while the frame rate is poor the game lowers its resolution by itself (down to ${Math.round(profile.renderScaleRange.min * 100)}%) and raises it again when there is room. Changes nothing about the match.`
+      : 'Off: always the full resolution of the Quality preset.';
+    this.frameLimitNote.textContent = FRAME_LIMIT_NOTES[this.settings.frameLimit];
     this.cameraNote.textContent = `${CAMERA_PRESET_NOTES[this.settings.cameraPreset]} Clashes always use Cinematic Hybrid.`;
     const scheme = CONTROL_TEXT[this.settings.controlScheme];
     this.controlNote.textContent = scheme.note;

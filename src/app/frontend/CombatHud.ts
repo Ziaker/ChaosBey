@@ -224,6 +224,11 @@ export class CombatHud {
   private updateRingOutWarning(session: MatchSession): void {
     if (!this.feel.ringOutWarning) return;
     const bey = session.getBey('first');
+    // Out over the wall on a rail is the ride, not a danger (the ring-out clock does not run there).
+    if (bey.rail.isOnRail()) {
+      this.ringOutVignette.style.opacity = '0';
+      return;
+    }
     this.ringOutVignette.style.opacity = ringOutDanger(bey.body.translation(), bey.body.linvel(), session.getLastResult()?.first.grounded ?? true, isOutOfArena(bey.body.translation(), bey.arenaFloor)).toFixed(3);
   }
 

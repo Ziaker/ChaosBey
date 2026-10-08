@@ -11,6 +11,7 @@
 // ============================================================
 
 import { DEFAULT_QUALITY_PRESET, QualityPreset } from '../runtime/QualityPreset';
+import { DEFAULT_FRAME_LIMIT, FRAME_LIMIT_SETTINGS, type FrameLimitSetting } from './FrameLimit';
 import { DEFAULT_FLOW_FX_SETTINGS, sanitizeFlowFxSettings, type FlowFxSettings } from '../../vfx/flow/flowFxTuning';
 
 /**
@@ -91,6 +92,13 @@ export interface PlayerSettings {
    * streaks, impact rings and comic words, each with its own sliders (Settings → Visual effects). Presentation only.
    */
   readonly flowFx: FlowFxSettings;
+  /**
+   * Performance pass (0.57.0): lower the render resolution by itself while the frame rate is poor, and raise it again when
+   * there is room. Render cost only. On by default.
+   */
+  readonly adaptiveResolution: boolean;
+  /** The most frames per second the game draws (the simulation ticks at 60 Hz regardless). */
+  readonly frameLimit: FrameLimitSetting;
 }
 
 /** The game-feel toggles (all on by default). */
@@ -116,6 +124,8 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   ringOutWarning: true,
   refusedInputFeedback: true,
   flowFx: DEFAULT_FLOW_FX_SETTINGS,
+  adaptiveResolution: true,
+  frameLimit: DEFAULT_FRAME_LIMIT,
 };
 
 /** What each quality preset changes. Render cost only. */
@@ -124,12 +134,21 @@ export interface QualityProfile {
   readonly maxPixelRatio: number;
   /** Speed trails behind the Beys. */
   readonly trails: boolean;
+  /**
+   * Performance pass (0.57.0): × the segment counts of the Bey models (lathes, tori, extrusions, cylinders). 1 = the approved
+   * models exactly; Low keeps their silhouette and drops the triangles roughly 3×. Set before the models are built.
+   */
+  readonly modelDetail: number;
+  /** MSAA on the canvas. Fixed when the renderer is created, so a change applies after a reload. */
+  readonly antialias: boolean;
+  /** The adaptive render scale's range on this preset: it never falls below the first or rises above the second (0.5..1). */
+  readonly renderScaleRange: { readonly min: number; readonly max: number };
 }
 
 export const QUALITY_PROFILES: Readonly<Record<QualityPreset, QualityProfile>> = {
-  [QualityPreset.Low]: { maxPixelRatio: 1, trails: false },
-  [QualityPreset.Medium]: { maxPixelRatio: 1.5, trails: true },
-  [QualityPreset.High]: { maxPixelRatio: 2, trails: true },
+  [QualityPreset.Low]: { maxPixelRatio: 1, trails: false, modelDetail: 0.4, antialias: false, renderScaleRange: { min: 0.5, max: 0.75 } },
+  [QualityPreset.Medium]: { maxPixelRatio: 1.5, trails: true, modelDetail: 1, antialias: true, renderScaleRange: { min: 0.6, max: 1 } },
+  [QualityPreset.High]: { maxPixelRatio: 2, trails: true, modelDetail: 1, antialias: true, renderScaleRange: { min: 0.75, max: 1 } },
 };
 
 /** Field-by-field validation: anything unusable becomes the default. */
@@ -161,6 +180,8 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
     ringOutWarning: bool('ringOutWarning'),
     refusedInputFeedback: bool('refusedInputFeedback'),
     flowFx: sanitizeFlowFxSettings(input.flowFx),
+    adaptiveResolution: typeof input.adaptiveResolution === 'boolean' ? input.adaptiveResolution : DEFAULT_PLAYER_SETTINGS.adaptiveResolution,
+    frameLimit: FRAME_LIMIT_SETTINGS.find((f) => f === input.frameLimit) ?? DEFAULT_PLAYER_SETTINGS.frameLimit,
   };
 }
 
@@ -190,6 +211,17 @@ export function loadPlayerSettings(): PlayerSettings {
     return sanitizePlayerSettings({ ...JSON.parse(old), cameraPreset: DEFAULT_PLAYER_SETTINGS.cameraPreset, conditionLayers: DEFAULT_PLAYER_SETTINGS.conditionLayers });
   } catch {
     return DEFAULT_PLAYER_SETTINGS;
+  }
+}
+
+/** Whether any Settings were ever saved (this browser has played before): the first launch has none. */
+export function hasSavedPlayerSettings(): boolean {
+  const storage = getStorage();
+  if (!storage) return true; // nowhere to remember a guess: do not start guessing
+  try {
+    return storage.getItem(STORAGE_KEY) !== null || storage.getItem(LEGACY_STORAGE_KEY) !== null;
+  } catch {
+    return true;
   }
 }
 
