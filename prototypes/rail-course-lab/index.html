@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lab de Percursos de Rail</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #070b10;
+        --panel: #0d141c;
+        --panel-2: #131d28;
+        --line: #223244;
+        --text: #e9f0f6;
+        --muted: #8ea2b5;
+        --accent: #7fe8ff;
+        --gate: #ffd166;
+        --warn: #ff9f5a;
+        font-family: 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+      .lab { display: grid; grid-template-columns: 320px 1fr 300px; height: 100%; min-height: 560px; }
+      .panel, .side { background: var(--panel); padding: 18px 14px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+      .panel { border-right: 1px solid var(--line); }
+      .side { border-left: 1px solid var(--line); }
+      .kicker { font: 600 11px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+      h1 { margin: 6px 0 8px; font-size: 21px; }
+      h3 { margin: 0 0 8px; font: 700 11.5px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; }
+      .warn { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+      .hint { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip, .idea {
+        display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+        border-radius: 6px; cursor: pointer; font: 12.5px inherit; font-family: inherit; padding: 7px 10px; text-align: left;
+      }
+      .idea { width: 100%; align-items: flex-start; flex-direction: column; gap: 3px; }
+      .idea b { font-size: 13px; }
+      .idea span { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+      kbd { font: 10px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--muted); background: var(--bg); }
+      .chip:hover, .idea:hover { border-color: #3d5a73; }
+      .chip[aria-pressed='true'], .idea[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+      button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      select, textarea { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 7px 8px; font: 12px inherit; font-family: inherit; }
+      textarea { font: 11px ui-monospace, Consolas, monospace; min-height: 120px; resize: vertical; }
+      .slider-row { display: grid; grid-template-columns: 1fr 52px; gap: 2px 8px; align-items: center; }
+      .slider-row label { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
+      .slider-row input { width: 100%; accent-color: var(--accent); }
+      .slider-row output { font: 600 11.5px ui-monospace, Consolas, monospace; text-align: right; font-variant-numeric: tabular-nums; }
+      .slider-row.changed label { color: #ffb347; }
+      .slider-row.changed label::after { content: ' •'; }
+      .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      .actions button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 7px 8px; font: 600 11.5px/1.2 inherit; font-family: inherit; cursor: pointer; }
+      .actions button:hover { border-color: #3d5a73; }
+      .stage { position: relative; overflow: hidden; background: #000; }
+      #canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+      .overlay { position: absolute; left: 14px; top: 12px; max-width: min(520px, calc(100% - 28px)); pointer-events: none; text-shadow: 0 1px 3px #000; font-size: 12.5px; line-height: 1.5; }
+      .overlay b { color: var(--accent); }
+      .readouts { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; margin: 0; font-size: 12.5px; }
+      .readouts dt { color: var(--muted); }
+      .readouts dd { margin: 0; font: 600 12.5px ui-monospace, Consolas, monospace; text-align: right; font-variant-numeric: tabular-nums; }
+      .readouts dd.bad { color: var(--warn); }
+      .notes { margin: 0; padding-left: 16px; font-size: 12px; color: #c6d6e4; line-height: 1.5; }
+      .notes li.bad { color: var(--warn); }
+      .keys { font-size: 11.5px; color: var(--muted); line-height: 1.8; }
+      @media (max-width: 1000px) { .lab { grid-template-columns: 280px 1fr; } .side { display: none; } }
+    </style>
+  </head>
+  <body>
+    <div class="lab">
+      <aside class="panel">
+        <div>
+          <div class="kicker">Protótipo — nada disto está no jogo</div>
+          <h1>Lab de Percursos de Rail</h1>
+          <p class="warn">
+            Os rails da 0.53.0 são arcos curtos dentro da arena. Aqui está a proposta nova: <b>entradas dentro da parede</b> que levam o Bey
+            <b>para fora da arena</b>, por um <b>percurso longo e curvo</b>, e o trazem de volta. Veja, mexa nos valores e diga qual formato quer.
+          </p>
+        </div>
+        <div>
+          <h3>Ideias de percurso</h3>
+          <div id="ideas" style="display: grid; gap: 6px"></div>
+        </div>
+        <div>
+          <h3>Stage</h3>
+          <select id="stage" aria-label="Stage"></select>
+        </div>
+        <div>
+          <h3>Rails por stage</h3>
+          <div class="chips" id="rail-count"></div>
+          <p class="hint">Vários rails ficam espaçados em volta da arena, todos com o mesmo formato.</p>
+        </div>
+        <div>
+          <h3>Câmera</h3>
+          <div class="chips" id="views"></div>
+        </div>
+        <div>
+          <h3>Passeio</h3>
+          <div class="chips" id="ride-opts"></div>
+          <p class="hint">O ponto laranja percorre o rail com a velocidade do jogo (8 → 32 m/s). <b>Pular</b> (Espaço) dentro da parede lança o Bey de volta à arena; fora dela, ele <b>volta pelo mesmo caminho</b> até a entrada.</p>
+        </div>
+        <div class="keys">
+          <kbd>1</kbd>–<kbd>4</kbd> ideia · <kbd>V</kbd> câmera · <kbd>Espaço</kbd> pular · <kbd>R</kbd> reiniciar · <kbd>P</kbd> pausar · <kbd>T</kbd> ida e volta · <kbd>G</kbd> entradas
+        </div>
+      </aside>
+      <main class="stage" id="stage-host">
+        <canvas id="canvas"></canvas>
+        <div class="overlay" id="overlay"></div>
+      </main>
+      <aside class="side">
+        <div>
+          <h3>Medidas do percurso</h3>
+          <dl class="readouts" id="readouts"></dl>
+        </div>
+        <div>
+          <h3>Observações</h3>
+          <ul class="notes" id="notes"></ul>
+        </div>
+        <div>
+          <h3>Ajuste</h3>
+          <div id="sliders" style="display: grid; gap: 10px"></div>
+          <div class="actions" style="margin-top: 10px">
+            <button type="button" id="reset">Voltar à ideia</button>
+            <button type="button" id="copy">Copiar formato (JSON)</button>
+          </div>
+          <p class="hint" id="status" style="min-height: 1.4em"></p>
+          <textarea id="json" readonly aria-label="Formato em JSON" placeholder="O formato escolhido aparece aqui ao copiar."></textarea>
+        </div>
+      </aside>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
