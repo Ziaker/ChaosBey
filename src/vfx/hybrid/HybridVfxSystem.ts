@@ -38,6 +38,8 @@ import type { PresentationFrame, PresentationSystem } from '../../presentation/h
 import type { BeyPresentationState, MatchPresentationState } from '../../presentation/state';
 import { measureRigDims } from '../condition/conditionRig';
 import { FxLayer, StreakSparks } from './fx/FxLayer';
+import { SkidBatch } from './fx/SkidBatch';
+import { softDot } from './fx/textures';
 import { makeHybrid } from './languages/hybrid';
 import type { FxContext, LanguageRuntime, Slot } from './languages/types';
 import { ScreenOverlay } from './ScreenOverlay';
@@ -114,6 +116,7 @@ export class HybridVfxSystem implements PresentationSystem {
   private readonly layer: FxLayer;
   private readonly scars: FloorScars;
   private readonly sparks: StreakSparks;
+  private readonly skids: SkidBatch;
   private readonly overlay: ScreenOverlay;
   private readonly flashLight = new THREE.PointLight(0xffffff, 0, 10, 2);
   private flashT = 0;
@@ -135,12 +138,13 @@ export class HybridVfxSystem implements PresentationSystem {
     this.layer = new FxLayer(scene, camera);
     this.scars = new FloorScars(this.layer, options.floorHeightAtR);
     this.sparks = new StreakSparks(SPARK_CAPACITY, options.floorHeightAtR);
+    this.skids = new SkidBatch(softDot(), options.floorHeightAtR);
     this.overlay = new ScreenOverlay(camera, options.overlayParent);
     // Owner, 2026-10-05: every effect follows the Bey size × the Pregame's effects size (both Beys share the size).
     this.effectScale = effectScaleOf(options.beys.first.gameplay, options.vfx);
     this.layer.scale = this.effectScale;
     this.sparks.scale = this.effectScale;
-    scene.add(this.sparks.object, this.flashLight);
+    scene.add(this.sparks.object, this.skids.object, this.flashLight);
     this.tracks = { first: this.buildTrack('first'), second: this.buildTrack('second') };
     this.runtime = makeHybrid('cel').create(this.context());
   }
@@ -193,6 +197,7 @@ export class HybridVfxSystem implements PresentationSystem {
       camera,
       layer: this.layer,
       sparks: this.sparks,
+      skids: this.skids,
       floorHeightAt: floorHeightAtR,
       beyColor: (slot) => this.track(slot).color.clone(),
       beyPos: (slot) => this.track(slot).pos.clone(),
@@ -338,6 +343,7 @@ export class HybridVfxSystem implements PresentationSystem {
     this.runtime.tick(fxDt);
     this.layer.tick(fxDt);
     this.sparks.tick(fxDt);
+    this.skids.tick(fxDt);
     this.overlay.update(rawDt);
     this.flashT = Math.max(0, this.flashT - rawDt * FLASH_FADE_PER_S);
     this.flashLight.intensity = this.flashPeak * this.flashT;
@@ -381,6 +387,7 @@ export class HybridVfxSystem implements PresentationSystem {
   reset(): void {
     this.layer.clear();
     this.sparks.clear();
+    this.skids.clear();
     this.overlay.clear();
     this.flashT = 0;
     this.flashLight.intensity = 0;
@@ -401,6 +408,8 @@ export class HybridVfxSystem implements PresentationSystem {
     return {
       fx: this.layer.count(),
       sparks: this.sparks.count(),
+      skidMarks: this.skids.count(),
+      fxRecycled: this.layer.recycled,
       vortices: SIDES.filter((side) => this.tracks[side].vortex.isPlaying).length,
       focusLines: screen.focusLines,
       impactFrame: screen.impactFrame,
@@ -417,6 +426,7 @@ export class HybridVfxSystem implements PresentationSystem {
   dispose(): void {
     this.layer.clear();
     this.sparks.clear();
+    this.skids.dispose();
     this.sparks.object.removeFromParent();
     for (const side of SIDES) this.tracks[side].vortex.dispose();
     this.sparks.object.geometry.dispose();

@@ -7,6 +7,7 @@
 // and tests can read where the player is.
 // ============================================================
 
+import type { WebGLRenderer } from 'three';
 import { sideAccentsCss } from '../../bey/visual/beyColors';
 import { DefeatCutscene } from './DefeatCutscene';
 import type { AppRenderer } from '../bootstrap/createRenderer';
@@ -69,6 +70,8 @@ export interface PlayFlowHandle {
   getMatchSeed(): string | null;
   /** Id of the Bey visual on Character Select's pedestal (e.g. `concept:attack-a`), or null off that screen. */
   getPreviewVisualId(): string | null;
+  /** The WebGL renderer, read-only for render-cost checks (`renderer.info`, timing the draw). Never written. */
+  getRenderer(): WebGLRenderer;
 }
 
 declare global {
@@ -116,6 +119,7 @@ export class PlayFlow {
       getScore: () => this.score,
       getMatchSeed: () => this.matchSeed,
       getPreviewVisualId: () => this.characterSelect?.previewVisualId ?? null,
+      getRenderer: () => this.deps.appRenderer.renderer,
     };
   }
 

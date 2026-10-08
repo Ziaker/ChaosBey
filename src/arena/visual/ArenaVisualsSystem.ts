@@ -76,7 +76,7 @@ export class ArenaVisualsSystem implements PresentationSystem {
     // Owner, 2026-10-04 (stage size): the art is built for the 36 m floor and stretched to the match's stage size.
     const size = arenaSizeScale();
     const floorAt = options.floorHeightAtR;
-    this.built = arenaArtFor(options.presetId).build(undefined, floorAt ? (r: number) => floorAt(r * size) : undefined);
+    this.built = arenaArtFor(options.presetId).build(undefined, floorAt ? (r: number) => floorAt(r * size) : undefined, size);
     this.built.root.scale.set(size, 1, size);
     this.built.root.name = `arena-art-${options.presetId}`;
     options.root.add(this.built.root);

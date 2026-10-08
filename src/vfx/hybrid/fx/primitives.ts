@@ -73,6 +73,16 @@ export interface FlatOpts {
 
 /** Segments per side of a conformed floor quad: enough for the bowl's curvature at ring sizes up to ~8 m. */
 const CONFORM_SEGMENTS = 24;
+/**
+ * Cost pass (0.47.4): a small decal (a 0.28 m skid mark, a 1 m scuff) does not need the ring's 24 x 24 grid (1152 triangles, 625
+ * vertices re-draped every frame): the floor is smooth over a few decimetres. The grid keeps the ~0.33 m cell the ring's 8 m / 24
+ * gave, sized for the decal at up to twice its authored size (the Bey size x the effects size scale it), never below 2 x 2.
+ */
+const CONFORM_CELL_M = 8 / CONFORM_SEGMENTS;
+const CONFORM_SIZE_HEADROOM = 2;
+export function conformSegments(maxSizeM: number): number {
+  return Math.max(2, Math.min(CONFORM_SEGMENTS, Math.ceil((maxSizeM * CONFORM_SIZE_HEADROOM) / CONFORM_CELL_M)));
+}
 
 /** Horizontal textured quad lying on the floor (shockwave rings, decals). */
 export function flatFx(o: FlatOpts): FxItem {
@@ -81,7 +91,8 @@ export function flatFx(o: FlatOpts): FxItem {
     blending: o.additive ? THREE.AdditiveBlending : THREE.NormalBlending, polygonOffset: true, polygonOffsetFactor: -2,
   });
   const conform = o.conform;
-  const geometry = conform ? new THREE.PlaneGeometry(1, 1, CONFORM_SEGMENTS, CONFORM_SEGMENTS).rotateX(-Math.PI / 2) : new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const segments = conformSegments(Math.max(o.size[0], o.size[1]));
+  const geometry = conform ? new THREE.PlaneGeometry(1, 1, segments, segments).rotateX(-Math.PI / 2) : new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
   const mesh = new THREE.Mesh(geometry, mat);
   mesh.position.copy(o.pos);
   mesh.rotation.y = o.rotation ?? 0;
@@ -92,8 +103,12 @@ export function flatFx(o: FlatOpts): FxItem {
   if (conform) mesh.frustumCulled = false; // the vertices move every frame; the unit-quad bounds no longer describe it
   const cos = Math.cos(mesh.rotation.y);
   const sin = Math.sin(mesh.rotation.y);
+  let drapedAt = Number.NaN;
   const drape = (s: number): void => {
     if (!conform || !local) return;
+    // The draped shape depends only on the scale: once the ring/decal has stopped growing, the vertices (and their upload) stay.
+    if (s === drapedAt) return;
+    drapedAt = s;
     for (let i = 0; i < position.count; i++) {
       const lx = local[i * 3]! * s;
       const lz = local[i * 3 + 2]! * s;
