@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { baselineUrl } from './presentationBaseline';
+import { GAME_DEFAULTS } from './gameDefaults';
 
 // Control (owner, 2026-10-04): Screen (reads camera) is the game's one control scheme — ↑ goes up the screen, away from
 // the camera (camera yaw + 180°). A new direction reads the camera at once; a held direction follows a camera that really
@@ -261,6 +262,6 @@ test('Settings has no control-scheme selector: Screen (reads camera) is the one 
   await expect(page.getByTestId('settings-control-note')).toContainText('Screen-relative');
   await expect(page.getByTestId('settings-controls')).toContainText('Move (up the screen)');
   // Whatever else is changed and saved, the saved scheme is Screen.
-  await page.getByTestId('settings-quality-High').click();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('chaosbey.settings.player.v2') ?? '{}').controlScheme)).toBe('screen');
+  await page.getByTestId(`settings-quality-${GAME_DEFAULTS.quality === 'High' ? 'Medium' : 'High'}`).click();
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}').controlScheme, GAME_DEFAULTS.settingsStorageKey)).toBe('screen');
 });

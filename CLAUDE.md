@@ -82,6 +82,11 @@ is the one that legitimately takes 20-45 minutes serially):
   because that cost was real and avoidable, not because the suite itself
   stopped mattering. A red `smoke` run still means fix it, just not by
   holding up everything else first.
+- **Pull requests run the FAST half** (`npm run test:smoke:fast`: everything except the files listed in
+  `tests/smoke/slowSpecs.ts` — whole rounds, repeated matches, prototype labs on software WebGL). Pushes to `main`, the
+  nightly run (03:23 UTC) and a manual run still run **everything** (`npm run test:smoke`). A red nightly/`main` smoke run is
+  fixed forward like any other red smoke run. When a change plausibly touches what a slow spec covers (a HUD flow, a whole
+  round, a lab), run that spec locally before merge.
 - Run it locally before merge only when the change could plausibly affect
   something it covers (rendering, the player flow, the Debug Lab, Self Test,
   drift/jump feel visible in a real browser) and you want to validate before

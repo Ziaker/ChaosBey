@@ -24,6 +24,8 @@ Este diretório contém decisões de design que agentes **não devem reabrir** s
 | Movimento / Motion Lab | `motion-approval.md` |
 | Rail Grinding — direção futura e pendências | `../planning/RAIL_GRINDING_FUTURE_UPDATE.md` |
 | Apresentação do Clash | `clash-presentation-approval.md` |
+| Cores dos Beys (uma por Bey), barra de Clash e plano das 4 peças | `bey-colors-plan.md` |
+| Pregame — overhaul visual/UX e presets oficiais de Advanced | `pregame-overhaul.md` |
 | Inventário/histórico de labs | `visual-prototype-inventory.md` |
 
 ## Precedência

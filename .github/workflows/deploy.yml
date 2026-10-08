@@ -5,11 +5,22 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Nightly: the full smoke suite on main, so the slow half is never more than a day stale.
+  schedule:
+    - cron: '23 3 * * *'
 
 permissions:
   contents: read
   pages: write
   id-token: write
+
+# A new commit on the same PR supersedes that PR's older build/smoke run.
+# The workflow name + PR number scope cancellation to one PR in this workflow.
+# `github.run_id` keeps non-PR runs (main pushes, nightly, manual) unique, so
+# parallel PRs never cancel each other and main is never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Fast gate (~2-3 min): typecheck, the fast suite, the production build.
@@ -60,7 +71,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:smoke
+      # Pull requests run the fast set (tests/smoke/slowSpecs.ts lists what it leaves out); main, the nightly run and a
+      # manual run run everything.
+      - run: ${{ github.event_name == 'pull_request' && 'npm run test:smoke:fast' || 'npm run test:smoke' }}
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'

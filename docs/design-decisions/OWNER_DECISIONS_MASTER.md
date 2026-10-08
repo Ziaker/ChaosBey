@@ -29,6 +29,7 @@ Documentos detalhados:
 - `inertial-duel-camera.md` — override de 2026-10-02 para yaw/composição da câmera de combate atual;
 - `motion-approval.md` — movimento e Motion Lab;
 - `clash-presentation-approval.md` — apresentação do Clash;
+- `pregame-overhaul.md` — overhaul visual/UX aprovado do Pregame e presets oficiais de Advanced;
 - `m10-status.md` / `m11-status.md` — integração de player flow e pós-M11.
 - `docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md` — direção futura aprovada e contrato de preparação do Rail Grinding; gameplay/visual ainda não integrados.
 
@@ -415,7 +416,7 @@ O HUD deve ser colocado sobre os sistemas reais/aprovados.
 
 ---
 
-# 11. UI / fluxo do jogador — FUNÇÃO DEFINIDA, TEMA VISUAL FINAL SEPARADO
+# 11. UI / fluxo do jogador — PREGAME VISUAL APROVADO; RESTANTE SEPARADO
 
 Fluxo funcional existente/definido inclui:
 
@@ -430,7 +431,31 @@ Fluxo funcional existente/definido inclui:
 
 Pregame é a tela para selecionar/configurar opções de partida que foram autorizadas para exposição; Debug Lab fica responsável por tuning profundo.
 
-A existência funcional dessas telas não transforma automaticamente a aparência provisória atual em tema visual final aprovado.
+## Owner override — Pregame, 2026-10-07
+
+A direção visual/UX do **Pregame Setup** foi aprovada e está detalhada em `pregame-overhaul.md`.
+
+Decisões fechadas:
+
+- interface objetiva e fácil de alterar, não cinematográfica;
+- layout desktop simples em duas colunas: configuração à esquerda, resumo curto à direita;
+- seções principais compactas: Preset, Opponent, AI, Arena, Match e Advanced;
+- Advanced reorganizado em Movement / Jump / Combat / Arena / Round / Visual;
+- controles compactos, default discreto, indicador `MODIFIED`, reset por categoria e `Reset all`;
+- cinco presets oficiais: **Normal Original, Realistic, Epic, Smooth, Strategic**;
+- `Custom` é estado derivado quando o Advanced não coincide com um preset oficial;
+- cada preset oficial possui descrição breve e uma configuração determinística do Advanced;
+- **Normal Original = defaults canônicos atuais**, sem tabela normal duplicada;
+- números iniciais de Realistic/Epic/Smooth/Strategic são tuning de implementação **PROVISÓRIO** dentro dos ranges existentes;
+- presets oficiais não alteram Player Bey, Opponent, AI difficulty/style, Arena/Floor principal nem Motion A/B/C;
+- presets salvos pelo usuário continuam separados dos presets oficiais;
+- sem VS cinematográfico, grandes previews 3D, arena-showcase ou animações pesadas.
+
+**Implementação (0.47.0):** duas colunas, seções Preset/Opponent/AI/Arena/Match/Advanced, resumo curto, Advanced em 6 abas com `MODIFIED`, contagens, Reset category / Reset all, cinco presets oficiais + Custom derivado, área Saved. Os números iniciais dos quatro presets alternativos são **PROVISÓRIOS** e ficam numa só tabela para revisão.
+
+**Futuro (pedido do owner, 2026-10-07, adiado):** um **seletor de paleta para cada uma das quatro peças** do Bey, com qualquer cor — fica para um pedido futuro; ver `bey-colors-plan.md`. Não faz parte do Pregame overhaul.
+
+Esta aprovação é específica do Pregame. Ela **não** fecha o tratamento visual final de Main Menu, Character Select, Pause, Results ou Settings.
 
 ---
 
@@ -484,6 +509,9 @@ Pedido do owner de 2026-10-02 ("correções de gameplay e apresentação"), exec
 | Funil: limite do slider +50% (owner, 2026-10-05) | "aumente o limite do slider do funilamento dos stages em 50%, não mude o valor base". | Máx. 12 → **18 m**; padrão 8,5 m inalterado | Lote 10 / 0.42.0 |
 | Efeitos acompanham o tamanho do Bey + slider de tamanho dos efeitos (owner, 2026-10-05) | "quanto aos sliders de tamanho do bey levou em conta os efeitos ficarem maiores também: todos" + "adicione um slider pra isso também". Todos os efeitos são desenhados no tamanho do Bey × o novo slider **Tamanho dos efeitos** (Pré-jogo → Visual): golpes, Dash, Circular e vórtice, esquiva, vento, drift, aterrissagem, marcas no chão, Clash, anel de recovery, contra-golpe, flash/tremida, partículas de condição. Só apresentação (fora do replay). Fantasmas do Bey ficam no tamanho do Bey; overlays de tela inalterados. | Slider ×0,5–2, padrão ×1 | Lote 10 / 0.43.0 |
 | Drift: curvas em arco (owner, 2026-10-05) | "PQ TÁ IMPOSSÍVEL DE DOBRAR NO DRIFT? ERA PRA FAZER O OPOSTO DISSO, ERA PRA FICAR MAIS FÁCIL DE FAZER CURVAS EM ARCO". O drift deixa de deslizar com grip reduzido e passa a cravar a curva: a direção do movimento segue a direção do Bey a até 6 rad/s, mantendo a velocidade. Complementa "Drift mais responsivo e útil para velocidade" (mesma data). | **PROVISÓRIO:** 6 rad/s | Lote 10 / 0.43.1 |
+| Cores dos Beys (owner, 2026-10-07) | "dê mais variedade de cores às outras versões dos Beys; não pode ter uma com a mesma cor da outra; deixe planejado a vontade de colorir as 4 peças de cada Bey; as cores também influenciam a cor da barra de Clash". Cada um dos nove Beys tem a sua cor (matiz própria; nenhum repete outro, nem a variante B/C da mesma família). A cor de UI do Bey manda no cartão do HUD, nas bolinhas, no Character Select e em **cada metade da barra de Clash**; no espelho (mesmo Bey dos dois lados) o segundo lado usa a segunda cor. **Plano, não implementado:** colorir as quatro peças (topo, anel, disco, driver) separadamente — dados prontos e sem uso (`pieceColors`), etapas em `bey-colors-plan.md`. | **Paletas PROVISÓRIAS** (o teste só exige cores distintas) | 0.44.0 |
+| Identidade das variantes B e C (owner, 2026-10-07) | "prossiga com tudo menos a 2" (lista de polimento, ideia 1): os Beys B e C de cada família deixam de copiar a família e passam a jogar como o conceito parece. Cada um é um desvio pequeno do A (mesmo total de Ratings, nenhum simplesmente melhor): Attack B fatiador leve e ágil / Attack C martelo pesado de maior alcance; Defense B pára-choques de maior alcance / Defense C fortaleza pesada e lenta; Stamina B giro de precisão / Stamina C planador rápido de maior resistência. **Supersede** a linha "16 — Nove Beys selecionáveis" no ponto "gameplay de B e C = a da família". | **Todos os valores PROVISÓRIOS** (`CONCEPT_GAMEPLAY_OVERRIDES`); medido por IA: dentro da família os três ficam próximos | 0.45.0 |
+| Polimento: drift quebrado e teto de lançamento (owner, 2026-10-07) | "prossiga com tudo menos a 2" (ideias 3, 4 e 5). **Drift:** um drift jogado ao ar (parede, golpe) com X ainda segurado termina de vez — antes ele se rearmava ao aterrissar e recomeçava sozinho; o HUD mostra **DRIFT LOST** durante a recuperação de grip; drift de novo exige novo toque + segurar. **Teto:** nenhum lançamento deixa um Bey acima de **100 m/s** (Knockback ×4 chegava a 261). **Quique de pouso (3):** medido — não existe no piso plano; nada a mudar. **Controle Screen (6):** dica "▲ UP THE SCREEN" no começo da rodada e "↑ = up the screen" na dica de controles; a regra de seguir a câmera (≤ 90°/s, re-lê ao mudar de direção) não muda. **Espaço (7):** medido (2,7 s do centro à parede no piso plano, tamanho padrão) — tamanho padrão mantido; vira teste de regressão. **Menu de pausa (10):** lista as regras fora do padrão e o botão **Default rules** (vale a partir da próxima rodada). | **Teto 100 m/s PROVISÓRIO** | 0.46.0 |
 
 # 13. PENDÊNCIAS REAIS — NÃO INVENTAR NEM REABRIR O RESTO
 
@@ -497,7 +525,8 @@ Isto é uma pendência estreita de UI/legibilidade, não uma licença para repro
 
 ## 13.2 UI visual
 
-- tema visual final de Main Menu / Character Select / Pregame / Pause / Results / Settings, se ainda não houver documento posterior de aprovação.
+- **Pregame:** direção visual/UX aprovada em 2026-10-07; ver `pregame-overhaul.md`. Não reabrir a direção aprovada. **Implementado na 0.47.0** (tabelas dos presets Realistic/Epic/Smooth/Strategic PROVISÓRIAS, em `pregamePresets.ts`).
+- continuam abertos, quando não houver decisão posterior: tema visual final de Main Menu / Character Select / Pause / Results / Settings.
 
 ## 13.3 Intro / Launch
 

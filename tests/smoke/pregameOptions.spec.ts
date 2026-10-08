@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { baselineUrl } from './presentationBaseline';
+import { bowlDepthText } from './gameDefaults';
+import { openAdvanced, openCategory, showControl } from './support/pregameAdvanced';
 
 // Owner, 2026-10-02 (Lote 9): the Pregame's Advanced rules are grouped (Movement, Jump, Combat, Arena, Round rules,
 // Visual), every value shows its default, Reset to defaults restores them, a moved value reaches the real match, and
@@ -13,29 +15,45 @@ test('Pregame advanced rules: groups, defaults, reset, into the match, remembere
   await page.getByTestId('character-select').waitFor({ timeout: 20_000 });
   await page.keyboard.press('Enter');
   await page.getByTestId('pregame').waitFor();
-  await page.getByTestId('pregame-advanced').locator('summary').click();
+  await openAdvanced(page);
 
-  for (const group of ['movement', 'jump', 'combat', 'arena', 'round', 'visual']) await expect(page.getByTestId(`pregame-group-${group}`)).toBeVisible();
-  await expect(page.getByTestId('pregame-bowl-depth-default')).toHaveText('default 8.50 m');
+  // Six categories, one tab each; only the selected category's controls are shown.
+  for (const group of ['movement', 'jump', 'combat', 'arena', 'round', 'visual']) {
+    await openCategory(page, group);
+    await expect(page.getByTestId(`pregame-group-${group}`)).toBeVisible();
+  }
+  await openCategory(page, 'arena');
+  await expect(page.getByTestId('pregame-bowl-depth-default')).toHaveText(`default ${bowlDepthText()}`);
+  await openCategory(page, 'round');
   await expect(page.getByTestId('pregame-round-time-limit-value')).toHaveText('no timer');
 
-  await page.getByTestId('pregame-bowl-depth').fill('4');
-  await page.getByTestId('pregame-top-speed').fill('1.2');
-  await page.getByTestId('pregame-win-spin-out').uncheck();
+  await (await showControl(page, 'bowl-depth')).fill('4');
+  await (await showControl(page, 'top-speed')).fill('1.2');
+  await (await showControl(page, 'win-spin-out')).uncheck();
+  await (await showControl(page, 'bowl-depth')).waitFor();
   await expect(page.getByTestId('pregame-bowl-depth-value')).toHaveText('4.00 m');
+  // Normal Original is the reference: the edits show as MODIFIED, in the tab counts and in the summary.
+  await expect(page.getByTestId('pregame-bowl-depth-modified')).toBeVisible();
+  await expect(page.getByTestId('pregame-tab-arena-count')).toHaveText('1');
+  await expect(page.getByTestId('pregame-summary-modified')).toContainText('3 settings differ');
+  await expect(page.getByTestId('pregame-summary-preset')).toHaveText('Custom');
   await expect(page.getByTestId('pregame-rules')).toContainText('Bowl depth 4.00 m');
   await expect(page.getByTestId('pregame-rules')).toContainText('top speed ×1.20');
   await expect(page.getByTestId('pregame-rules')).not.toContainText('spin-out (Stamina 0)');
 
   // Reset to defaults brings everything back.
   await page.getByTestId('pregame-reset-defaults').click();
-  await expect(page.getByTestId('pregame-bowl-depth-value')).toHaveText('8.50 m');
+  await (await showControl(page, 'bowl-depth')).waitFor();
+  await expect(page.getByTestId('pregame-bowl-depth-value')).toHaveText(bowlDepthText());
+  await (await showControl(page, 'win-spin-out')).waitFor();
   await expect(page.getByTestId('pregame-win-spin-out')).toBeChecked();
+  await expect(page.getByTestId('pregame-summary-preset')).toHaveText('Normal Original');
 
   // Move two values again and play: they reach the match.
-  await page.getByTestId('pregame-bowl-depth').fill('4');
-  await page.getByTestId('pregame-jump-cooldown').fill('1');
+  await (await showControl(page, 'bowl-depth')).fill('4');
+  await (await showControl(page, 'jump-cooldown')).fill('1');
   // Item 11 (owner, 2026-10-04): speed → damage and "Dash keeps momentum" are Combat options too.
+  await showControl(page, 'speed-damage');
   await expect(page.getByTestId('pregame-speed-damage-value')).toHaveText('50%');
   await expect(page.getByTestId('pregame-dash-carries-speed')).toBeChecked();
   await page.getByTestId('pregame-speed-damage').fill('1');

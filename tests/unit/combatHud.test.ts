@@ -9,6 +9,9 @@ import {
   clashBarShare,
   followClashBar,
   hudSide,
+  stepUpCue,
+  UP_CUE_AFTER_STEER_S,
+  UP_CUE_S,
   roundEndBanner,
 } from '../../src/app/frontend/hudModel';
 
@@ -54,5 +57,31 @@ describe('HUD side readout', () => {
     expect(roundEndBanner('SecondWinsByKo')).toBe('K.O.!');
     expect(roundEndBanner('Draw')).toBe('DRAW');
     expect(roundEndBanner('Ongoing')).toBeNull();
+  });
+});
+
+describe('the round-start arrow cue (owner polish, 2026-10-07, idea 6)', () => {
+  it('stays UP_CUE_S, fading over its last second, then goes', () => {
+    let left = UP_CUE_S;
+    let cue = stepUpCue(left, false, true, 0);
+    expect(cue).toMatchObject({ visible: true, opacity: 1 });
+    cue = stepUpCue(UP_CUE_S, false, true, UP_CUE_S - 0.5);
+    expect(cue.visible).toBe(true);
+    expect(cue.opacity).toBeCloseTo(0.5, 5);
+    left = cue.leftS;
+    cue = stepUpCue(left, false, true, 0.6);
+    expect(cue.visible).toBe(false);
+    expect(stepUpCue(0, false, true, 0.016).visible).toBe(false); // gone for good
+  });
+
+  it('the first steer lets it go in a short fade, not an abrupt cut', () => {
+    const cue = stepUpCue(UP_CUE_S, true, true, 0.016);
+    expect(cue.visible).toBe(true);
+    expect(cue.leftS).toBeLessThanOrEqual(UP_CUE_AFTER_STEER_S);
+    expect(stepUpCue(cue.leftS, true, true, 0.5).visible).toBe(false);
+  });
+
+  it('is off with the control hints', () => {
+    expect(stepUpCue(UP_CUE_S, false, false, 0.016).visible).toBe(false);
   });
 });

@@ -8,7 +8,7 @@
 import { DEFAULT_VFX_OPTIONS, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import { CONCEPT_BEYS, conceptBeyFor } from '../../bey/archetype/BeyConceptRoster';
 import { DEFAULT_AI_DIFFICULTY_TIER, type AiDifficultyTierId } from '../../ai/difficulty/AiDifficultyTiers';
-import { DEFAULT_ARENA_PRESET, arenaPreset, type ArenaGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
+import { DEFAULT_ARENA_PRESET, arenaPreset, isPresetGeometry, type ArenaGeometry, type ArenaPresetId } from '../../arena/presets/ArenaPresets';
 import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import { createDefaultMatchConfig, type MatchConfig, resolveMatchConfig } from '../../config/match/MatchConfig';
@@ -340,6 +340,37 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   beySizeScale: { name: 'Bey size', format: (v) => `×${(v as number).toFixed(2)}` },
   airRecoveryMinDelayS: { name: 'recovery time', format: (v) => `${(v as number).toFixed(2)} s` },
 };
+
+/**
+ * Every advanced rule, the arena's walls, Clash impact and the visual options back to their defaults (Bey, AI, arena look,
+ * floor profile, motion direction, rounds and seed stay). The Pregame's "Reset to defaults" and the Pause menu's "Default
+ * rules" are this one function.
+ */
+export function withDefaultRules(setup: MatchSetup): MatchSetup {
+  const preset = arenaPreset(setup.arena.presetId).geometry;
+  return {
+    ...setup,
+    rules: defaultMatchRules(),
+    visual: DEFAULT_VFX_OPTIONS,
+    clashImpactMultiplier: CLASH_IMPACT_MULTIPLIER_DEFAULT,
+    arena: { ...setup.arena, geometry: { ...setup.arena.geometry, wallHeightM: preset.wallHeightM, wallRestitution: preset.wallRestitution } },
+  };
+}
+
+/**
+ * Polish (owner, 2026-10-07, idea 10): everything this match plays differently from the defaults, in the player's words —
+ * custom walls, a Clash impact other than ×1, a movement direction other than the default, and every rule that differs
+ * (changedRuleLines). Empty = the match is on the defaults. Shown on the Pause menu, so "the drift feels odd" can be told
+ * apart from "this match has custom rules".
+ */
+export function activeRuleLines(setup: MatchSetup): string[] {
+  const lines: string[] = [];
+  const walls = setup.arena.geometry;
+  if (!isPresetGeometry(setup.arena.presetId, walls)) lines.push(`Walls ${walls.wallHeightM.toFixed(1)} m high, bounce ${walls.wallRestitution.toFixed(2)}`);
+  if (setup.clashImpactMultiplier !== CLASH_IMPACT_MULTIPLIER_DEFAULT) lines.push(`Clash impact ×${setup.clashImpactMultiplier.toFixed(2)}`);
+  if ((setup.motion ?? DEFAULT_MOTION_DIRECTION) !== DEFAULT_MOTION_DIRECTION) lines.push(`Movement direction ${setup.motion}`);
+  return [...lines, ...changedRuleLines(setup)];
+}
 
 /** "Dash cooldown 2.00 s", … for every rule that differs from its default (Lote 9: the explanation reflects the values). */
 export function changedRuleLines(setup: MatchSetup): string[] {

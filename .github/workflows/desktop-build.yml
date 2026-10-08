@@ -1,13 +1,12 @@
-name: Desktop build (Windows + macOS)
+name: Desktop build (Windows)
 
-# Builds the portable desktop test build (see electron/README.md) on real
-# Windows and macOS runners and publishes each as a downloadable artifact —
-# the Windows job optionally also as a GitHub Release — so the owner can get
-# a build without installing Node, npm, Git, or any dev tooling locally:
-# download the artifact zip from this workflow's run page, extract it, open
-# ChaosBey.exe (Windows) or ChaosBey.app (macOS, both Intel and Apple
-# Silicon builds are produced — see each job's own README.txt for Gatekeeper
-# "unsigned app" first-run instructions).
+# Builds the portable desktop test build (see electron/README.md) on a real
+# Windows runner and publishes it as a downloadable artifact — optionally also
+# as a GitHub Release — so the owner can get a build without installing Node,
+# npm, Git, or any dev tooling locally: download the artifact zip from this
+# workflow's run page, extract it, open ChaosBey.exe. (The macOS CI build was
+# dropped on the owner's request, 2026-10-07: not needed. `npm run build:mac`
+# still works locally.)
 #
 # Two triggers, two purposes:
 #   - pull_request (scoped to the paths that can affect this packaging):
@@ -160,99 +159,3 @@ jobs:
             ChaosBey-Windows-Portable.zip
             release/ChaosBey-Portable.exe
           prerelease: true
-
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies (from lockfile)
-        run: npm ci
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Build web (production bundle)
-        run: npm run build
-
-      - name: Package Electron (unsigned app, x64 + arm64 — package.json's build.mac.identity is null, so no Apple Developer certificate is needed for this local test build)
-        run: npx electron-builder --mac --publish=never
-
-      - name: Validate ChaosBey.app was actually produced for both architectures
-        run: |
-          for dir in release/mac release/mac-arm64; do
-            if [ ! -d "$dir/ChaosBey.app" ]; then
-              echo "::error::electron-builder did not produce $dir/ChaosBey.app — failing the build."
-              exit 1
-            fi
-            echo "Found $dir/ChaosBey.app"
-          done
-
-      - name: Write build info (commit, version) next to each app
-        run: |
-          SHA="${{ github.sha }}"
-          SHORT_SHA="${SHA:0:8}"
-          VERSION=$(node -p "require('./package.json').version")
-          RUN_NUMBER="${{ github.run_number }}"
-          BUILT_AT=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
-          for dir in release/mac release/mac-arm64; do
-            cat > "$dir/README.txt" <<EOF
-          ChaosBey — macOS local test build
-          ===================================
-
-          How to run: double-click ChaosBey.app in this folder. No install
-          needed — this whole folder is portable, copy it anywhere.
-
-          This build:
-            Game version:   $VERSION
-            Git commit:     $SHA
-            Built from run: #$RUN_NUMBER
-            Built at:       $BUILT_AT
-
-          The running game also shows its version and commit in the
-          bottom-right corner of every screen (e.g. "v$VERSION . $SHORT_SHA"),
-          so you can always confirm which build you're playing without
-          opening this file.
-
-          Not a notarized/signed app: on first run, macOS Gatekeeper will
-          refuse to open it with "ChaosBey can't be opened because Apple
-          cannot check it for malicious software". Right-click (or
-          Control-click) ChaosBey.app, choose "Open", then confirm "Open" in
-          the dialog — this only needs to be done once, and is expected for
-          an unsigned local test build, not a sign of a problem.
-
-          This is a local-testing convenience only. ChaosBey's real,
-          supported target is the web build at
-          https://ziaker.github.io/ChaosBey/ — every merge to main deploys
-          there automatically.
-          EOF
-          done
-
-      - name: Zip each .app (ditto preserves the bundle's symlinks/permissions and resource forks — a plain directory upload would not)
-        run: |
-          ditto -c -k --sequesterRsrc --keepParent release/mac/ChaosBey.app release/ChaosBey-macOS-x64.zip
-          ditto -c -k --sequesterRsrc --keepParent release/mac-arm64/ChaosBey.app release/ChaosBey-macOS-arm64.zip
-          cp release/mac/README.txt release/ChaosBey-macOS-x64-README.txt
-          cp release/mac-arm64/README.txt release/ChaosBey-macOS-arm64-README.txt
-
-      - name: Upload macOS x64 (Intel) build
-        uses: actions/upload-artifact@v4
-        with:
-          name: ChaosBey-macOS-x64
-          path: |
-            release/ChaosBey-macOS-x64.zip
-            release/ChaosBey-macOS-x64-README.txt
-          retention-days: 30
-
-      - name: Upload macOS arm64 (Apple Silicon) build
-        uses: actions/upload-artifact@v4
-        with:
-          name: ChaosBey-macOS-arm64
-          path: |
-            release/ChaosBey-macOS-arm64.zip
-            release/ChaosBey-macOS-arm64-README.txt
-          retention-days: 30

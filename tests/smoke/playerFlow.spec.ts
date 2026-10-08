@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { BASELINE_MENU_URL, baselineUrl } from './presentationBaseline';
+import { showControl } from './support/pregameAdvanced';
 import { ROUND_WALL_TIMEOUT_MS, describeRun, playRoundToEnd } from './support/playRoundToEnd';
 
 // ============================================================
@@ -55,15 +56,16 @@ test('Character Select and Pregame set up the match that really runs, and Result
   await page.getByTestId('pregame-arena-rift').click();
   await expect(page.getByTestId('pregame-rules')).toContainText('Rift Crater');
   // Advanced rules: a lower wall and a fixed seed.
-  await page.getByTestId('pregame-advanced').locator('summary').click();
-  await page.getByTestId('pregame-wall-height').fill('0.8');
+  await (await showControl(page, 'wall-height')).fill('0.8');
   await expect(page.getByTestId('pregame-wall-height-value')).toHaveText('0.8 m');
   await expect(page.getByTestId('pregame-rules')).toContainText('Custom walls: 0.8 m high, bounce 0.40');
   // Owner 2026-10-02: the Ring-out delay slider (0-3 s, provisional default 1.5 s) reaches the match.
+  await (await showControl(page, 'ring-out-delay')).waitFor();
   await expect(page.getByTestId('pregame-ring-out-delay-value')).toHaveText('1.50 s');
   await page.getByTestId('pregame-ring-out-delay').fill('0.5');
   await expect(page.getByTestId('pregame-ring-out-delay-value')).toHaveText('0.50 s');
   // Owner 2026-10-02 (Lote 2): the Dash cooldown slider (0.5-5 s, provisional default 1.5 s).
+  await (await showControl(page, 'dash-cooldown')).waitFor();
   await expect(page.getByTestId('pregame-dash-cooldown-value')).toHaveText('1.50 s');
   await page.getByTestId('pregame-dash-cooldown').fill('2.5');
   await expect(page.getByTestId('pregame-dash-cooldown-value')).toHaveText('2.50 s');
