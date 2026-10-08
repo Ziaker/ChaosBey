@@ -5,16 +5,16 @@
 // Bey, and, on a Dash release or a hit, jagged shock rings, a floor crown and
 // a dust burst.
 // All of it is built from the approved Cel Cyclone pieces (src/vfx/hybrid/fx:
-// wakeStreakFx, jaggedRingFx, flatFx, burstFx and their textures), so it lives
+// wakeStreakFx, jaggedRingFx and their textures), so it lives
 // in the same cel look; the dust is the lab's own (AnimeDust).
 //
 // Presentation only: it reads a FlowBey and emits effects into an FxLayer.
 // ============================================================
 
 import * as THREE from 'three';
-import { burstFx, flatFx, jaggedRingFx, wakeStreakFx, type WindLook } from '../../../../src/vfx/hybrid/fx/primitives';
+import { jaggedRingFx, wakeStreakFx, type WindLook } from '../../../../src/vfx/hybrid/fx/primitives';
 import type { FxLayer } from '../../../../src/vfx/hybrid/fx/FxLayer';
-import { impactStar, jaggedRing, tornStreak } from '../../../../src/vfx/hybrid/fx/textures';
+import { jaggedRing, tornStreak } from '../../../../src/vfx/hybrid/fx/textures';
 import { floorHeight, type FlowBey } from '../sim/FlowSim';
 import type { Tuning } from '../tuning';
 import { AnimeDust, type DustStyle } from './AnimeDust';
@@ -29,16 +29,11 @@ const BEY_MID_HEIGHT_M = 0.55;       // the middle of the Bey's body above the f
 const RING_STAGGER_S = 0.05;
 const RING_LIFE_S = 0.42;
 const RING_SHRINK_PER_RING = 0.18;
-const CROWN_LIFE_S = 0.55;
-const CROWN_LIFT_M = 0.05;
 const DASH_BURST = 6;
 const DASH_FAN_RAD = 0.7;
 const BURST_LIFE_S = 1;
 const BURST_COUNT_MIN = 6;
 const BURST_COUNT_MAX = 12;
-const STAR_LIFE_S = 0.25;
-const STAR_HEIGHT_M = 1;
-const STAR_SPIKES = 10;
 // -----------------------------------------
 
 export interface WindFlags {
@@ -73,10 +68,16 @@ export class AnimeWind {
 
   constructor(
     private readonly layer: FxLayer,
+    camera: THREE.Camera,
     seed = 7,
   ) {
     this.rng = makeRng(seed);
-    this.dust = new AnimeDust(layer, this.rng);
+    this.dust = new AnimeDust(layer, camera, this.rng);
+  }
+
+  /** The colour the dust cutouts are multiplied by (the arena's light). */
+  get dustTint(): THREE.Color {
+    return this.dust.tint;
   }
 
   /** The dust idea in use (roll, bubbles or shards). */
@@ -175,42 +176,15 @@ export class AnimeWind {
         }),
       );
     }
-    this.dust.burst(new THREE.Vector3(b.x, floor, b.z), back, DASH_FAN_RAD, DASH_BURST, tuning.burstSizeM, BURST_LIFE_S);
+    this.dust.burst(new THREE.Vector3(b.x, floor, b.z), back, DASH_FAN_RAD, DASH_BURST, tuning.burstSizeM * tuning.intensity, BURST_LIFE_S);
   }
 
-  /** A hit: a jagged crown on the floor, a dust burst flung outward and a flat impact star. */
+  /** A hit: the dust burst of the chosen composition (its crowns and clouds), flung outward from the contact point. */
   impact(x: number, z: number, m: number, tuning: Tuning, flags: WindFlags): void {
     if (!flags.crown) return;
     const y = floorHeight(Math.hypot(x, z));
-    const size = tuning.crownSizeM * tuning.intensity * (0.7 + 0.6 * m);
-    for (let n = 0; n < 2; n++) {
-      this.layer.add(
-        flatFx({
-          tex: jaggedRing(),
-          color: WIND_WHITE,
-          pos: new THREE.Vector3(x, y + CROWN_LIFT_M, z),
-          size: [0.8, size * (1 - n * 0.3)],
-          life: CROWN_LIFE_S * (1 - n * 0.2),
-          opacity: 1,
-          additive: false,
-          rotation: this.rng() * Math.PI,
-          conform: { floorHeightAt: (r) => floorHeight(r), lift: CROWN_LIFT_M },
-        }),
-      );
-    }
     const n = Math.round(BURST_COUNT_MIN + (BURST_COUNT_MAX - BURST_COUNT_MIN) * m);
-    this.dust.burst(new THREE.Vector3(x, y, z), null, 0, n, tuning.burstSizeM, BURST_LIFE_S);
-    this.layer.add(
-      burstFx({
-        tex: impactStar(STAR_SPIKES),
-        color: 0xffffff,
-        pos: new THREE.Vector3(x, y + STAR_HEIGHT_M, z),
-        size: [1, tuning.burstSizeM * 0.9],
-        life: STAR_LIFE_S,
-        rotation: this.rng() * Math.PI,
-        additive: false,
-      }),
-    );
+    this.dust.burst(new THREE.Vector3(x, y, z), null, 0, n, tuning.burstSizeM * (0.8 + 0.5 * m) * tuning.intensity, BURST_LIFE_S);
   }
 }
 
