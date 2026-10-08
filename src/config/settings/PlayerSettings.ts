@@ -11,6 +11,7 @@
 // ============================================================
 
 import { DEFAULT_QUALITY_PRESET, QualityPreset } from '../runtime/QualityPreset';
+import { DEFAULT_FLOW_FX_SETTINGS, sanitizeFlowFxSettings, type FlowFxSettings } from '../../vfx/flow/flowFxTuning';
 
 /**
  * How the arrows / stick drive the Bey. All four are selectable; the first
@@ -85,6 +86,11 @@ export interface PlayerSettings {
   readonly ringOutWarning: boolean;
   /** A Dodge or Attack press the game refuses (not ready) makes its HUD line flash and shake. */
   readonly refusedInputFeedback: boolean;
+  /**
+   * Owner, 2026-10-08 ("Fluxo do Bey", docs/design-decisions/flow-fx-effects.md): the spin blur, lean, shadow, anime dust, wind
+   * streaks, impact rings and comic words, each with its own sliders (Settings → Visual effects). Presentation only.
+   */
+  readonly flowFx: FlowFxSettings;
 }
 
 /** The game-feel toggles (all on by default). */
@@ -109,6 +115,7 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   hitShake: true,
   ringOutWarning: true,
   refusedInputFeedback: true,
+  flowFx: DEFAULT_FLOW_FX_SETTINGS,
 };
 
 /** What each quality preset changes. Render cost only. */
@@ -153,6 +160,7 @@ export function sanitizePlayerSettings(value: unknown): PlayerSettings {
     hitShake: bool('hitShake'),
     ringOutWarning: bool('ringOutWarning'),
     refusedInputFeedback: bool('refusedInputFeedback'),
+    flowFx: sanitizeFlowFxSettings(input.flowFx),
   };
 }
 

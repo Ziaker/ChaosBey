@@ -1,5 +1,6 @@
 // ============================================================
-// BEY FLOW FX LAB — ANIME WIND AND DUST
+// FLOW FX — WIND, DUST AND IMPACT RINGS
+// (shared by the game's FlowFxSystem and the Bey Flow FX lab)
 // The continuous "epic" layer the owner asked for:
 //   * anime dust in real volume behind the tip (three compositions, see AnimeDust);
 //   * torn wind streaks streaming behind the Bey;
@@ -8,21 +9,34 @@
 //     flying backward; at the contact also the floor crowns and the flat star;
 //   * and a dust burst with both.
 // The rings, crowns, star and streaks are the approved Cel Cyclone pieces
-// (src/vfx/hybrid/fx); the dust is the lab's own (AnimeDust).
+// (src/vfx/hybrid/fx); the dust is the Flow FX's own (AnimeDust).
 //
 // Every direction here is the Bey's own heading (the way it moves, or the way it
 // is being fired) or the direction of the attack: never an unrelated vector.
 //
-// Presentation only: it reads a FlowBey and emits effects into an FxLayer.
+// Presentation only: it reads a FlowBeyPose and emits effects into an FxLayer.
 // ============================================================
 
 import * as THREE from 'three';
-import { burstFx, flatFx, jaggedRingFx, wakeStreakFx, type WindLook } from '../../../../src/vfx/hybrid/fx/primitives';
-import type { FxLayer } from '../../../../src/vfx/hybrid/fx/FxLayer';
-import { impactStar, jaggedRing, tornStreak } from '../../../../src/vfx/hybrid/fx/textures';
-import { floorHeight, type FlowBey } from '../sim/FlowSim';
-import type { Tuning } from '../tuning';
-import { AnimeDust, type DustStyle } from './AnimeDust';
+import { burstFx, flatFx, jaggedRingFx, wakeStreakFx, type WindLook } from '../hybrid/fx/primitives';
+import type { FxLayer } from '../hybrid/fx/FxLayer';
+import { impactStar, jaggedRing, tornStreak } from '../hybrid/fx/textures';
+import { AnimeDust, type DustStyle, type FlowFloor } from './AnimeDust';
+import type { FlowFxValues } from './flowFxTuning';
+
+/** What the effects read of a Bey: where it is on the floor, how fast, and the way it is heading (or being fired). */
+export interface FlowBeyPose {
+  x: number;
+  z: number;
+  speed: number;
+  /** Unit horizontal heading: the Dash direction while it dashes, otherwise its velocity direction. */
+  headX: number;
+  headZ: number;
+  dashing: boolean;
+  /** Unit horizontal vector toward the Dash target. */
+  dashDirX: number;
+  dashDirZ: number;
+}
 
 // ---------------- TUNING ----------------
 const TRAIL_MIN_SPEED_MPS = 2;
@@ -30,7 +44,7 @@ const TRAIL_FULL_SPEED_MPS = 10;
 const WIND_WHITE = 0xffffff;
 const WIND_GREY = 0xaab6c8;
 const CEL_LOOK: WindLook = { cel: true, opacity: 1 };
-const BEY_MID_HEIGHT_M = 0.55;       // the middle of the Bey's body above the floor: the shock rings are born here
+const DEFAULT_BEY_MID_HEIGHT_M = 0.55; // the middle of the Bey's body above the floor: the shock rings are born here
 const RING_STAGGER_S = 0.05;
 const RING_LIFE_S = 0.42;
 const RING_SHRINK_PER_RING = 0.18;
@@ -82,7 +96,7 @@ function unit(x: number, z: number): THREE.Vector3 {
   return len > 1e-6 ? new THREE.Vector3(x / len, 0, z / len) : new THREE.Vector3(1, 0, 0);
 }
 
-export class AnimeWind {
+export class FlowWind {
   private readonly rng: () => number;
   private readonly dustCarry = [0, 0];
   private readonly windCarry = [0, 0];
@@ -94,10 +108,13 @@ export class AnimeWind {
     private readonly layer: FxLayer,
     camera: THREE.Camera,
     scene: THREE.Object3D,
+    private readonly floor: FlowFloor,
     seed = 7,
+    /** The middle of the Bey's body above the floor (m): the rings are born here. Scales with the Bey. */
+    private readonly beyMidHeightM = DEFAULT_BEY_MID_HEIGHT_M,
   ) {
     this.rng = makeRng(seed);
-    this.dust = new AnimeDust(scene, camera, this.rng);
+    this.dust = new AnimeDust(scene, camera, this.rng, floor);
   }
 
   /** The dust composition in use (wave, crown or cloud). */
@@ -129,7 +146,7 @@ export class AnimeWind {
   }
 
   /** Ages the dust one frame, with the opacity, fade and shrink the tuning asks for. */
-  update(dt: number, tuning: Tuning): void {
+  update(dt: number, tuning: FlowFxValues): void {
     this.dust.update(dt, { opacity: tuning.dustOpacity, fade: tuning.dustFade, shrink: tuning.dustShrink });
   }
 
@@ -146,8 +163,8 @@ export class AnimeWind {
   }
 
   /** Per rendered frame, per Bey: dust and wind streaks in proportion to the speed. `tip` is the contact point. */
-  trail(i: 0 | 1, b: FlowBey, tip: THREE.Vector3, dt: number, tuning: Tuning, flags: WindFlags): void {
-    this.follow[i]!.set(tip.x, tip.y + BEY_MID_HEIGHT_M, tip.z);
+  trail(i: 0 | 1, b: FlowBeyPose, tip: THREE.Vector3, dt: number, tuning: FlowFxValues, flags: WindFlags): void {
+    this.follow[i]!.set(tip.x, tip.y + this.beyMidHeightM, tip.z);
     if (b.speed < TRAIL_MIN_SPEED_MPS || dt <= 0) return;
     const speedK = smoothstep(TRAIL_MIN_SPEED_MPS, TRAIL_FULL_SPEED_MPS, b.speed);
     const dashK = b.dashing ? tuning.dustDashBoost : 0;
@@ -198,7 +215,7 @@ export class AnimeWind {
    * Jagged shock rings born at `origin` (already at the height of the middle of the body), facing `dir` (the way the attack
    * goes) and flying backward along it.
    */
-  private shockRings(origin: THREE.Vector3, dir: THREE.Vector3, tuning: Tuning): void {
+  private shockRings(origin: THREE.Vector3, dir: THREE.Vector3, tuning: FlowFxValues): void {
     const rings = Math.round(tuning.crownCount);
     for (let n = 0; n < rings; n++) {
       this.layer.add(
@@ -221,12 +238,12 @@ export class AnimeWind {
    * A Dash was released: the shock rings born in the middle of the Bey, facing the way it is being fired (toward the
    * target) and flying backward, plus a fan of dust behind it.
    */
-  dashStart(i: 0 | 1, b: FlowBey, tuning: Tuning, flags: WindFlags): void {
+  dashStart(i: 0 | 1, b: FlowBeyPose, tuning: FlowFxValues, flags: WindFlags): void {
     if (!flags.crown) return;
     const dir = unit(b.dashDirX, b.dashDirZ);
-    const floor = floorHeight(Math.hypot(b.x, b.z));
+    const floor = this.floor.heightAt(Math.hypot(b.x, b.z));
     // The simulation is ahead of the last rendered frame: place the rings from the Bey's own position.
-    const head = this.follow[i]!.set(b.x, floor + BEY_MID_HEIGHT_M, b.z);
+    const head = this.follow[i]!.set(b.x, floor + this.beyMidHeightM, b.z);
     this.shockRings(head.clone(), dir, tuning);
     this.dust.burst(new THREE.Vector3(b.x, floor, b.z), dir.clone().negate(), DASH_FAN_RAD, DASH_BURST, tuning.burstSizeM * tuning.intensity, BURST_LIFE_S);
   }
@@ -235,11 +252,11 @@ export class AnimeWind {
    * A hit, at the contact of the two Beys: the shock rings born at the contact and facing the attack, the crowns on the
    * floor and the flat star (the approved impact), plus the dust burst of the chosen composition.
    */
-  impact(x: number, z: number, m: number, dirX: number, dirZ: number, tuning: Tuning, flags: WindFlags): void {
+  impact(x: number, z: number, m: number, dirX: number, dirZ: number, tuning: FlowFxValues, flags: WindFlags): void {
     if (!flags.crown) return;
-    const y = floorHeight(Math.hypot(x, z));
+    const y = this.floor.heightAt(Math.hypot(x, z));
     const dir = unit(dirX, dirZ);
-    this.shockRings(new THREE.Vector3(x, y + BEY_MID_HEIGHT_M, z), dir, tuning);
+    this.shockRings(new THREE.Vector3(x, y + this.beyMidHeightM, z), dir, tuning);
     const size = tuning.crownSizeM * tuning.intensity * (0.7 + 0.6 * m);
     for (let n = 0; n < CROWN_COUNT; n++) {
       this.layer.add(
@@ -252,7 +269,7 @@ export class AnimeWind {
           opacity: 1,
           additive: false,
           rotation: this.rng() * Math.PI,
-          conform: { floorHeightAt: (r) => floorHeight(r), lift: CROWN_LIFT_M },
+          conform: { floorHeightAt: (r) => this.floor.heightAt(r), lift: CROWN_LIFT_M },
         }),
       );
     }

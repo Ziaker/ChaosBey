@@ -19,9 +19,9 @@ import { ArenaVisualsSystem } from '../../../../src/arena/visual/ArenaVisualsSys
 import type { ArenaPresetId } from '../../../../src/arena/presets/ArenaPresets';
 import { CONCEPTS } from '../../../bey-visual-concepts/src/concepts/conceptDefinitions';
 import { FxLayer } from '../../../../src/vfx/hybrid/fx/FxLayer';
-import { AnimeWind } from '../fx/AnimeWind';
-import type { DustStyle } from '../fx/AnimeDust';
-import { CALLOUT_CYCLE, FlowSim, floorHeight, type CalloutKind, type FlowEvent } from '../sim/FlowSim';
+import { FlowWind } from '../../../../src/vfx/flow/FlowWind';
+import type { DustStyle } from '../../../../src/vfx/flow/flowFxTuning';
+import { CALLOUT_CYCLE, FlowSim, floorHeight, floorSlope, type CalloutKind, type FlowEvent } from '../sim/FlowSim';
 import { TUNING } from '../tuning';
 import { FlowRig, type FxFlags } from './FlowRig';
 
@@ -67,7 +67,7 @@ export class FlowStage {
   private camReady = false;
   private readonly rigs: [FlowRig, FlowRig];
   private readonly layer: FxLayer;
-  private readonly wind: AnimeWind;
+  private readonly wind: FlowWind;
   private readonly prevDashing = [false, false];
   private readonly tip = new THREE.Vector3();
   private accumulator = 0;
@@ -84,7 +84,7 @@ export class FlowStage {
     pmrem.dispose();
     this.scene.add(this.arenaRoot);
     this.layer = new FxLayer(this.scene, this.camera);
-    this.wind = new AnimeWind(this.layer, this.camera, this.scene);
+    this.wind = new FlowWind(this.layer, this.camera, this.scene, { heightAt: floorHeight, slopeAt: floorSlope });
     this.setArena(DEFAULT_ARENA);
 
     const [idA, idB] = BEY_IDS;

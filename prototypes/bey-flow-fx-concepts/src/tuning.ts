@@ -20,42 +20,14 @@
 // Units: the label names the unit; "x" values are multipliers (1 = proposal).
 // ============================================================
 
+import { FLOW_FX_DEFAULT_VALUES, type FlowFxValues } from '../../../src/vfx/flow/flowFxTuning';
+
 export type TuningGroup = 'global' | 'blur' | 'lean' | 'shadow' | 'dust' | 'wind' | 'crown' | 'callout';
 
-export interface Tuning {
-  // --- Global ---
-  intensity: number;
-  // --- Spin blur (smeared disc, fades as the spin dies) ---
-  blurStrength: number;
+/** The shared Flow FX values (src/vfx/flow, the same ones the game's Settings sliders edit) plus the lab-only spin fade of its own blur shell. */
+export type Tuning = FlowFxValues & {
   blurFadeSpin: number;
-  // --- Lean (inward tilt in a curve) ---
-  leanMaxDeg: number;
-  leanAccelRefMps2: number;
-  leanSmooth: number;
-  // --- Blob shadow: a small dark disc under each Bey ---
-  shadowOpacity: number;
-  shadowScale: number;
-  // --- Anime dust (three ideas, real volume): behind the tip and in the bursts ---
-  dustOpacity: number;
-  dustFade: number;
-  dustShrink: number;
-  dustRate: number;
-  dustSizeM: number;
-  dustLifeS: number;
-  dustDashBoost: number;
-  // --- Wind streaks: torn white strokes streaming behind the Bey ---
-  windRate: number;
-  windLengthM: number;
-  windWidthM: number;
-  windLifeS: number;
-  // --- Crowns: jagged rings and a cloud burst on a Dash release and on a hit ---
-  crownCount: number;
-  crownSizeM: number;
-  burstSizeM: number;
-  // --- Words (HIT / BLOCK / COUNTER) ---
-  calloutScale: number;
-  calloutLifeS: number;
-}
+};
 
 export interface TuningSpec {
   readonly key: keyof Tuning;
@@ -77,32 +49,8 @@ export const GROUP_TITLES: Readonly<Record<TuningGroup, string>> = {
   callout: 'Texto HIT / BLOCK / COUNTER',
 };
 
-export const PROPOSED: Readonly<Tuning> = {
-  intensity: 1,
-  blurStrength: 1.35,
-  blurFadeSpin: 0.2,
-  leanMaxDeg: 26,
-  leanAccelRefMps2: 13,
-  leanSmooth: 9,
-  shadowOpacity: 0.55,
-  shadowScale: 1,
-  dustOpacity: 0.95,
-  dustFade: 0.6,
-  dustShrink: 0.5,
-  dustRate: 17,
-  dustSizeM: 0.55,
-  dustLifeS: 0.55,
-  dustDashBoost: 0.6,
-  windRate: 30,
-  windLengthM: 1.1,
-  windWidthM: 0.25,
-  windLifeS: 0.25,
-  crownCount: 2,
-  crownSizeM: 5.4,
-  burstSizeM: 1,
-  calloutScale: 0.55,
-  calloutLifeS: 0.55,
-};
+/** The owner's numbers from the lab's tuning panel (2026-10-08) are the starting point: the same defaults as the game's Settings. */
+export const PROPOSED: Readonly<Tuning> = { ...FLOW_FX_DEFAULT_VALUES, blurFadeSpin: 0.2 };
 
 export const TUNING_SPEC: readonly TuningSpec[] = [
   { key: 'intensity', group: 'global', label: 'Intensidade geral dos efeitos (x)', min: 0, max: 2, step: 0.05 },

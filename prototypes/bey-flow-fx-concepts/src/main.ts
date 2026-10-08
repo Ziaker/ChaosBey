@@ -4,7 +4,7 @@
 // panel. Everything here is lab UI; nothing reaches the game.
 // ============================================================
 
-import { DUST_STYLES, type DustStyle } from './fx/AnimeDust';
+import { DUST_STYLES, type DustStyle } from '../../../src/vfx/flow/AnimeDust';
 import type { FxFlags } from './stage/FlowRig';
 import { FlowStage, type ViewMode } from './stage/FlowStage';
 import type { ArenaPresetId } from '../../../src/arena/presets/ArenaPresets';

@@ -135,6 +135,8 @@ export class ConditionRig implements ConditionRigLike {
   private readonly blurMat: THREE.ShaderMaterial;
   private readonly blurBandMat: THREE.MeshBasicMaterial;
   private readonly blurGeos: THREE.BufferGeometry[] = [];
+  /** Owner, 2026-10-08 (Settings → Visual effects → Spin blur): × the approved blur strength. 1 = the approved look. */
+  blurScale = 1;
   private time = 0;
   private shudder = 0;
   private readonly tmp = new THREE.Vector3();
@@ -231,7 +233,7 @@ export class ConditionRig implements ConditionRigLike {
     this.tilt.quaternion.copy(bodyQuaternion);
     this.visual.spinGroup.rotation.y = frame.meshSpin;
     this.shudder = frame.shudder;
-    const blurOn = T.blur * THREE.MathUtils.smoothstep(frame.rps, T.blurFadeRps * 0.6, T.blurFadeRps * 1.6);
+    const blurOn = T.blur * this.blurScale * THREE.MathUtils.smoothstep(frame.rps, T.blurFadeRps * 0.6, T.blurFadeRps * 1.6);
     const opacity = Math.min(0.95, BLUR_BASE_OPACITY * blurOn);
     this.blurMat.uniforms.uOpacity!.value = opacity;
     this.blurMat.uniforms.uAngle!.value = frame.trueSpin;
