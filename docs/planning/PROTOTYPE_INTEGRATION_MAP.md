@@ -1,6 +1,6 @@
 # ChaosBey — Prototype Integration Map
 
-**Date:** 2026-10-01 (status update 2026-10-02, section 0) · **Against:** `main@73c04ab` (through #80) and the open PRs #24, #64, #67, #72, #75, #76.
+**Date:** 2026-10-01 (status updates through 2026-10-07, section 0) · **Against:** `main@73c04ab` (through #80) and the open PRs #24, #64, #67, #72, #75, #76.
 **Scope:** where every visual prototype stands and where it plugs in. This document ports nothing and decides nothing. It replaces the conclusions of the older plan in PR #67 where they went stale (section 3).
 
 **The camera is frozen for the whole visual integration pass (owner order, 2026-10-01): see section 6.** Nothing below changes a camera file, parameter, preset, event or behaviour; where a prototype and the current camera disagree, the prototype adapts or waits.
@@ -27,6 +27,8 @@ Provisional, not owner choices: each gameplay archetype wears concept A of its f
 
 Since this map was written the stage also became **3× / 36 m** (#83, v0.12.0) and the camera follows it (#88, v0.14.1: eye limit 34.5 m, ring-out watch 33 m). The camera freeze of section 6 applied to the visual batches, which touched no camera file; #88 was a separate, owner-requested camera fix, and the owner-approved Inertial Duel Camera (#89) is camera work outside this pass. PR #24 (Clash lab) and PR #67 (old plan) are now fully superseded by #86 and this map.
 
+**Launch update — owner 2026-10-07:** **A — Timing Snap is approved**. Canonical prototype: `prototypes/launch-system-concepts/index.html`; decision: `docs/design-decisions/launch-system-approval.md`. It is not integrated into the normal round flow yet.
+
 ## 1. The map
 
 | Prototype | Source of truth | Approval | In `src/` today | State | Plugs into (foundation seam) | Depends on | Still open |
@@ -39,7 +41,8 @@ Since this map was written the stage also became **3× / 36 m** (#83, v0.12.0) a
 | **Clash Presentation Lab** (Overdrive + camera B) | `clash-presentation-approval.md` · **code only in PR #24** (`claude/clash-presentation-lab`, draft, conflicts with `main`) | Approved | Camera B forced, no orbit ✔; tug-of-war bar in `CombatHud` ✔. Overdrive visuals (contact pose, speedlines, dust, resolution) ✘ | **PARTIALLY INTEGRATED** · rest **READY TO PORT** from the branch (visuals only) | `ClashPresentationSnapshot` + `clashStarted/Progress/Resolved` + `clashPresentation`. The camera is read, never edited: `CameraRig.ts` already has `CLASH_FORCED_PRESET = 'B'` and `clashOrbit: false` | VFX seam first (shares dust/spark language) | Tie style (ASK FIRST), Beys overlapping on screen, reduced-intensity variant, pulse shake. **Deferred, they touch time/camera:** entry slow motion, per-mash hitstop |
 | **Camera Lab** | `camera-approval.md` · `prototypes/camera-concepts/` | A/B/C approved, 43 values each | Director + presets + Settings; in-game `ARENA_CAMERA_RIGS` override min/max distance and height | **ALREADY INTEGRATED — FROZEN** by the owner for this pass (baseline, no edit of any kind) | `CameraPresentationSnapshot` (read-only; the director stays the only authority) | none | Default for new players, FOV × preset, Perfect Dodge / Intro cameras, slow motion, post-freeze Ring-Out/Finisher feed, shake × VFX: all stay open and untouched |
 | **Combat HUD Lab** (A/B/C) | `OWNER_DECISIONS_MASTER.md` §10, §13.1 · PR #64 (`chatgpt/combat-hud-lab`, draft, base `c828a90`) | **Not chosen** | Functional `CombatHud` (M10), temporary look | **OWNER CHOICE REQUIRED** | `HudPresentationState` + `newHud` | Rebase/update #64 onto current `main` (#71 has landed; its base is stale) | Which of A/B/C. In production the Dash lock-on is drawn only by the debug layers (`DebugVisualLayers`), not by `CombatHud`; whether the lab shows it was not checked |
-| UI theme, Intro/Countdown/Launch, Post-FX, SFX | `VISUAL_APPROVALS_MASTER.md` §11 | Not prototyped / not decided | — | **DEFERRED** | — | — | everything |
+| **Launch System Lab — A Timing Snap** | `launch-system-approval.md` · `prototypes/launch-system-concepts/` | **A approved**: physical launchers, player-selected entry point, Timing Snap, dual arrival, immediate Combat on first bounce; no post-landing countdown | Normal game still starts rounds without this interactive launch | **READY TO PORT — OWNER APPROVED** | Round-start / Play flow; target validation from real arena floor; replay/AI/telemetry hooks | Existing Bey visuals, arena art/floor, Motion/VFX/Camera as their own authorities | Exact timing→gameplay tuning, AI target/timing policy, gamepad mapping |
+| UI theme, extra Intro outside the approved Launch, Post-FX, SFX | `VISUAL_APPROVALS_MASTER.md` §11 | Launch itself decided; remaining items separate | — | **DEFERRED** | — | — | only the separate items named here |
 
 ## 2. What the foundation provides (`src/presentation/`)
 
