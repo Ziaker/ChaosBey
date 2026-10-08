@@ -21,4 +21,5 @@ export const SLOW_SPECS: readonly string[] = [
   'beyVisualConcepts.spec.ts',
   'arenaVisualConcepts.spec.ts',
   'conditionVisualConcepts.spec.ts',
+  'launchSystemApproved.spec.ts',
 ];

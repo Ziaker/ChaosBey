@@ -1,8 +1,8 @@
 # ChaosBey — Canonical Visual Approvals Master
 
 **Status:** CANÔNICO — fonte de entrada para qualquer auditoria de protótipos e aprovações visuais  
-**Atualizado:** 2026-10-07 (owner aprovou direção visual/UX do Pregame)  
-**Escopo:** Beys, Arena, VFX, condição (Stamina/Stability/Quebrado), câmera, movimento, Clash e lacunas visuais ainda não aprovadas.
+**Atualizado:** 2026-10-07 (owner aprovou Launch System A — Timing Snap; Pregame já aprovado)  
+**Escopo:** Beys, Arena, VFX, condição (Stamina/Stability/Quebrado), câmera, movimento, Clash, Launch e lacunas visuais ainda não aprovadas.
 
 > **Regra obrigatória para agentes:** antes de perguntar novamente ao owner sobre uma decisão visual, leia este arquivo e depois o documento detalhado apontado na seção correspondente. Uma decisão marcada como **APROVADA** aqui não deve ser reaberta sem uma nova instrução explícita do owner.
 
@@ -50,7 +50,7 @@ A existência de UI de debug, sliders ou readouts dentro de um lab **não** sign
 | HUD de combate completo | **AINDA NÃO APROVADO / lab dedicado pendente** | GDD + este arquivo |
 | Pregame Setup UI | **DIREÇÃO VISUAL/UX APROVADA — ainda não integrada** | `pregame-overhaul.md` |
 | Main Menu / Character Select / Pause / Results / Settings | **DIREÇÃO VISUAL FINAL AINDA ABERTA** | GDD + este arquivo |
-| Intro/Countdown/Launch | **AINDA NÃO PROTOTIPADOS como pacote visual final** | GDD |
+| Launch System | **A — TIMING SNAP APROVADO; launcher físico + ponto de entrada + chegada simultânea; sem countdown pós-pouso; não integrado** | `launch-system-approval.md` |
 | Bloom / chromatic aberration | **NÃO PROTOTIPADOS / uso final não decidido** | inventário |
 
 ---
@@ -446,9 +446,23 @@ Esta aprovação não decide o tratamento visual final de:
 
 O GDD define funções e conteúdo dessas telas, mas isso não equivale a aprovação do tratamento visual final.
 
-## 11.2 Intro / Countdown / Launch
+## 11.2 Launch System — APROVADO pelo owner em 2026-10-07
 
-O GDD prevê intro, countdown e lançamento interativo. O minigame final de launch não está totalmente definido e não existe um pacote visual final aprovado equivalente aos labs acima.
+Fonte detalhada: `docs/design-decisions/launch-system-approval.md`.  
+Protótipo aprovado: `prototypes/launch-system-concepts/index.html`.
+
+Direção final:
+
+- **A — Timing Snap**;
+- Beys visivelmente montados em launchers físicos 3D antes do release;
+- jogador escolhe o ponto de entrada/queda do próprio Bey;
+- um toque de timing libera o launcher;
+- preservar a animação aprovada dos **dois Beys chegando ao stage**;
+- ao completar o primeiro contato/quique dos dois Beys na arena, **Combat começa imediatamente**;
+- **sem 3 / 2 / 1 / GO após o pouso** e sem lockout equivalente;
+- B/C são histórico de exploração, não opções finais.
+
+A UI/readouts de debug do Lab não viram automaticamente HUD/balance final. O pacote está **APROVADO, AINDA NÃO INTEGRADO**.
 
 ## 11.3 Post-FX
 
@@ -484,6 +498,7 @@ Salvo nova decisão do owner, não listar como completamente ausente:
 - Finisher camera;
 - linguagem física geral demonstrada pelo Motion Lab;
 - Clash Presentation completo na direção C Overdrive.
+- Launch System A — Timing Snap com launcher físico, ponto de entrada, chegada dupla e início imediato no quique.
 
 Um item pode estar **não integrado** e ainda assim estar totalmente prototipado/aprovado.
 
@@ -491,16 +506,17 @@ Um item pode estar **não integrado** e ainda assim estar totalmente prototipado
 
 # 13. Protótipos/lacunas visuais que continuam legítimos
 
-Com base nas decisões registradas até 2026-09-27, os grandes buracos visuais restantes incluem:
+Com base nas decisões registradas, os grandes buracos visuais restantes incluem:
 
 1. **Combat HUD Lab completo**;
 2. **UI visual de Main Menu / Character Select / Pause / Results / Settings**; o Pregame foi aprovado separadamente em 2026-10-07;
-3. **Match Intro / Countdown / Launch presentation**;
-4. **Camera treatment dedicado de Perfect Dodge / Intro / momentos decisivos**, conforme `camera-approval.md`;
-5. **VFX específico de pulo, ataque aéreo e air recovery**, ainda não coberto pelo pacote aprovado do VFX Lab (GDD §§20, 21 e 25);
-6. **identidade visual individual de partículas e trails por Bey**, para diferenciar os nove Beys sem confundir isso com o trail genérico/tuning já aprovado (GDD §§32 e 98);
-7. **Post-FX**, somente se o owner decidir explorar bloom/chromatic aberration;
-8. **integração/showcase final** combinando sistemas aprovados para validar legibilidade em conjunto.
+3. **Camera treatment dedicado de Perfect Dodge / Intro / momentos decisivos**, conforme `camera-approval.md`;
+4. **VFX específico de pulo, ataque aéreo e air recovery**, ainda não coberto pelo pacote aprovado do VFX Lab (GDD §§20, 21 e 25);
+5. **identidade visual individual de partículas e trails por Bey**, para diferenciar os nove Beys sem confundir isso com o trail genérico/tuning já aprovado (GDD §§32 e 98);
+6. **Post-FX**, somente se o owner decidir explorar bloom/chromatic aberration;
+7. **integração/showcase final** combinando sistemas aprovados para validar legibilidade em conjunto.
+
+**Launch não pertence mais a esta lista:** A — Timing Snap está aprovado. Um eventual Intro adicional antes dos launchers só existe se o owner pedir depois e nunca pode reintroduzir countdown/lockout após o pouso.
 
 Movimento possui lab e linguagem aprovados, mas ainda requer tuning de produção/playtest; isso é diferente de “não ter protótipo”.
 
@@ -516,6 +532,7 @@ Leia este master primeiro e depois, conforme a área:
 - `docs/design-decisions/motion-approval.md` — linguagem e limites do Motion Lab;
 - `docs/design-decisions/clash-presentation-approval.md` — apresentação do Clash;
 - `docs/design-decisions/pregame-overhaul.md` — direção visual/UX aprovada do Pregame e presets oficiais;
+- `docs/design-decisions/launch-system-approval.md` — direção final do Launch A Timing Snap e fluxo launcher → chegada → Combat;
 - `docs/design-decisions/visual-prototype-inventory.md` — inventário/histórico; usar com cuidado quando uma linha tiver sido superseded por decisão posterior.
 
 Protótipos correspondentes:
