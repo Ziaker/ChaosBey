@@ -17,7 +17,7 @@ function watchErrors(page: Page): string[] {
   return errors;
 }
 
-const SYSTEMS = ['condition-visuals', 'hybrid-vfx', 'clash-presentation', 'arena-visuals'];
+const SYSTEMS = ['flow-fx', 'condition-visuals', 'hybrid-vfx', 'clash-presentation', 'arena-visuals'];
 
 async function matchView(page: Page) {
   return page.evaluate(() => {
