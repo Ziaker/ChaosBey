@@ -598,6 +598,8 @@ A arquitetura de yaw/composição inercial **não está aberta**. Permanecem ape
 
 **Owner, 2026-10-08 (0.52.0, respostas):** entrada **ao pular em direção** ao rail; ida e volta pela **mesma rota**; no rail **só carregar ataque e pular — pular sai antes do fim e volta à arena**; **2 rails por stage** para começar, layout à escolha do agente (provisório). Jogável na 0.51.0; suposições abertas (fim do rail, golpes no rail, AI, visual, números) em `RAIL_GRINDING_FUTURE_UPDATE.md` §17.
 
+**Owner, 2026-10-08 (0.53.0):** no fim do rail o Bey **sai**; **não dá para levar golpe no trilho** (o Bey fica fora da arena: intocável); **a AI deve usar rails**. Implementado na 0.53.0 (`RAIL_GRINDING_FUTURE_UPDATE.md` §18).
+
 A direção do sistema está aprovada, mas os detalhes de implementação listados em `docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md` continuam **ASK FIRST** até nova decisão do owner.
 
 Não tratar a frase “similar a Dissidia” como autorização para copiar automaticamente controles, interrupções, colisões, UI ou apresentação do jogo de referência.
