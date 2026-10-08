@@ -2,10 +2,12 @@
 // AI RAIL PILOT — how the AI uses the rails (Rail Grinding, 0.53.0)
 // Owner, 2026-10-08 ("a AI deve usar rails"): a small plan the AI runs outside its intent system, because a rail run is a
 // short, scripted manoeuvre with its own rules (on a rail only attack-charging and a jump exist, and the Bey cannot be hit):
-//   Approach  — run at the nearest rail point, with a clear gap to the opponent;
+//   Approach  — run at the nearest gate, with a clear gap to the opponent;
 //   Jumping   — one jump press, early enough that the hop's flight reaches the rail;
 //   Riding    — hold Attack (charge the Dash) and jump off when the route points at the opponent (or the rail is nearly over);
 //   Released  — in the air / just landed: turn toward the opponent and let the Dash go when lined up.
+// Rails are long courses (0.56.0): it runs at a GATE, rides the whole course out holding the Dash charge, and may jump off on the
+// way in when the route points at the opponent.
 // It reads only what a player sees (positions, speed, the rails' shape, its own state) and rolls its dice on the AI's seeded RNG.
 // Every number is PROVISIONAL AI tuning.
 // ============================================================
@@ -17,24 +19,26 @@ import { fromYaw, length, normalize, signedAngleBetween, subtract, type Vec2 } f
 
 export const RAIL_CONSIDER_INTERVAL_S = 1.5;
 /** A rail further than this (m) from the AI is not worth a run. */
-export const RAIL_MAX_APPROACH_M = 16;
+export const RAIL_MAX_APPROACH_M = 30;
 /** Rails are for crossing open ground: closer to the opponent than this (m), the AI fights instead. */
 export const RAIL_MIN_OPPONENT_DISTANCE_M = 7;
-export const RAIL_APPROACH_TIMEOUT_S = 4;
+export const RAIL_APPROACH_TIMEOUT_S = 6;
 export const RAIL_JUMP_MIN_SPEED_MPS = 5;
 /** The hop reaches the rail about this long after the press, so the press comes (speed × this) metres before it. */
 export const RAIL_JUMP_LEAD_S = 0.55;
 export const RAIL_JUMP_MAX_HEADING_ERROR_RAD = 0.3;
 export const RAIL_JUMPING_TIMEOUT_S = 1.6;
-export const RAIL_COOLDOWN_S = 6;
+/** A gate is a full jump high: the press is held this long (past the full-jump hold) and let go well before the landing. */
+export const RAIL_JUMP_HOLD_S = 0.3;
+export const RAIL_COOLDOWN_S = 12;
 export const RAIL_EXIT_ALIGN_RAD = 0.4;
 export const RAIL_MIN_RIDE_S = 0.35;
 export const RAIL_EXIT_REMAINING_M = 4;
 export const RAIL_RELEASE_HEADING_ERROR_RAD = 0.5;
 export const RAIL_RELEASED_TIMEOUT_S = 1.2;
 /** Chance of starting a run at each consideration: this plus (aggression × the gain). */
-export const RAIL_BASE_CHANCE = 0.3;
-export const RAIL_AGGRESSION_CHANCE_GAIN = 0.4;
+export const RAIL_BASE_CHANCE = 0.15;
+export const RAIL_AGGRESSION_CHANCE_GAIN = 0.3;
 /** Chance of charging a Dash on a rail: this plus the personality's willingness for collisions (1 - collisionAvoidance) × the gain. */
 export const RAIL_DASH_BASE_CHANCE = 0.2;
 export const RAIL_DASH_COLLISION_GAIN = 0.8;
@@ -73,15 +77,17 @@ export interface RailPilotOutput {
   /** Where to steer and drive (null = no movement keys). */
   readonly moveDirection: Vec2 | null;
   readonly holdAttack: boolean;
-  /** Press Jump this tick. */
+  /** Jump is held this tick (a one-tick press leaves a rail; a held one is the full jump that reaches a gate). */
   readonly jump: boolean;
 }
 
-function nearestHorizontal(rail: RailController, from: Vec2): { point: Vec2; distanceM: number } | null {
+/** The nearest gate (the first or last point of any rail): a rail is entered only through its gates. */
+function nearestGate(rail: RailController, from: Vec2): { point: Vec2; distanceM: number } | null {
   let best: { point: Vec2; distanceM: number } | null = null;
   for (const definition of rail.getRails()) {
     if (!definition.enabled) continue;
-    for (const p of definition.path.points) {
+    const points = definition.path.points;
+    for (const p of [points[0]!, points[points.length - 1]!]) {
       const d = Math.hypot(p.x - from.x, p.z - from.z);
       if (best === null || d < best.distanceM) best = { point: { x: p.x, z: p.z }, distanceM: d };
     }
@@ -110,6 +116,7 @@ export class RailPilot {
   }
 
   private enter(stage: RailPilotStage): void {
+    
     this.stage = stage;
     this.stageTimeS = 0;
   }
@@ -148,7 +155,7 @@ export class RailPilot {
           i.grounded && !i.impaired && i.attackState === AttackState.Neutral && i.driftState === DriftState.Idle &&
           i.distanceToOpponentM >= RAIL_MIN_OPPONENT_DISTANCE_M;
         if (!ready) return null;
-        const nearest = nearestHorizontal(i.rail, i.positionXZ);
+        const nearest = nearestGate(i.rail, i.positionXZ);
         if (nearest === null || nearest.distanceM > RAIL_MAX_APPROACH_M) return null;
         if (!i.roll(RAIL_BASE_CHANCE + RAIL_AGGRESSION_CHANCE_GAIN * Math.max(0, Math.min(1, i.aggression)))) return null;
         this.target = nearest.point;
@@ -166,7 +173,7 @@ export class RailPilot {
           this.finish(); // the hop came down short of the rail
           return null;
         }
-        return { moveDirection: normalize(subtract(this.target, i.positionXZ)), holdAttack: false, jump: false };
+        return { moveDirection: normalize(subtract(this.target, i.positionXZ)), holdAttack: false, jump: this.stageTimeS < RAIL_JUMP_HOLD_S };
       }
       case RailPilotStage.Riding:
         return this.riding(i);
@@ -219,7 +226,8 @@ export class RailPilot {
     if (route !== null && this.stageTimeS >= RAIL_MIN_RIDE_S) {
       const tangent = normalize({ x: route.tangent.x, z: route.tangent.z });
       const aligned = length(i.directionToOpponent) > 0 && Math.abs(signedAngleBetween(tangent, i.directionToOpponent)) <= RAIL_EXIT_ALIGN_RAD;
-      jump = aligned || route.remainingM < RAIL_EXIT_REMAINING_M;
+      // Only inside the wall: out over the arena a Jump would turn the Bey round, and the AI rides the course out.
+      jump = route.insideArena && !route.returning && (aligned || route.remainingM < RAIL_EXIT_REMAINING_M);
     }
     if (jump) this.enter(RailPilotStage.Released);
     return { moveDirection: null, holdAttack: this.dashOnExit, jump };

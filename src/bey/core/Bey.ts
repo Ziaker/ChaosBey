@@ -22,6 +22,7 @@ import { StabilitySystem } from '../stability/StabilitySystem';
 import { StaminaSystem } from '../stamina/StaminaSystem';
 import { MomentumSystem } from '../momentum/MomentumSystem';
 import { RailController } from '../../arena/rails/RailController';
+import { RAIL_SPEED_DEFAULT, RAIL_TUNING, scaleRailTuning } from '../../arena/rails/RailTraversal';
 import type { RailDefinition } from '../../arena/rails/RailBlueprint';
 import { LEGACY_JUMP_FULL_HEIGHT_M } from '../../drift/DriftTuning';
 import { createBeyRigidBody } from './BeyRigidBody';
@@ -100,7 +101,7 @@ export function createBey(
     attack: new AttackController(definition.attack, rules.dashCooldownS, rules.dashCarriesSpeed ?? false, rules.topSpeedScale ?? 1, rules.circularAttack ?? true),
     momentum: new MomentumSystem(rules),
     // A short hop's launch speed, from the Bey's own jump rules: what a Jump press gives when it leaves a rail.
-    rail: new RailController(matchRules !== undefined && (rules.railsEnabled ?? false) ? rails : [], { jumpExitLiftMps: Math.sqrt(2 * Math.abs(GRAVITY_Y) * (rules.gravityScale ?? 1) * (rules.jumpShortHopHeightM ?? JUMP_SHORT_HOP_TARGET_APEX_M)) }),
+    rail: new RailController(matchRules !== undefined && (rules.railsEnabled ?? false) ? rails : [], { tuning: scaleRailTuning(RAIL_TUNING, rules.railSpeed ?? RAIL_SPEED_DEFAULT), jumpExitLiftMps: Math.sqrt(2 * Math.abs(GRAVITY_Y) * (rules.gravityScale ?? 1) * (rules.jumpShortHopHeightM ?? JUMP_SHORT_HOP_TARGET_APEX_M)) }),
     rules,
     arenaFloor,
     motion,

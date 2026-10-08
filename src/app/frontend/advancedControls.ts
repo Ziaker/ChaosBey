@@ -35,6 +35,7 @@ import {
   GAME_SPEED_RANGE,
   GRAVITY_SCALE_RANGE,
   FUNNEL_PULL_RANGE,
+  RAIL_SPEED_RANGE,
   IMPACT_PUSH_RANGE,
   JUMP_COOLDOWN_RANGE,
   JUMP_STAMINA_COST_RANGE,
@@ -151,7 +152,8 @@ export const ADVANCED_CONTROLS: readonly AdvancedControl[] = [
   { kind: 'slider', category: 'arena', id: 'bowl-depth', label: 'Bowl depth (funnel)', range: ARENA_BOWL_DEPTH_RANGE, key: 'arenaBowlDepthM', format: meters, note: 'How deep the bowl is (rim above the centre): the floor\'s collider, art, spawns and effects all follow it. 0 = flat. Owner base rule on the Funnel.' },
   { kind: 'slider', category: 'arena', id: 'wall-height', label: 'Wall height', range: ARENA_WALL_HEIGHT_RANGE, key: 'wallHeightM', format: (v) => `${v.toFixed(1)} m`, note: 'A low wall lets a launched Bey fly out of the arena; a tall one keeps it in. The default is the arena\'s own.' },
   { kind: 'slider', category: 'arena', id: 'wall-bounce', label: 'Wall bounce', range: ARENA_WALL_BOUNCE_RANGE, key: 'wallRestitution', format: (v) => v.toFixed(2), note: 'How hard the wall throws a Bey back into the fight. The default is the arena\'s own.' },
-  { kind: 'toggle', category: 'arena', id: 'rails', label: 'Rails', key: 'railsEnabled', note: 'Rail grinding on the stages (a future update): off = the match is played as if the stages had no rails. No stage has a rail yet, so this changes nothing today. Provisional.' },
+  { kind: 'toggle', category: 'arena', id: 'rails', label: 'Rails', key: 'railsEnabled', note: 'Rail grinding: long rails with two gates inside the wall that carry a jumping Bey out of the arena and back in. The Bey is untouchable on a rail. Off = the match is played as if the stages had no rails. Provisional.' },
+  { kind: 'slider', category: 'arena', id: 'rail-speed', label: 'Rail speed', range: RAIL_SPEED_RANGE, key: 'railSpeed', format: (v) => `×${v.toFixed(2)}`, note: 'How fast a Bey travels along a rail (the speed it starts at, the one it builds toward, and how quickly). ×1 = 8 → 32 m/s over about 6 s. Provisional.' },
   // ---- round ----
   { kind: 'slider', category: 'round', id: 'round-time-limit', label: 'Round time limit', range: ROUND_TIME_LIMIT_RANGE, key: 'roundTimeLimitS', format: (v) => (v === 0 ? 'no timer' : `${v.toFixed(0)} s`), note: 'When time runs out with nobody beaten, the round is a draw (provisional). No timer by default.' },
   { kind: 'slider', category: 'round', id: 'ring-out-delay', label: 'Ring-out delay', range: RING_OUT_DELAY_RANGE, key: 'ringOutDelayS', format: sec, note: 'How long a Bey must stay outside the arena before the ring-out counts (back inside resets it). 0 = instant. Provisional.' },

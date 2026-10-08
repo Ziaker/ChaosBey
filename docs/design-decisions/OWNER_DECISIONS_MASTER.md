@@ -602,6 +602,8 @@ A arquitetura de yaw/composição inercial **não está aberta**. Permanecem ape
 
 **Owner, 2026-10-08 (0.55.0):** os rails devem ter **entradas que levam o Bey para fora da arena e o trazem de volta**, em **percursos largos de trajeto (não de tamanho), com curvas — não só retos**; **pediu um protótipo antes de implementar**. Protótipo: Rail Course Lab (`rail-courses-approval.md`); o jogo mantém os rails da 0.53.0 até a escolha.
 
+**Owner, 2026-10-08 (0.56.0):** escolheu **a ideia A** do Rail Course Lab com os números dele (2 rails, portão a 0,88 do raio, 110° horário, 1,4 de raio por fora, 1,8 m / 7,5 m de altura) e pediu um **slider no jogo para a velocidade do Bey no trajeto** (Advanced › Arena › **Rail speed**). Implementado (`rail-courses-approval.md` §5).
+
 A direção do sistema está aprovada, mas os detalhes de implementação listados em `docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md` continuam **ASK FIRST** até nova decisão do owner.
 
 Não tratar a frase “similar a Dissidia” como autorização para copiar automaticamente controles, interrupções, colisões, UI ou apresentação do jogo de referência.

@@ -48,6 +48,8 @@ export function isOnRail(state: RailTraversalState): boolean {
 export interface RailTuning {
   /** Distance/volume within which a Bey can attach (m). */
   readonly captureRadiusM: number;
+  /** How far along the route from either end a gate reaches (m): a rail is entered only through its two gates, never from the middle of the course. */
+  readonly gateZoneM: number;
   /** Angular tolerance of the entry, between the Bey's velocity and the rail's tangent (rad). */
   readonly entryAngleTolRad: number;
   /** Least horizontal speed to attach (m/s), 0 = none. */
@@ -81,6 +83,7 @@ export interface RailTuning {
 /** PLACEHOLDER values for prototypes and tests ONLY — not a decision, not used by the game. */
 export const PLACEHOLDER_RAIL_TUNING: RailTuning = {
   captureRadiusM: 1.5,
+  gateZoneM: 4,
   entryAngleTolRad: Math.PI / 2,
   minEntrySpeedMps: 0,
   startSpeedMps: 8,
@@ -104,6 +107,7 @@ export const PLACEHOLDER_RAIL_TUNING: RailTuning = {
  */
 export const RAIL_TUNING: RailTuning = {
   captureRadiusM: 1.8,
+  gateZoneM: 4,
   entryAngleTolRad: Math.PI / 2,
   minEntrySpeedMps: 0,
   startSpeedMps: 8,
@@ -119,3 +123,23 @@ export const RAIL_TUNING: RailTuning = {
   attachCorrectionPerS: 14,
   attachCorrectionMaxMps: 10,
 };
+
+/**
+ * Owner, 2026-10-08 ("coloque um slider no jogo quanto a velocidade do bey no trajeto"): the Pregame's Rail speed. × every
+ * speed of the ride — the speed it starts at, the one it accelerates toward, the cap — and its acceleration, so a faster rail
+ * is the same ride played quicker. 1 = RAIL_TUNING as it is. PROVISIONAL range.
+ */
+export const RAIL_SPEED_DEFAULT = 1;
+export const RAIL_SPEED_RANGE = { min: 0.25, max: 3, step: 0.05 } as const;
+
+export function scaleRailTuning(tuning: RailTuning, speedScale: number): RailTuning {
+  const k = Number.isFinite(speedScale) && speedScale > 0 ? speedScale : RAIL_SPEED_DEFAULT;
+  if (k === 1) return tuning;
+  return {
+    ...tuning,
+    startSpeedMps: tuning.startSpeedMps * k,
+    accelerationMps2: tuning.accelerationMps2 * k,
+    targetSpeedMps: tuning.targetSpeedMps * k,
+    maxSpeedMps: tuning.maxSpeedMps * k,
+  };
+}

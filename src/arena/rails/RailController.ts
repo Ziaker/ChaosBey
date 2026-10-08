@@ -6,7 +6,11 @@
 //      direction it was going when it grabbed it, and leaves at the end it reaches;
 //   3. on a rail the Bey can only CHARGE its attack and JUMP — a jump leaves the rail early, back to the arena;
 //   4. two rails per stage to start (StageRails.ts).
-// Everything else (collisions, AI use, speed numbers, visuals) is provisional — RAIL_TUNING in RailTraversal.ts.
+//   5. (0.56.0, owner chose course A) a rail is a long COURSE with a gate inside the wall at each end: it is entered only
+//      through a gate (never from the middle), carries the Bey out over the wall, round the outside and back in; a Jump press
+//      INSIDE the wall leaves it, but OUTSIDE the arena it turns the Bey round to come back along the same route to the gate it
+//      entered by ("o caminho de ida e de volta são os mesmos"); and a Bey on a rail is out of the arena (untouchable).
+// Everything else (AI use, speed numbers, visuals) is provisional — RAIL_TUNING in RailTraversal.ts, the Pregame's Rail speed.
 //
 // This is a state machine, not a body writer: it reads the Bey's position/velocity, decides, and hands back (a) the actions
 // the Bey may still use this tick, (b) a velocity OVERRIDE for MovementController — which stays the only writer of the
@@ -79,6 +83,8 @@ export class RailController {
   /** Owner, 2026-10-08 ("não tem como levar um golpe no trilho, ele fica fora da arena"): on a rail the Bey cannot be touched. */
   private intangible = false;
   private intangibleAfterS = 0;
+  /** The Bey pressed Jump outside the arena and is coming back along the route to the gate it entered by. */
+  private returning = false;
 
   constructor(
     private readonly rails: readonly RailDefinition[],
@@ -94,12 +100,17 @@ export class RailController {
   }
 
   /** Where the route goes from the Bey's progress, in the direction it travels: the AI reads it to pick the moment to leave. Null off a rail. */
-  getRoute(): { readonly tangent: Point3; readonly remainingM: number } | null {
+  getRoute(): { readonly tangent: Point3; readonly remainingM: number; readonly insideArena: boolean; readonly returning: boolean } | null {
     if (!this.isOnRail() || this.railIndex < 0) return null;
     const rail = this.rails[this.railIndex]!;
     const sample = rail.path.sampleAt(this.state.progressM);
     const remainingM = this.state.direction > 0 ? rail.path.lengthM - this.state.progressM : this.state.progressM;
-    return { tangent: { x: sample.tangent.x * this.state.direction, y: sample.tangent.y * this.state.direction, z: sample.tangent.z * this.state.direction }, remainingM };
+    return {
+      tangent: { x: sample.tangent.x * this.state.direction, y: sample.tangent.y * this.state.direction, z: sample.tangent.z * this.state.direction },
+      remainingM,
+      insideArena: horizontal(sample.position) < rail.arenaRadiusM,
+      returning: this.returning,
+    };
   }
 
   /**
@@ -142,6 +153,7 @@ export class RailController {
   private leave(reason: RailExitReason): void {
     this.state = { ...NOT_ON_RAIL, exitReason: reason };
     this.railIndex = -1;
+    this.returning = false;
     this.cooldownS = this.tuning.reattachCooldownS;
   }
 
@@ -158,12 +170,18 @@ export class RailController {
     const rail = this.rails[this.railIndex]!;
     const actions = withoutActions(input.actions, [Action.Dodge, Action.JumpDrift]);
 
-    // A Jump press leaves the rail early, back to the arena: the speed it had, along the route, and a short hop's lift.
-    if (!entered && input.actions.pressedThisFrame.has(Action.JumpDrift)) {
+    // A Jump press leaves the rail early. INSIDE the wall that is back into the arena: the speed it had, along the route, and a
+    // short hop's lift. OUTSIDE the arena there is nowhere to land, so the Bey turns round and comes back along the same route
+    // to the gate it entered by (and leaves there), once.
+    if (!entered && !this.returning && input.actions.pressedThisFrame.has(Action.JumpDrift)) {
       const sample = rail.path.sampleAt(this.state.progressM);
-      const launch = this.exitVelocity(sample.tangent, this.state.direction, this.state.speedMps, this.jumpExitLiftMps);
-      this.leave('voluntary');
-      return { actions, override: null, launch, entered: false, exitReason: 'voluntary' };
+      if (horizontal(sample.position) < rail.arenaRadiusM) {
+        const launch = this.exitVelocity(sample.tangent, this.state.direction, this.state.speedMps, this.jumpExitLiftMps);
+        this.leave('voluntary');
+        return { actions, override: null, launch, entered: false, exitReason: 'voluntary' };
+      }
+      this.returning = true;
+      this.state = { ...this.state, direction: this.state.direction === 1 ? -1 : 1 };
     }
 
     // Advance along the route: toward the target speed, in the direction it was grabbed.
@@ -176,8 +194,9 @@ export class RailController {
     const direction = this.state.direction;
     const progress = this.state.progressM + (entered ? 0 : direction * speed * input.dt);
     const length = rail.path.lengthM;
-    if (!rail.path.closed && (progress >= length || progress <= 0)) {
-      const end = rail.path.sampleAt(progress >= length ? length : 0);
+    // Only the end it is travelling toward: a Bey that grabs a gate sits AT that end (progress 0 or the full length) and sets off from it.
+    if (!rail.path.closed && ((direction > 0 && progress >= length) || (direction < 0 && progress <= 0))) {
+      const end = rail.path.sampleAt(direction > 0 ? length : 0);
       const launch = this.exitVelocity(end.tangent, direction, speed, this.tuning.exitLiftMps);
       this.leave('end');
       return { actions, override: null, launch, entered: false, exitReason: 'end' };
@@ -211,35 +230,37 @@ export class RailController {
     return { x: tangent.x * direction * carried, y: tangent.y * direction * carried + liftMps, z: tangent.z * direction * carried };
   }
 
-  /** Grabs the nearest rail within reach if the Bey is jumping toward it. */
+  /** Grabs a rail by one of its gates if the Bey is jumping toward it: within reach of the route, and within the gate zone of an end. */
   private tryGrab(input: RailTickInput): boolean {
     if (this.cooldownS > 0 || input.attachBlocked || input.grounded || !input.inOwnHop) return false;
     let best = -1;
     let bestDistance = Infinity;
     let bestProjection: ReturnType<RailDefinition['path']['project']> | null = null;
+    let bestDirection: RailDirection = 1;
     for (let i = 0; i < this.rails.length; i++) {
       const rail = this.rails[i]!;
       if (!rail.enabled) continue;
       const projection = rail.path.project(input.position);
       if (projection.distanceM > this.tuning.captureRadiusM || projection.distanceM >= bestDistance) continue;
+      // Gates only: the Bey enters at an end and travels away from it; the middle of the course (outside the arena) is no entrance.
+      const fromStart = projection.progressM;
+      const fromEnd = rail.path.lengthM - projection.progressM;
+      if (Math.min(fromStart, fromEnd) > this.tuning.gateZoneM) continue;
       if (!this.movingToward(input, projection.position)) continue;
       best = i;
       bestDistance = projection.distanceM;
       bestProjection = projection;
+      bestDirection = fromStart <= fromEnd ? 1 : -1;
     }
     if (best < 0 || bestProjection === null) return false;
     const rail = this.rails[best]!;
-    const sample = rail.path.sampleAt(bestProjection.progressM);
     const hs = horizontal(input.velocity);
-    // Direction: the way the Bey was going along the route; a Bey (almost) at rest takes the way it faces.
-    let along = input.velocity.x * sample.tangent.x + input.velocity.z * sample.tangent.z;
-    if (Math.abs(along) < 1) along = Math.sin(input.headingRad) * sample.tangent.x + Math.cos(input.headingRad) * sample.tangent.z;
-    const direction: RailDirection = along < 0 ? -1 : 1;
     this.railIndex = best;
+    this.returning = false;
     this.state = {
       railId: rail.id,
       progressM: bestProjection.progressM,
-      direction,
+      direction: bestDirection,
       speedMps: Math.max(this.tuning.startSpeedMps, hs * this.tuning.entrySpeedCarry),
       entrySpeedMps: hs,
       timeOnRailS: 0,
@@ -272,6 +293,7 @@ export class RailController {
       entryReason: this.state.entryReason,
       exitReason: this.state.exitReason,
       cooldownS: this.cooldownS,
+      returning: this.returning,
       intangible: this.intangible,
       intangibleAfterS: this.intangibleAfterS,
     };

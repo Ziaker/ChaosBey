@@ -11,9 +11,10 @@ import { floorHeightAt } from '../../src/arena/floor/ArenaFloorProfile';
 import { RailPath } from '../../src/arena/rails/RailPath';
 import { RAIL_RESOLVE_STEP_M, resolveRail, type RailBlueprint } from '../../src/arena/rails/RailBlueprint';
 import { railsForMatch, STAGE_RAIL_BLUEPRINTS } from '../../src/arena/rails/StageRails';
-import { NOT_ON_RAIL, PLACEHOLDER_RAIL_TUNING, isOnRail } from '../../src/arena/rails/RailTraversal';
+import { NOT_ON_RAIL, PLACEHOLDER_RAIL_TUNING, RAIL_SPEED_DEFAULT, RAIL_SPEED_RANGE, isOnRail } from '../../src/arena/rails/RailTraversal';
 import { ARENA_PRESETS } from '../../src/arena/presets/ArenaPresets';
-import { createDefaultMatchConfig } from '../../src/config/match/MatchConfig';
+import { courseMetrics } from '../../src/arena/rails/RailCourse';
+import { beyMatchRulesOf, createDefaultMatchConfig } from '../../src/config/match/MatchConfig';
 
 const L_SHAPE = [
   { x: 0, y: 0, z: 0 },
@@ -120,6 +121,23 @@ describe('stage rails and the Pregame option', () => {
     for (const preset of ARENA_PRESETS) expect(railsForMatch({ stage: preset.id, railsEnabled: true, floor: { id: 'bowl-b', depthM: 8.5 }, floorRadiusM: 36 })).toHaveLength(2);
   });
 
+  it('the stage rails are the owner\'s chosen course A (Rail Course Lab, 2026-10-08): two long courses with a gate inside the wall at each end, over the wall and round the outside', () => {
+    const rails = railsForMatch({ stage: 'foundry', railsEnabled: true, floor: { id: 'bowl-b', depthM: 7 }, floorRadiusM: ARENA_FLOOR_RADIUS });
+    expect(rails.map((r) => r.id)).toEqual(['rail-east', 'rail-west']);
+    for (const rail of rails) {
+      const points = rail.path.points;
+      for (const gate of [points[0]!, points[points.length - 1]!]) expect(Math.hypot(gate.x, gate.z)).toBeCloseTo(0.88 * ARENA_FLOOR_RADIUS, 0); // the owner's gate radius
+      expect(rail.arenaRadiusM).toBe(ARENA_FLOOR_RADIUS);
+      const m = courseMetrics(rail, { floor: { id: 'bowl-b', depthM: 7 }, floorRadiusM: ARENA_FLOOR_RADIUS, wallHeightM: 3 });
+      expect(m.lengthM).toBeGreaterThan(100);
+      expect(m.outsideShare).toBeGreaterThan(0.5);
+      expect(m.wallCrossings).toBe(2);
+      expect(m.wallClearanceM ?? 0).toBeGreaterThan(1); // clear of even the tallest wall the Pregame allows
+    }
+    // The two rails are the same course turned half way round.
+    expect(rails[1]!.path.points[0]!.x).toBeCloseTo(-rails[0]!.path.points[0]!.x, 3);
+  });
+
   it('with the option off a stage has no rails at all, and with it on it has the stage\'s layout resolved onto the floor', () => {
     const blueprints = { foundry: [{ id: 'f', label: 'F', points: [{ u: 0, v: 0, heightM: 0.2 }, { u: 0.5, v: 0, heightM: 0.2 }] }], rift: [], tournament: [] } as const;
     const on = railsForMatch({ stage: 'foundry', railsEnabled: true, floor: { id: 'bowl-b', depthM: 8.5 }, floorRadiusM: 36, blueprints });
@@ -148,6 +166,32 @@ describe('stage rails and the Pregame option', () => {
     expect(withDefaultRules(setup).rules.railsEnabled).toBe(true);
   });
 
+  it('Rail speed is a Pregame slider (owner, 2026-10-08): ×1 by default, in the match config and the Bey\'s rules, MODIFIED when changed, reset by Reset all', () => {
+    expect(createDefaultMatchConfig().railSpeed).toBe(RAIL_SPEED_DEFAULT);
+    expect(RAIL_SPEED_DEFAULT).toBe(1);
+    expect(defaultMatchRules().railSpeed).toBe(1);
+    expect(MATCH_RULE_KEYS).toContain('railSpeed');
+    const control = ADVANCED_CONTROLS.find((c) => c.key === 'railSpeed')!;
+    expect(control).toMatchObject({ kind: 'slider', id: 'rail-speed', category: 'arena' });
+    expect(beyMatchRulesOf(createDefaultMatchConfig()).railSpeed).toBe(1);
+    let setup = createDefaultMatchSetup();
+    expect(matchConfigFor(setup).railSpeed).toBe(1);
+    setup = writeAdvanced(setup, 'railSpeed', 2, true);
+    expect(matchConfigFor(setup).railSpeed).toBe(2);
+    expect(beyMatchRulesOf(matchConfigFor(setup)).railSpeed).toBe(2);
+    expect(isModified(setup, 'railSpeed')).toBe(true);
+    expect(modifiedKeys(setup)).toEqual(['railSpeed']);
+    expect(changedRuleLines(setup).join(' ')).toContain('rail speed');
+    expect(sanitizeMatchRules(setup.rules).railSpeed).toBe(2);
+    expect(withDefaultRules(setup).rules.railSpeed).toBe(1);
+    // The range keeps the slider usable: from a crawl to three times the rail's own speed.
+    expect(RAIL_SPEED_RANGE.min).toBeGreaterThan(0);
+    expect(RAIL_SPEED_RANGE.max).toBeGreaterThanOrEqual(2);
+    for (const id of ['normal', 'realistic', 'epic', 'smooth', 'strategic'] as const) {
+      expect(advancedSnapshot(applyPreset(createDefaultMatchSetup(), id)).railSpeed, id).toBe(1);
+    }
+  });
+
   it('no official preset turns rails off: every preset keeps the default', () => {
     const base = createDefaultMatchSetup();
     for (const id of ['normal', 'realistic', 'epic', 'smooth', 'strategic'] as const) {
@@ -164,7 +208,7 @@ describe('rail traversal contract', () => {
   });
 
   it('names every tuning value of the doc (§12) in one place, with placeholders that are only for prototypes', () => {
-    expect(Object.keys(PLACEHOLDER_RAIL_TUNING).sort()).toEqual(['accelerationMps2', 'attachCorrectionMaxMps', 'attachCorrectionPerS', 'captureRadiusM', 'entryAngleTolRad', 'entrySpeedCarry', 'exitLiftMps', 'exitSpeedCarry', 'exitTangentBlend', 'maxSpeedMps', 'minEntrySpeedMps', 'reattachCooldownS', 'staminaDrainPerS', 'startSpeedMps', 'targetSpeedMps']);
+    expect(Object.keys(PLACEHOLDER_RAIL_TUNING).sort()).toEqual(['accelerationMps2', 'attachCorrectionMaxMps', 'attachCorrectionPerS', 'captureRadiusM', 'entryAngleTolRad', 'entrySpeedCarry', 'exitLiftMps', 'exitSpeedCarry', 'exitTangentBlend', 'gateZoneM', 'maxSpeedMps', 'minEntrySpeedMps', 'reattachCooldownS', 'staminaDrainPerS', 'startSpeedMps', 'targetSpeedMps']);
     for (const value of Object.values(PLACEHOLDER_RAIL_TUNING)) expect(Number.isFinite(value)).toBe(true);
   });
 });

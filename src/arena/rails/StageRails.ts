@@ -8,31 +8,32 @@
 
 import type { ArenaPresetId } from '../presets/ArenaPresets';
 import { resolveRail, type RailBlueprint, type RailDefinition, type RailResolveContext } from './RailBlueprint';
-
-/** Where the starter rails sit: a circle of this many floor radii round the centre, this high over the floor (m). PROVISIONAL. */
-const STARTER_RAIL_RADIUS_U = 0.6;
-const STARTER_RAIL_HEIGHT_M = 1.6;
-/** How far each starter rail runs round the circle (± degrees from its middle) and how many points define it. PROVISIONAL. */
-const STARTER_RAIL_HALF_SPAN_DEG = 50;
-const STARTER_RAIL_POINTS = 9;
-
-function arcRail(id: string, label: string, middleDeg: number): RailBlueprint {
-  const points = [];
-  for (let i = 0; i < STARTER_RAIL_POINTS; i++) {
-    const deg = middleDeg - STARTER_RAIL_HALF_SPAN_DEG + (2 * STARTER_RAIL_HALF_SPAN_DEG * i) / (STARTER_RAIL_POINTS - 1);
-    const rad = (deg * Math.PI) / 180;
-    points.push({ u: STARTER_RAIL_RADIUS_U * Math.cos(rad), v: STARTER_RAIL_RADIUS_U * Math.sin(rad), heightM: STARTER_RAIL_HEIGHT_M });
-  }
-  return { id, label, points };
-}
+import { railCourse, rotatedCourse, type RailCourseParams } from './RailCourse';
 
 /**
- * Owner, 2026-10-08 ("2 pra iniciar, escolha por si"): two rails to start, the layout left to me — so PROVISIONAL, to be
- * changed by playtest here. Two mirrored arcs, east and west of the centre (the Beys spawn north and south, so neither side
- * is nearer), high enough that only a full jump reaches it so a Bey must jump toward one to grab it. Authored in floor radii, so they follow
- * the stage size and the funnel (RailBlueprint).
+ * Owner, 2026-10-08, after the Rail Course Lab: course A ("Volta larga") with the owner's own numbers — a long route with a gate
+ * inside the wall at each end (0.88 of the floor radius, 1.8 m over the floor) that goes out over the wall (7.5 m up), round the
+ * OUTSIDE of the arena (1.4 floor radii from the centre, 110° clockwise) and back in. Two rails, one on each side of the arena
+ * (the same course turned 180°), on every stage. Authored in floor radii, so it follows the stage size and the funnel.
  */
-export const STARTER_RAILS: readonly RailBlueprint[] = [arcRail('rail-east', 'East rail', 0), arcRail('rail-west', 'West rail', 180)];
+export const OWNER_COURSE: RailCourseParams = {
+  gateAngleDeg: 0,
+  sweepDeg: -110,
+  gateRadiusU: 0.88,
+  outerRadiusU: 1.4,
+  waves: 0,
+  waveAmplitudeU: 0,
+  insideHeightM: 1.8,
+  outsideHeightM: 7.5,
+  heightWaves: 0,
+  heightWaveAmplitudeM: 0,
+  pointCount: 240,
+};
+
+export const STARTER_RAILS: readonly RailBlueprint[] = [
+  railCourse('rail-east', 'East rail', OWNER_COURSE),
+  railCourse('rail-west', 'West rail', rotatedCourse(OWNER_COURSE, 180)),
+];
 
 /**
  * The rail layouts per stage. All three share the starter layout for now; when a stage gets its own, the stage must also join
