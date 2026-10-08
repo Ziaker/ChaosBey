@@ -39,6 +39,7 @@ import { TelemetryEventKind } from '../../telemetry/events/TelemetryEvent';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 import { applyAdaptationNudge, AdaptationTracker } from '../adaptation/AdaptationTracker';
 import { ActionSelector } from '../decision/ActionSelection';
+import { RailPilot } from '../decision/RailPilot';
 import { AiIntent } from '../decision/Intent';
 import { selectIntent, type ConsideredScore, type IntentDecision } from '../decision/IntentSelection';
 import { evaluateRisk, type RiskAssessment } from '../decision/RiskEvaluation';
@@ -122,6 +123,8 @@ const ZERO_RISK: RiskAssessment = { edgeRisk: 0, opponentThreat: 0, selfVulnerab
 
 export class AIController implements CombatController {
   private readonly actionSelector = new ActionSelector();
+  /** Rail Grinding: this AI's rail runs (inactive when the stage has no rails). */
+  private readonly railPilot = new RailPilot();
   /**
    * A separate ActionSelector for the Clash-mash path (sampleClashMashActions)
    * so its held/pressedThisFrame bookkeeping never shares state with
@@ -206,12 +209,6 @@ export class AIController implements CombatController {
     }
     this.wasClashActive = false;
 
-    // Rail Grinding (0.52.0): on a rail only attack-charging and jumping exist, and the AI has no rail behaviour yet — it rides
-    // the rail out holding whatever it held, instead of tapping buttons the rail refuses (the 14 presses a second the matrix caught).
-    if (this.ownBey.rail.isOnRail()) {
-      return this.actionSelector.repeatFrozenActions(context.fixedDeltaSeconds);
-    }
-
     this.nowS += context.fixedDeltaSeconds;
 
     const ownRaw = extractRawState(this.physics, this.ownBey.body, this.ownBey);
@@ -227,6 +224,33 @@ export class AIController implements CombatController {
       { circularReachM: this.ownCircularReachM() },
     );
     this.lastWorld = world;
+
+    // Rail Grinding (0.53.0, owner: "a AI deve usar rails"): a rail run is its own short plan (RailPilot) — while it has the
+    // controls the intent pipeline waits, and decides afresh the tick the run is over.
+    const railPlan = this.railPilot.step({
+      dt: context.fixedDeltaSeconds,
+      rail: this.ownBey.rail,
+      positionXZ: ownRaw.positionXZ,
+      velocityXZ: ownRaw.velocityXZ,
+      headingRad: ownRaw.headingRad,
+      grounded: ownRaw.grounded,
+      attackState: ownRaw.attackState,
+      driftState: ownRaw.driftState,
+      dashChargeFraction: ownRaw.dashChargeFraction,
+      impaired: ownRaw.airRecoveryAvailable || ownRaw.actionsLocked === true || ownRaw.isBroken,
+      distanceToOpponentM: world.distanceToOpponentM,
+      directionToOpponent: world.directionToOpponent,
+      opponentAttackState: opponentRaw.attackState,
+      aggression: this.personality.aggression,
+      collisionAvoidance: this.personality.collisionAvoidance,
+      roll: (probability) => this.rng.nextBool(probability),
+    });
+    if (railPlan !== null) {
+      this.decisionTimerS = Number.MAX_SAFE_INTEGER;
+      const railActions = this.actionSelector.selectRailActions(railPlan, ownRaw.headingRad, context.fixedDeltaSeconds);
+      this.lastActionSummary = `rail run (${this.railPilot.getStage()})`;
+      return railActions;
+    }
 
     if (this.lastOwnAttackState === AttackState.Neutral && ownRaw.attackState !== AttackState.Neutral) {
       this.lastOwnAttackStartS = this.nowS;
@@ -446,6 +470,11 @@ export class AIController implements CombatController {
   /** The difficulty multipliers this controller runs with — Debug Lab inspection only (GDD section 65: "difficulty modifiers"). */
   getDifficultyProfile(): AiDifficultyProfile {
     return this.difficulty;
+  }
+
+  /** Rail Grinding: the AI is in the middle of a rail run (RailPilot has the controls, not the intent pipeline). */
+  isRunningRail(): boolean {
+    return this.railPilot.isActive();
   }
 
   getDebugState(): AiDebugState {

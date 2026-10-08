@@ -517,6 +517,18 @@ export class ActionSelector {
     this.currentTick = 0;
   }
 
+  /**
+   * Rail Grinding (0.53.0): the actions of a rail run (RailPilot) through the same bookkeeping as normal play — steering
+   * and driving toward `moveDirection`, Attack held to charge the Dash, and Jump held for this one tick when `jump`.
+   */
+  selectRailActions(plan: { moveDirection: Vec2 | null; holdAttack: boolean; jump: boolean }, headingRad: number, fixedDeltaSeconds: number): ControllerActions {
+    const desiredHeld = new Set<Action>();
+    if (plan.moveDirection !== null) addMovementActions({ direction: plan.moveDirection, allowReverse: false }, headingRad, desiredHeld);
+    if (plan.holdAttack) desiredHeld.add(Action.Attack);
+    if (plan.jump) desiredHeld.add(Action.JumpDrift);
+    return this.commit(desiredHeld, fixedDeltaSeconds);
+  }
+
   /** Same held->pressedThisFrame/hold-duration bookkeeping ScriptedController.ts uses — see its header comment for why this shape. Public so AIController's Clash-mash path (a very different decision than normal intent-driven play — see AIController.ts) can drive the same diffing without duplicating it. */
   commit(activeHeld: ReadonlySet<Action>, fixedDeltaSeconds: number): ControllerActions {
     const pressedThisFrame = new Set<Action>();
