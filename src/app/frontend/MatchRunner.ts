@@ -30,6 +30,9 @@ import { controlSetupFor } from './controlReferences';
 import type { DirectionalController, DirectionalDebug } from '../../input/directional/DirectionalController';
 import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ConditionLayerSetting, type ControlScheme } from '../../config/settings/PlayerSettings';
 import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
+import { AdaptiveResolution } from './adaptiveResolution';
+import { FrameLimiter } from './frameLimiter';
+import { DEFAULT_FRAME_LIMIT, type FrameLimitSetting } from '../../config/settings/FrameLimit';
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 import type { ImpactFeedbackOptions } from '../../vfx/ImpactFeedback';
 import type { FlowFxSettings } from '../../vfx/flow/flowFxTuning';
@@ -73,6 +76,17 @@ export interface MatchPresentation {
   readonly feel?: ImpactFeedbackOptions;
   /** Owner, 2026-10-08: the Visual effects sliders (spin blur, lean, shadow, dust, wind, impact rings, comic words). */
   readonly flowFx?: FlowFxSettings;
+  /** Performance pass (0.57.0): how the picture is paced and how sharp it is. Render cost only; omit for the defaults. */
+  readonly performance?: MatchPerformance;
+}
+
+/** Render pacing and resolution (never reaches the simulation). */
+export interface MatchPerformance {
+  /** Lower the render resolution by itself while the frame rate is poor. */
+  readonly adaptiveResolution: boolean;
+  readonly frameLimit: FrameLimitSetting;
+  /** Where the adaptive render scale may go on this quality preset. */
+  readonly renderScaleRange: { readonly min: number; readonly max: number };
 }
 
 export interface MatchRunnerEvents {
@@ -89,6 +103,11 @@ export class MatchRunner {
   private roundOverReported = false;
   private presentation: MatchPresentation = { cameraEffects: true, trails: true };
   private overlayFields: CombatOverlayFields | null = null;
+  private readonly frameLimiter = new FrameLimiter(DEFAULT_FRAME_LIMIT);
+  private readonly adaptive: AdaptiveResolution;
+  /** Frame time (scaled by the game speed) of frames the limiter skipped: handed to the next drawn one, so effects keep pace. */
+  private skippedFrameS = 0;
+  private lastDrawMs: number | null = null;
   private stopped = false;
   private running = false;
 
@@ -103,6 +122,8 @@ export class MatchRunner {
     gameSpeed = 1,
   ) {
     const { appRenderer, debugOverlay, attackProfileSettingsPanel, stateMachine, telemetry } = deps;
+    // The resolution the last match settled on carries over (a slow machine is slow in the next round too).
+    this.adaptive = new AdaptiveResolution(appRenderer.getRenderScale());
     this.loop = new FixedTimestepLoop({
       onFixedTick: () => {
         const { firstActions } = session.tick();
@@ -115,7 +136,27 @@ export class MatchRunner {
           this.events.onRoundOver?.(session.roundState.result);
         }
       },
-      onRenderFrame: (frameDeltaSeconds) => {
+      onRenderFrame: (loopFrameDeltaSeconds) => {
+        const nowMs = performance.now();
+        const perf = this.presentation.performance;
+        this.frameLimiter.setLimit(perf?.frameLimit ?? DEFAULT_FRAME_LIMIT);
+        if (!this.frameLimiter.shouldDraw(nowMs)) {
+          this.skippedFrameS += loopFrameDeltaSeconds;
+          return;
+        }
+        const frameDeltaSeconds = loopFrameDeltaSeconds + this.skippedFrameS;
+        this.skippedFrameS = 0;
+        // Adaptive resolution: judged on the real time between DRAWN frames (not the game-speed-scaled one).
+        if (this.lastDrawMs !== null) {
+          if (perf?.adaptiveResolution ?? true) {
+            const next = this.adaptive.update(nowMs - this.lastDrawMs, perf?.renderScaleRange);
+            if (next !== null) appRenderer.setRenderScale(next);
+          } else if (appRenderer.getRenderScale() !== 1) {
+            this.adaptive.reset();
+            appRenderer.setRenderScale(1);
+          }
+        }
+        this.lastDrawMs = nowMs;
         session.renderFrame(frameDeltaSeconds, appRenderer.camera, { cameraView: 'game', cameraEffects: this.presentation.cameraEffects });
         appRenderer.render();
         this.events.onFrame?.(session, frameDeltaSeconds);

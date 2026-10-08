@@ -166,6 +166,21 @@ describe('MatchAnomalyDetector — each GDD 67 condition is caught, once per epi
     expect(afterRound.filter((d) => d.kind === 'state-contradiction' && d.side === 'match')).toHaveLength(1);
   });
 
+  it('two Clashes one cooldown apart are not one never-ending cooldown (the streak ends when the next Clash goes Active)', async () => {
+    const cooldownTicks = DEFAULT_ANOMALY_THRESHOLDS.maxClashCooldownTicks - 20; // just inside the limit
+    const span = cooldownTicks * 2 + 60;
+    const found = await run(span, (_w, tick) => {
+      // cooldown (inside the limit) → a new Clash goes Active for 60 ticks → another cooldown (inside the limit)
+      if (tick < cooldownTicks) return { clash: clashStub(ClashState.Cooldown, 5) };
+      if (tick < cooldownTicks + 60) return { clash: clashStub(ClashState.Active) };
+      return { clash: clashStub(ClashState.Cooldown, 5) };
+    });
+    expect(found.filter((d) => d.kind === 'cooldown-never-ending')).toEqual([]);
+    // ...while one cooldown that really outlasts its limit is still reported.
+    const stuck = await run(DEFAULT_ANOMALY_THRESHOLDS.maxClashCooldownTicks + 2, () => ({ clash: clashStub(ClashState.Cooldown, 5) }));
+    expect(stuck.filter((d) => d.kind === 'cooldown-never-ending')).toHaveLength(1);
+  });
+
   it('permanent hitstop (live sessions pass hitstopActive)', async () => {
     const found = await run(DEFAULT_ANOMALY_THRESHOLDS.maxHitstopTicks + 2, () => ({ hitstopActive: true }));
     expect(found.filter((d) => d.kind === 'permanent-hitstop')).toHaveLength(1);

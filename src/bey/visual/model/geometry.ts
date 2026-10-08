@@ -38,6 +38,23 @@ export function atY<T extends THREE.Object3D>(object: T, y: number): T {
   return object;
 }
 
+// ---------------- model detail (performance pass, 0.57.0) ----------------
+// A multiplier on the segment counts of every curved piece the Bey models are built from (lathes, tori, extrusion curves,
+// cylinders). 1 = the approved models exactly; the Low quality preset sets ~0.4, which keeps each silhouette and cuts the
+// triangle count about 3×. Presentation only; set it BEFORE the models are built (a built model keeps the detail it was made with).
+let modelDetail = 1;
+export function setBeyModelDetail(detail: number): void {
+  modelDetail = Number.isFinite(detail) ? Math.max(0.2, Math.min(1, detail)) : 1;
+}
+export function getBeyModelDetail(): number {
+  return modelDetail;
+}
+/** A segment count at the current detail: unchanged at 1, never below `min` (a lathe under 8 sides stops looking round). */
+export function detailed(count: number, min = 6): number {
+  if (modelDetail >= 1) return count;
+  return Math.max(Math.min(min, count), Math.round(count * modelDetail));
+}
+
 /** Wrap an object authored at +X so it sits at a world angle around the Y axis. */
 export function atAngle(object: THREE.Object3D, angle: number): THREE.Group {
   const wrapper = new THREE.Group();
@@ -60,7 +77,7 @@ export function radial(count: number, factory: (index: number, angle: number) =>
 export function lathe(profile: ReadonlyArray<readonly [number, number]>, segments = 72): THREE.LatheGeometry {
   return new THREE.LatheGeometry(
     profile.map(([r, y]) => new THREE.Vector2(Math.max(0, r), y)),
-    segments,
+    detailed(segments, 12),
   );
 }
 
@@ -72,6 +89,7 @@ export function facet(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
 }
 
 export function circlePath(radius: number, samples = 96): THREE.Path {
+  samples = detailed(samples, 16);
   const path = new THREE.Path();
   for (let i = 0; i <= samples; i++) {
     const t = (i / samples) * TAU;
@@ -85,6 +103,7 @@ export function circlePath(radius: number, samples = 96): THREE.Path {
 
 /** Closed outline from a polar radius function r(θ), optionally with a circular hole. */
 export function polarShape(radiusAt: (theta: number) => number, samples = 360, holeRadius?: number): THREE.Shape {
+  samples = detailed(samples, 48);
   const shape = new THREE.Shape();
   for (let i = 0; i < samples; i++) {
     const t = (i / samples) * TAU;
@@ -101,6 +120,7 @@ export function polarShape(radiusAt: (theta: number) => number, samples = 360, h
 
 /** Closed path from a polar radius function — use as a non-circular hole. */
 export function polarPath(radiusAt: (theta: number) => number, samples = 360): THREE.Path {
+  samples = detailed(samples, 48);
   const path = new THREE.Path();
   for (let i = 0; i <= samples; i++) {
     const t = (i / samples) * TAU;
@@ -136,6 +156,7 @@ export function smoothstep(edge0: number, edge1: number, x: number): number {
 
 /** Annular sector between two radii over [a0, a1] (radians). */
 export function annularSector(innerRadius: number, outerRadius: number, a0: number, a1: number, samples = 48): THREE.Shape {
+  samples = detailed(samples, 8);
   const shape = new THREE.Shape();
   for (let i = 0; i <= samples; i++) {
     const t = a0 + ((a1 - a0) * i) / samples;
@@ -183,13 +204,14 @@ export function roundedRectShape(width: number, depth: number, radius: number): 
  * along +Y, occupying y ∈ [0, height] including the bevel.
  */
 export function extrudeUp(shape: THREE.Shape, height: number, bevel = 0.03, curveSegments = 24): THREE.ExtrudeGeometry {
+  curveSegments = detailed(curveSegments, 6);
   const b = Math.min(bevel, height * 0.45);
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth: Math.max(0.001, height - 2 * b),
     bevelEnabled: b > 0,
     bevelThickness: b,
     bevelSize: b,
-    bevelSegments: 2,
+    bevelSegments: modelDetail < 1 ? 1 : 2,
     curveSegments,
   });
   // Extrusion runs along +Z. rotateX(-90°) maps (x, y, z) -> (x, z, -y):
@@ -213,7 +235,7 @@ export function extrudeSide(shape: THREE.Shape, thickness: number, bevel = 0.015
     bevelThickness: b,
     bevelSize: b,
     bevelSegments: 1,
-    curveSegments: 16,
+    curveSegments: detailed(16, 5),
   });
   geometry.translate(0, 0, -thickness / 2 + b);
   return geometry;
@@ -226,14 +248,14 @@ export function boltHead(radius: number, height: number, material: THREE.Materia
 
 /** Horizontal torus (ring lying flat) centered at y = 0. */
 export function flatTorus(radius: number, tube: number, material: THREE.Material, radialSegments = 16, tubularSegments = 96): THREE.Mesh {
-  const geometry = new THREE.TorusGeometry(radius, tube, radialSegments, tubularSegments);
+  const geometry = new THREE.TorusGeometry(radius, tube, detailed(radialSegments, 6), detailed(tubularSegments, 16));
   geometry.rotateX(Math.PI / 2);
   return mesh(geometry, material);
 }
 
 /** Cylinder standing on y = 0. */
 export function cylinderUp(radiusTop: number, radiusBottom: number, height: number, material: THREE.Material, segments = 64): THREE.Mesh {
-  return mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments).translate(0, height / 2, 0), material);
+  return mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, height, detailed(segments, 8)).translate(0, height / 2, 0), material);
 }
 
 /** Flat annulus (washer) standing on y = 0. */

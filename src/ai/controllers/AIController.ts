@@ -325,7 +325,13 @@ export class AIController implements CombatController {
       }
     }
 
-    const actions = this.actionSelector.selectActions(this.activeDecision.intent, world, this.personality, this.dodgeAttemptSucceeds, context.fixedDeltaSeconds);
+    // A Bey on a rail is out of the arena and untouchable (owner, 2026-10-08): nothing to chase, attack or dodge. Meanwhile the AI
+    // laps to build speed — except when its own safety is at stake (edge recovery, air recovery), which stays as decided.
+    const intent =
+      this.opponentBey.rail.isOnRail() && this.activeDecision.intent !== AiIntent.RecoverFromEdge && this.activeDecision.intent !== AiIntent.AirRecover
+        ? AiIntent.BuildSpeed
+        : this.activeDecision.intent;
+    const actions = this.actionSelector.selectActions(intent, world, this.personality, this.dodgeAttemptSucceeds, context.fixedDeltaSeconds);
     this.lastActionSummary = summarizeActions(actions);
     return actions;
   }

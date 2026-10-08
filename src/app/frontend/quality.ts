@@ -7,11 +7,11 @@
 import type { AppRenderer } from '../bootstrap/createRenderer';
 import { QUALITY_PROFILES, type PlayerSettings } from '../../config/settings/PlayerSettings';
 import type { MatchPresentation } from './MatchRunner';
+import { setBeyModelDetail } from '../../bey/visual/model/geometry';
 
 export function applyQuality(appRenderer: AppRenderer, settings: PlayerSettings): void {
-  const { renderer } = appRenderer;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, QUALITY_PROFILES[settings.quality].maxPixelRatio));
-  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  appRenderer.setPixelRatioCap(QUALITY_PROFILES[settings.quality].maxPixelRatio);
+  setBeyModelDetail(QUALITY_PROFILES[settings.quality].modelDetail);
 }
 
 export function presentationFor(settings: PlayerSettings): MatchPresentation {
@@ -22,5 +22,6 @@ export function presentationFor(settings: PlayerSettings): MatchPresentation {
     conditionLayers: settings.conditionLayers,
     feel: { hitFlash: settings.hitFlash, hitShake: settings.hitShake, counterFeedback: settings.counterFeedback },
     flowFx: settings.flowFx,
+    performance: { adaptiveResolution: settings.adaptiveResolution, frameLimit: settings.frameLimit, renderScaleRange: QUALITY_PROFILES[settings.quality].renderScaleRange },
   };
 }

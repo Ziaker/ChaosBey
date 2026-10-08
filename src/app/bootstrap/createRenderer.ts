@@ -20,18 +20,36 @@ export interface AppRenderer {
   readonly camera: THREE.PerspectiveCamera;
   render: () => void;
   dispose: () => void;
+  /**
+   * Performance pass (0.57.0): the canvas' pixel ratio is `min(devicePixelRatio, cap) × scale`. The cap comes from the quality
+   * preset, the scale from the adaptive resolution (1 = full). Resizes the drawing buffer; render cost only.
+   */
+  setPixelRatioCap(cap: number): void;
+  setRenderScale(scale: number): void;
+  getRenderScale(): number;
 }
 
-export function createRenderer(canvas: HTMLCanvasElement): AppRenderer {
+export interface RendererOptions {
+  /** MSAA. Fixed for the life of the WebGL context. Default on. */
+  readonly antialias?: boolean;
+}
+
+export function createRenderer(canvas: HTMLCanvasElement, options: RendererOptions = {}): AppRenderer {
   // three.js needs WebGL2 and throws when the context can't be created
   // (no GPU, a blocklisted driver, WebGL disabled). Tag that case so boot
   // can show the player a message instead of a blank page (GDD 117).
   let renderer: THREE.WebGLRenderer;
   try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: options.antialias ?? true });
   } catch (error) {
     throw new WebGl2UnavailableError(error);
   }
+  let pixelRatioCap = 2;
+  let renderScale = 1;
+  const applyPixelRatio = (): void => {
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelRatioCap) * renderScale);
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+  };
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
   const scene = new THREE.Scene();
@@ -69,6 +87,17 @@ export function createRenderer(canvas: HTMLCanvasElement): AppRenderer {
     scene,
     camera,
     render: () => renderer.render(scene, camera),
+    setPixelRatioCap: (cap) => {
+      pixelRatioCap = cap;
+      applyPixelRatio();
+    },
+    setRenderScale: (scale) => {
+      const next = Math.max(0.25, Math.min(1, scale));
+      if (next === renderScale) return;
+      renderScale = next;
+      applyPixelRatio();
+    },
+    getRenderScale: () => renderScale,
     dispose: () => {
       window.removeEventListener('resize', handleResize);
       renderer.dispose();

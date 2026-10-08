@@ -351,7 +351,11 @@ export class MatchAnomalyDetector {
       emit('permanent-clash', 'match', `Clash Active for ${t.maxClashActiveTicks} ticks (target ${CLASH_TARGET_DURATION_S} s)`);
     }
     const clashCooldownBad = clashState === ClashState.Cooldown && input.clash.getCooldownRemainingS() > CLASH_COOLDOWN_S + 1e-6;
-    if (this.streak('clash-cooldown', clashState === ClashState.Cooldown, t.maxClashCooldownTicks, frozen) || this.latch('clash-cooldown-range', clashCooldownBad)) {
+    // A Clash that becomes Active again is the end of the cooldown, not a freeze of it: only hitstop and a finished round pause this
+    // streak (counting through the next Clash used to add one cooldown's ticks to the following one — a false "never ending" when
+    // two Clashes came one cooldown apart).
+    const cooldownPaused = !roundRunning || input.hitstopActive === true;
+    if (this.streak('clash-cooldown', clashState === ClashState.Cooldown, t.maxClashCooldownTicks, cooldownPaused) || this.latch('clash-cooldown-range', clashCooldownBad)) {
       emit('cooldown-never-ending', 'match', `Clash cooldown lasting past ${CLASH_COOLDOWN_S} s (remaining ${input.clash.getCooldownRemainingS().toFixed(2)} s)`);
     }
     if (input.hitstopActive !== undefined && this.streak('hitstop', input.hitstopActive, t.maxHitstopTicks)) {

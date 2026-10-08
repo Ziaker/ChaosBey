@@ -18,7 +18,10 @@ export function createRailVisuals(rails: readonly RailDefinition[], radiusM: num
     if (!rail.enabled) continue;
     const points = rail.path.points.map((p) => new THREE.Vector3(p.x, p.y, p.z));
     const curve = new THREE.CatmullRomCurve3(points, rail.path.closed, 'catmullrom', 0.2);
-    const geometry = new THREE.TubeGeometry(curve, Math.max(8, points.length * 2), radiusM, 8, rail.path.closed);
+    // One segment per ~1.5 m is as smooth as the eye can tell at this thickness (the 240-point route used to be drawn with 480
+    // segments × 8 sides = 7,700 triangles a rail; this is ~1,200).
+    const tubular = Math.max(16, Math.min(240, Math.round(rail.path.lengthM / 1.5)));
+    const geometry = new THREE.TubeGeometry(curve, tubular, radiusM, 6, rail.path.closed);
     const material = new THREE.MeshBasicMaterial({ color: RAIL_VISUAL_COLOR_HEX, fog: false });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = `rail:${rail.id}`;

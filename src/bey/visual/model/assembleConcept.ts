@@ -20,6 +20,7 @@
 
 import * as THREE from 'three';
 import { createMaterialKit } from './materials';
+import { detailed } from './geometry';
 import type { BuiltPiece, ConceptDefinition, ConceptParts } from './types';
 
 // ---------------- ASSEMBLY TUNING ----------------
@@ -62,7 +63,7 @@ export function assembleConcept(definition: ConceptDefinition): BuiltConcept {
   ) as Record<keyof ConceptParts, BuiltPiece>;
 
   const groove = (radius: number): THREE.Mesh => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, SEAM_GROOVE_HEIGHT, 64).translate(0, -SEAM_GROOVE_HEIGHT / 2, 0), mats.darkPlastic);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, SEAM_GROOVE_HEIGHT, detailed(64, 16)).translate(0, -SEAM_GROOVE_HEIGHT / 2, 0), mats.darkPlastic);
     m.castShadow = true;
     return m;
   };

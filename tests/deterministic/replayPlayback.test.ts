@@ -122,8 +122,10 @@ interface Recording {
 // replay-10 (3212 ticks, 29 frozen, 1359 steering ticks after 900) from a scan of replay-0..119 (31 qualify).
 // 0.56.0 (the AI runs the rail courses through the gates): replay-107 fell to 19 frozen ticks; replay-4 (3246 ticks, 43 frozen) and
 // replay-40 (3286 ticks, 25 frozen, 1139 steering ticks after 900) from a scan of replay-0..119 (39 qualify).
+// 0.57.0 (the AI builds speed while its opponent is on a rail): replay-40 fell to 12 frozen ticks; replay-4 still qualifies unchanged
+// and replay-1 (3446 ticks, 33 frozen, 1415 steering ticks after 900) replaces it, from a scan of replay-0..119 (43 qualify).
 const LONG_SEED = 'replay-4';
-const MUTATION_SEED = 'replay-40';
+const MUTATION_SEED = 'replay-1';
 
 /** A recording that really exercises the path: long, and frozen on hitstop at least 100 times. */
 function expectSubstantial(recording: Recording): void {
