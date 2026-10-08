@@ -178,7 +178,7 @@ function withHeld(actions: ControllerActions, added: Action): ControllerActions 
 }
 
 /**
- * Rail Grinding (0.51.0, owner 2026-10-08): one Bey's rail step, before its drift / dodge / attack read their input. On a
+ * Rail Grinding (0.52.0, owner 2026-10-08): one Bey's rail step, before its drift / dodge / attack read their input. On a
  * rail the Bey can only charge its attack and jump (a jump leaves the rail): Dodge and Jump are taken out of its actions
  * by the RailController (the Jump press itself is what leaves), a Circular tap is refused, and a Dash charge goes on
  * charging but does not fire until the Bey is off the rail (the release is held back). Returns the actions to use and the
@@ -296,7 +296,7 @@ export function tickMatch(
   firstActions = first.movement.filterPostClashActions(firstActions, firstGrounded, fixedDeltaSeconds);
   secondActions = second.movement.filterPostClashActions(secondActions, secondGrounded, fixedDeltaSeconds);
 
-  // Rail Grinding (0.51.0): grabbing, travelling and leaving a rail, and what the Bey may still do on it.
+  // Rail Grinding (0.52.0): grabbing, travelling and leaving a rail, and what the Bey may still do on it.
   const firstRail = railStep(first, firstActions, firstGrounded, fixedDeltaSeconds);
   const secondRail = railStep(second, secondActions, secondGrounded, fixedDeltaSeconds);
   firstActions = firstRail.actions;

@@ -1,5 +1,5 @@
 // ============================================================
-// RAIL CONTROLLER — one Bey's rail grinding (Rail Grinding, 0.51.0)
+// RAIL CONTROLLER — one Bey's rail grinding (Rail Grinding, 0.52.0)
 // Owner, 2026-10-08, on docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md §13:
 //   1. a Bey GRABS a rail by JUMPING TOWARD it (airborne in its own hop, within reach, moving toward the rail);
 //   2. the way there and the way back are THE SAME ROUTE (a rail is a line, not a one-way lane): the Bey travels it in the

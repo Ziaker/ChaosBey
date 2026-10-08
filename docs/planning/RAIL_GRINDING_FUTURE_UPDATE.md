@@ -453,7 +453,7 @@ Quando 1–3 e 5 estiverem decididos, o próximo passo é o protótipo de rota c
 
 ---
 
-## 17. Primeira versão jogável (0.51.0) — respostas do owner e suposições
+## 17. Primeira versão jogável (0.52.0) — respostas do owner e suposições
 
 **Owner, 2026-10-08 (respostas às 4 perguntas bloqueantes):**
 1. **Entrada:** *ao pular em direção* ao rail (sem botão dedicado, sem indicador).

@@ -1,5 +1,5 @@
 // ============================================================
-// RAIL VISUAL — temporary placeholder for the rails of a stage (Rail Grinding 0.51.0)
+// RAIL VISUAL — temporary placeholder for the rails of a stage (Rail Grinding 0.52.0)
 // A thin glowing tube along each rail's route. Presentation only: it reads the RailDefinition and never touches physics. The final
 // rail art is an owner decision still to come (docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md); this just makes the route visible.
 // ============================================================

@@ -98,7 +98,7 @@ export const PLACEHOLDER_RAIL_TUNING: RailTuning = {
 };
 
 /**
- * The tuning the game plays with (0.51.0). The owner closed HOW the rail works (jump toward it to grab it, there and back
+ * The tuning the game plays with (0.52.0). The owner closed HOW the rail works (jump toward it to grab it, there and back
  * along the same route, only charging the attack and jumping while on it, a jump leaves it for the arena) but gave no
  * numbers: every value here is PROVISIONAL, to be tuned by playtest in this one place.
  */

@@ -443,7 +443,7 @@ export class DriftController {
   }
 
   /**
-   * Rail Grinding (0.51.0): the Bey grabbed a rail in the middle of its own hop. The hop is over — no landing follows — and
+   * Rail Grinding (0.52.0): the Bey grabbed a rail in the middle of its own hop. The hop is over — no landing follows — and
    * nothing of it (a buffered press, an armed drift, a follow-up window) carries onto the rail or off it.
    */
   abortForRail(): void {

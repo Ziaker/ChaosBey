@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lab de Fluxo do Bey</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07100b;
+        --panel: #0d1610;
+        --panel-2: #142019;
+        --line: #22342a;
+        --text: #e9f2ec;
+        --muted: #8ea597;
+        --accent: #6fd3ff;
+        font-family: 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+      .lab { display: grid; grid-template-columns: 300px 1fr 300px; height: 100%; min-height: 560px; }
+      .lab.no-tuning { grid-template-columns: 300px 1fr; }
+      .lab.no-tuning .tuning { display: none; }
+      .panel, .tuning { background: var(--panel); padding: 18px 14px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+      .panel { border-right: 1px solid var(--line); }
+      .tuning { border-left: 1px solid var(--line); }
+      .kicker { font: 600 11px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+      h1 { margin: 6px 0 8px; font-size: 21px; }
+      h2 { margin: 0; font-size: 16px; }
+      h3 { margin: 0 0 8px; font: 700 11.5px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; }
+      .warn { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+      .hint { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip, .row-button {
+        display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+        border-radius: 6px; cursor: pointer; font: 12.5px inherit; font-family: inherit; padding: 7px 10px;
+      }
+      .row-button { width: 100%; text-align: left; }
+      kbd { font: 10px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--muted); background: var(--bg); }
+      .chip:hover, .row-button:hover { border-color: #3d5a49; }
+      .chip[aria-pressed='true'], .row-button[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+      .chip:focus-visible, .row-button:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .style-desc { margin: 6px 0 0; font-size: 12px; color: #c6d6cc; line-height: 1.45; }
+      .legend { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: #c6d6cc; }
+      .legend b { font-family: ui-monospace, Consolas, monospace; }
+      .slider-row { display: grid; grid-template-columns: 1fr 44px; gap: 2px 8px; align-items: center; }
+      .slider-row label { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
+      .slider-row input { width: 100%; accent-color: var(--accent); }
+      .slider-row output { font: 600 11.5px ui-monospace, Consolas, monospace; text-align: right; font-variant-numeric: tabular-nums; }
+      .slider-row.changed label { color: #ffb347; }
+      .slider-row.changed label::after { content: ' •'; }
+      .tune-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      .tune-actions button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 7px 8px; font: 600 11.5px/1.2 inherit; font-family: inherit; cursor: pointer; }
+      .tune-actions button:hover { border-color: #3d5a49; }
+      .tune-status { font-size: 11.5px; color: #c6d6cc; min-height: 1.4em; margin: 0; }
+      .tune-group { border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+      .tune-group summary { cursor: pointer; padding: 8px 10px; font: 700 11px ui-monospace, Consolas, monospace; letter-spacing: 0.08em; text-transform: uppercase; color: #c9d6cd; }
+      .tune-body { display: grid; gap: 8px; padding: 2px 10px 10px; }
+
+      .stage { position: relative; min-width: 0; overflow: hidden; background: #16301f; }
+      .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+      .callouts { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+      .hud { position: absolute; left: 12px; bottom: 10px; font: 11px ui-monospace, Consolas, monospace; color: rgba(255,255,255,0.75); text-shadow: 0 1px 2px #000; pointer-events: none; }
+
+      /* ---------------- CALLOUTS ---------------- */
+      .callout { position: absolute; transform: translate(-50%, -50%) rotate(var(--tilt)); white-space: nowrap; font-weight: 900; line-height: 1; animation-duration: var(--life); animation-fill-mode: forwards; animation-timing-function: linear; }
+      .callout.kind-hit { --c1: #ffd23f; --c2: #ff7a1a; }
+      .callout.kind-block { --c1: #bfe6ff; --c2: #3b78c8; }
+      .callout.kind-counter { --c1: #ff7ad2; --c2: #ffd23f; }
+
+      /* A — Quadrinho */
+      .callout.style-a { font: italic 900 calc(46px * var(--scale)) / 1 Impact, 'Arial Black', sans-serif; color: var(--c1); -webkit-text-stroke: calc(7px * var(--scale)) #1a0f0a; paint-order: stroke fill; text-shadow: calc(4px * var(--scale)) calc(4px * var(--scale)) 0 #1a0f0a; animation-name: pop-a; }
+      .callout.style-a::before { content: ''; position: absolute; inset: -42% -22%; z-index: -1; background: var(--c2); clip-path: polygon(100.0% 50.0%, 82.4% 56.4%, 96.2% 69.1%, 77.4% 68.3%, 85.4% 85.4%, 68.3% 77.4%, 69.1% 96.2%, 56.4% 82.4%, 50.0% 100.0%, 43.6% 82.4%, 30.9% 96.2%, 31.7% 77.4%, 14.6% 85.4%, 22.6% 68.3%, 3.8% 69.1%, 17.6% 56.4%, 0.0% 50.0%, 17.6% 43.6%, 3.8% 30.9%, 22.6% 31.7%, 14.6% 14.6%, 31.7% 22.6%, 30.9% 3.8%, 43.6% 17.6%, 50.0% 0.0%, 56.4% 17.6%, 69.1% 3.8%, 68.3% 22.6%, 85.4% 14.6%, 77.4% 31.7%, 96.2% 30.9%, 82.4% 43.6%); filter: drop-shadow(0 0 0 #000); opacity: 0.92; }
+      @keyframes pop-a {
+        0% { scale: 0.2; translate: 0 0; rotate: -14deg; opacity: 0; }
+        12% { scale: 1.38; rotate: 4deg; opacity: 1; }
+        26% { scale: 0.96; rotate: -2deg; }
+        38% { scale: 1.04; rotate: 0deg; }
+        78% { scale: 1; translate: 0 -8px; opacity: 1; }
+        100% { scale: 0.9; translate: 0 -34px; opacity: 0; }
+      }
+
+      /* B — Arcade */
+      .callout.style-b { font: 900 calc(40px * var(--scale)) / 1 'Courier New', Consolas, monospace; letter-spacing: calc(2px * var(--scale)); background: linear-gradient(#ffffff 0 42%, var(--c1) 42% 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; filter: drop-shadow(2px 0 0 #0b1030) drop-shadow(-2px 0 0 #0b1030) drop-shadow(0 2px 0 #0b1030) drop-shadow(0 -2px 0 #0b1030) drop-shadow(4px 4px 0 var(--c2)); animation-name: bounce-b; animation-timing-function: steps(1, end); }
+      @keyframes bounce-b {
+        0% { scale: 0; translate: 0 0; opacity: 1; }
+        10% { scale: 1.3; }
+        20% { scale: 0.88; }
+        30% { scale: 1.08; }
+        40% { scale: 1; }
+        50% { translate: 0 -6px; }
+        60% { translate: 0 0; }
+        70% { translate: 0 -3px; }
+        80% { translate: 0 0; opacity: 1; }
+        88% { opacity: 0; }
+        92% { opacity: 1; }
+        100% { opacity: 0; scale: 1; }
+      }
+
+      /* C — Cinético */
+      .callout.style-c { font: 800 calc(30px * var(--scale)) / 1 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.28em; text-transform: uppercase; color: #fff; padding: calc(6px * var(--scale)) calc(26px * var(--scale)); background: linear-gradient(100deg, rgba(0,0,0,0) 0, rgba(6,10,14,0.72) 14%, rgba(6,10,14,0.72) 86%, rgba(0,0,0,0) 100%); border-top: 2px solid var(--c1); border-bottom: 2px solid var(--c2); text-shadow: 0 0 14px var(--c1); clip-path: polygon(6% 0, 100% 0, 94% 100%, 0 100%); animation-name: slide-c; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
+      @keyframes slide-c {
+        0% { translate: -70px 0; opacity: 0; }
+        14% { translate: 0 0; opacity: 1; }
+        78% { translate: 8px 0; opacity: 1; }
+        100% { translate: 50px 0; opacity: 0; }
+      }
+
+      @media (prefers-reduced-motion: reduce) { .callout { animation-duration: calc(var(--life) * 0.6); } }
+      @media (max-width: 900px) {
+        .lab, .lab.no-tuning { grid-template-columns: 1fr; grid-template-rows: auto 60vh auto; height: auto; }
+        .panel, .tuning { border: 0; }
+        .stage { min-height: 60vh; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="lab" id="lab">
+      <aside class="panel">
+        <div>
+          <div class="kicker">Protótipo · não aprovado</div>
+          <h1>Lab de Fluxo do Bey</h1>
+          <p class="warn">
+            Terceira rodada. Ficam o borrão de giro, a inclinação, os riscos de vento e as argolas de impacto; as faixas em
+            crescente saíram. A poeira anime foi refeita em três ideias para você comparar (Q, W, E). O movimento é
+            coreografia, não o jogo: nada em <code>src/</code> muda.
+          </p>
+        </div>
+
+        <section>
+          <h3>Efeitos</h3>
+          <div class="chips" id="effects"></div>
+        </section>
+
+        <section>
+          <h3>Cena</h3>
+          <div class="chips" id="scene-buttons"></div>
+          <div class="slider-row" style="margin-top: 10px">
+            <label for="spin">Giro restante (Stamina)</label>
+            <input id="spin" type="range" min="0" max="1" step="0.01" value="1" />
+            <output id="spin-out">100%</output>
+          </div>
+          <div class="slider-row" style="margin-top: 6px">
+            <label for="speed">Velocidade da cena</label>
+            <input id="speed" type="range" min="0.1" max="1.5" step="0.05" value="1" />
+            <output id="speed-out">1.0x</output>
+          </div>
+        </section>
+
+        <section>
+          <h3>Poeira anime — 3 ideias</h3>
+          <div class="chips" id="dust-styles"></div>
+          <p class="style-desc" id="dust-desc"></p>
+        </section>
+
+        <section>
+          <h3>Texto de combate</h3>
+          <div class="chips" id="callout-styles"></div>
+          <p class="style-desc" id="callout-desc"></p>
+          <div class="chips" id="callout-fire" style="margin-top: 8px"></div>
+          <ul class="legend" id="callout-legend" style="margin-top: 8px"></ul>
+          <p class="hint" style="margin-top: 8px">Colisões reais da cena disparam HIT → BLOCK → COUNTER! em sequência, só para você ver os três.</p>
+        </section>
+
+        <section>
+          <h3>Câmera</h3>
+          <div class="chips" id="views"></div>
+          <p class="hint" style="margin-top: 6px">Alta e fixa (como nas referências) ou livre (arraste para orbitar, roda para zoom).</p>
+        </section>
+      </aside>
+
+      <main class="stage" id="stage">
+        <canvas id="canvas"></canvas>
+        <div class="callouts" id="callouts"></div>
+        <div class="hud" id="hud"></div>
+      </main>
+
+      <aside class="tuning" id="tuning">
+        <h2>Ajuste fino <kbd>P</kbd></h2>
+        <p class="hint">Cada valor dos efeitos. As linhas laranja diferem da proposta inicial; o rascunho fica salvo neste navegador.</p>
+        <div class="tune-actions">
+          <button id="tune-copy" type="button">Copiar valores</button>
+          <button id="tune-reset" type="button">Voltar à proposta</button>
+        </div>
+        <p class="tune-status" id="tune-status" role="status"></p>
+        <div id="tune-groups"></div>
+      </aside>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

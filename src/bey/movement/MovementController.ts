@@ -94,7 +94,7 @@ export interface MovementPreStepInput {
    */
   floorNormal?: { x: number; y: number; z: number } | null;
   /**
-   * Rail Grinding (0.51.0): while the Bey is on a rail, the route's velocity (3D) and the yaw it faces replace the whole
+   * Rail Grinding (0.52.0): while the Bey is on a rail, the route's velocity (3D) and the yaw it faces replace the whole
    * velocity this tick — no steering, throttle, grip or slide. Takes priority over everything but is not a Dodge or a Dash
    * (a Bey on a rail can't do either). A wall or another Bey still interrupts it through the post-step impact detector.
    */

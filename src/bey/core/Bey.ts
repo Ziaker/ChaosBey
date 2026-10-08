@@ -53,7 +53,7 @@ export interface Bey {
   readonly attack: AttackController;
   /** Owner, 2026-10-02 (Lote 3): speed build-up (see bey/momentum/). */
   readonly momentum: MomentumSystem;
-  /** Rail Grinding (0.51.0): this Bey's traversal of the stage's rails (none when the stage has none or the Pregame option is off). */
+  /** Rail Grinding (0.52.0): this Bey's traversal of the stage's rails (none when the stage has none or the Pregame option is off). */
   readonly rail: RailController;
   /** The match's per-Bey rules (MatchConfig): build-time config, in the replay config snapshot. */
   readonly rules: BeyMatchRules;
