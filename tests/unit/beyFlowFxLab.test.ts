@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { afterAll, describe, expect, it } from 'vitest';
 import { CONCEPTS } from '../../prototypes/bey-visual-concepts/src/concepts/conceptDefinitions';
-import { PointPool } from '../../prototypes/bey-flow-fx-concepts/src/fx/PointPool';
-import { WindRibbon, type RibbonShape } from '../../prototypes/bey-flow-fx-concepts/src/fx/WindRibbon';
+import { FxLayer } from '../../src/vfx/hybrid/fx/FxLayer';
+import { AnimeWind, type WindFlags } from '../../prototypes/bey-flow-fx-concepts/src/fx/AnimeWind';
+import { CLOUD_VARIANTS, CRESCENT, cloudBlobs, crescentPoints } from '../../prototypes/bey-flow-fx-concepts/src/fx/animeTextures';
 import { ARENA_RADIUS_M, BEY_DIAMETER_M, CALLOUT_CYCLE, FlowSim, floorHeight, floorSlope, type FlowEvent } from '../../prototypes/bey-flow-fx-concepts/src/sim/FlowSim';
 import { FlowRig, type FxFlags } from '../../prototypes/bey-flow-fx-concepts/src/stage/FlowRig';
 import { PROPOSED, TUNING, TUNING_SPEC, applyTuning, resetTuning } from '../../prototypes/bey-flow-fx-concepts/src/tuning';
@@ -10,11 +11,12 @@ import { CALLOUT_MEANING, CALLOUT_STYLES, CALLOUT_WORDS } from '../../prototypes
 
 // Visual-prototype checks (not gameplay): the Bey Flow FX lab's tuning is
 // consistent, its choreographed motion stays finite and inside the bowl,
-// the wind ribbon builds a sane tapered strip, and the rig drives every
-// effect from that motion.
+// the cartoon cloud and wind-blade shapes are well formed, and the rig and the
+// anime wind emitter react to that motion.
 
 const DT = 1 / 60;
-const ALL_ON: FxFlags = { ribbon: true, helix: true, blur: true, ghost: true, dust: true, lean: true };
+const ALL_ON: FxFlags = { blur: true, lean: true, dust: true, wind: true, swoosh: true, crown: true };
+const WIND_ON: WindFlags = { dust: true, wind: true, crown: true };
 
 function runSim(seconds: number, setup?: (s: FlowSim) => void): { sim: FlowSim; events: Array<FlowEvent & { t: number }> } {
   const sim = new FlowSim();
@@ -40,12 +42,12 @@ describe('flow lab — tuning', () => {
   });
 
   it('applyTuning clamps to the range, ignores junk, and resetTuning restores the proposal', () => {
-    applyTuning({ ribbonWidthM: 99, ghostCount: Number.NaN, dustRate: -5 });
-    const widthSpec = TUNING_SPEC.find((s) => s.key === 'ribbonWidthM')!;
+    applyTuning({ windWidthM: 99, swooshCount: Number.NaN, dustRate: -5 });
+    const widthSpec = TUNING_SPEC.find((s) => s.key === 'windWidthM')!;
     const dustSpec = TUNING_SPEC.find((s) => s.key === 'dustRate')!;
-    expect(TUNING.ribbonWidthM).toBe(widthSpec.max);
+    expect(TUNING.windWidthM).toBe(widthSpec.max);
     expect(TUNING.dustRate).toBe(dustSpec.min);
-    expect(TUNING.ghostCount).toBe(PROPOSED.ghostCount);
+    expect(TUNING.swooshCount).toBe(PROPOSED.swooshCount);
     resetTuning();
     expect({ ...TUNING }).toEqual({ ...PROPOSED });
   });
@@ -125,187 +127,226 @@ describe('flow lab — choreographed motion', () => {
   });
 });
 
-describe('flow lab — wind ribbon', () => {
-  const shape = (over: Partial<RibbonShape> = {}): RibbonShape => ({
-    lifeS: 0.5,
-    opacity: 1,
-    waveM: 0,
-    waveHz: 0,
-    helixRadiusM: 0,
-    helixTurnsPerS: 0,
-    helixPhase: 0,
-    widthScale: 1,
-    headColor: new THREE.Color(1, 1, 1),
-    tailColor: new THREE.Color(0, 0.5, 1),
-    ...over,
-  });
-  const camera = new THREE.Vector3(0, 20, 15);
-
-  function straightRibbon(): { ribbon: WindRibbon; now: number } {
-    const ribbon = new WindRibbon();
-    let now = 0;
-    for (let i = 0; i < 30; i++) {
-      now = i * DT;
-      ribbon.push(now, new THREE.Vector3(i * 0.2, 0.5, 0), 1, 0.4);
-    }
-    return { ribbon, now };
-  }
-
-  it('builds a finite triangle strip that tapers and fades toward the tail', () => {
-    const { ribbon, now } = straightRibbon();
-    ribbon.update(now, camera, shape());
-    const geo = ribbon.mesh.geometry;
-    const pos = geo.attributes.position!.array as Float32Array;
-    const col = geo.attributes.color!.array as Float32Array;
-    const live = ribbon.sampleCount;
-    expect(live).toBeGreaterThan(10);
-    expect(geo.drawRange.count).toBe((live - 1) * 6);
-    for (let i = 0; i < live * 6; i++) expect(Number.isFinite(pos[i]!)).toBe(true);
-    const width = (k: number): number => {
-      const o = k * 6;
-      return Math.hypot(pos[o]! - pos[o + 3]!, pos[o + 1]! - pos[o + 4]!, pos[o + 2]! - pos[o + 5]!);
-    };
-    const mid = Math.floor(live / 2);
-    expect(width(mid)).toBeGreaterThan(width(live - 1)); // the tail is thinner than the middle
-    const alpha = (k: number): number => col[k * 8 + 3]!;
-    expect(alpha(1)).toBeGreaterThan(alpha(live - 1));
-    expect(alpha(live - 1)).toBeLessThan(0.15);
-    expect(alpha(live - 1)).toBeLessThan(alpha(1) * 0.2); // the tail is nearly gone next to the head
-  });
-
-  it('drops samples older than its life and draws nothing with fewer than two', () => {
-    const { ribbon, now } = straightRibbon();
-    ribbon.update(now + 10, camera, shape());
-    expect(ribbon.sampleCount).toBe(0);
-    expect(ribbon.mesh.geometry.drawRange.count).toBe(0);
-  });
-
-  it('a helix strand leaves the straight path, a plain ribbon does not', () => {
-    const { ribbon, now } = straightRibbon();
-    const plain = new WindRibbon();
-    const helix = new WindRibbon();
-    for (let i = 0; i < 30; i++) {
-      plain.push(i * DT, new THREE.Vector3(i * 0.2, 0.5, 0), 1, 0.2);
-      helix.push(i * DT, new THREE.Vector3(i * 0.2, 0.5, 0), 1, 0.2);
-    }
-    plain.update(now, camera, shape());
-    helix.update(now, camera, shape({ helixRadiusM: 0.6, helixTurnsPerS: 3 }));
-    const maxOffAxis = (r: WindRibbon): number => {
-      const p = r.mesh.geometry.attributes.position!.array as Float32Array;
-      let m = 0;
-      for (let k = 0; k < r.sampleCount; k++) m = Math.max(m, Math.hypot(p[k * 6 + 1]! - 0.5, p[k * 6 + 2]!));
-      return m;
-    };
-    expect(maxOffAxis(helix)).toBeGreaterThan(maxOffAxis(plain) + 0.2);
-  });
-
-  it('clear() empties it', () => {
-    const { ribbon } = straightRibbon();
-    ribbon.clear();
-    expect(ribbon.sampleCount).toBe(0);
+describe('flow lab — owner tuning', () => {
+  it("starts from the owner's own numbers for the effects they kept", () => {
+    expect(PROPOSED.blurStrength).toBe(1.35);
+    expect(PROPOSED.blurFadeSpin).toBe(0.2);
+    expect(PROPOSED.leanMaxDeg).toBe(26);
+    expect(PROPOSED.leanAccelRefMps2).toBe(13);
+    expect(PROPOSED.calloutScale).toBe(0.55);
+    expect(PROPOSED.calloutLifeS).toBe(0.55);
   });
 });
 
-describe('flow lab — point pool', () => {
-  it('particles live for their life and then go away', () => {
-    const pool = new PointPool(20, false);
-    pool.emit(new THREE.Vector3(), new THREE.Vector3(1, 1, 0), 0.2, 0.5, new THREE.Color(1, 1, 1), 1);
-    expect(pool.liveCount).toBe(1);
-    pool.update(0.25);
-    expect(pool.liveCount).toBe(1);
-    pool.update(0.4);
-    expect(pool.liveCount).toBe(0);
-    pool.dispose();
+describe('flow lab — cartoon shapes', () => {
+  it('every cloud variant is deterministic, finite, inside the tile and sits on a flat base', () => {
+    expect(CLOUD_VARIANTS).toBeGreaterThanOrEqual(3);
+    for (let v = 0; v < CLOUD_VARIANTS; v++) {
+      const a = cloudBlobs(v);
+      expect(cloudBlobs(v)).toEqual(a);
+      expect(a.length).toBeGreaterThanOrEqual(8);
+      for (const b of a) {
+        for (const n of [b.x, b.y, b.r]) expect(Number.isFinite(n)).toBe(true);
+        expect(b.x - b.r).toBeGreaterThan(-0.05);
+        expect(b.x + b.r).toBeLessThan(1.05);
+        expect(b.y + b.r).toBeLessThan(1);
+        expect(b.r).toBeGreaterThan(0.08);
+      }
+      // The bottom row is the widest: the cloud is wider at the base than on top.
+      const lows = a.filter((b) => b.y > 0.6);
+      const highs = a.filter((b) => b.y < 0.4);
+      const span = (bs: typeof a): number => Math.max(...bs.map((b) => b.x + b.r)) - Math.min(...bs.map((b) => b.x - b.r));
+      expect(span(lows)).toBeGreaterThan(span(highs));
+    }
   });
 
-  it('wraps around instead of overflowing', () => {
-    const pool = new PointPool(4, true);
-    for (let i = 0; i < 10; i++) pool.emit(new THREE.Vector3(), new THREE.Vector3(), 0.1, 1, new THREE.Color(), 1);
-    expect(pool.liveCount).toBe(4);
-    pool.dispose();
+  it('the variants differ from each other', () => {
+    expect(cloudBlobs(0)).not.toEqual(cloudBlobs(1));
+    expect(cloudBlobs(1)).not.toEqual(cloudBlobs(2));
+  });
+
+  it('the wind blade is a closed crescent: pointed at both tips, bulging past its inner edge', () => {
+    const { outer, inner } = crescentPoints(24);
+    expect(outer.length).toBe(25);
+    expect(inner.length).toBe(25);
+    // The two edges meet at the tips...
+    expect(outer[0]).toEqual(CRESCENT.tipA);
+    expect(inner[inner.length - 1]).toEqual(CRESCENT.tipA);
+    expect(outer[outer.length - 1]).toEqual(CRESCENT.tipB);
+    expect(inner[0]).toEqual(CRESCENT.tipB);
+    // ...and between them the outer edge is higher (smaller y) than the inner edge: it has thickness.
+    const mid = 12;
+    const outerMid = outer[mid]!;
+    const innerMid = inner[inner.length - 1 - mid]!;
+    expect(innerMid[1] - outerMid[1]).toBeGreaterThan(0.15);
+    for (const [x, y] of [...outer, ...inner]) {
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(x).toBeLessThanOrEqual(1);
+      expect(Number.isFinite(y)).toBe(true);
+    }
+  });
+});
+
+describe('flow lab — anime wind', () => {
+  function setup(): { layer: FxLayer; wind: AnimeWind } {
+    const scene = new THREE.Scene();
+    const cam = new THREE.PerspectiveCamera(40, 1.6, 0.1, 300);
+    cam.position.set(0, 15, 11);
+    const layer = new FxLayer(scene, cam);
+    return { layer, wind: new AnimeWind(layer) };
+  }
+  const tip = new THREE.Vector3(2, 0.3, 1);
+
+  function fastBey(): ReturnType<typeof runSim>['sim']['beys'][0] {
+    const sim = new FlowSim();
+    const b = sim.beys[0];
+    b.vx = 8;
+    b.vz = 2;
+    b.speed = Math.hypot(8, 2);
+    return b;
+  }
+
+  it('a fast Bey leaves clouds and wind streaks; a slow one leaves none', () => {
+    const { layer, wind } = setup();
+    const b = fastBey();
+    for (let i = 0; i < 60; i++) wind.trail(0, b, tip, DT, TUNING, WIND_ON);
+    expect(wind.emittedClouds).toBeGreaterThan(3);
+    expect(layer.count()).toBeGreaterThan(8); // clouds + streaks
+
+    const slow = setup();
+    const s = fastBey();
+    s.vx = 0.5;
+    s.vz = 0;
+    s.speed = 0.5;
+    for (let i = 0; i < 60; i++) slow.wind.trail(0, s, tip, DT, TUNING, WIND_ON);
+    expect(slow.layer.count()).toBe(0);
+  });
+
+  it('a Dash leaves more clouds than plain running', () => {
+    const run = setup();
+    const dash = setup();
+    const a = fastBey();
+    const b = fastBey();
+    b.dashing = true;
+    for (let i = 0; i < 120; i++) {
+      run.wind.trail(0, a, tip, DT, TUNING, WIND_ON);
+      dash.wind.trail(0, b, tip, DT, TUNING, WIND_ON);
+    }
+    expect(dash.wind.emittedClouds).toBeGreaterThan(run.wind.emittedClouds);
+  });
+
+  it('every effect can be turned off on its own', () => {
+    const { layer, wind } = setup();
+    const b = fastBey();
+    for (let i = 0; i < 60; i++) wind.trail(0, b, tip, DT, TUNING, { dust: false, wind: false, crown: true });
+    expect(layer.count()).toBe(0);
+    wind.impact(1, 1, 0.8, TUNING, { dust: true, wind: true, crown: false });
+    wind.dashStart(0, b, tip, TUNING, { dust: true, wind: true, crown: false });
+    expect(layer.count()).toBe(0);
+  });
+
+  it('a hit raises the crown, a cloud burst and a star; a harder hit raises more clouds', () => {
+    const light = setup();
+    const heavy = setup();
+    light.wind.impact(1, 1, 0.1, TUNING, WIND_ON);
+    heavy.wind.impact(1, 1, 1, TUNING, WIND_ON);
+    expect(light.layer.count()).toBeGreaterThanOrEqual(2 + 6 + 1);
+    expect(heavy.wind.emittedClouds).toBeGreaterThan(light.wind.emittedClouds);
+  });
+
+  it('a Dash release raises the configured number of shock rings plus a puff of clouds', () => {
+    const { layer, wind } = setup();
+    wind.dashStart(0, fastBey(), tip, TUNING, WIND_ON);
+    expect(layer.count()).toBe(Math.round(TUNING.crownCount) + 6);
+    expect(wind.emittedClouds).toBe(6);
+  });
+
+  it('is deterministic for a given seed', () => {
+    const a = setup();
+    const b = setup();
+    const bey = fastBey();
+    for (let i = 0; i < 90; i++) {
+      a.wind.trail(0, bey, tip, DT, TUNING, WIND_ON);
+      b.wind.trail(0, bey, tip, DT, TUNING, WIND_ON);
+    }
+    expect(a.layer.count()).toBe(b.layer.count());
+    expect(a.wind.emittedClouds).toBe(b.wind.emittedClouds);
+  });
+
+  it('the live effect count stays inside the layer budget however long it runs', () => {
+    const { layer, wind } = setup();
+    const b = fastBey();
+    b.dashing = true;
+    for (let i = 0; i < 60 * 30; i++) {
+      wind.trail(0, b, tip, DT, { ...TUNING, intensity: 2 }, WIND_ON);
+      layer.tick(DT);
+    }
+    expect(layer.count()).toBeLessThan(700);
   });
 });
 
 describe('flow lab — rig', () => {
-  const dust = new PointPool(400, false);
-  const sparks = new PointPool(300, true);
   const scene = new THREE.Scene();
   const rigs: FlowRig[] = [];
-  afterAll(() => {
-    rigs.forEach((r) => r.dispose());
-    dust.dispose();
-    sparks.dispose();
-  });
+  afterAll(() => rigs.forEach((r) => r.dispose()));
 
   function makeRig(): FlowRig {
     const def = CONCEPTS.find((c) => c.id === 'attack-a')!;
-    const rig = new FlowRig(def, scene, dust, sparks, 0, 3);
+    const rig = new FlowRig(def, scene);
     rigs.push(rig);
     return rig;
   }
-  const camera = new THREE.PerspectiveCamera(40, 1.6, 0.1, 300);
-  camera.position.set(0, 22, 17);
-  camera.lookAt(0, 0.4, 0);
 
-  it('drives ribbon, ghosts, dust and lean from the motion, all finite and bounded', () => {
+  it('leans into curves and shows wind blades, all finite and bounded', () => {
     const sim = new FlowSim();
     const rig = makeRig();
     let maxLean = 0;
-    let maxGhosts = 0;
+    let maxBlades = 0;
     for (let i = 0; i < 8 / DT; i++) {
       sim.step(DT);
-      rig.record(sim.beys[0], sim.time, DT, TUNING, ALL_ON);
-      rig.update(sim.beys[0], sim.time, DT, camera, TUNING, ALL_ON);
-      dust.update(DT);
+      rig.update(sim.beys[0], DT, TUNING, ALL_ON);
       expect(Number.isFinite(rig.leanDegrees)).toBe(true);
       maxLean = Math.max(maxLean, Math.abs(rig.leanDegrees));
-      maxGhosts = Math.max(maxGhosts, rig.visibleGhosts);
+      maxBlades = Math.max(maxBlades, rig.visibleSwooshes);
     }
-    expect(rig.ribbonSampleCount).toBeGreaterThan(5);
     expect(maxLean).toBeGreaterThan(2);
     expect(maxLean).toBeLessThanOrEqual(TUNING.leanMaxDeg + 1e-6);
-    expect(maxGhosts).toBeGreaterThan(0);
-    expect(maxGhosts).toBeLessThanOrEqual(Math.round(TUNING.ghostCount));
-    expect(dust.liveCount).toBeGreaterThan(0);
+    expect(maxBlades).toBeGreaterThan(0);
+    expect(maxBlades).toBeLessThanOrEqual(Math.round(TUNING.swooshCount));
+  });
+
+  it('the wind blades fade with the spin and are gone when it is nearly dead', () => {
+    const sim = new FlowSim();
+    const rig = makeRig();
+    sim.spinTarget = 0.02;
+    for (let i = 0; i < 3 / DT; i++) {
+      sim.step(DT);
+      rig.update(sim.beys[0], DT, TUNING, ALL_ON);
+    }
+    expect(rig.visibleSwooshes).toBe(0);
   });
 
   it('turns every effect off cleanly', () => {
     const sim = new FlowSim();
     const rig = makeRig();
-    const off: FxFlags = { ribbon: false, helix: false, blur: false, ghost: false, dust: false, lean: false };
+    const off: FxFlags = { blur: false, lean: false, dust: false, wind: false, swoosh: false, crown: false };
     for (let i = 0; i < 3 / DT; i++) {
       sim.step(DT);
-      rig.record(sim.beys[0], sim.time, DT, TUNING, off);
-      rig.update(sim.beys[0], sim.time, DT, camera, TUNING, off);
+      rig.update(sim.beys[0], DT, TUNING, off);
     }
-    expect(rig.ribbonSampleCount).toBe(0);
-    expect(rig.visibleGhosts).toBe(0);
+    expect(rig.visibleSwooshes).toBe(0);
     expect(rig.leanDegrees).toBe(0);
   });
 
-  it('samples the path per sim step, not per rendered frame', () => {
+  it('puts the tip on the floor under the Bey', () => {
     const sim = new FlowSim();
     const rig = makeRig();
-    // 30 sim steps but only ONE rendered frame: the ribbon still has every step's sample.
-    for (let i = 0; i < 30; i++) {
-      sim.step(DT);
-      rig.record(sim.beys[0], sim.time, DT, TUNING, ALL_ON);
-    }
-    rig.update(sim.beys[0], sim.time, 30 * DT, camera, TUNING, ALL_ON);
-    expect(rig.ribbonSampleCount).toBe(30);
-  });
-
-  it('resetTrails forgets the path', () => {
-    const sim = new FlowSim();
-    const rig = makeRig();
-    for (let i = 0; i < 2 / DT; i++) {
-      sim.step(DT);
-      rig.record(sim.beys[0], sim.time, DT, TUNING, ALL_ON);
-      rig.update(sim.beys[0], sim.time, DT, camera, TUNING, ALL_ON);
-    }
-    expect(rig.ribbonSampleCount).toBeGreaterThan(0);
-    rig.resetTrails();
-    expect(rig.ribbonSampleCount).toBe(0);
+    sim.step(DT);
+    rig.update(sim.beys[0], DT, TUNING, ALL_ON);
+    const t = rig.tip(new THREE.Vector3());
+    expect(t.x).toBeCloseTo(sim.beys[0].x);
+    expect(t.z).toBeCloseTo(sim.beys[0].z);
+    expect(t.y).toBeCloseTo(floorHeight(Math.hypot(t.x, t.z)));
   });
 });
 

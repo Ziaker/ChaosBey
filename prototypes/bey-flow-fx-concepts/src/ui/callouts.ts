@@ -1,8 +1,8 @@
 // ============================================================
 // BEY FLOW FX LAB — HIT / BLOCK / COUNTER CALLOUTS
-// Three candidate looks for the floating combat word. The owner asked for
-// "Hit, Block, Counter, stylised", with the final style defined by
-// prototypes, so this lab only compares them; none is decided.
+// Three candidate looks for the floating combat word. The owner chose A
+// (Quadrinho) on 2026-10-08 and asked that the words be an OPTION in the
+// game's Settings; B and C stay here only as history.
 //
 //   A — Quadrinho:  comic burst, thick outline, wobbling pop (Western comic).
 //   B — Arcade:     chunky pixel-ish letters with a stepped shadow, bounce
@@ -25,7 +25,7 @@ export interface CalloutStyleInfo {
 }
 
 export const CALLOUT_STYLES: readonly CalloutStyleInfo[] = [
-  { id: 'A', label: 'A — Quadrinho', description: 'Explosão de gibi: contorno grosso, balanço ao aparecer.' },
+  { id: 'A', label: 'A — Quadrinho (escolhido)', description: 'Explosão de gibi: contorno grosso, balanço ao aparecer. Escolhido pelo owner; no jogo será uma opção nas Configurações.' },
   { id: 'B', label: 'B — Arcade', description: 'Letras grossas com sombra em degraus, quique (estilo dos jogos de PS1/PS2).' },
   { id: 'C', label: 'C — Cinético', description: 'Maiúsculas limpas com corte diagonal; desliza e some. O mais discreto.' },
 ];

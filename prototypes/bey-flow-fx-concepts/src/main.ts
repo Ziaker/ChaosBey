@@ -20,12 +20,12 @@ const $ = <T extends HTMLElement>(id: string): T => {
 };
 
 const EFFECTS: ReadonlyArray<{ key: keyof FxFlags; label: string; key1: string }> = [
-  { key: 'ribbon', label: 'Fita de vento', key1: '1' },
-  { key: 'helix', label: 'Espiral', key1: '2' },
-  { key: 'blur', label: 'Borrão de giro', key1: '3' },
-  { key: 'ghost', label: 'Eco fantasma', key1: '4' },
-  { key: 'dust', label: 'Poeira e faíscas', key1: '5' },
-  { key: 'lean', label: 'Inclinação', key1: '6' },
+  { key: 'blur', label: 'Borrão de giro', key1: '1' },
+  { key: 'lean', label: 'Inclinação', key1: '2' },
+  { key: 'dust', label: 'Poeira anime', key1: '3' },
+  { key: 'wind', label: 'Vento: riscos', key1: '4' },
+  { key: 'swoosh', label: 'Vento: faixas', key1: '5' },
+  { key: 'crown', label: 'Coroas de impacto', key1: '6' },
 ];
 
 // ---------------- tuning draft (best effort) ----------------
@@ -47,7 +47,7 @@ function writeDraft(): void {
 
 const stage = new FlowStage($<HTMLCanvasElement>('canvas'), $('stage'));
 const callouts = new CalloutLayer($('callouts'));
-let calloutStyle: CalloutStyleId = 'B';
+let calloutStyle: CalloutStyleId = 'A';
 
 const draft = readDraft();
 if (draft) applyTuning(draft);
@@ -163,7 +163,7 @@ function buildTuning(): void {
     if (!body) {
       const details = document.createElement('details');
       details.className = 'tune-group';
-      details.open = spec.group === 'ribbon' || spec.group === 'global';
+      details.open = spec.group === 'dust' || spec.group === 'wind' || spec.group === 'swoosh';
       const summary = document.createElement('summary');
       summary.textContent = GROUP_TITLES[spec.group];
       body = document.createElement('div');
@@ -247,7 +247,7 @@ window.addEventListener('keydown', (ev) => {
 // ---------------- HUD line ----------------
 window.setInterval(() => {
   const s = stage.stats;
-  $('hud').textContent = `t ${s.simTime.toFixed(1)} s · fita ${s.ribbonSamples} pts · poeira ${s.dust} · faíscas ${s.sparks}`;
+  $('hud').textContent = `t ${s.simTime.toFixed(1)} s · efeitos vivos ${s.live} · nuvens ${s.clouds}`;
 }, HUD_REFRESH_MS);
 
 declare global {

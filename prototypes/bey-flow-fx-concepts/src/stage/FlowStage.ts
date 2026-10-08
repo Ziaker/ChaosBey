@@ -10,7 +10,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { CONCEPTS } from '../../../bey-visual-concepts/src/concepts/conceptDefinitions';
-import { PointPool } from '../fx/PointPool';
+import { FxLayer } from '../../../../src/vfx/hybrid/fx/FxLayer';
+import { AnimeWind } from '../fx/AnimeWind';
 import { ARENA_RADIUS_M, CALLOUT_CYCLE, FlowSim, floorHeight, type CalloutKind, type FlowEvent } from '../sim/FlowSim';
 import { TUNING } from '../tuning';
 import { FlowRig, type FxFlags } from './FlowRig';
@@ -26,8 +27,6 @@ const FLOOR_RADIAL_SEGMENTS = 64;
 const FLOOR_ANGULAR_SEGMENTS = 128;
 const WALL_HEIGHT_M = 1.5;
 const WALL_OUTSET_M = 0.7;
-const DUST_CAPACITY = 600;
-const SPARK_CAPACITY = 400;
 const BEY_IDS = ['attack-a', 'stamina-b'] as const;
 // -----------------------------------------
 
@@ -113,14 +112,16 @@ export class FlowStage {
   readonly camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 300);
   readonly controls: OrbitControls;
   readonly scene = new THREE.Scene();
-  readonly flags: FxFlags = { ribbon: true, helix: true, blur: true, ghost: true, dust: true, lean: true };
+  readonly flags: FxFlags = { blur: true, lean: true, dust: true, wind: true, swoosh: true, crown: true };
   sim = new FlowSim();
   timeScale = 1;
   paused = false;
   private view: ViewMode = 'overview';
   private readonly rigs: [FlowRig, FlowRig];
-  private readonly dust = new PointPool(DUST_CAPACITY, false);
-  private readonly sparks = new PointPool(SPARK_CAPACITY, true);
+  private readonly layer: FxLayer;
+  private readonly wind: AnimeWind;
+  private readonly prevDashing = [false, false];
+  private readonly tip = new THREE.Vector3();
   private accumulator = 0;
   private lastMs = performance.now();
   private onEvent: (e: FlowEvent) => void = () => {};
@@ -141,14 +142,15 @@ export class FlowStage {
     sun.position.set(-6, 14, 8);
     this.scene.add(sun);
     this.scene.add(buildFloor(), buildWall());
-    this.scene.add(this.dust.points, this.sparks.points);
+    this.layer = new FxLayer(this.scene, this.camera);
+    this.wind = new AnimeWind(this.layer);
 
     const [idA, idB] = BEY_IDS;
     const defA = CONCEPTS.find((c) => c.id === idA)!;
     const defB = CONCEPTS.find((c) => c.id === idB)!;
     this.rigs = [
-      new FlowRig(defA, this.scene, this.dust, this.sparks, 0, 11),
-      new FlowRig(defB, this.scene, this.dust, this.sparks, Math.PI / 2, 29),
+      new FlowRig(defA, this.scene),
+      new FlowRig(defB, this.scene),
     ];
 
     this.controls = new OrbitControls(this.camera, canvas);
@@ -187,11 +189,13 @@ export class FlowStage {
     this.sim = new FlowSim();
     this.sim.spinTarget = spin;
     this.sim.dashesEnabled = dashes;
-    this.rigs.forEach((r) => r.resetTrails());
+    this.layer.clear();
+    this.prevDashing[0] = false;
+    this.prevDashing[1] = false;
   }
 
   fire(kind: CalloutKind): void {
-    this.onEvent(this.sim.forceCallout(kind));
+    this.handleEvent(this.sim.forceCallout(kind));
   }
 
   /** The next kind the sim will use on a real collision (for the lab's hint line). */
@@ -205,13 +209,13 @@ export class FlowStage {
     return { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h };
   }
 
-  get stats(): { ribbonSamples: number; dust: number; sparks: number; simTime: number } {
-    return {
-      ribbonSamples: this.rigs[0].ribbonSampleCount + this.rigs[1].ribbonSampleCount,
-      dust: this.dust.liveCount,
-      sparks: this.sparks.liveCount,
-      simTime: this.sim.time,
-    };
+  get stats(): { live: number; clouds: number; simTime: number } {
+    return { live: this.layer.count(), clouds: this.wind.emittedClouds, simTime: this.sim.time };
+  }
+
+  private handleEvent(e: FlowEvent): void {
+    this.wind.impact(e.x, e.z, e.m, TUNING, this.flags);
+    this.onEvent(e);
   }
 
   private resize(): void {
@@ -220,9 +224,6 @@ export class FlowStage {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    const px = this.renderer.domElement.height;
-    this.dust.setViewport(px, CAMERA_FOV);
-    this.sparks.setViewport(px, CAMERA_FOV);
   }
 
   private frame(): void {
@@ -235,22 +236,28 @@ export class FlowStage {
     while (this.accumulator >= FIXED_DT) {
       this.accumulator -= FIXED_DT;
       this.sim.step(FIXED_DT);
-      this.rigs.forEach((rig, i) => rig.record(this.sim.beys[i]!, this.sim.time, FIXED_DT, TUNING, this.flags));
-      for (const e of this.sim.events) this.onEvent(e);
+      this.sim.beys.forEach((b, i) => {
+        // A Dash just started: shock rings and a puff of clouds behind the Bey.
+        if (b.dashing && !this.prevDashing[i]) this.wind.dashStart(i as 0 | 1, b, this.rigs[i]!.tip(this.tip), TUNING, this.flags);
+        this.prevDashing[i] = b.dashing;
+      });
+      for (const e of this.sim.events) this.handleEvent(e);
     }
     if (this.view === 'free') this.controls.update();
 
-    this.rigs.forEach((rig, i) => rig.update(this.sim.beys[i]!, this.sim.time, dt, this.camera, TUNING, this.flags));
-    this.dust.update(dt);
-    this.sparks.update(dt);
+    this.rigs.forEach((rig, i) => {
+      const b = this.sim.beys[i]!;
+      rig.update(b, dt, TUNING, this.flags);
+      this.wind.trail(i as 0 | 1, b, rig.tip(this.tip), dt, TUNING, this.flags);
+    });
+    this.layer.tick(dt);
     this.renderer.render(this.scene, this.camera);
   }
 
   dispose(): void {
     this.renderer.setAnimationLoop(null);
     this.rigs.forEach((r) => r.dispose());
-    this.dust.dispose();
-    this.sparks.dispose();
+    this.layer.clear();
     this.renderer.dispose();
   }
 }

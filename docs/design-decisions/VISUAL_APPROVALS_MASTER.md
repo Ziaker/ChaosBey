@@ -51,7 +51,7 @@ A existência de UI de debug, sliders ou readouts dentro de um lab **não** sign
 | Pregame Setup UI | **DIREÇÃO VISUAL/UX APROVADA — ainda não integrada** | `pregame-overhaul.md` |
 | Main Menu / Character Select / Pause / Results / Settings | **DIREÇÃO VISUAL FINAL AINDA ABERTA** | GDD + este arquivo |
 | Launch System | **A — TIMING SNAP APROVADO; launcher físico + ponto de entrada + chegada simultânea; sem countdown pós-pouso; não integrado** | `launch-system-approval.md` |
-| Fluxo do Bey — fita de vento, espiral, borrão de giro, eco fantasma, poeira, inclinação e texto HIT/BLOCK/COUNTER | **PROTOTIPADO, NÃO FINAL (owner, 2026-10-08); estilo do texto a escolher; não integrado** | `prototypes/bey-flow-fx-concepts/` · `bey-flow-fx-approval.md` |
+| Fluxo do Bey — borrão de giro, inclinação, poeira/vento anime, coroas de impacto e texto HIT/BLOCK/COUNTER | **PROTOTIPADO, NÃO FINAL (owner, 2026-10-08): texto estilo A escolhido (opção nas Configurações); ficam borrão e inclinação; poeira/vento anime a ajustar; não integrado** | `prototypes/bey-flow-fx-concepts/` · `bey-flow-fx-approval.md` |
 | Bloom / chromatic aberration | **NÃO PROTOTIPADOS / uso final não decidido** | inventário |
 
 ---

@@ -1,54 +1,56 @@
 // ============================================================
 // BEY FLOW FX LAB — LIVE TUNING
-// Every adjustable value of the continuous per-Bey effects (wind ribbon,
-// helix swirl, spin blur, ghost echoes, tip dust, lean) and of the
-// Hit / Block / Counter callouts. The tuning panel edits TUNING live and
+// Every adjustable value of the continuous per-Bey effects and of the
+// HIT / BLOCK / COUNTER words. The tuning panel edits TUNING live and
 // everything reads it every frame.
 //
-// PROPOSED holds Claude's starting values, taken from the owner's
-// references (a light-yellow stadium with cyan wind ribbons, spin blur and
-// a translucent echo). They are NOT approved: the owner tunes them here
-// and the final values are recorded in
+// Round 2 (owner feedback, 2026-10-08): the owner kept the SPIN BLUR, the
+// LEAN and a dust/sparks slot, and asked for the dust to be "anime, more
+// epic" with "more wind". The old ribbon, helix and ghost echo are gone;
+// the dust and wind are now cartoon clouds, torn wind streaks, crescent wind
+// blades and floor crowns drawn in the style of the owner's reference sheets
+// and of the approved Cel Cyclone (src/vfx/hybrid/fx).
+//
+// PROPOSED = Claude's starting values; for blur, lean and the word the owner's
+// own tuned numbers (copied from the lab) are the new starting point. None of
+// it is approved yet: the final values go in
 // docs/design-decisions/bey-flow-fx-approval.md.
 //
 // Units: the label names the unit; "x" values are multipliers (1 = proposal).
 // ============================================================
 
-export type TuningGroup = 'global' | 'ribbon' | 'helix' | 'blur' | 'ghost' | 'dust' | 'lean' | 'callout';
+export type TuningGroup = 'global' | 'blur' | 'lean' | 'dust' | 'wind' | 'swoosh' | 'crown' | 'callout';
 
 export interface Tuning {
   // --- Global ---
   intensity: number;
-  // --- Wind ribbon (the tapered cyan/white band behind the rim) ---
-  ribbonLifeS: number;
-  ribbonWidthM: number;
-  ribbonDashWidthM: number;
-  ribbonFullSpeedMps: number;
-  ribbonOpacity: number;
-  ribbonCore: number;
-  ribbonWaveM: number;
-  ribbonWaveHz: number;
-  // --- Helix swirl (thin strands spiralling around the ribbon) ---
-  helixRadiusM: number;
-  helixTurnsPerS: number;
-  helixWidthM: number;
-  helixOpacity: number;
   // --- Spin blur (smeared disc, fades as the spin dies) ---
   blurStrength: number;
   blurFadeSpin: number;
-  // --- Ghost echoes (translucent copies lagging on the path) ---
-  ghostCount: number;
-  ghostSpacingS: number;
-  ghostOpacity: number;
-  // --- Tip dust (scrape particles at the contact point) ---
-  dustRate: number;
-  dustSizeM: number;
-  dustLifeS: number;
   // --- Lean (inward tilt in a curve) ---
   leanMaxDeg: number;
   leanAccelRefMps2: number;
   leanSmooth: number;
-  // --- Callouts (HIT / BLOCK / COUNTER) ---
+  // --- Anime dust: cartoon clouds rolling out behind the tip ---
+  dustRate: number;
+  dustSizeM: number;
+  dustLifeS: number;
+  dustDashBoost: number;
+  // --- Wind streaks: torn white strokes streaming behind the Bey ---
+  windRate: number;
+  windLengthM: number;
+  windWidthM: number;
+  windLifeS: number;
+  // --- Wind blades: crescent bands wrapping the Bey ---
+  swooshCount: number;
+  swooshSizeM: number;
+  swooshSpinRps: number;
+  swooshOpacity: number;
+  // --- Crowns: jagged rings and a cloud burst on a Dash release and on a hit ---
+  crownCount: number;
+  crownSizeM: number;
+  burstSizeM: number;
+  // --- Words (HIT / BLOCK / COUNTER) ---
   calloutScale: number;
   calloutLifeS: number;
 }
@@ -64,75 +66,69 @@ export interface TuningSpec {
 
 export const GROUP_TITLES: Readonly<Record<TuningGroup, string>> = {
   global: 'Geral',
-  ribbon: 'Fita de vento',
-  helix: 'Espiral (hélice)',
   blur: 'Borrão de giro',
-  ghost: 'Eco fantasma',
-  dust: 'Poeira na ponta',
   lean: 'Inclinação na curva',
+  dust: 'Poeira anime (nuvens)',
+  wind: 'Vento: riscos rasgados',
+  swoosh: 'Vento: faixas em volta do Bey',
+  crown: 'Coroas e explosão de impacto',
   callout: 'Texto HIT / BLOCK / COUNTER',
 };
 
 export const PROPOSED: Readonly<Tuning> = {
   intensity: 1,
-  ribbonLifeS: 0.5,
-  ribbonWidthM: 0.75,
-  ribbonDashWidthM: 1.5,
-  ribbonFullSpeedMps: 11,
-  ribbonOpacity: 0.95,
-  ribbonCore: 0.9,
-  ribbonWaveM: 0.18,
-  ribbonWaveHz: 2.2,
-  helixRadiusM: 0.5,
-  helixTurnsPerS: 2.4,
-  helixWidthM: 0.12,
-  helixOpacity: 0.9,
-  blurStrength: 1,
-  blurFadeSpin: 0.45,
-  ghostCount: 3,
-  ghostSpacingS: 0.07,
-  ghostOpacity: 0.22,
-  dustRate: 38,
-  dustSizeM: 0.32,
-  dustLifeS: 0.55,
-  leanMaxDeg: 22,
-  leanAccelRefMps2: 16,
+  blurStrength: 1.35,
+  blurFadeSpin: 0.2,
+  leanMaxDeg: 26,
+  leanAccelRefMps2: 13,
   leanSmooth: 9,
-  calloutScale: 1,
-  calloutLifeS: 0.95,
+  dustRate: 14,
+  dustSizeM: 1.8,
+  dustLifeS: 1,
+  dustDashBoost: 1.5,
+  windRate: 9,
+  windLengthM: 2.6,
+  windWidthM: 0.75,
+  windLifeS: 0.65,
+  swooshCount: 3,
+  swooshSizeM: 2.4,
+  swooshSpinRps: 1.4,
+  swooshOpacity: 0.95,
+  crownCount: 3,
+  crownSizeM: 4.5,
+  burstSizeM: 3.2,
+  calloutScale: 0.55,
+  calloutLifeS: 0.55,
 };
 
 export const TUNING_SPEC: readonly TuningSpec[] = [
   { key: 'intensity', group: 'global', label: 'Intensidade geral dos efeitos (x)', min: 0, max: 2, step: 0.05 },
 
-  { key: 'ribbonLifeS', group: 'ribbon', label: 'Duração do rastro (s)', min: 0.1, max: 1.2, step: 0.02 },
-  { key: 'ribbonWidthM', group: 'ribbon', label: 'Largura andando (m)', min: 0.04, max: 1, step: 0.02 },
-  { key: 'ribbonDashWidthM', group: 'ribbon', label: 'Largura no Dash (m)', min: 0.1, max: 2, step: 0.05 },
-  { key: 'ribbonFullSpeedMps', group: 'ribbon', label: 'Velocidade para força total (m/s)', min: 4, max: 30, step: 0.5 },
-  { key: 'ribbonOpacity', group: 'ribbon', label: 'Opacidade', min: 0, max: 1, step: 0.05 },
-  { key: 'ribbonCore', group: 'ribbon', label: 'Brilho do núcleo branco (x)', min: 0, max: 1, step: 0.05 },
-  { key: 'ribbonWaveM', group: 'ribbon', label: 'Ondulação lateral (m)', min: 0, max: 0.8, step: 0.02 },
-  { key: 'ribbonWaveHz', group: 'ribbon', label: 'Frequência da ondulação (Hz)', min: 0, max: 8, step: 0.1 },
-
-  { key: 'helixRadiusM', group: 'helix', label: 'Raio da espiral (m)', min: 0, max: 1.5, step: 0.05 },
-  { key: 'helixTurnsPerS', group: 'helix', label: 'Voltas por segundo', min: 0, max: 8, step: 0.1 },
-  { key: 'helixWidthM', group: 'helix', label: 'Largura dos fios (m)', min: 0.02, max: 0.4, step: 0.01 },
-  { key: 'helixOpacity', group: 'helix', label: 'Opacidade', min: 0, max: 1, step: 0.05 },
-
   { key: 'blurStrength', group: 'blur', label: 'Força do borrão (x)', min: 0, max: 1.5, step: 0.05 },
   { key: 'blurFadeSpin', group: 'blur', label: 'Giro em que o borrão some (0–1)', min: 0.05, max: 0.9, step: 0.05 },
-
-  { key: 'ghostCount', group: 'ghost', label: 'Quantidade de ecos', min: 0, max: 6, step: 1 },
-  { key: 'ghostSpacingS', group: 'ghost', label: 'Intervalo entre ecos (s)', min: 0.02, max: 0.25, step: 0.01 },
-  { key: 'ghostOpacity', group: 'ghost', label: 'Opacidade do primeiro eco', min: 0, max: 0.8, step: 0.02 },
-
-  { key: 'dustRate', group: 'dust', label: 'Partículas por segundo', min: 0, max: 120, step: 2 },
-  { key: 'dustSizeM', group: 'dust', label: 'Tamanho (m)', min: 0.05, max: 0.6, step: 0.01 },
-  { key: 'dustLifeS', group: 'dust', label: 'Vida (s)', min: 0.15, max: 1.5, step: 0.05 },
 
   { key: 'leanMaxDeg', group: 'lean', label: 'Inclinação máxima (graus)', min: 0, max: 40, step: 1 },
   { key: 'leanAccelRefMps2', group: 'lean', label: 'Aceleração lateral para o máximo (m/s²)', min: 4, max: 40, step: 1 },
   { key: 'leanSmooth', group: 'lean', label: 'Suavização (1/s)', min: 2, max: 30, step: 1 },
+
+  { key: 'dustRate', group: 'dust', label: 'Nuvens por segundo', min: 0, max: 40, step: 1 },
+  { key: 'dustSizeM', group: 'dust', label: 'Tamanho máximo da nuvem (m)', min: 0.4, max: 4, step: 0.1 },
+  { key: 'dustLifeS', group: 'dust', label: 'Vida da nuvem (s)', min: 0.3, max: 2.5, step: 0.05 },
+  { key: 'dustDashBoost', group: 'dust', label: 'Reforço no Dash (x a mais)', min: 0, max: 4, step: 0.1 },
+
+  { key: 'windRate', group: 'wind', label: 'Riscos por segundo', min: 0, max: 30, step: 1 },
+  { key: 'windLengthM', group: 'wind', label: 'Comprimento (m)', min: 0.8, max: 6, step: 0.1 },
+  { key: 'windWidthM', group: 'wind', label: 'Largura (m)', min: 0.2, max: 2, step: 0.05 },
+  { key: 'windLifeS', group: 'wind', label: 'Vida (s)', min: 0.2, max: 1.5, step: 0.05 },
+
+  { key: 'swooshCount', group: 'swoosh', label: 'Quantidade de faixas', min: 0, max: 4, step: 1 },
+  { key: 'swooshSizeM', group: 'swoosh', label: 'Tamanho (m)', min: 0.8, max: 5, step: 0.1 },
+  { key: 'swooshSpinRps', group: 'swoosh', label: 'Voltas por segundo', min: 0, max: 5, step: 0.1 },
+  { key: 'swooshOpacity', group: 'swoosh', label: 'Opacidade', min: 0, max: 1, step: 0.05 },
+
+  { key: 'crownCount', group: 'crown', label: 'Anéis serrilhados no Dash', min: 0, max: 5, step: 1 },
+  { key: 'crownSizeM', group: 'crown', label: 'Tamanho do anel/coroa (m)', min: 1, max: 9, step: 0.1 },
+  { key: 'burstSizeM', group: 'crown', label: 'Tamanho da explosão de nuvem (m)', min: 1, max: 7, step: 0.1 },
 
   { key: 'calloutScale', group: 'callout', label: 'Tamanho do texto (x)', min: 0.5, max: 2, step: 0.05 },
   { key: 'calloutLifeS', group: 'callout', label: 'Duração do texto (s)', min: 0.4, max: 2, step: 0.05 },
