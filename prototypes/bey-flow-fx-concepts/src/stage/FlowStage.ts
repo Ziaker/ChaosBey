@@ -12,6 +12,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { CONCEPTS } from '../../../bey-visual-concepts/src/concepts/conceptDefinitions';
 import { FxLayer } from '../../../../src/vfx/hybrid/fx/FxLayer';
 import { AnimeWind } from '../fx/AnimeWind';
+import type { DustStyle } from '../fx/AnimeDust';
 import { ARENA_RADIUS_M, CALLOUT_CYCLE, FlowSim, floorHeight, type CalloutKind, type FlowEvent } from '../sim/FlowSim';
 import { TUNING } from '../tuning';
 import { FlowRig, type FxFlags } from './FlowRig';
@@ -112,7 +113,7 @@ export class FlowStage {
   readonly camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 300);
   readonly controls: OrbitControls;
   readonly scene = new THREE.Scene();
-  readonly flags: FxFlags = { blur: true, lean: true, dust: true, wind: true, swoosh: true, crown: true };
+  readonly flags: FxFlags = { blur: true, lean: true, dust: true, wind: true, crown: true };
   sim = new FlowSim();
   timeScale = 1;
   paused = false;
@@ -194,6 +195,17 @@ export class FlowStage {
     this.prevDashing[1] = false;
   }
 
+  /** Raises the Dash shock rings now, aimed at the other Bey, through the same path a real Dash release uses (the lab's "G" button). */
+  previewDash(): void {
+    const [a, b] = this.sim.beys;
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const d = Math.hypot(dx, dz) || 1;
+    a.dashDirX = dx / d;
+    a.dashDirZ = dz / d;
+    this.wind.dashStart(0, a, TUNING, this.flags);
+  }
+
   fire(kind: CalloutKind): void {
     this.handleEvent(this.sim.forceCallout(kind));
   }
@@ -209,8 +221,16 @@ export class FlowStage {
     return { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h };
   }
 
-  get stats(): { live: number; clouds: number; simTime: number } {
-    return { live: this.layer.count(), clouds: this.wind.emittedClouds, simTime: this.sim.time };
+  get stats(): { live: number; dust: number; simTime: number } {
+    return { live: this.layer.count(), dust: this.wind.emittedDust, simTime: this.sim.time };
+  }
+
+  get dustStyle(): DustStyle {
+    return this.wind.dustStyle;
+  }
+
+  setDustStyle(style: DustStyle): void {
+    this.wind.dustStyle = style;
   }
 
   private handleEvent(e: FlowEvent): void {
@@ -238,7 +258,7 @@ export class FlowStage {
       this.sim.step(FIXED_DT);
       this.sim.beys.forEach((b, i) => {
         // A Dash just started: shock rings and a puff of clouds behind the Bey.
-        if (b.dashing && !this.prevDashing[i]) this.wind.dashStart(i as 0 | 1, b, this.rigs[i]!.tip(this.tip), TUNING, this.flags);
+        if (b.dashing && !this.prevDashing[i]) this.wind.dashStart(i as 0 | 1, b, TUNING, this.flags);
         this.prevDashing[i] = b.dashing;
       });
       for (const e of this.sim.events) this.handleEvent(e);

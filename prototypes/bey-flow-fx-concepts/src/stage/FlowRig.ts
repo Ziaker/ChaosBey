@@ -8,10 +8,9 @@
 //     └ lean   inward tilt in a curve (from the lateral acceleration)
 //       ├ spin   drawn rotation of the pieces
 //       │ └ model
-//       ├ blur shell (smeared disc; fades as the spin dies)
-//       └ wind blades (crescent bands wrapping the Bey)
+//       └ blur shell (smeared disc; fades as the spin dies)
 //
-// The clouds, streaks and crowns that stay behind in the world are not
+// The dust, streaks and crowns that stay behind in the world are not
 // here: they belong to AnimeWind. Presentation only: the rig reads a
 // FlowBey, it never writes one.
 // ============================================================
@@ -19,21 +18,12 @@
 import * as THREE from 'three';
 import { assembleConcept, type BuiltConcept } from '../../../bey-visual-concepts/src/model/assembleConcept';
 import type { ConceptDefinition } from '../../../bey-visual-concepts/src/model/types';
-import { crescent } from '../fx/animeTextures';
 import { BEY_DIAMETER_M, floorHeight, floorSlope, type FlowBey } from '../sim/FlowSim';
 import type { Tuning } from '../tuning';
 
 // ---------------- RIG TUNING ----------------
-const MAX_SWOOSHES = 4;
 const SPIN_VISUAL_RAD_PER_S = 16;     // drawn spin at full spin
 const BLUR_MAX_OPACITY = 0.6;
-const SWOOSH_RADIUS_FACTOR = 1.25;    // blade distance from the axis, in ring radii
-const SWOOSH_TILT_RAD = 0.3;          // blades are tipped up toward the outside
-const SWOOSH_HEIGHT_FRACTION = 0.9;   // … at this fraction of the ring's mid height
-const SWOOSH_FADE_IN_SPEED_MPS = 2;
-const SWOOSH_FULL_SPEED_MPS = 8;
-const SWOOSH_BOB = 0.12;
-const SWOOSH_SIZE_RADIUS = 0.12;      // extra distance per metre of blade size
 // --------------------------------------------
 
 export interface FxFlags {
@@ -41,7 +31,6 @@ export interface FxFlags {
   lean: boolean;
   dust: boolean;
   wind: boolean;
-  swoosh: boolean;
   crown: boolean;
 }
 
@@ -96,16 +85,9 @@ export class FlowRig {
   private readonly ringMidY: number;
   private readonly blurMesh: THREE.Mesh;
   private readonly blurMat: THREE.ShaderMaterial;
-  private readonly swooshPivots: THREE.Group[] = [];
-  private readonly swooshMats: THREE.MeshBasicMaterial[] = [];
-  private readonly swooshMeshes: THREE.Mesh[] = [];
-  private readonly swooshGeo = new THREE.PlaneGeometry(1, 0.8);
-  private readonly swooshGroup = new THREE.Group();
 
   private leanRad = 0;
   private spinAngle = 0;
-  private swooshAngle = 0;
-  private swooshTime = 0;
   private lastDirX = 1;
   private lastDirZ = 0;
 
@@ -150,29 +132,6 @@ export class FlowRig {
     this.blurMesh.position.y = this.ringMidY + 0.02;
     this.lean.add(this.blurMesh);
 
-    // Wind blades: crescents lying around the Bey, concave side toward the axis, orbiting with the spin.
-    this.swooshGroup.position.y = this.ringMidY * SWOOSH_HEIGHT_FRACTION;
-    this.lean.add(this.swooshGroup);
-    for (let i = 0; i < MAX_SWOOSHES; i++) {
-      const mat = new THREE.MeshBasicMaterial({
-        map: crescent(),
-        side: THREE.DoubleSide,
-        transparent: true,
-        depthWrite: false,
-        alphaTest: 0.45,
-        opacity: 0,
-        fog: false,
-      });
-      const mesh = new THREE.Mesh(this.swooshGeo, mat);
-      mesh.rotation.x = -Math.PI / 2 + SWOOSH_TILT_RAD; // texture "up" points to -z, i.e. outward from the mesh's offset below
-      this.swooshMeshes.push(mesh);
-      const pivot = new THREE.Group();
-      pivot.add(mesh);
-      pivot.visible = false;
-      this.swooshGroup.add(pivot);
-      this.swooshPivots.push(pivot);
-      this.swooshMats.push(mat);
-    }
     scene.add(this.root);
   }
 
@@ -181,17 +140,12 @@ export class FlowRig {
     return THREE.MathUtils.radToDeg(this.leanRad);
   }
 
-  /** How many wind blades are currently drawn. */
-  get visibleSwooshes(): number {
-    return this.swooshPivots.filter((p) => p.visible).length;
-  }
-
   /** Writes the tip contact point (on the floor) into `out`. */
   tip(out: THREE.Vector3): THREE.Vector3 {
     return out.copy(this.root.position);
   }
 
-  /** Advances the rig one rendered frame: pose, lean, spin, blur and wind blades. */
+  /** Advances the rig one rendered frame: pose, lean, spin and blur. */
   update(b: FlowBey, dt: number, tuning: Tuning, flags: FxFlags): void {
     const r = Math.hypot(b.x, b.z);
     const y = floorHeight(r);
@@ -232,36 +186,11 @@ export class FlowRig {
     this.blurMat.uniforms.uOpacity!.value = blurAlpha;
     this.blurMesh.visible = blurAlpha > 0.003;
 
-    this.updateSwooshes(b, dt, tuning, flags);
-  }
-
-  private updateSwooshes(b: FlowBey, dt: number, tuning: Tuning, flags: FxFlags): void {
-    const count = flags.swoosh ? Math.min(MAX_SWOOSHES, Math.round(tuning.swooshCount)) : 0;
-    this.swooshAngle += tuning.swooshSpinRps * Math.PI * 2 * b.dir * dt;
-    this.swooshTime += dt;
-    const speedK = smoothstep(SWOOSH_FADE_IN_SPEED_MPS, SWOOSH_FULL_SPEED_MPS, b.speed);
-    const spinK = smoothstep(0.1, 0.5, b.spin);
-    const opacity = tuning.swooshOpacity * Math.min(1, tuning.intensity) * speedK * spinK;
-    const size = tuning.swooshSizeM * (0.8 + 0.3 * speedK);
-    for (let i = 0; i < MAX_SWOOSHES; i++) {
-      const pivot = this.swooshPivots[i]!;
-      const on = i < count && opacity > 0.01;
-      pivot.visible = on;
-      if (!on) continue;
-      pivot.rotation.y = this.swooshAngle + (i / count) * Math.PI * 2;
-      pivot.position.y = Math.sin(this.swooshTime * 3 + i * 1.7) * SWOOSH_BOB;
-      const mesh = this.swooshMeshes[i]!;
-      mesh.scale.setScalar(size);
-      mesh.position.z = -(this.ringRadius * SWOOSH_RADIUS_FACTOR + SWOOSH_SIZE_RADIUS * size);
-      this.swooshMats[i]!.opacity = opacity;
-    }
   }
 
   dispose(): void {
     this.model.dispose();
     this.blurMat.dispose();
     this.blurMesh.geometry.dispose();
-    this.swooshMats.forEach((m) => m.dispose());
-    this.swooshGeo.dispose();
   }
 }

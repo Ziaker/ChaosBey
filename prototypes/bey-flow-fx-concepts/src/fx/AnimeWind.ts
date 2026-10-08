@@ -1,22 +1,23 @@
 // ============================================================
 // BEY FLOW FX LAB — ANIME WIND AND DUST
-// The continuous "epic" layer the owner asked for: cartoon clouds rolling
-// out behind the tip, torn wind streaks streaming behind the Bey, and, on a
-// Dash release or a hit, jagged shock rings, a floor crown and a cloud burst.
+// The continuous "epic" layer the owner asked for: anime dust behind the
+// tip (three ideas, see AnimeDust), torn wind streaks streaming behind the
+// Bey, and, on a Dash release or a hit, jagged shock rings, a floor crown and
+// a dust burst.
 // All of it is built from the approved Cel Cyclone pieces (src/vfx/hybrid/fx:
-// spriteFx, wakeStreakFx, jaggedRingFx, flatFx, burstFx and their textures)
-// plus the lab's own cartoon cloud, so it lives in the same cel look.
+// wakeStreakFx, jaggedRingFx, flatFx, burstFx and their textures), so it lives
+// in the same cel look; the dust is the lab's own (AnimeDust).
 //
 // Presentation only: it reads a FlowBey and emits effects into an FxLayer.
 // ============================================================
 
 import * as THREE from 'three';
-import { burstFx, flatFx, jaggedRingFx, spriteFx, wakeStreakFx, type WindLook } from '../../../../src/vfx/hybrid/fx/primitives';
+import { burstFx, flatFx, jaggedRingFx, wakeStreakFx, type WindLook } from '../../../../src/vfx/hybrid/fx/primitives';
 import type { FxLayer } from '../../../../src/vfx/hybrid/fx/FxLayer';
 import { impactStar, jaggedRing, tornStreak } from '../../../../src/vfx/hybrid/fx/textures';
 import { floorHeight, type FlowBey } from '../sim/FlowSim';
 import type { Tuning } from '../tuning';
-import { CLOUD_VARIANTS, toonCloud } from './animeTextures';
+import { AnimeDust, type DustStyle } from './AnimeDust';
 
 // ---------------- TUNING ----------------
 const TRAIL_MIN_SPEED_MPS = 2;
@@ -24,14 +25,17 @@ const TRAIL_FULL_SPEED_MPS = 10;
 const WIND_WHITE = 0xffffff;
 const WIND_GREY = 0xaab6c8;
 const CEL_LOOK: WindLook = { cel: true, opacity: 1 };
+const BEY_MID_HEIGHT_M = 0.55;       // the middle of the Bey's body above the floor: the shock rings are born here
 const RING_STAGGER_S = 0.05;
 const RING_LIFE_S = 0.42;
 const RING_SHRINK_PER_RING = 0.18;
 const CROWN_LIFE_S = 0.55;
 const CROWN_LIFT_M = 0.05;
-const DASH_CLOUDS = 6;
-const BURST_CLOUDS_MIN = 6;
-const BURST_CLOUDS_MAX = 12;
+const DASH_BURST = 6;
+const DASH_FAN_RAD = 0.7;
+const BURST_LIFE_S = 1;
+const BURST_COUNT_MIN = 6;
+const BURST_COUNT_MAX = 12;
 const STAR_LIFE_S = 0.25;
 const STAR_HEIGHT_M = 1;
 const STAR_SPIKES = 10;
@@ -48,7 +52,7 @@ const smoothstep = (a: number, b: number, x: number): number => {
   return t * t * (3 - 2 * t);
 };
 
-/** Small deterministic generator so a replayed lab shows the same clouds (mulberry32). */
+/** Small deterministic generator so a replayed lab shows the same dust (mulberry32). */
 function makeRng(seed: number): () => number {
   let s = seed | 0;
   return () => {
@@ -65,43 +69,35 @@ export class AnimeWind {
   private readonly windCarry = [0, 0];
   /** Where each Bey's rim is now: the streaks' heads follow this while they are young. */
   private readonly follow = [new THREE.Vector3(), new THREE.Vector3()];
-  private cloudCount = 0;
+  private readonly dust: AnimeDust;
 
   constructor(
     private readonly layer: FxLayer,
     seed = 7,
   ) {
     this.rng = makeRng(seed);
+    this.dust = new AnimeDust(layer, this.rng);
   }
 
-  /** Clouds and streaks emitted so far (observability for the stats line and the tests). */
-  get emittedClouds(): number {
-    return this.cloudCount;
+  /** The dust idea in use (roll, bubbles or shards). */
+  get dustStyle(): DustStyle {
+    return this.dust.style;
+  }
+
+  set dustStyle(style: DustStyle) {
+    this.dust.style = style;
+  }
+
+  /** Dust emissions so far (observability for the stats line and the tests). */
+  get emittedDust(): number {
+    return this.dust.emitted;
   }
 
   private rand(a: number, b: number): number {
     return a + this.rng() * (b - a);
   }
 
-  private cloud(p: THREE.Vector3, vel: THREE.Vector3, size: [number, number], life: number): void {
-    this.cloudCount++;
-    this.layer.add(
-      spriteFx({
-        tex: toonCloud(Math.floor(this.rng() * CLOUD_VARIANTS)),
-        color: 0xffffff,
-        additive: false,
-        opacity: 1,
-        pos: p,
-        vel,
-        drag: 1.6,
-        size,
-        life,
-        fadeIn: 0.06,
-      }),
-    );
-  }
-
-  /** Per rendered frame, per Bey: dust clouds and wind streaks in proportion to the speed. `tip` is the contact point. */
+  /** Per rendered frame, per Bey: dust and wind streaks in proportion to the speed. `tip` is the contact point. */
   trail(i: 0 | 1, b: FlowBey, tip: THREE.Vector3, dt: number, tuning: Tuning, flags: WindFlags): void {
     const rimY = tip.y + 0.55;
     this.follow[i]!.set(tip.x, rimY, tip.z);
@@ -116,16 +112,8 @@ export class AnimeWind {
       this.dustCarry[i] = this.dustCarry[i]! + tuning.dustRate * tuning.intensity * speedK * (1 + dashK) * dt;
       while (this.dustCarry[i]! >= 1) {
         this.dustCarry[i] = this.dustCarry[i]! - 1;
-        const p = tip.clone().addScaledVector(back, this.rand(0.1, 0.9));
-        p.addScaledVector(side, this.rand(-0.5, 0.5));
-        p.y = floorHeight(Math.hypot(p.x, p.z)) + this.rand(0.15, 0.4);
-        const vel = back
-          .clone()
-          .multiplyScalar(b.speed * 0.18)
-          .addScaledVector(side, this.rand(-1.2, 1.2))
-          .setY(this.rand(0.3, 0.8));
-        const grow = tuning.dustSizeM * this.rand(0.7, 1.2) * (0.6 + 0.5 * speedK + 0.15 * dashK);
-        this.cloud(p, vel, [grow * 0.3, grow], tuning.dustLifeS * this.rand(0.8, 1.15));
+        const size = tuning.dustSizeM * this.rand(0.7, 1.2) * (0.6 + 0.5 * speedK + 0.15 * dashK);
+        this.dust.puff(tip, back, speedK, size, tuning.dustLifeS * this.rand(0.8, 1.15));
       }
     }
 
@@ -159,12 +147,18 @@ export class AnimeWind {
     }
   }
 
-  /** A Dash was released: jagged shock rings behind the Bey and a puff of clouds. */
-  dashStart(i: 0 | 1, b: FlowBey, tip: THREE.Vector3, tuning: Tuning, flags: WindFlags): void {
-    if (!flags.crown || b.speed < 0.5) return;
-    const dir = new THREE.Vector3(b.vx / b.speed, 0, b.vz / b.speed);
+  /**
+   * A Dash was released: jagged shock rings born in the middle of the Bey, facing the way it is being fired (toward the
+   * target, not along its old orbit velocity) and flying backward, plus a fan of dust behind it.
+   */
+  dashStart(i: 0 | 1, b: FlowBey, tuning: Tuning, flags: WindFlags): void {
+    if (!flags.crown) return;
+    const len = Math.hypot(b.dashDirX, b.dashDirZ);
+    const dir = len > 1e-6 ? new THREE.Vector3(b.dashDirX / len, 0, b.dashDirZ / len) : new THREE.Vector3(1, 0, 0);
     const back = dir.clone().negate();
-    const head = this.follow[i]!;
+    const floor = floorHeight(Math.hypot(b.x, b.z));
+    // The simulation is ahead of the last rendered frame: place the rings from the Bey's own position.
+    const head = this.follow[i]!.set(b.x, floor + BEY_MID_HEIGHT_M, b.z);
     const rings = Math.round(tuning.crownCount);
     for (let n = 0; n < rings; n++) {
       this.layer.add(
@@ -178,20 +172,13 @@ export class AnimeWind {
           delay: n * RING_STAGGER_S,
           drift: 0.6 + n * 0.5,
           look: CEL_LOOK,
-          groundAt: (p) => floorHeight(Math.hypot(p.x, p.z)),
         }),
       );
     }
-    for (let n = 0; n < DASH_CLOUDS; n++) {
-      const p = tip.clone().addScaledVector(back, this.rand(0.3, 2));
-      p.y = floorHeight(Math.hypot(p.x, p.z)) + this.rand(0.2, 0.5);
-      const side = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(this.rand(-1.5, 1.5));
-      const grow = tuning.burstSizeM * this.rand(0.5, 0.9);
-      this.cloud(p, back.clone().multiplyScalar(this.rand(0.8, 2)).add(side).setY(this.rand(0.2, 0.6)), [0.6, grow], this.rand(0.8, 1.2));
-    }
+    this.dust.burst(new THREE.Vector3(b.x, floor, b.z), back, DASH_FAN_RAD, DASH_BURST, tuning.burstSizeM, BURST_LIFE_S);
   }
 
-  /** A hit: a jagged crown on the floor, a cloud burst flung outward and a flat impact star. */
+  /** A hit: a jagged crown on the floor, a dust burst flung outward and a flat impact star. */
   impact(x: number, z: number, m: number, tuning: Tuning, flags: WindFlags): void {
     if (!flags.crown) return;
     const y = floorHeight(Math.hypot(x, z));
@@ -211,14 +198,8 @@ export class AnimeWind {
         }),
       );
     }
-    const n = Math.round(BURST_CLOUDS_MIN + (BURST_CLOUDS_MAX - BURST_CLOUDS_MIN) * m);
-    for (let k = 0; k < n; k++) {
-      const a = (k / n) * Math.PI * 2 + this.rand(-0.25, 0.25);
-      const speed = this.rand(2, 5) * (0.6 + 0.6 * m);
-      const p = new THREE.Vector3(x + Math.cos(a) * 0.3, y + this.rand(0.3, 0.8), z + Math.sin(a) * 0.3);
-      const vel = new THREE.Vector3(Math.cos(a) * speed, this.rand(0.4, 1.2), Math.sin(a) * speed);
-      this.cloud(p, vel, [0.7, tuning.burstSizeM * this.rand(0.6, 1)], this.rand(0.75, 1.1));
-    }
+    const n = Math.round(BURST_COUNT_MIN + (BURST_COUNT_MAX - BURST_COUNT_MIN) * m);
+    this.dust.burst(new THREE.Vector3(x, y, z), null, 0, n, tuning.burstSizeM, BURST_LIFE_S);
     this.layer.add(
       burstFx({
         tex: impactStar(STAR_SPIKES),

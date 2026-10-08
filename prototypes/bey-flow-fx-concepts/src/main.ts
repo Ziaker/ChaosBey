@@ -4,6 +4,7 @@
 // panel. Everything here is lab UI; nothing reaches the game.
 // ============================================================
 
+import { DUST_STYLES, type DustStyle } from './fx/AnimeDust';
 import type { FxFlags } from './stage/FlowRig';
 import { FlowStage } from './stage/FlowStage';
 import type { CalloutKind, FlowEvent } from './sim/FlowSim';
@@ -24,8 +25,7 @@ const EFFECTS: ReadonlyArray<{ key: keyof FxFlags; label: string; key1: string }
   { key: 'lean', label: 'Inclinação', key1: '2' },
   { key: 'dust', label: 'Poeira anime', key1: '3' },
   { key: 'wind', label: 'Vento: riscos', key1: '4' },
-  { key: 'swoosh', label: 'Vento: faixas', key1: '5' },
-  { key: 'crown', label: 'Coroas de impacto', key1: '6' },
+  { key: 'crown', label: 'Argolas e coroas de impacto', key1: '5' },
 ];
 
 // ---------------- tuning draft (best effort) ----------------
@@ -84,6 +84,7 @@ const dashChip = chip($('scene-buttons'), 'Dashes', 'D', true, () => toggleDashe
 const pauseChip = chip($('scene-buttons'), 'Pausar', 'Espaço', false, () => togglePause());
 const slowChip = chip($('scene-buttons'), 'Câmera lenta', 'S', false, () => toggleSlow());
 chip($('scene-buttons'), 'Reiniciar', 'R', false, () => stage.reset());
+chip($('scene-buttons'), 'Argolas do Dash', 'G', false, () => stage.previewDash());
 
 function toggleDashes(): void {
   stage.sim.dashesEnabled = !stage.sim.dashesEnabled;
@@ -114,6 +115,20 @@ speedInput.addEventListener('input', () => {
   $('speed-out').textContent = `${Number(speedInput.value).toFixed(1)}x`;
   applySpeed();
 });
+
+// ---------------- dust ideas ----------------
+const dustChips = new Map<DustStyle, HTMLButtonElement>();
+const DUST_KEYS = ['q', 'w', 'e'];
+DUST_STYLES.forEach((d, i) => {
+  const b = chip($('dust-styles'), d.label, DUST_KEYS[i]!.toUpperCase(), d.id === stage.dustStyle, () => setDust(d.id));
+  dustChips.set(d.id, b);
+});
+function setDust(id: DustStyle): void {
+  stage.setDustStyle(id);
+  dustChips.forEach((b, k) => b.setAttribute('aria-pressed', String(k === id)));
+  $('dust-desc').textContent = DUST_STYLES.find((d) => d.id === id)?.description ?? '';
+}
+setDust(stage.dustStyle);
 
 // ---------------- callout styles ----------------
 const styleChips = new Map<CalloutStyleId, HTMLButtonElement>();
@@ -163,7 +178,7 @@ function buildTuning(): void {
     if (!body) {
       const details = document.createElement('details');
       details.className = 'tune-group';
-      details.open = spec.group === 'dust' || spec.group === 'wind' || spec.group === 'swoosh';
+      details.open = spec.group === 'dust' || spec.group === 'crown';
       const summary = document.createElement('summary');
       summary.textContent = GROUP_TITLES[spec.group];
       body = document.createElement('div');
@@ -231,6 +246,8 @@ window.addEventListener('keydown', (ev) => {
   if (effect) return toggleEffect(effect.key);
   const styleIndex = ['7', '8', '9'].indexOf(k);
   if (styleIndex >= 0) return setStyle(CALLOUT_STYLES[styleIndex]!.id);
+  const dustIndex = DUST_KEYS.indexOf(k);
+  if (dustIndex >= 0) return setDust(DUST_STYLES[dustIndex]!.id);
   switch (k) {
     case 'h': return stage.fire('hit');
     case 'j': return stage.fire('block');
@@ -239,6 +256,7 @@ window.addEventListener('keydown', (ev) => {
     case ' ': ev.preventDefault(); return togglePause();
     case 's': return toggleSlow();
     case 'r': return stage.reset();
+    case 'g': return stage.previewDash();
     case 'v': return setView(stage.viewMode === 'overview' ? 'free' : 'overview');
     case 'p': $('lab').classList.toggle('no-tuning'); return;
   }
@@ -247,7 +265,7 @@ window.addEventListener('keydown', (ev) => {
 // ---------------- HUD line ----------------
 window.setInterval(() => {
   const s = stage.stats;
-  $('hud').textContent = `t ${s.simTime.toFixed(1)} s · efeitos vivos ${s.live} · nuvens ${s.clouds}`;
+  $('hud').textContent = `t ${s.simTime.toFixed(1)} s · efeitos vivos ${s.live} · emissões de poeira ${s.dust}`;
 }, HUD_REFRESH_MS);
 
 declare global {

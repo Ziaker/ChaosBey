@@ -50,6 +50,9 @@ export interface FlowBey {
   spin: number;
   charging: boolean;
   dashing: boolean;
+  /** Unit vector toward the Dash target (the other Bey), set when a Dash starts and kept while it lasts. */
+  dashDirX: number;
+  dashDirZ: number;
   /** Orbit direction: +1 or -1. */
   dir: 1 | -1;
 }
@@ -80,7 +83,7 @@ function makeBey(angle: number, dir: 1 | -1): FlowBey {
   // Tangent velocity: perpendicular to the radius, sign = orbit direction.
   const vx = -Math.sin(angle) * ORBIT_SPEED_MPS * dir;
   const vz = Math.cos(angle) * ORBIT_SPEED_MPS * dir;
-  return { x, z, vx, vz, ax: 0, az: 0, speed: ORBIT_SPEED_MPS, spin: 1, charging: false, dashing: false, dir };
+  return { x, z, vx, vz, ax: 0, az: 0, speed: ORBIT_SPEED_MPS, spin: 1, charging: false, dashing: false, dashDirX: -Math.cos(angle), dashDirZ: -Math.sin(angle), dir };
 }
 
 export class FlowSim {
@@ -155,6 +158,8 @@ export class FlowSim {
       const dx = other.x - b.x;
       const dz = other.z - b.z;
       const d = Math.hypot(dx, dz) || 1e-6;
+      b.dashDirX = dx / d;
+      b.dashDirZ = dz / d;
       ax += (((dx / d) * DASH_SPEED_MPS - b.vx) * DASH_STEER_PER_S);
       az += (((dz / d) * DASH_SPEED_MPS - b.vz) * DASH_STEER_PER_S);
     } else {
