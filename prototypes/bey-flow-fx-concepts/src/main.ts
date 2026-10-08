@@ -6,7 +6,8 @@
 
 import { DUST_STYLES, type DustStyle } from './fx/AnimeDust';
 import type { FxFlags } from './stage/FlowRig';
-import { FlowStage } from './stage/FlowStage';
+import { FlowStage, type ViewMode } from './stage/FlowStage';
+import type { ArenaPresetId } from '../../../src/arena/presets/ArenaPresets';
 import type { CalloutKind, FlowEvent } from './sim/FlowSim';
 import { CALLOUT_MEANING, CALLOUT_STYLES, CALLOUT_WORDS, CalloutLayer, type CalloutStyleId } from './ui/callouts';
 import { GROUP_TITLES, PROPOSED, TUNING, TUNING_SPEC, applyTuning, resetTuning, type Tuning, type TuningGroup } from './tuning';
@@ -155,13 +156,29 @@ for (const f of FIRE_KEYS) {
   $('callout-legend').appendChild(li);
 }
 
-// ---------------- camera ----------------
-const viewChips = new Map<string, HTMLButtonElement>();
-viewChips.set('overview', chip($('views'), 'Alta e fixa', 'V', true, () => setView('overview')));
-viewChips.set('free', chip($('views'), 'Livre', 'V', false, () => setView('free')));
-function setView(v: 'overview' | 'free'): void {
+// ---------------- camera and arena ----------------
+const VIEWS: ReadonlyArray<{ id: ViewMode; label: string }> = [
+  { id: 'game', label: 'Câmera do jogo' },
+  { id: 'overview', label: 'Alta e fixa' },
+  { id: 'free', label: 'Livre' },
+];
+const viewChips = new Map<ViewMode, HTMLButtonElement>();
+VIEWS.forEach((v) => viewChips.set(v.id, chip($('views'), v.label, 'V', v.id === stage.viewMode, () => setView(v.id))));
+function setView(v: ViewMode): void {
   stage.setView(v);
   viewChips.forEach((b, k) => b.setAttribute('aria-pressed', String(k === v)));
+}
+
+const ARENAS: ReadonlyArray<{ id: ArenaPresetId; label: string; key: string }> = [
+  { id: 'foundry', label: 'Foundry Pit', key: 'Z' },
+  { id: 'rift', label: 'Rift Crater', key: 'X' },
+  { id: 'tournament', label: 'Tournament Stadium', key: 'C' },
+];
+const arenaChips = new Map<ArenaPresetId, HTMLButtonElement>();
+ARENAS.forEach((a) => arenaChips.set(a.id, chip($('arenas'), a.label, a.key, a.id === stage.arenaPreset, () => setArena(a.id))));
+function setArena(id: ArenaPresetId): void {
+  stage.setArena(id);
+  arenaChips.forEach((b, k) => b.setAttribute('aria-pressed', String(k === id)));
 }
 
 // ---------------- tuning panel ----------------
@@ -257,7 +274,10 @@ window.addEventListener('keydown', (ev) => {
     case 's': return toggleSlow();
     case 'r': return stage.reset();
     case 'g': return stage.previewDash();
-    case 'v': return setView(stage.viewMode === 'overview' ? 'free' : 'overview');
+    case 'v': return setView(VIEWS[(VIEWS.findIndex((x) => x.id === stage.viewMode) + 1) % VIEWS.length]!.id);
+    case 'z': return setArena('foundry');
+    case 'x': return setArena('rift');
+    case 'c': return setArena('tournament');
     case 'p': $('lab').classList.toggle('no-tuning'); return;
   }
 });

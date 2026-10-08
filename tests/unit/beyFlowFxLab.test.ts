@@ -3,8 +3,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { CONCEPTS } from '../../prototypes/bey-visual-concepts/src/concepts/conceptDefinitions';
 import { FxLayer } from '../../src/vfx/hybrid/fx/FxLayer';
 import { AnimeWind, type WindFlags } from '../../prototypes/bey-flow-fx-concepts/src/fx/AnimeWind';
-import { DUST_STYLES, type DustStyle } from '../../prototypes/bey-flow-fx-concepts/src/fx/AnimeDust';
-import { ROLL_BASE_Y, ROLL_VARIANTS, SHARD, bubbleCluster, rollLumps, rollTail, shardPoints } from '../../prototypes/bey-flow-fx-concepts/src/fx/animeTextures';
+import { DUST_STYLES, erosionThreshold, type DustStyle } from '../../prototypes/bey-flow-fx-concepts/src/fx/AnimeDust';
+import { DUST_SIZES, DUST_VARIANTS, cumulusMass, insideDistance, rng } from '../../prototypes/bey-flow-fx-concepts/src/fx/dustArt';
 import { ARENA_RADIUS_M, BEY_DIAMETER_M, CALLOUT_CYCLE, FlowSim, floorHeight, floorSlope, type FlowBey, type FlowEvent } from '../../prototypes/bey-flow-fx-concepts/src/sim/FlowSim';
 import { FlowRig, type FxFlags } from '../../prototypes/bey-flow-fx-concepts/src/stage/FlowRig';
 import { PROPOSED, TUNING, TUNING_SPEC, applyTuning, resetTuning } from '../../prototypes/bey-flow-fx-concepts/src/tuning';
@@ -154,89 +154,107 @@ describe('flow lab — owner tuning', () => {
   });
 });
 
-describe('flow lab — dust shapes', () => {
-  it('the rolling wave: lumps sit on the flat base, shrink toward the tail, and differ by variant', () => {
-    expect(ROLL_VARIANTS).toBeGreaterThanOrEqual(3);
-    for (let v = 0; v < ROLL_VARIANTS; v++) {
-      const lumps = rollLumps(v);
-      expect(rollLumps(v)).toEqual(lumps); // deterministic
-      for (const b of lumps) {
-        for (const n of [b.x, b.y, b.r]) expect(Number.isFinite(n)).toBe(true);
-        expect(b.x).toBeGreaterThan(0);
-        expect(b.x).toBeLessThan(1);
-        expect(b.y + b.r).toBeLessThanOrEqual(ROLL_BASE_Y + 0.03); // sits on the base (the texture cuts anything below it)
-        expect(b.y - b.r).toBeGreaterThanOrEqual(0); // and stays inside the tile
-        expect(b.r).toBeGreaterThan(0.03);
+describe('flow lab — dust art', () => {
+  it('the generator is deterministic and different seeds differ', () => {
+    const a = rng(5);
+    const b = rng(5);
+    for (let i = 0; i < 10; i++) expect(a()).toBe(b());
+    expect(rng(5)()).not.toBe(rng(6)());
+    for (let i = 0; i < 100; i++) {
+      const v = rng(9)();
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(1);
+    }
+  });
+
+  it('a cumulus is a scalloped mass: bumps of very different sizes, all on or above the base, most of the profile bell-shaped', () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const m = cumulusMass(rng(seed), 100, 900, 300, 200);
+      expect(cumulusMass(rng(seed), 100, 900, 300, 200)).toEqual(m); // deterministic
+      expect(m.lobes.length).toBeGreaterThan(10);
+      for (const l of m.lobes) {
+        for (const n of [l.x, l.y, l.r]) expect(Number.isFinite(n)).toBe(true);
+        expect(l.r).toBeGreaterThan(0);
+        expect(l.y - l.r).toBeLessThan(300); // nothing floats below the base line's top
+        expect(l.x).toBeGreaterThan(50);
+        expect(l.x).toBeLessThan(950);
       }
-      const row = lumps.slice(0, -1); // the row along the base (the last lump is the curled head)
-      expect(row[0]!.r).toBeGreaterThan(row[row.length - 1]!.r); // the crest tapers
-      const head = lumps[lumps.length - 1]!;
-      expect(head.x).toBeLessThan(row[0]!.x); // the curl is at the head end
-      expect(head.y).toBeLessThan(row[0]!.y); // …and taller
+      const radii = m.lobes.map((l) => l.r);
+      expect(Math.max(...radii) / Math.min(...radii)).toBeGreaterThan(3); // sizes really vary: that is what makes the cusps
+      // The core polygon starts and ends on the base and rises in between.
+      expect(m.core[0]).toEqual([100, 300]);
+      expect(m.core[m.core.length - 1]).toEqual([900, 300]);
+      expect(Math.min(...m.core.map(([, y]) => y))).toBeLessThan(300 - 80);
     }
-    expect(rollLumps(0)).not.toEqual(rollLumps(1));
+    expect(cumulusMass(rng(1), 100, 900, 300, 200).lobes).not.toEqual(cumulusMass(rng(2), 100, 900, 300, 200).lobes);
   });
 
-  it('the tail is a thin tapered strip that ends at the right edge on the base line', () => {
-    const tail = rollTail();
-    const xs = tail.map(([x]) => x);
-    expect(Math.max(...xs)).toBeGreaterThan(0.95);
-    expect(Math.max(...xs)).toBeLessThanOrEqual(1);
-    for (const [, y] of tail) expect(y).toBeLessThanOrEqual(ROLL_BASE_Y + 1e-9);
-  });
-
-  it('a bubble cluster has the requested number of bubbles, a big one first, all small and finite', () => {
-    for (const count of [3, 4, 5]) {
-      const c = bubbleCluster(1, count);
-      expect(c.length).toBe(count);
-      expect(c[0]!.r).toBe(1);
-      for (const b of c) {
-        for (const n of [b.x, b.y, b.r]) expect(Number.isFinite(n)).toBe(true);
-        expect(b.r).toBeGreaterThan(0.2);
-        expect(b.r).toBeLessThanOrEqual(1);
-        expect(Math.hypot(b.x, b.y)).toBeLessThan(1);
-      }
+  it('every kind has a canvas size and the variants wrap', () => {
+    for (const kind of ['wave', 'puff', 'crown', 'burst'] as const) {
+      expect(DUST_SIZES[kind].w).toBeGreaterThan(256);
+      expect(DUST_SIZES[kind].h).toBeGreaterThan(256);
     }
-    expect(bubbleCluster(0, 4)).not.toEqual(bubbleCluster(1, 4));
+    expect(DUST_VARIANTS).toBeGreaterThanOrEqual(3);
   });
 
-  it('the shard is a closed blade: pointed at both ends and with thickness between them', () => {
-    const { upper, lower } = shardPoints(20);
-    expect(upper[0]).toEqual(SHARD.tipA);
-    expect(lower[lower.length - 1]).toEqual(SHARD.tipA);
-    expect(upper[upper.length - 1]).toEqual(SHARD.tipB);
-    expect(lower[0]).toEqual(SHARD.tipB);
-    const mid = 10;
-    expect(lower[lower.length - 1 - mid]![1] - upper[mid]![1]).toBeGreaterThan(0.2);
-    for (const [x, y] of [...upper, ...lower]) {
-      expect(x).toBeGreaterThanOrEqual(0);
-      expect(x).toBeLessThanOrEqual(1);
-      expect(y).toBeGreaterThanOrEqual(0);
-      expect(y).toBeLessThanOrEqual(1);
-    }
+  it('the inside distance is 0 outside the shape and grows toward its middle', () => {
+    // A 9x9 block of opaque pixels inside a 15x15 map.
+    const w = 15;
+    const alpha = new Uint8Array(w * w);
+    for (let y = 3; y < 12; y++) for (let x = 3; x < 12; x++) alpha[y * w + x] = 255;
+    const d = insideDistance(alpha, w, w);
+    expect(d[0]).toBe(0);
+    expect(d[3 * w + 3]).toBeGreaterThan(0); // the edge pixel is 1 px inside
+    expect(d[3 * w + 3]).toBeLessThan(2);
+    expect(d[7 * w + 7]).toBeGreaterThan(d[3 * w + 7]!); // the middle is farther from any edge than the border
+    expect(d[7 * w + 7]).toBeGreaterThan(3.5);
+    expect(d[7 * w + 7]).toBeLessThanOrEqual(5);
   });
 
-  it('offers the three dust ideas', () => {
-    expect(DUST_STYLES.map((d) => d.id)).toEqual(['roll', 'bubbles', 'shards']);
+  it('thin features are eroded first: a 2 px line is gone at a distance a fat block still has', () => {
+    const w = 40;
+    const alpha = new Uint8Array(w * w);
+    for (let y = 5; y < 35; y++) for (let x = 5; x < 20; x++) alpha[y * w + x] = 255; // fat block
+    for (let x = 22; x < 38; x++) for (let y = 19; y < 21; y++) alpha[y * w + x] = 255; // thin line
+    const d = insideDistance(alpha, w, w);
+    expect(Math.max(...Array.from(d.slice(0, w * w)).filter((_, i) => i % w >= 22))).toBeLessThan(2);
+    expect(d[20 * w + 12]).toBeGreaterThan(5);
+  });
+
+  it('offers the three compositions', () => {
+    expect(DUST_STYLES.map((d) => d.id)).toEqual(['wave', 'crown', 'cloud']);
     for (const d of DUST_STYLES) {
       expect(d.label.length).toBeGreaterThan(5);
       expect(d.description.length).toBeGreaterThan(20);
     }
   });
+
+  it('the erosion threshold holds shapes whole, then climbs monotonically to nearly 1', () => {
+    expect(erosionThreshold(0)).toBeLessThan(0.05);
+    expect(erosionThreshold(0.3)).toBeLessThan(0.05);
+    let prev = 0;
+    for (let k = 0; k <= 1.0001; k += 0.05) {
+      const t = erosionThreshold(Math.min(1, k));
+      expect(t).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = t;
+    }
+    expect(erosionThreshold(1)).toBeGreaterThan(0.9);
+    expect(erosionThreshold(1)).toBeLessThan(1);
+  });
 });
 
 describe('flow lab — anime wind', () => {
-  function setup(style: DustStyle = 'roll'): { layer: FxLayer; wind: AnimeWind; scene: THREE.Scene } {
+  function setup(style: DustStyle = 'wave'): { layer: FxLayer; wind: AnimeWind; scene: THREE.Scene } {
     const scene = new THREE.Scene();
     const cam = new THREE.PerspectiveCamera(40, 1.6, 0.1, 300);
     cam.position.set(0, 15, 11);
     const layer = new FxLayer(scene, cam);
-    const wind = new AnimeWind(layer);
+    const wind = new AnimeWind(layer, cam);
     wind.dustStyle = style;
     return { layer, wind, scene };
   }
   const tip = new THREE.Vector3(2, 0.3, 1);
-  const STYLES: DustStyle[] = ['roll', 'bubbles', 'shards'];
+  const STYLES: DustStyle[] = ['wave', 'crown', 'cloud'];
 
   function fastBey(): FlowBey {
     const sim = new FlowSim();
@@ -300,20 +318,89 @@ describe('flow lab — anime wind', () => {
     expect(layer.count()).toBe(0);
   });
 
-  it.each(STYLES)('%s: a hit raises the crown, a dust burst and a star; a harder hit raises more dust', (style) => {
+  it.each(STYLES)('%s: a hit raises a dust burst; a harder hit raises at least as many effects', (style) => {
     const light = setup(style);
     const heavy = setup(style);
     light.wind.impact(1, 1, 0.1, TUNING, WIND_ON);
     heavy.wind.impact(1, 1, 1, TUNING, WIND_ON);
-    expect(light.layer.count()).toBeGreaterThanOrEqual(2 + 3 + 1); // crown rings + some dust + star
-    expect(heavy.wind.emittedDust).toBeGreaterThan(light.wind.emittedDust);
+    expect(light.layer.count()).toBeGreaterThanOrEqual(2);
+    expect(heavy.layer.count()).toBeGreaterThanOrEqual(light.layer.count());
+    expect(light.wind.emittedDust).toBe(1);
   });
 
   it('a Dash release raises the configured number of shock rings plus a fan of dust', () => {
-    const { layer, wind } = setup('roll');
+    const { layer, wind } = setup('wave');
     wind.dashStart(0, fastBey(), TUNING, WIND_ON);
-    expect(layer.count()).toBe(Math.round(TUNING.crownCount) + 6);
-    expect(wind.emittedDust).toBe(6);
+    expect(layer.count()).toBeGreaterThanOrEqual(Math.round(TUNING.crownCount) + 4);
+    expect(wind.emittedDust).toBe(1); // one burst
+  });
+
+  describe('cutouts', () => {
+    function cutouts(style: DustStyle): { scene: THREE.Scene; layer: FxLayer; cam: THREE.PerspectiveCamera } {
+      const scene = new THREE.Scene();
+      const cam = new THREE.PerspectiveCamera(60, 1.6, 0.1, 300);
+      cam.position.set(6, 3, 8);
+      const layer = new FxLayer(scene, cam);
+      const wind = new AnimeWind(layer, cam);
+      wind.dustStyle = style;
+      const b = fastBey();
+      for (let i = 0; i < 40; i++) wind.trail(0, b, tip, DT, { ...TUNING, windRate: 0 }, WIND_ON);
+      return { scene, layer, cam };
+    }
+
+    it.each(STYLES)('%s: dissolves by erosion: the alpha test creeps up over the life, and nothing is left at the end', (style) => {
+      const { scene, layer } = cutouts(style);
+      const mats = new Set<THREE.MeshBasicMaterial>();
+      scene.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
+        if (m && 'alphaTest' in m) mats.add(m);
+      });
+      expect(mats.size).toBeGreaterThan(0);
+      for (const m of mats) {
+        expect(m.transparent).toBe(false); // opaque cutouts: the Beys and the arena occlude them
+        expect(m.alphaTest).toBeGreaterThan(0);
+        expect(m.alphaTest).toBeLessThan(0.1); // whole when young
+      }
+      for (let i = 0; i < 20; i++) layer.tick(DT);
+      for (let i = 0; i < 240; i++) layer.tick(DT);
+      expect(layer.count()).toBe(0);
+    });
+
+    it('upright cutouts stand on the floor and turn to face the camera around the vertical axis only', () => {
+      const { scene, layer, cam } = cutouts('cloud');
+      layer.tick(DT);
+      let checked = 0;
+      scene.traverse((o) => {
+        if (o.type !== 'Group' || o.parent !== scene) return;
+        const toCam = Math.atan2(cam.position.x - o.position.x, cam.position.z - o.position.z);
+        expect(o.rotation.y).toBeCloseTo(toCam, 5);
+        expect(o.rotation.x).toBeCloseTo(0, 5);
+        expect(o.rotation.z).toBeCloseTo(0, 5);
+        // Standing on the floor: the base of the cutout is at the floor's height, give or take the little it has risen.
+        expect(o.position.y).toBeLessThan(floorHeight(Math.hypot(o.position.x, o.position.z)) + 1.2);
+        checked++;
+      });
+      expect(checked).toBeGreaterThan(0);
+    });
+
+    it('a crown lies on the floor and tilts with its slope', () => {
+      const scene = new THREE.Scene();
+      const cam = new THREE.PerspectiveCamera(60, 1.6, 0.1, 300);
+      const layer = new FxLayer(scene, cam);
+      const wind = new AnimeWind(layer, cam);
+      wind.dustStyle = 'crown';
+      wind.impact(9, 0, 0.6, TUNING, WIND_ON); // near the wall, where the funnel is steep
+      layer.tick(DT);
+      const holders = scene.children.filter((c) => c.type === 'Group');
+      expect(holders.length).toBeGreaterThan(0);
+      for (const h of holders) {
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(h.quaternion);
+        expect(up.y).toBeLessThan(0.999); // tilted: the floor is not flat out there
+        expect(up.y).toBeGreaterThan(0.8);
+        expect(up.x).toBeLessThan(0); // tipped away from the centre's side: the floor rises toward +x, so its normal leans to -x
+        expect(h.position.y).toBeGreaterThan(floorHeight(9) - 0.01);
+      }
+    });
   });
 
   describe('shock rings', () => {

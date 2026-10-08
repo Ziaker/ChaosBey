@@ -10,9 +10,17 @@
 // Three.js), so the tests can run it headless.
 // ============================================================
 
+import {
+  DEFAULT_ARENA_FLOOR,
+  MATCH_BOWL_DEPTH_DEFAULT_M,
+  floorHeightAtRadius,
+  floorSlopeAtRadius,
+  type ArenaFloorSpec,
+} from '../../../../src/arena/floor/ArenaFloorProfile';
+
 // ---------------- TUNING ----------------
-export const ARENA_RADIUS_M = 7.5;
-export const BOWL_DEPTH_M = 1.7;
+/** The play area (m): the game's camera never looks past ~10.5 m from the centre, so the lab keeps the fight inside it. */
+export const ARENA_RADIUS_M = 10;
 export const BEY_DIAMETER_M = 1.3;
 const GRAVITY_SCALE = 22;            // slope pull (m/s² per unit slope) — stylised, not real gravity
 const ORBIT_SPEED_MPS = 8;
@@ -65,19 +73,21 @@ export interface FlowEvent {
   m: number;
 }
 
-/** Floor height at distance r (parabolic dish, centre lowest). */
+/** The floor the game plays on by default: the funnel at its default depth (src/arena/floor), not a lab invention. */
+export const GAME_FLOOR: ArenaFloorSpec = { id: DEFAULT_ARENA_FLOOR, depthM: MATCH_BOWL_DEPTH_DEFAULT_M };
+
+/** Floor height at distance r from the centre (the game's own profile). */
 export function floorHeight(r: number): number {
-  const k = Math.min(1, r / ARENA_RADIUS_M);
-  return BOWL_DEPTH_M * k * k;
+  return floorHeightAtRadius(GAME_FLOOR, r);
 }
 
-/** dh/dr. */
+/** dh/dr (the game's own profile). */
 export function floorSlope(r: number): number {
-  return (2 * BOWL_DEPTH_M * Math.min(r, ARENA_RADIUS_M)) / (ARENA_RADIUS_M * ARENA_RADIUS_M);
+  return floorSlopeAtRadius(GAME_FLOOR, r);
 }
 
 function makeBey(angle: number, dir: 1 | -1): FlowBey {
-  const r = 4.2;
+  const r = 5;
   const x = Math.cos(angle) * r;
   const z = Math.sin(angle) * r;
   // Tangent velocity: perpendicular to the radius, sign = orbit direction.
