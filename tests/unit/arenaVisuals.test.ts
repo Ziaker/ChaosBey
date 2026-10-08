@@ -100,7 +100,7 @@ describe('the approved arenas, on every real floor', () => {
         const inCone = spots.some((s) => {
           const toPoint = p.clone().sub(s.position);
           const axis = s.target.position.clone().sub(s.position);
-          return toPoint.length() <= s.distance && toPoint.angleTo(axis) <= s.angle;
+          return (s.distance === 0 || toPoint.length() <= s.distance) && toPoint.angleTo(axis) <= s.angle; // distance 0 = no range window
         });
         if (!inCone && !directional) unlit.push(`r=${r.toFixed(1)} a=${a.toFixed(2)}`);
       }

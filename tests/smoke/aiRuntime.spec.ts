@@ -186,10 +186,11 @@ test('AI opponent runs in the real loop through hits, hitstop and (when it happe
 // ------------------------------------------------------------
 
 /** 10 simulated seconds at the fixed 60 Hz step. */
+const MAX_TICKS_FOR_FIRST_ACTION = 3000;
 const SIMULATED_TICKS = 600;
 
 test('AI opponent decides, explains and acts over 600 simulated ticks — intents, actions, scores, aim, finite values (M7 Part 2b)', async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(180_000);
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
@@ -224,7 +225,20 @@ test('AI opponent decides, explains and acts over 600 simulated ticks — intent
     });
   const startTick = await readTick();
   expect(startTick).toBeGreaterThanOrEqual(0);
-  await expect.poll(readTick, { timeout: 70_000, intervals: [500] }).toBeGreaterThanOrEqual(startTick + SIMULATED_TICKS);
+  // At least SIMULATED_TICKS, and then until the AI has pressed an attack / dodge (the AI circles and builds speed before it
+  // commits, and on the funnel it slides — the first press came at tick ~550–600 on most seeds, so a fixed 600-tick window
+  // failed on about half of them), up to MAX_TICKS_FOR_FIRST_ACTION: an AI that never acts in 50 s is what this check catches.
+  await expect
+    .poll(
+      async () => {
+        const tick = await readTick();
+        if (tick < startTick + SIMULATED_TICKS) return false;
+        if (tick >= startTick + MAX_TICKS_FOR_FIRST_ACTION) return true;
+        return page.evaluate(() => (window as unknown as { __aiOverlaySnapshots: string[] }).__aiOverlaySnapshots.some((text) => /^action.*(begin attack|tap circular|charging dash|dodge)/m.test(text)));
+      },
+      { timeout: 130_000, intervals: [500] },
+    )
+    .toBe(true);
 
   const snapshots = await page.evaluate(() => (window as unknown as { __aiOverlaySnapshots: string[] }).__aiOverlaySnapshots);
   expect(snapshots.length).toBeGreaterThan(20);

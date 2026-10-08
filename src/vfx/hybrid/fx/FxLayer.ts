@@ -35,6 +35,14 @@ export interface LiveFxItem extends FxItem {
   fxScaleApplied: boolean;
 }
 
+/**
+ * Cost pass (0.47.4): the most effect objects alive at once. Every effect is its own object (a draw call, a material, usually a
+ * geometry), so a heavy match with raised effect intensity / dust piled up hundreds of them. Past the budget the OLDEST effect is
+ * recycled (disposed and removed) before a new one is added, so the work is capped without changing what any slider means. The
+ * approved look at the default settings stays well under it (peak ~460 live in a measured AI-vs-AI match).
+ */
+export const FX_LIVE_BUDGET = 700;
+
 export class FxLayer {
   private readonly items: LiveFxItem[] = [];
 
@@ -44,9 +52,18 @@ export class FxLayer {
    */
   scale = 1;
 
-  constructor(private readonly scene: THREE.Object3D, private readonly camera: THREE.Camera) {}
+  constructor(private readonly scene: THREE.Object3D, private readonly camera: THREE.Camera, private readonly budget = FX_LIVE_BUDGET) {}
+
+  /** How many effects were recycled early to stay inside the budget (observability). */
+  recycled = 0;
 
   add(item: FxItem): void {
+    while (this.items.length >= this.budget) {
+      const oldest = this.items.shift()!;
+      this.scene.remove(oldest.object);
+      disposeObject(oldest.object);
+      this.recycled++;
+    }
     const live = Object.assign(item, { age: 0, fxScale: item.unscaled ? 1 : this.scale, fxScaleApplied: false }) as LiveFxItem;
     this.scene.add(item.object);
     this.items.push(live);
@@ -160,6 +177,9 @@ export class StreakSparks {
   emit(at: THREE.Vector3, o: SparkOptions): void {
     const hot = new THREE.Color(o.hot);
     const cool = new THREE.Color(o.cool);
+    // Past the capacity the oldest sparks go, in one move instead of one shift per new spark.
+    const overflow = this.sparks.length + o.count - this.max;
+    if (overflow > 0) this.sparks.splice(0, Math.min(overflow, this.sparks.length));
     for (let i = 0; i < o.count; i++) {
       if (this.sparks.length >= this.max) this.sparks.shift();
       const v = o.dir.clone()
@@ -174,10 +194,13 @@ export class StreakSparks {
   tick(dt: number): void {
     const c = new THREE.Color();
     let n = 0;
-    for (let i = this.sparks.length - 1; i >= 0; i--) {
+    // One pass that keeps the survivors in order (a splice per dead spark was O(n) each, up to 1500 sparks).
+    let kept = 0;
+    for (let i = 0; i < this.sparks.length; i++) {
       const s = this.sparks[i]!;
       s.life -= dt;
-      if (s.life <= 0) { this.sparks.splice(i, 1); continue; }
+      if (s.life <= 0) continue;
+      this.sparks[kept++] = s;
       s.v.y -= this.gravity * dt;
       s.p.addScaledVector(s.v, dt);
       const floor = this.floorHeightAt(Math.hypot(s.p.x, s.p.z));
@@ -195,6 +218,7 @@ export class StreakSparks {
       this.col.setXYZ(n * 2 + 1, c.r * 0.2, c.g * 0.2, c.b * 0.2);
       n++;
     }
+    this.sparks.length = kept;
     this.object.geometry.setDrawRange(0, n * 2);
     this.pos.needsUpdate = true;
     this.col.needsUpdate = true;

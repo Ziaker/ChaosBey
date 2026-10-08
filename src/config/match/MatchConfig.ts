@@ -28,6 +28,7 @@ import {
 } from '../../bey/momentum/MomentumTuning';
 import { JUMP_FULL_HEIGHT_DEFAULT_M, JUMP_SHORT_HOP_TARGET_APEX_M } from '../../drift/DriftTuning';
 import { MOVEMENT_STAMINA_DRAIN_DEFAULT } from '../../bey/stamina/StaminaTuning';
+import { FUNNEL_PULL_DEFAULT } from '../../bey/movement/MovementTuning';
 import { DODGE_COOLDOWN_S } from '../../dodge/DodgeTuning';
 import { CIRCULAR_LAUNCH_FORCE_DEFAULT } from '../../combat/attacks/AttackTuning';
 import { SPEED_DAMAGE_GAIN_DEFAULT } from '../../combat/attacks/SpeedDamage';
@@ -174,10 +175,16 @@ export interface MatchConfig {
    * per unit of the launching force (capped). Pregame slider, 0.2 s.
    */
   airRecoveryMinDelayS: number;
+  /**
+   * Owner, 2026-10-08 ("a física não tá sendo aplicada ... o bey só deveria ficar completamente parado na parte plana do
+   * funil"): × the pull of the floor's slope on every Bey (gravity's component along the floor, accumulated as a slide
+   * velocity the handling model does not damp). 0 = none (the pre-0.48 behaviour); 1 = gravity as it is. Pregame slider.
+   */
+  funnelPull: number;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed' | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed' | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS' | 'funnelPull'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -217,6 +224,7 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     circularAttack: config.circularAttack ?? true,
     beySizeScale: config.beySizeScale ?? 1,
     airRecoveryMinDelayS: config.airRecoveryMinDelayS ?? 0,
+    funnelPull: config.funnelPull ?? 0,
   };
 }
 
@@ -272,6 +280,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     circularAttack: true,
     beySizeScale: 1,
     airRecoveryMinDelayS: AIR_RECOVERY_MIN_DELAY_DEFAULT_S,
+    funnelPull: FUNNEL_PULL_DEFAULT,
   });
 }
 
@@ -324,6 +333,7 @@ export const ARENA_BOWL_DEPTH_RANGE = { min: 0, max: 18, step: 0.25 } as const;
 export const BEY_SIZE_SCALE_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
 /** Owner, 2026-10-05: the recovery time slider (the minimum; the launching force adds to it). PROVISIONAL. */
 export const AIR_RECOVERY_MIN_DELAY_DEFAULT_S = 0.2;
+export { FUNNEL_PULL_RANGE } from '../../bey/movement/MovementTuning';
 export const AIR_RECOVERY_MIN_DELAY_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
 export const ROUND_TIME_LIMIT_RANGE = { min: 0, max: 180, step: 15 } as const;
 export const ACCELERATION_SCALE_RANGE = { min: 0.25, max: 3, step: 0.05 } as const;

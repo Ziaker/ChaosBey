@@ -125,7 +125,12 @@ export const MECHANICAL: VfxLanguage = {
         const speed = e.vel.length();
         if (skidTimer <= 0) {
           skidTimer = 0.035;
-          if (TUNING.skidMarks > 0) ctx.layer.add(flatFx({ tex: softDot(), color: 0x000000, pos: new THREE.Vector3(e.pos.x, floorY(e.pos) + 0.015, e.pos.z), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.015 }, size: [0.28, 0.28], life: 2.5, opacity: Math.min(1, 0.35 * TUNING.skidMarks), hold: 0.6 }));
+          if (TUNING.skidMarks > 0) {
+            const opacity = Math.min(1, 0.35 * TUNING.skidMarks);
+            // The same dot either way; the game batches them into one mesh (SkidBatch), the labs' contexts keep one decal each.
+            if (ctx.skids) ctx.skids.add({ x: e.pos.x, z: e.pos.z, size: 0.28 * ctx.layer.scale, life: 2.5, opacity, hold: 0.6, lift: 0.015 });
+            else ctx.layer.add(flatFx({ tex: softDot(), color: 0x000000, pos: new THREE.Vector3(e.pos.x, floorY(e.pos) + 0.015, e.pos.z), conform: { floorHeightAt: ctx.floorHeightAt, lift: 0.015 }, size: [0.28, 0.28], life: 2.5, opacity, hold: 0.6 }));
+          }
         }
         if (Math.random() < Math.min(0.95, (speed / 25) * TUNING.speedSparks)) {
           emit(tipPos(e.pos), { count: 1, speed: 2, dir: e.vel.clone().normalize().negate(), spread: 0.8, life: [0.08, 0.2], hot, cool, upBias: 0.2 });

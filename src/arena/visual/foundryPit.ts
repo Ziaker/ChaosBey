@@ -8,7 +8,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, onCircle, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
+import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, onCircle, scaledCount, seededRandom, shadowed, skyDome, spotAngleToCover, stageCoveragePoints, stageRigIntensity } from './common';
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
@@ -19,6 +19,14 @@ const LAMP_COUNT = 4;               // Overhead work lamps.
 const LAMP_COLOR = 0xffc38a;        // Warm sodium-ish work light.
 const LAMP_INTENSITY = 260;         // Spot light intensity (physically based units) of the lab's rig; GAME: see rigIntensity.
 const CLASH_LAMP_COLOR = 0xffffff;  // Lamps go white-hot during a Clash.
+// GAME readability (owner playtest, 2026-10-08): "the first stage is dark, and darker the deeper the funnel". The lab's rig was
+// aimed at a 3.2 m bowl: a 0.62 rad cone with a long penumbra, so on a deep funnel the far slope and the whole wall stood outside it.
+const LAMP_PENUMBRA = 0.4;          // Soft edge of each lamp's cone (the lab used 0.55).
+const FILL_SKY = 0x8a97b3;          // Cool hall fill: the lab's 0x6f7f99 at 0.35 read as black on the brushed steel.
+const FILL_GROUND = 0x2a2420;       // ... and a warm bounce from the floor.
+const FILL_INTENSITY = 0.85;
+const FLOOR_METALNESS = 0.45;       // There is no environment map to reflect: the lab's 0.75 turned 3/4 of the albedo into black.
+const PANEL_METALNESS = 0.55;
 const HAZARD_ORANGE = '#f28a1c';
 // -----------------------------------------
 
@@ -115,39 +123,49 @@ export const FOUNDRY_PIT: ArenaConcept = {
     impact: 'Orange-yellow sparks; hazard stripes glow and lamps flare white on Clash',
   },
   defaultDepth: BOWL_DEPTH,
-  build(depth = BOWL_DEPTH, profile?: (r: number) => number): BuiltArena {
+  build(depth = BOWL_DEPTH, profile?: (r: number) => number, stageScale = 1): BuiltArena {
     // GAME: the real floor's profile when given (the lab always used its own bowl).
     const heightAt = profile ?? bowlProfile(depth);
     const root = new THREE.Group();
     const R = ARENA_RADIUS;
     const rim = heightAt(R);
+    // GAME: the stage size stretches the root on X/Z only; the rig below is scaled as a whole by `rigScale` (heights, ranges, haze).
+    const rigScale = ARENA_SCALE * stageScale;
 
     const floorTex = paintFloor();
     const floor = shadowed(new THREE.Mesh(
       bowlFloor(R, heightAt),
-      new THREE.MeshStandardMaterial({ map: floorTex.color, roughnessMap: floorTex.rough, metalness: 0.75, roughness: 1 }),
+      new THREE.MeshStandardMaterial({ map: floorTex.color, roughnessMap: floorTex.rough, metalness: FLOOR_METALNESS, roughness: 1 }),
     ), false, true);
     root.add(floor);
 
     // Wall: heavy panels + base + hazard rail.
-    const panelMat = new THREE.MeshStandardMaterial({ color: 0x4b5058, metalness: 0.85, roughness: 0.42 });
+    const panelMat = new THREE.MeshStandardMaterial({ color: 0x5b616a, metalness: PANEL_METALNESS, roughness: 0.45 });
     const darkMat = new THREE.MeshStandardMaterial({ color: 0x1a1c20, metalness: 0.7, roughness: 0.6 });
     const boltMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 1, roughness: 0.3 });
     const chord = 2 * (R + 0.35) * Math.sin(Math.PI / WALL_SEGMENTS) * 1.02;
+    // Cost pass (0.47.4): the 10 bolts on each of the 48 panels were 480 meshes with 480 geometries (a draw call each, ~150 of them in
+    // view); they are one instanced mesh now, placed exactly where the panel children were.
+    const boltGeometry = new THREE.CylinderGeometry(0.06, 0.06, 0.08, 6).rotateX(Math.PI / 2);
+    const bolts = new THREE.InstancedMesh(boltGeometry, boltMat, WALL_SEGMENTS * 10);
+    const boltMatrix = new THREE.Matrix4();
+    let boltIndex = 0;
     for (let i = 0; i < WALL_SEGMENTS; i++) {
       const a = (i / WALL_SEGMENTS) * Math.PI * 2;
       const panel = onCircle(shadowed(new THREE.Mesh(new THREE.BoxGeometry(chord, WALL_HEIGHT + 0.4, 0.5), panelMat)), R + 0.35, a, rim + WALL_HEIGHT / 2 - 0.2);
       root.add(panel);
+      panel.updateMatrix();
       for (let k = -2; k <= 2; k++) {
         for (const y of [-0.55, 0.55]) {
-          const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.08, 6).rotateX(Math.PI / 2), boltMat);
-          bolt.position.set(k * chord * 0.2, y, 0.27);
-          panel.add(bolt);
+          boltMatrix.makeTranslation(k * chord * 0.2, y, 0.27).premultiply(panel.matrix);
+          bolts.setMatrixAt(boltIndex++, boltMatrix);
         }
       }
       const rib = new THREE.Mesh(new THREE.BoxGeometry(0.25, WALL_HEIGHT + 0.5, 0.7), darkMat);
       root.add(onCircle(shadowed(rib), R + 0.4, a + Math.PI / WALL_SEGMENTS, rim + WALL_HEIGHT / 2 - 0.15));
     }
+    bolts.instanceMatrix.needsUpdate = true;
+    root.add(bolts);
     const hazardMat = new THREE.MeshStandardMaterial({ map: hazardTexture(), roughness: 0.55, metalness: 0.3, emissive: 0xff7a1a, emissiveIntensity: 0 });
     const rail = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.62, R + 0.62, 0.32, scaledCount(128), 1, true), hazardMat);
     rail.position.y = rim + WALL_HEIGHT + 0.02;
@@ -162,14 +180,24 @@ export const FOUNDRY_PIT: ArenaConcept = {
     root.add(grate);
 
     // Lighting: ring truss with work lamps.
+    // GAME: the rig hangs where the lab hung it, and no lower than the wall's top plus the lab's clearance: on a deep bowl (or a small
+    // stage) the rim stands up to the lamps' own height, where no cone can reach the wall that is level with them. A lamp that is lifted
+    // for that is brightened by (distance ratio)^decay, so the centre of the floor is lit exactly as before at any depth.
+    const baseLampY = 14.6 * rigScale;
+    const lampY = Math.max(baseLampY, rim + WALL_HEIGHT + 0.6 * baseLampY);
+    const lampRadius = 8 * rigScale; // (world metres: the root stretches the rig's X/Z by the stage size)
+    const lampIntensity = stageRigIntensity(LAMP_INTENSITY, 1.6, stageScale) * Math.pow(Math.hypot(lampRadius, lampY) / Math.hypot(lampRadius, baseLampY), 1.6);
     const truss = new THREE.Mesh(new THREE.TorusGeometry(8 * ARENA_SCALE, 0.18 * ARENA_SCALE, 8, scaledCount(96)).rotateX(Math.PI / 2), darkMat);
-    truss.position.y = 15 * ARENA_SCALE;
+    truss.position.y = lampY + 0.4 * rigScale;
     root.add(truss);
     const lamps: THREE.SpotLight[] = [];
     const lensMat = new THREE.MeshStandardMaterial({ color: 0xffe2bd, emissive: LAMP_COLOR, emissiveIntensity: 2 });
+    // GAME: what each lamp has to light, in world metres (the root stretches X/Z by the stage size, heights are as built).
+    const worldRadius = R * stageScale;
+    const coverage = stageCoveragePoints(worldRadius, (r) => heightAt(r / stageScale), WALL_HEIGHT);
     for (let i = 0; i < LAMP_COUNT; i++) {
       const a = (i / LAMP_COUNT) * Math.PI * 2 + Math.PI / 4;
-      const pos = new THREE.Vector3(Math.cos(a) * 8, 14.6, Math.sin(a) * 8).multiplyScalar(ARENA_SCALE); // GAME: the rig scaled as a whole
+      const pos = new THREE.Vector3(Math.cos(a) * 8 * ARENA_SCALE, lampY, Math.sin(a) * 8 * ARENA_SCALE); // GAME: the rig scaled as a whole (X/Z by the root)
       const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.5 * ARENA_SCALE, 0.9 * ARENA_SCALE, 0.8 * ARENA_SCALE, 16), darkMat);
       housing.position.copy(pos);
       housing.lookAt(0, 0, 0);
@@ -179,9 +207,14 @@ export const FOUNDRY_PIT: ArenaConcept = {
       lens.rotation.x = Math.PI / 2;
       housing.add(lens);
       root.add(housing);
-      const spot = new THREE.SpotLight(LAMP_COLOR, rigIntensity(LAMP_INTENSITY, 1.6), 40 * ARENA_SCALE, 0.62, 0.55, 1.6);
+      // GAME: aimed at the lab's spot (a little past the centre) but at the bowl's mid height, with the cone sized to the real stage
+      // (floor edge and wall top included) instead of the lab's fixed 0.62 rad; no range cut-off (the lab's 40 m window faded the far side).
+      const aim = new THREE.Vector3(-pos.x * 0.15, rim * 0.3, -pos.z * 0.15);
+      const world = (v: THREE.Vector3): THREE.Vector3 => new THREE.Vector3(v.x * stageScale, v.y, v.z * stageScale);
+      const angle = spotAngleToCover(world(pos), world(aim), coverage, { fraction: 0.75, minAngle: 0.62, maxAngle: 1.2 });
+      const spot = new THREE.SpotLight(LAMP_COLOR, lampIntensity, 0, angle, LAMP_PENUMBRA, 1.6);
       spot.position.copy(pos);
-      spot.target.position.set(-pos.x * 0.15, 0, -pos.z * 0.15);
+      spot.target.position.copy(aim);
       if (i === 0) {
         spot.castShadow = true;
         spot.shadow.mapSize.set(2048, 2048);
@@ -191,12 +224,12 @@ export const FOUNDRY_PIT: ArenaConcept = {
       root.add(spot, spot.target);
       lamps.push(spot);
     }
-    root.add(new THREE.HemisphereLight(0x6f7f99, 0x0b0b0c, 0.35));
+    root.add(new THREE.HemisphereLight(FILL_SKY, FILL_GROUND, FILL_INTENSITY));
 
     const flashLight = new THREE.PointLight(0xffa24a, 0, 9, 2);
     root.add(flashLight);
     root.add(skyDome(0x050608, 0x14161b, 0x050506));
-    const fog = new THREE.FogExp2(0x0b0c10, 0.018 / ARENA_SCALE); // GAME: the lab's haze over the scaled distances
+    const fog = new THREE.FogExp2(0x0b0c10, 0.018 / rigScale); // GAME: the lab's haze over the scaled distances (and the stage size)
     let flashT = 0;
 
     const baseColor = new THREE.Color(LAMP_COLOR);
@@ -207,14 +240,14 @@ export const FOUNDRY_PIT: ArenaConcept = {
       floorHeightAt: heightAt,
       wallRadius: R,
       sparkColors: [0xffe28a, 0xff6a14],
-      exposure: 1.0,
+      exposure: 1.15,
       fog,
       environmentIntensity: 0.35,
       update({ time, dt, clash }) {
         const flicker = 1 + 0.03 * Math.sin(time * 37) * Math.sin(time * 11);
         lamps.forEach((l, i) => {
           l.color.copy(baseColor).lerp(clashColor, clash);
-          l.intensity = rigIntensity(LAMP_INTENSITY, 1.6) * flicker * (1 + clash * (0.6 + 0.4 * Math.sin(time * 18 + i)));
+          l.intensity = lampIntensity * flicker * (1 + clash * (0.6 + 0.4 * Math.sin(time * 18 + i)));
         });
         lensMat.emissiveIntensity = 2 + clash * 4;
         hazardMat.emissiveIntensity = clash * (0.6 + 0.4 * Math.sin(time * 10));

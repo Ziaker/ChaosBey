@@ -32,6 +32,57 @@ export function rigIntensity(labIntensity: number, decay: number): number {
   return labIntensity * Math.pow(ARENA_SCALE, decay);
 }
 
+/**
+ * GAME: a light rig that keeps the lab's look at any stage size scales as a whole: its distances by `stageScale` (the
+ * stage-size slider; the arena art's root is stretched by it on X/Z only, so heights have to be scaled by hand) and its
+ * intensity by stageScale^decay, exactly as `rigIntensity` does for the 12 m -> 36 m pass.
+ */
+export function stageRigIntensity(labIntensity: number, decay: number, stageScale: number): number {
+  return rigIntensity(labIntensity, decay) * Math.pow(Math.max(stageScale, 1e-3), decay);
+}
+
+/**
+ * GAME: the points an overhead lamp has to light, in world metres: the floor halfway out, the floor edge and the top of
+ * the wall, all the way round. `heightAt(r)` is the floor's height at world distance r from the centre. On a deep bowl
+ * the rim (and the wall on it) stands far above the centre, which is what a lamp aimed at the centre used to miss.
+ */
+export function stageCoveragePoints(radiusM: number, heightAt: (r: number) => number, wallTopAboveRimM: number, samples = 16): THREE.Vector3[] {
+  const points: THREE.Vector3[] = [];
+  const rim = heightAt(radiusM);
+  for (let i = 0; i < samples; i++) {
+    const a = (i / samples) * Math.PI * 2;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    points.push(
+      new THREE.Vector3(c * radiusM * 0.5, heightAt(radiusM * 0.5), s * radiusM * 0.5),
+      new THREE.Vector3(c * radiusM, rim, s * radiusM),
+      new THREE.Vector3(c * radiusM, rim + wallTopAboveRimM, s * radiusM),
+    );
+  }
+  return points;
+}
+
+/**
+ * GAME: the cone angle (rad) a spot light at `from`, aimed at `target`, needs so every one of `points` sits inside
+ * `fraction` of it (the part before the penumbra's falloff), clamped to [minAngle, maxAngle]. A spot's brightness does
+ * not depend on its cone, so widening it only lights more of the stage: it never dims what it already lit.
+ */
+export function spotAngleToCover(
+  from: THREE.Vector3,
+  target: THREE.Vector3,
+  points: readonly THREE.Vector3[],
+  { fraction = 0.8, minAngle = 0.3, maxAngle = 1.25 }: { fraction?: number; minAngle?: number; maxAngle?: number } = {},
+): number {
+  const axis = target.clone().sub(from).normalize();
+  const to = new THREE.Vector3();
+  let worst = 0;
+  for (const p of points) {
+    to.copy(p).sub(from).normalize();
+    worst = Math.max(worst, Math.acos(Math.min(1, Math.max(-1, axis.dot(to)))));
+  }
+  return Math.min(maxAngle, Math.max(minAngle, worst / fraction));
+}
+
 /** Deterministic RNG so every arena looks the same on every load. */
 export function seededRandom(seed: number): () => number {
   let a = seed >>> 0;

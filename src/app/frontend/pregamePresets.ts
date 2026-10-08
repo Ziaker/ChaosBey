@@ -51,17 +51,21 @@ export const OFFICIAL_PRESETS: readonly OfficialPreset[] = [
     overrides: {},
   },
   {
-    // Heavier, more inertia, less exaggerated: lower speed and steering authority at speed, weaker air control, momentum that
-    // builds slower and drains slower so it matters, weightier contacts, calmer knockback and lift, restrained effects.
+    // Owner, 2026-10-08: "realismo = fisicamente EXATAMENTE igual a beyblade ... não é pra ser lento, é pra ser rápido mas
+    // fisicamente realista, no combate, no knockback, em tudo", with the funnel acting on speed and direction. So: FAST
+    // (acceleration and top speed above Normal, not below), a strong funnel pull (the slope drives everything), momentum that
+    // builds and lasts (inertia), speed kept through turns but less steering authority at speed (a top slides), little air
+    // control, heavier gravity, hard physical collisions (knockback, Clash and body damage up), restrained effects.
     id: 'realistic',
     label: 'Realistic',
     description: 'Heavier, more physical movement with more inertia and less exaggerated behavior.',
     provisional: true,
     overrides: {
       rules: {
-        accelerationScale: 1.4,
-        topSpeedScale: 2.2,
-        turnSpeedRetention: 0.7,
+        funnelPull: 2.2,
+        accelerationScale: 2.2,
+        topSpeedScale: 3,
+        turnSpeedRetention: 0.95,
         highSpeedControl: 0.6,
         airControl: 0.8,
         gravityScale: 4.2,
@@ -70,14 +74,13 @@ export const OFFICIAL_PRESETS: readonly OfficialPreset[] = [
         momentumDecayS: 3.5,
         jumpFullHeightM: 2.5,
         jumpShortHopHeightM: 0.35,
-        knockbackScale: 0.8,
-        contactLiftMps: 1.5,
-        clashLaunchMps: 18,
+        knockbackScale: 1.3,
+        contactLiftMps: 3,
+        clashLaunchMps: 32,
         bodyContactControlLossScale: 1.1,
         bodyCollisionDamage: 1.3,
-        gameSpeed: 1,
       },
-      visual: { intensity: 0.7, effectSize: 0.9, groundWaves: 0.6, dust: 0.8 },
+      visual: { intensity: 0.8, effectSize: 0.9, groundWaves: 0.7, dust: 0.8 },
     },
   },
   {
