@@ -4,7 +4,7 @@ A browser-based 3D spinning-top arena combat simulator, built with Three.js, Rap
 
 **Play it:** https://ziaker.github.io/ChaosBey/ — every merge to `main` is built, tested and deployed there automatically.
 
-**Version:** 0.48.0 (`package.json`). The game shows its version and the commit it was built from in the bottom-right corner of every screen (e.g. `v0.48.0 · 8d51f79`); if it doesn't match the latest `main`, reload with Ctrl+Shift+R (GitHub Pages caches the page for a few minutes).
+**Version:** 0.49.0 (`package.json`). The game shows its version and the commit it was built from in the bottom-right corner of every screen (e.g. `v0.49.0 · 8d51f79`); if it doesn't match the latest `main`, reload with Ctrl+Shift+R (GitHub Pages caches the page for a few minutes).
 
 **Standing rule (every change, no exceptions):** each PR that changes the game, its rules, its content or its tooling must (1) bump the version in `package.json` (and `package-lock.json`) — patch for fixes, minor for features/gameplay/content changes — so the number in the corner of the game moves, and (2) update this README (the **Version** line above and the **Status** / **Latest changes** notes below). A unit test (`tests/unit/versionSync.test.ts`) fails if `package.json`, `package-lock.json` and this README disagree. The rule is also written in `CLAUDE.md` (§4), `docs/design-decisions/README.md` and the PR template.
 
@@ -25,6 +25,8 @@ The Pregame overhaul and official Advanced presets (implemented in 0.47.0; the f
 The owner-approved **Launch System A — Timing Snap** is specified in [`docs/design-decisions/launch-system-approval.md`](docs/design-decisions/launch-system-approval.md); the approved one-file prototype is [`prototypes/launch-system-concepts/index.html`](prototypes/launch-system-concepts/index.html).
 
 ## Latest changes
+
+- **0.49.0 — Bey Flow FX Lab (prototype/docs, no game change; owner request 2026-10-08):** new lab `prototypes/bey-flow-fx-concepts/` comparing the continuous per-Bey effects from the owner's Beyblade references — tapered **wind ribbon** with a white core, **helix strands**, **spin blur** that fades as spin dies, **ghost echoes**, **tip dust/sparks** and **lean into the curve** — plus three candidate styles (A Comic, B Arcade, C Kinetic) for the **HIT / BLOCK / COUNTER!** word. Every value is a slider; all of it is **PROVISIONAL and not approved** (`docs/design-decisions/bey-flow-fx-approval.md`). Also records the owner's request for an **alternative, selectable "Bey Real" gameplay mode** (realistic physics, automatic movement with little player influence, the player only drives Charge/Release, Circular, Jump and Dodge, with its own camera) — **not prototyped or built yet**; open follow-ups are listed in that document.
 
 - **0.48.0 — Launch System A approved (prototype/docs, not yet integrated; owner 2026-10-07):** **Timing Snap** is the final launch direction. Both Beys begin visibly mounted in physical launchers; the player chooses where to throw their Bey; one timing press releases the launcher; the approved simultaneous arrival animation is preserved. **Combat begins immediately when both Beys make their first arena contact/bounce — no post-landing 3/2/1/GO timer or hidden lockout.** B/C remain history only. The canonical single-file prototype and approval contract are now in the repository.
 

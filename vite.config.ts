@@ -42,6 +42,7 @@ export default defineConfig(({ command, isPreview }) => ({
         cameraConcepts: fileURLToPath(new URL('./prototypes/camera-concepts/index.html', import.meta.url)),
         beyMotionConcepts: fileURLToPath(new URL('./prototypes/bey-motion-concepts/index.html', import.meta.url)),
         launchSystemConcepts: fileURLToPath(new URL('./prototypes/launch-system-concepts/index.html', import.meta.url)),
+        beyFlowFxConcepts: fileURLToPath(new URL('./prototypes/bey-flow-fx-concepts/index.html', import.meta.url)),
       },
     },
   },
