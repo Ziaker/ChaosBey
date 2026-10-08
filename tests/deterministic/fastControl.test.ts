@@ -28,7 +28,7 @@ describe('control at speed (owner, 2026-10-04)', () => {
     }
     expect(speedSum / 1200).toBeGreaterThan(25); // really fast
     expect(noControl).toBe(0); // was 337 of 1200 ticks
-    // The stick here is the direction of travel (+0.18 rad), and since 0.48.0 the funnel's slide is part of the velocity but
+    // The stick here is the direction of travel (+0.18 rad), and since 0.49.0 the funnel's slide is part of the velocity but
     // not of what the stick drives: the heading follows the stick, the velocity also follows the slope (98 of 1200 ticks off).
     expect(offTheStick).toBeLessThan(150); // ≥ 87% of the lap on the stick (was 95% before the funnel pull)
   });

@@ -34,7 +34,7 @@ import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecord
 // replay-4 since 0.41.0 (owner, 2026-10-05: no Air Recovery after a lost Clash): 1945 ticks, 28 frozen.
 // replay-46 since 0.42.0 (owner, 2026-10-05: intangible dodge, recovery time, drift): 2628 ticks, 22 frozen.
 // replay-158 since 0.43.1 (owner, 2026-10-05: the drift carves its turns): 2516 ticks, 32 frozen.
-// replay-46 since 0.48.0 (owner, 2026-10-08: the funnel pull changed every fight on a slope): 2912 ticks, 37 frozen, from a
+// replay-46 since 0.49.0 (owner, 2026-10-08: the funnel pull changed every fight on a slope): 2912 ticks, 37 frozen, from a
 // scan of replay-0..119 (30 qualify).
 const LONG_SEED = 'replay-46';
 /** The tampered-inputs check flips MoveForward on ticks 300 up to (not including) this. */

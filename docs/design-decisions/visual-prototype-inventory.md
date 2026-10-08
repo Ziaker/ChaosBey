@@ -11,6 +11,8 @@
 > **Atualização (27/09/2026, decisões canônicas posteriores):** todos os **9 conceitos de Bey são selecionáveis/jogáveis**; a antiga pendência de escolher só 3 finais, um por arquétipo, está **SUPERSEDED**. O **Clash Presentation Lab** também deixou de ser uma lacuna: a direção **C — Overdrive + câmera B — Cinematic Hybrid** foi aprovada e está registrada em `docs/design-decisions/clash-presentation-approval.md`. O protótipo `prototypes/clash-presentation-concepts/` continua fora da `main` enquanto o PR histórico específico não for mergeado. Em qualquer conflito com snapshots antigos deste inventário, prevalece `docs/design-decisions/VISUAL_APPROVALS_MASTER.md`.
 >
 > **Atualização (07/10/2026, Pregame):** o owner aprovou a direção visual/UX específica do **Pregame Setup** sem exigir um Lab: duas colunas, configuração compacta, Advanced por categorias e presets oficiais **Normal Original / Realistic / Epic / Smooth / Strategic** com `Custom` derivado. A decisão detalhada está em `docs/design-decisions/pregame-overhaul.md`. Isso fecha o Pregame como direção, mas não aprova Main Menu / Character Select / Pause / Results / Settings e não significa integração já feita.
+>
+> **Atualização (07/10/2026, Launch):** o owner escolheu e aprovou **A — Timing Snap** no Launch System Lab. O protótipo canônico é `prototypes/launch-system-concepts/index.html`: launchers físicos visíveis, jogador escolhe o ponto de entrada, um toque de timing libera o Bey, e a animação simultânea dos dois Beys chegando ao stage é obrigatória. **Combat começa assim que ambos fazem o primeiro contato/quique na arena; não existe 3/2/1/GO depois do pouso.** B/C ficam somente como histórico. Detalhes: `docs/design-decisions/launch-system-approval.md`.
 
 ## 1. Resumo e onde está cada coisa
 
@@ -56,6 +58,7 @@ O motivo de a `main` não mostrar esse material é histórico: o PR #9 mergeou a
 | Câmera de combate — 3 direções (A Arena Fighter, B Cinematic Hybrid, C Hyper Dynamic) com modos Combat Follow, High Speed, Close Combat, Knockback Follow, Clash, Ring-Out e Finisher | **APROVADO** sem alterações, como opções selecionáveis nas Configurações (uma por vez); 43 valores por direção; ainda não integrado | `prototypes/camera-concepts/` · `docs/design-decisions/camera-approval.md` |
 | Clash completo entre os Beys — energia, pulsos, mash e resolução | **PROTOTIPADO E APROVADO na apresentação: C Overdrive + câmera B; protótipo ainda fora da `main`** | `docs/design-decisions/clash-presentation-approval.md` · branch/PR histórico do Clash |
 | Pregame Setup — layout/UX + presets oficiais de Advanced | **DIREÇÃO APROVADA pelo owner em 07/10/2026; ainda não integrada** | `docs/design-decisions/pregame-overhaul.md` |
+| Launch System — A Timing Snap | **APROVADO pelo owner em 07/10/2026; protótipo no repo; ainda não integrado** | `prototypes/launch-system-concepts/` · `docs/design-decisions/launch-system-approval.md` |
 | Bloom / aberração cromática | **DECISÃO VISUAL AINDA NÃO TOMADA; não prototipado** | — |
 | Sparks, speed lines, trail, landing burst, shake, hitstop e FOV do jogo atual | **INTEGRADO NA MAIN, placeholder M4** | `src/vfx/`, `src/camera/` |
 | Mesh procedural atual do Bey (`ring / upper / lower / tip`) | **INTEGRADO NA MAIN, placeholder M1/M6** | `src/bey/procedural-model/createBeyMesh.ts` |

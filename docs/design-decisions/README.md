@@ -26,6 +26,7 @@ Este diretório contém decisões de design que agentes **não devem reabrir** s
 | Apresentação do Clash | `clash-presentation-approval.md` |
 | Cores dos Beys (uma por Bey), barra de Clash e plano das 4 peças | `bey-colors-plan.md` |
 | Pregame — overhaul visual/UX e presets oficiais de Advanced | `pregame-overhaul.md` |
+| Launch System — A Timing Snap, launcher físico, ponto de entrada e início imediato no quique | `launch-system-approval.md` |
 | Inventário/histórico de labs | `visual-prototype-inventory.md` |
 
 ## Precedência

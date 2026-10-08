@@ -197,7 +197,7 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     durationTicks: 5 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
       placeBey(first, -6, -6, 0);
-      // Far to the side: the funnel's pull (0.48.0) slides an idle Bey toward the centre, so it starts well outside the Dash's path.
+      // Far to the side: the funnel's pull (0.49.0) slides an idle Bey toward the centre, so it starts well outside the Dash's path.
       placeBey(second, 22, -8, 0);
     },
     first: script(hold(Action.Attack, 0, SHORT_DASH_HOLD_TICKS)),
@@ -322,7 +322,7 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     supported: true,
     durationTicks: 4 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
-      // 5 m back (was 3): the funnel's pull (0.48.0) slides the dasher ~1 m toward the defender while the Dash charges,
+      // 5 m back (was 3): the funnel's pull (0.49.0) slides the dasher ~1 m toward the defender while the Dash charges,
       // and a touch before the Dash fired ended the scenario on a weak contact knockback.
       placeBey(first, 0, -5, 0);
       placeBey(second, 0, 0, Math.PI);
