@@ -11,6 +11,7 @@
 
 import type * as THREE from 'three';
 import type { FxLayer, StreakSparks } from '../fx/FxLayer';
+import type { SkidBatch } from '../fx/SkidBatch';
 
 export type Slot = 0 | 1;
 
@@ -20,6 +21,8 @@ export interface FxContext {
   readonly camera: THREE.Camera;
   readonly layer: FxLayer;
   readonly sparks: StreakSparks;
+  /** Cost pass (0.47.4): where skid marks go, in one batched mesh. Omitted (the labs' contexts): each one is its own FxLayer decal. */
+  readonly skids?: SkidBatch;
   floorHeightAt(r: number): number;
   /** Signature color of each Bey (from its palette) — for colored energy effects. */
   beyColor(slot: Slot): THREE.Color;
