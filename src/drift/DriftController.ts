@@ -442,6 +442,20 @@ export class DriftController {
     this.bufferedJumpElapsedS = null;
   }
 
+  /**
+   * Rail Grinding (0.51.0): the Bey grabbed a rail in the middle of its own hop. The hop is over — no landing follows — and
+   * nothing of it (a buffered press, an armed drift, a follow-up window) carries onto the rail or off it.
+   */
+  abortForRail(): void {
+    this.state = DriftState.Idle;
+    this.launchPending = false;
+    this.bufferedJumpElapsedS = null;
+    this.driftFollowUpS = null;
+    this.driftArmed = false;
+    this.holdingSinceHop = false;
+    this.driftAirborneS = 0;
+  }
+
   private beginHop(body: RAPIER.RigidBody, actions: ControllerActions, headingRad: number): void {
     if (this.jumpCooldownRemainingS > 0 || !this.jumpAllowed) {
       // Lote 9: still cooling down (or the jump's Stamina cost can't be paid): keep the press, like an air press.

@@ -6,7 +6,7 @@
 // numbers through the code. Names of the reasons are provisional.
 // ============================================================
 
-export type RailEntryReason = 'proximity' | 'input' | 'scripted';
+export type RailEntryReason = 'jump' | 'proximity' | 'input' | 'scripted';
 export type RailExitReason = 'end' | 'voluntary' | 'interrupted' | 'hit' | 'ring-out' | 'scripted';
 export type RailDirection = 1 | -1;
 
@@ -52,6 +52,8 @@ export interface RailTuning {
   readonly entryAngleTolRad: number;
   /** Least horizontal speed to attach (m/s), 0 = none. */
   readonly minEntrySpeedMps: number;
+  /** The grind never starts slower than this (m/s): a Bey that jumped in standing still still travels the rail. */
+  readonly startSpeedMps: number;
   /** Acceleration along the rail (m/s²). */
   readonly accelerationMps2: number;
   /** Speed the grind pulls toward (m/s). */
@@ -70,6 +72,10 @@ export interface RailTuning {
   readonly reattachCooldownS: number;
   /** Stamina drained per second on a rail, 0 = none. */
   readonly staminaDrainPerS: number;
+  /** How fast the Bey is pulled onto the rail's line when it grabs it (1/s) — a short, observable correction, never a snap. */
+  readonly attachCorrectionPerS: number;
+  /** The most that correction may add (m/s). */
+  readonly attachCorrectionMaxMps: number;
 }
 
 /** PLACEHOLDER values for prototypes and tests ONLY — not a decision, not used by the game. */
@@ -77,6 +83,7 @@ export const PLACEHOLDER_RAIL_TUNING: RailTuning = {
   captureRadiusM: 1.5,
   entryAngleTolRad: Math.PI / 2,
   minEntrySpeedMps: 0,
+  startSpeedMps: 8,
   accelerationMps2: 10,
   targetSpeedMps: 30,
   maxSpeedMps: 45,
@@ -86,4 +93,29 @@ export const PLACEHOLDER_RAIL_TUNING: RailTuning = {
   exitLiftMps: 0,
   reattachCooldownS: 0.5,
   staminaDrainPerS: 0,
+  attachCorrectionPerS: 14,
+  attachCorrectionMaxMps: 10,
+};
+
+/**
+ * The tuning the game plays with (0.51.0). The owner closed HOW the rail works (jump toward it to grab it, there and back
+ * along the same route, only charging the attack and jumping while on it, a jump leaves it for the arena) but gave no
+ * numbers: every value here is PROVISIONAL, to be tuned by playtest in this one place.
+ */
+export const RAIL_TUNING: RailTuning = {
+  captureRadiusM: 1.8,
+  entryAngleTolRad: Math.PI / 2,
+  minEntrySpeedMps: 0,
+  startSpeedMps: 8,
+  accelerationMps2: 12,
+  targetSpeedMps: 32,
+  maxSpeedMps: 40,
+  entrySpeedCarry: 1,
+  exitSpeedCarry: 1,
+  exitTangentBlend: 1,
+  exitLiftMps: 0,
+  reattachCooldownS: 0.5,
+  staminaDrainPerS: 0,
+  attachCorrectionPerS: 14,
+  attachCorrectionMaxMps: 10,
 };

@@ -21,6 +21,8 @@ import { SpinController } from '../spin/SpinController';
 import { StabilitySystem } from '../stability/StabilitySystem';
 import { StaminaSystem } from '../stamina/StaminaSystem';
 import { MomentumSystem } from '../momentum/MomentumSystem';
+import { RailController } from '../../arena/rails/RailController';
+import type { RailDefinition } from '../../arena/rails/RailBlueprint';
 import { LEGACY_JUMP_FULL_HEIGHT_M } from '../../drift/DriftTuning';
 import { createBeyRigidBody } from './BeyRigidBody';
 import type { ArenaFloor } from '../../arena/floor/ArenaFloorProfile';
@@ -51,6 +53,8 @@ export interface Bey {
   readonly attack: AttackController;
   /** Owner, 2026-10-02 (Lote 3): speed build-up (see bey/momentum/). */
   readonly momentum: MomentumSystem;
+  /** Rail Grinding (0.51.0): this Bey's traversal of the stage's rails (none when the stage has none or the Pregame option is off). */
+  readonly rail: RailController;
   /** The match's per-Bey rules (MatchConfig): build-time config, in the replay config snapshot. */
   readonly rules: BeyMatchRules;
   /** M11: the floor profile of the arena this Bey plays on (placement helpers put it on the floor). Not simulation state. */
@@ -67,6 +71,8 @@ export function createBey(
   motion: MotionParams = motionParams(),
   /** The match's per-Bey rules (MatchConfig); omitted = the defaults, with the pre-2026-10-02 jump (see LEGACY_JUMP_FULL_HEIGHT_M). */
   matchRules?: BeyMatchRules,
+  /** The rails of the stage (already resolved onto its floor); none = no rail grinding. */
+  rails: readonly RailDefinition[] = [],
 ): Bey {
   const rules: BeyMatchRules = matchRules ?? { ...beyMatchRulesOf(createDefaultMatchConfig()), jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, defensiveCircular: false, speedDamageGain: 0, dashCarriesSpeed: false,
     // Owner, 2026-10-04 speed pass: match-only. Bare constructions (the Camera Lab: camera frozen) keep the old handling.
@@ -93,6 +99,8 @@ export function createBey(
     stability: new StabilitySystem(),
     attack: new AttackController(definition.attack, rules.dashCooldownS, rules.dashCarriesSpeed ?? false, rules.topSpeedScale ?? 1, rules.circularAttack ?? true),
     momentum: new MomentumSystem(rules),
+    // A short hop's launch speed, from the Bey's own jump rules: what a Jump press gives when it leaves a rail.
+    rail: new RailController(matchRules !== undefined && (rules.railsEnabled ?? false) ? rails : [], { jumpExitLiftMps: Math.sqrt(2 * Math.abs(GRAVITY_Y) * (rules.gravityScale ?? 1) * (rules.jumpShortHopHeightM ?? JUMP_SHORT_HOP_TARGET_APEX_M)) }),
     rules,
     arenaFloor,
     motion,

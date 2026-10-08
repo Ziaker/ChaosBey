@@ -206,6 +206,12 @@ export class AIController implements CombatController {
     }
     this.wasClashActive = false;
 
+    // Rail Grinding (0.51.0): on a rail only attack-charging and jumping exist, and the AI has no rail behaviour yet — it rides
+    // the rail out holding whatever it held, instead of tapping buttons the rail refuses (the 14 presses a second the matrix caught).
+    if (this.ownBey.rail.isOnRail()) {
+      return this.actionSelector.repeatFrozenActions(context.fixedDeltaSeconds);
+    }
+
     this.nowS += context.fixedDeltaSeconds;
 
     const ownRaw = extractRawState(this.physics, this.ownBey.body, this.ownBey);

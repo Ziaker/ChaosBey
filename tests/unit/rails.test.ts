@@ -115,9 +115,9 @@ describe('RailBlueprint', () => {
 });
 
 describe('stage rails and the Pregame option', () => {
-  it('no stage has a rail yet: the layouts are an owner decision, none is invented', () => {
-    for (const preset of ARENA_PRESETS) expect(STAGE_RAIL_BLUEPRINTS[preset.id], preset.id).toEqual([]);
-    for (const preset of ARENA_PRESETS) expect(railsForMatch({ stage: preset.id, railsEnabled: true, floor: 'bowl-b', floorRadiusM: 36 })).toEqual([]);
+  it('every stage starts with two rails (owner, 2026-10-08: "2 pra iniciar"), the same provisional layout on all of them', () => {
+    for (const preset of ARENA_PRESETS) expect(STAGE_RAIL_BLUEPRINTS[preset.id], preset.id).toHaveLength(2);
+    for (const preset of ARENA_PRESETS) expect(railsForMatch({ stage: preset.id, railsEnabled: true, floor: { id: 'bowl-b', depthM: 8.5 }, floorRadiusM: 36 })).toHaveLength(2);
   });
 
   it('with the option off a stage has no rails at all, and with it on it has the stage\'s layout resolved onto the floor', () => {
@@ -164,7 +164,7 @@ describe('rail traversal contract', () => {
   });
 
   it('names every tuning value of the doc (§12) in one place, with placeholders that are only for prototypes', () => {
-    expect(Object.keys(PLACEHOLDER_RAIL_TUNING).sort()).toEqual(['accelerationMps2', 'captureRadiusM', 'entryAngleTolRad', 'entrySpeedCarry', 'exitLiftMps', 'exitSpeedCarry', 'exitTangentBlend', 'maxSpeedMps', 'minEntrySpeedMps', 'reattachCooldownS', 'staminaDrainPerS', 'targetSpeedMps']);
+    expect(Object.keys(PLACEHOLDER_RAIL_TUNING).sort()).toEqual(['accelerationMps2', 'attachCorrectionMaxMps', 'attachCorrectionPerS', 'captureRadiusM', 'entryAngleTolRad', 'entrySpeedCarry', 'exitLiftMps', 'exitSpeedCarry', 'exitTangentBlend', 'maxSpeedMps', 'minEntrySpeedMps', 'reattachCooldownS', 'staminaDrainPerS', 'startSpeedMps', 'targetSpeedMps']);
     for (const value of Object.values(PLACEHOLDER_RAIL_TUNING)) expect(Number.isFinite(value)).toBe(true);
   });
 });

@@ -22,6 +22,9 @@ import { beyVisualDefinitionFor } from '../../bey/visual/approvedBeyVisuals';
 import { BeyVisualAnchors, type BeyVisualDefinition } from '../../presentation/beyVisual';
 import { PRESENTATION_FEATURES_OFF, type PresentationFeatures } from '../../presentation/features';
 import { matchSpawnsFor } from './matchSpawns';
+import { arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
+import type { RailDefinition } from '../../arena/rails/RailBlueprint';
+import { railsOfMatch } from '../../arena/rails/StageRails';
 
 /** Which visual one Bey wears and where effects attach to it (presentation only). */
 export interface BeyVisualHandle {
@@ -34,6 +37,8 @@ export interface BeyVisualHandle {
 export interface MatchScene {
   readonly first: Bey;
   readonly second: Bey;
+  /** Rail Grinding: the rails of this match's stage (empty when the Pregame option is off). */
+  readonly rails: readonly RailDefinition[];
   /** Presentation-only: the visual each Bey wears and its VFX anchors. */
   readonly visuals: { readonly first: BeyVisualHandle; readonly second: BeyVisualHandle };
   syncVisualsToPhysics(first: BeyVisualPose, second: BeyVisualPose): void;
@@ -124,8 +129,9 @@ export function createMatchScene(
   const spawns = matchSpawnsFor(floor);
   const firstBase = applyAttackProfileSettings(beys.first, attackProfileSettings);
   const secondBase = applyAttackProfileSettings(beys.second, attackProfileSettings);
-  const first = createBey(physics, spawns.first, firstBase, floor, motionValues, rules);
-  const second = createBey(physics, spawns.second, secondBase, floor, motionValues, rules);
+  const rails = railsOfMatch(rules.railsEnabled ?? false, floor, arenaFloorRadius());
+  const first = createBey(physics, spawns.first, firstBase, floor, motionValues, rules, rails);
+  const second = createBey(physics, spawns.second, secondBase, floor, motionValues, rules, rails);
 
   // The same resolution Character Select's preview uses (beyVisualDefinitionFor):
   // the approved concept with `newBeyVisuals` on, the legacy placeholder
@@ -152,6 +158,7 @@ export function createMatchScene(
   return {
     first,
     second,
+    rails,
     visuals,
     syncVisualsToPhysics: (firstPose, secondPose) => {
       syncFirst(firstPose);

@@ -171,6 +171,40 @@ function withoutActions(actions: ControllerActions, removed: readonly Action[]):
   };
 }
 
+/** The same actions with `added` held (not pressed) this tick. */
+function withHeld(actions: ControllerActions, added: Action): ControllerActions {
+  if (actions.held.has(added)) return actions;
+  return { ...actions, held: new Set([...actions.held, added]) };
+}
+
+/**
+ * Rail Grinding (0.51.0, owner 2026-10-08): one Bey's rail step, before its drift / dodge / attack read their input. On a
+ * rail the Bey can only charge its attack and jump (a jump leaves the rail): Dodge and Jump are taken out of its actions
+ * by the RailController (the Jump press itself is what leaves), a Circular tap is refused, and a Dash charge goes on
+ * charging but does not fire until the Bey is off the rail (the release is held back). Returns the actions to use and the
+ * route's velocity for MovementController, if any.
+ */
+function railStep(bey: Bey, actions: ControllerActions, grounded: boolean, dt: number): { actions: ControllerActions; override: { velocity: { x: number; y: number; z: number }; headingRad: number } | null } {
+  const out = bey.rail.tick({
+    actions,
+    position: bey.body.translation(),
+    velocity: bey.body.linvel(),
+    headingRad: bey.movement.getHeadingRad(),
+    grounded,
+    inOwnHop: bey.drift.getState() === DriftState.Hopping,
+    attachBlocked: bey.attack.isCommitted() || bey.movement.areActionsLocked() || bey.movement.isKnockbackPlaying(),
+    dt,
+  });
+  if (out.entered) bey.drift.abortForRail();
+  if (out.launch) bey.body.setLinvel(out.launch, true);
+  let result = out.actions;
+  if (bey.rail.isOnRail()) {
+    bey.attack.blockCircularFor(dt * 2);
+    if (bey.attack.getState() === AttackState.ChargingDash) result = withHeld(result, Action.Attack);
+  }
+  return { actions: result, override: out.override };
+}
+
 export function tickMatch(
   physics: PhysicsWorld,
   first: Bey,
@@ -261,6 +295,12 @@ export function tickMatch(
   // The post-Clash locks (owner, 2026-10-04): what the Beys may still do this tick.
   firstActions = first.movement.filterPostClashActions(firstActions, firstGrounded, fixedDeltaSeconds);
   secondActions = second.movement.filterPostClashActions(secondActions, secondGrounded, fixedDeltaSeconds);
+
+  // Rail Grinding (0.51.0): grabbing, travelling and leaving a rail, and what the Bey may still do on it.
+  const firstRail = railStep(first, firstActions, firstGrounded, fixedDeltaSeconds);
+  const secondRail = railStep(second, secondActions, secondGrounded, fixedDeltaSeconds);
+  firstActions = firstRail.actions;
+  secondActions = secondRail.actions;
 
   // Lote 9 (GDD 12): a jump's Stamina cost — a Bey that can't pay it can't jump; paid when the hop begins.
   const canPayJump = (bey: Bey): boolean => (bey.rules.jumpStaminaCost ?? 0) <= 0 || bey.stamina.resource.value > bey.rules.jumpStaminaCost;
@@ -353,6 +393,7 @@ export function tickMatch(
     dashOverride: firstAttack.dashOverride,
     dodgeOverride: firstDodge.dodgeOverride,
     floorNormal: floorNormalUnder(first, firstGrounded),
+    railOverride: firstRail.override,
   });
   second.movement.applyPreStep(second.body, {
     actions: secondActions,
@@ -366,6 +407,7 @@ export function tickMatch(
     dashOverride: secondAttack.dashOverride,
     dodgeOverride: secondDodge.dodgeOverride,
     floorNormal: floorNormalUnder(second, secondGrounded),
+    railOverride: secondRail.override,
   });
 
   first.spin.tick(first.body, fixedDeltaSeconds, firstCondition, firstGrounded, firstDrift.driftState === DriftState.Drifting ? first.movement.getHeadingRad() : null, axisCondition(first));
@@ -411,6 +453,9 @@ export function tickMatch(
 
   const firstMovement = first.movement.postStep(first.body, firstGrounded, firstDrift.driftState === DriftState.Hopping);
   const secondMovement = second.movement.postStep(second.body, secondGrounded, secondDrift.driftState === DriftState.Hopping);
+  // A hit, a wall or the other Bey knocks a Bey off its rail (provisional: the owner has not decided what a collision does there).
+  if (firstMovement.impactDeltaSpeedMps > 0) first.rail.interrupt('hit');
+  if (secondMovement.impactDeltaSpeedMps > 0) second.rail.interrupt('hit');
 
   // Note: a wall/floor bounce does NOT call dodge.registerLaunch() — GDD
   // section 21 grants Air Recovery only for being launched/knocked

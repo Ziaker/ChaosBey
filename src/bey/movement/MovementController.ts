@@ -93,6 +93,12 @@ export interface MovementPreStepInput {
    * bouncing off it. A vertical normal (the flat arena) changes nothing.
    */
   floorNormal?: { x: number; y: number; z: number } | null;
+  /**
+   * Rail Grinding (0.51.0): while the Bey is on a rail, the route's velocity (3D) and the yaw it faces replace the whole
+   * velocity this tick — no steering, throttle, grip or slide. Takes priority over everything but is not a Dodge or a Dash
+   * (a Bey on a rail can't do either). A wall or another Bey still interrupts it through the post-step impact detector.
+   */
+  railOverride?: { velocity: { x: number; y: number; z: number }; headingRad: number } | null;
 }
 
 export interface MovementSnapshot {
@@ -119,6 +125,9 @@ export interface MovementSnapshot {
   /** Unit vector of the velocity deviation that triggered impactDeltaSpeedMps; zero vector when there was no impact this tick. */
   impactDirection: Vec2;
 }
+
+/** Rail Grinding: how fast the heading swings round to face the way of travel (rad/s). PROVISIONAL. */
+const RAIL_HEADING_TURN_RATE_RAD_S = 14;
 
 /** Numerical safety clamp on horizontal speed (m/s) — not a gameplay limit (owner speed pass, 2026-10-04). */
 const NUMERICAL_SPEED_CLAMP_MPS = 60;
@@ -384,6 +393,11 @@ export class MovementController {
     const topSpeedMultiplier = input.topSpeedMultiplier ?? 1;
 
     this.driftingThisStep = false;
+    if (input.railOverride) {
+      this.driftFloorLossMps = 0;
+      this.applyRailOverride(body, input.railOverride, fixedDeltaSeconds);
+      return;
+    }
     if (dodgeOverride) {
       this.driftFloorLossMps = 0;
       this.applyDodgeOverride(body, dodgeOverride, grounded, fixedDeltaSeconds, floorNormal);
@@ -648,6 +662,24 @@ export class MovementController {
     }
     this.slide = { x: sx, z: sz };
     return this.slide;
+  }
+
+  /** Rail Grinding: the route drives the whole velocity, the heading swings round to face the way of travel. */
+  private applyRailOverride(body: RAPIER.RigidBody, rail: { velocity: { x: number; y: number; z: number }; headingRad: number }, fixedDeltaSeconds: number): void {
+    this.postImpactCooldownRemainingS = 0;
+    this.knockbackPlaying = false;
+    this.slide = { x: 0, z: 0 };
+    this.whirlRadPerS = 0;
+    this.turnRateRadPerS = 0;
+    const error = Math.atan2(Math.sin(rail.headingRad - this.headingRad), Math.cos(rail.headingRad - this.headingRad));
+    const step = RAIL_HEADING_TURN_RATE_RAD_S * fixedDeltaSeconds;
+    this.headingRad += Math.max(-step, Math.min(step, error));
+    this.lastHeadingForward = fromYaw(this.headingRad);
+    this.lastLateralGripPerS = 0;
+    body.setLinvel({ x: rail.velocity.x, y: rail.velocity.y, z: rail.velocity.z }, true);
+    this.preStepVerticalMps = rail.velocity.y;
+    this.intendedVelocityThisTick = { x: rail.velocity.x, z: rail.velocity.z };
+    this.preStepHorizontal = { x: rail.velocity.x, z: rail.velocity.z };
   }
 
   /**
