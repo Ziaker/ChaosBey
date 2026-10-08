@@ -67,12 +67,18 @@ function withoutActions(actions: ControllerActions, removed: readonly Action[]):
   };
 }
 
+/** The longest a Bey stays untouchable after leaving a rail while still overlapping the other Bey (s). */
+export const RAIL_INTANGIBLE_AFTER_MAX_S = 1;
+
 export class RailController {
   private readonly tuning: RailTuning;
   private readonly jumpExitLiftMps: number;
   private state: RailTraversalState = NOT_ON_RAIL;
   private railIndex = -1;
   private cooldownS = 0;
+  /** Owner, 2026-10-08 ("não tem como levar um golpe no trilho, ele fica fora da arena"): on a rail the Bey cannot be touched. */
+  private intangible = false;
+  private intangibleAfterS = 0;
 
   constructor(
     private readonly rails: readonly RailDefinition[],
@@ -80,6 +86,43 @@ export class RailController {
   ) {
     this.tuning = options.tuning ?? RAIL_TUNING;
     this.jumpExitLiftMps = options.jumpExitLiftMps ?? 0;
+  }
+
+  /** The rails this Bey can grab (the AI reads them to plan a run; the controller never changes them). */
+  getRails(): readonly RailDefinition[] {
+    return this.rails;
+  }
+
+  /** Where the route goes from the Bey's progress, in the direction it travels: the AI reads it to pick the moment to leave. Null off a rail. */
+  getRoute(): { readonly tangent: Point3; readonly remainingM: number } | null {
+    if (!this.isOnRail() || this.railIndex < 0) return null;
+    const rail = this.rails[this.railIndex]!;
+    const sample = rail.path.sampleAt(this.state.progressM);
+    const remainingM = this.state.direction > 0 ? rail.path.lengthM - this.state.progressM : this.state.progressM;
+    return { tangent: { x: sample.tangent.x * this.state.direction, y: sample.tangent.y * this.state.direction, z: sample.tangent.z * this.state.direction }, remainingM };
+  }
+
+  /**
+   * Out of the arena while on a rail: no solver contact, no hit, no body collision (the same pass-through a Dodge gives, see
+   * DodgeController.updateIntangibility). After leaving it lasts until the two bodies no longer overlap, so a Bey that jumps
+   * off right above the other is not popped apart (capped at RAIL_INTANGIBLE_AFTER_MAX_S).
+   */
+  updateIntangibility(overlappingOpponent: boolean, dt: number): void {
+    if (this.isOnRail()) {
+      this.intangible = true;
+      this.intangibleAfterS = 0;
+      return;
+    }
+    if (!this.intangible) return;
+    this.intangibleAfterS += dt;
+    if (!overlappingOpponent || this.intangibleAfterS >= RAIL_INTANGIBLE_AFTER_MAX_S) {
+      this.intangible = false;
+      this.intangibleAfterS = 0;
+    }
+  }
+
+  isIntangible(): boolean {
+    return this.intangible;
   }
 
   getState(): RailTraversalState {
@@ -229,6 +272,8 @@ export class RailController {
       entryReason: this.state.entryReason,
       exitReason: this.state.exitReason,
       cooldownS: this.cooldownS,
+      intangible: this.intangible,
+      intangibleAfterS: this.intangibleAfterS,
     };
   }
 }

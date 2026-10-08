@@ -36,7 +36,8 @@ import { TelemetryRecorder } from '../../src/telemetry/recording/TelemetryRecord
 // replay-158 since 0.43.1 (owner, 2026-10-05: the drift carves its turns): 2516 ticks, 32 frozen.
 // replay-46 since 0.49.0 (owner, 2026-10-08: the funnel pull changed every fight on a slope): 2912 ticks, 37 frozen, from a
 // scan of replay-0..119 (30 qualify).
-const LONG_SEED = 'replay-46';
+// replay-107 since 0.53.0 (owner, 2026-10-08: the AI rides the rails): 2935 ticks, 37 frozen, from a scan of replay-0..119.
+const LONG_SEED = 'replay-107';
 /** The tampered-inputs check flips MoveForward on ticks 300 up to (not including) this. */
 const EDIT_END_TICK = 700;
 

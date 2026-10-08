@@ -429,7 +429,10 @@ export function tickMatch(
     beyBodiesOverlapVertically(first.body.translation().y, first.definition.physical.colliderHalfHeightM, second.body.translation().y, second.definition.physical.colliderHalfHeightM);
   first.dodge.updateIntangibility(overlapBefore, fixedDeltaSeconds);
   second.dodge.updateIntangibility(overlapBefore, fixedDeltaSeconds);
-  const phased = first.dodge.isIntangible() || second.dodge.isIntangible();
+  // Rail Grinding (owner, 2026-10-08): a Bey on a rail is out of the arena — it cannot take a hit, and cannot give one.
+  first.rail.updateIntangibility(overlapBefore, fixedDeltaSeconds);
+  second.rail.updateIntangibility(overlapBefore, fixedDeltaSeconds);
+  const phased = first.dodge.isIntangible() || second.dodge.isIntangible() || first.rail.isIntangible() || second.rail.isIntangible();
   physics.setBeyContactsEnabled(!phased);
   capLaunchSpeed(first); // a launch applied late in the last tick (a hit, a Clash) is cut before it can carry the Bey through a wall
   capLaunchSpeed(second);
@@ -453,7 +456,7 @@ export function tickMatch(
 
   const firstMovement = first.movement.postStep(first.body, firstGrounded, firstDrift.driftState === DriftState.Hopping);
   const secondMovement = second.movement.postStep(second.body, secondGrounded, secondDrift.driftState === DriftState.Hopping);
-  // A hit, a wall or the other Bey knocks a Bey off its rail (provisional: the owner has not decided what a collision does there).
+  // Anything that still touches a Bey on its rail (not the other Bey: it is intangible there) takes it off.
   if (firstMovement.impactDeltaSpeedMps > 0) first.rail.interrupt('hit');
   if (secondMovement.impactDeltaSpeedMps > 0) second.rail.interrupt('hit');
 

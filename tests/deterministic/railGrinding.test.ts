@@ -186,3 +186,54 @@ describe('rails in a real match', () => {
     }
   });
 });
+
+describe('a Bey on a rail is out of the arena (owner, 2026-10-08)', () => {
+  it('takes no hit and no body contact from the other Bey, and the other Bey is unharmed too', async () => {
+    const world = await SelfTestMatchWorld.build({ firstDefinition: ATTACK_ARCHETYPE, secondDefinition: DEFENSE_ARCHETYPE, aiMashSource: new NullAiMashSource(), matchConfigOverrides: { railsEnabled: true } as never });
+    try {
+      const a = world.first;
+      a.body.setTranslation({ x: 15, y: BEY_SPAWN_HEIGHT_M + floorHeightAt(a.arenaFloor, 15, 0), z: 0 }, true);
+      a.body.setLinvel({ x: 8, y: 0, z: 0 }, true);
+      const idle = new IdleController();
+      const press = (pressed: Action[], held: Action[], move: { x: number; z: number }): CombatController => ({ sampleActions: () => ({ held: new Set(held), pressedThisFrame: new Set(pressed), attackHoldDurationSeconds: 0, jumpDriftHoldDurationSeconds: 0, moveIntent: move }) });
+      // Park the opponent where the rail is, right under the route, while the first Bey rides over it.
+      let onRailTicks = 0;
+      const stabilityBefore = world.second.stability.resource.value;
+      for (let t = 0; t < 120; t++) {
+        // Until the first Bey is on the rail the opponent waits far away; then it stands right under the rider, every tick.
+        const p = a.rail.isOnRail() ? a.body.translation() : { x: 0, y: 0, z: -33 };
+        world.second.body.setTranslation({ x: p.x, y: a.rail.isOnRail() ? a.body.translation().y : BEY_SPAWN_HEIGHT_M + floorHeightAt(world.second.arenaFloor, p.x, p.z), z: p.z }, true);
+        world.second.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        world.step({ first: press(t === 0 ? [Action.JumpDrift] : [], a.rail.isOnRail() ? [Action.Attack] : [Action.JumpDrift], { x: 1, z: 0 }), second: idle });
+        if (a.rail.isOnRail()) {
+          onRailTicks++;
+          expect(a.rail.isIntangible()).toBe(true);
+        }
+      }
+      expect(onRailTicks).toBeGreaterThan(20);
+      // The opponent standing under the rail was never hit, pushed or damaged.
+      expect(world.second.stability.resource.value).toBe(stabilityBefore);
+      expect(world.second.movement.isKnockbackPlaying()).toBe(false);
+    } finally {
+      world.dispose();
+    }
+  });
+
+  it('the intangibility outlasts the rail only while the two bodies still overlap, and is capped', () => {
+    const c = new RailController([rail]);
+    expect(c.tick(input({ velocity: { x: 3, y: 1, z: -5 } })).entered).toBe(true);
+    c.updateIntangibility(true, DT);
+    expect(c.isIntangible()).toBe(true);
+    c.interrupt('hit');
+    c.updateIntangibility(true, DT);
+    expect(c.isIntangible()).toBe(true); // still overlapping the other Bey
+    c.updateIntangibility(false, DT);
+    expect(c.isIntangible()).toBe(false); // clear of it
+    const d = new RailController([rail]);
+    d.tick(input({ velocity: { x: 3, y: 1, z: -5 } }));
+    d.updateIntangibility(true, DT);
+    d.interrupt('voluntary');
+    for (let i = 0; i < 70; i++) d.updateIntangibility(true, DT);
+    expect(d.isIntangible()).toBe(false); // the cap (1 s) ended it though still overlapping
+  });
+});

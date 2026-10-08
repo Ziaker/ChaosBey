@@ -464,3 +464,9 @@ Quando 1–3 e 5 estiverem decididos, o próximo passo é o protótipo de rota c
 **Implementado:** `RailController` (grab/ride/leave), `MovementController.railOverride` (único escritor de velocidade), `DriftController.abortForRail`, `tickMatch.railStep`, estado hasheado no replay. Rails: arcos leste/oeste a 0,6 raio do piso, 1,6 m acima, ±50°, iguais nos 3 stages (o stage ainda não está no `MatchConfig`).
 
 **Suposições PROVISÓRIAS (confirmar com o owner):** o Bey precisa estar num pulo **próprio** e dentro de 1,8 m do rail, indo em direção a ele (só o pulo cheio alcança a altura); sentido = o que ele já seguia (ou o que encara); no fim do rail ele **sai** (não inverte); qualquer golpe/Clash o tira do rail; Dodge/Air Recovery indisponíveis; o AI ainda não usa rails; velocidades/aceleração/captura em `RAIL_TUNING`.
+
+## 18. Respostas às suposições (0.53.0, owner 2026-10-08)
+- **Fim do rail:** "ele sai do trilho" — confirmado: sai ao longo da rota (não inverte).
+- **Golpes no trilho:** "não tem como levar um golpe no trilho, ele fica fora da arena" — o Bey no trilho é **intocável** (sem golpe, Clash nem contato corporal, nos dois sentidos); depois de sair, só até os corpos deixarem de se sobrepor (máx. 1 s). Implementado com a mesma passagem do Dodge (`phased` em `tickMatch`).
+- **AI:** "sim" — a AI usa os rails (`src/ai/decision/RailPilot.ts`): aproximação, pulo antecipado, carrega o Dash no trilho, salta quando a rota aponta para o oponente e solta o Dash alinhada. Números provisórios.
+- Continuam em aberto: o visual final, os números (`RAIL_TUNING` e as constantes da AI) e layouts por stage.

@@ -61,6 +61,8 @@ export interface AiSideStats {
   meanCircularStartSpeedMps: number;
   dodges: number;
   jumps: number;
+  /** Rail Grinding: times this side grabbed a rail. */
+  railRides: number;
   hitsLanded: number;
   /** Incoming hits this side nullified with dodge i-frames. */
   hitsDodged: number;
@@ -156,6 +158,7 @@ class SideTracker {
       meanCircularStartSpeedMps: 0,
       dodges: 0,
       jumps: 0,
+      railRides: 0,
       hitsLanded: 0,
       hitsDodged: 0,
       deliberateErrors: 0,
@@ -197,6 +200,7 @@ class SideTracker {
     const attackIntent = debug.activeIntent === AiIntent.AttackCircular || debug.activeIntent === AiIntent.AttackDash;
     const stalled =
       !clashActive &&
+      !ai.isRunningRail() && // a rail run drives the Bey itself: the intent below is stale for its duration
       attackIntent &&
       attackState === AttackState.Neutral &&
       dashReadiness >= 1 &&
@@ -393,6 +397,8 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
   let previousFirstBroken = false;
   let previousSecondBroken = false;
   let distanceSum = 0;
+  let previousFirstOnRail = false;
+  let previousSecondOnRail = false;
   let ticks = 0;
   let maxTickMs = 0;
   let slowTicks = 0;
@@ -417,6 +423,12 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
       broken || attackState === AttackState.DashRecovery || attackState === AttackState.CircularRecovery;
     first.record(tick, firstAi, firstActions, result.first.attackState, result.first.dodgeState, clashActive, Math.hypot(a.x, a.z), isOpen(previousSecondAttackState, previousSecondBroken), result.first.dashReadiness, result.first.movement.speedMps);
     second.record(tick, secondAi, secondActions, result.second.attackState, result.second.dodgeState, clashActive, Math.hypot(b.x, b.z), isOpen(previousFirstAttackState, previousFirstBroken), result.second.dashReadiness, result.second.movement.speedMps);
+    const firstOnRail = world.first.rail.isOnRail();
+    const secondOnRail = world.second.rail.isOnRail();
+    if (firstOnRail && !previousFirstOnRail) first.stats.railRides++;
+    if (secondOnRail && !previousSecondOnRail) second.stats.railRides++;
+    previousFirstOnRail = firstOnRail;
+    previousSecondOnRail = secondOnRail;
     previousFirstAttackState = result.first.attackState;
     previousSecondAttackState = result.second.attackState;
     previousFirstBroken = result.first.isBroken;
