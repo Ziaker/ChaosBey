@@ -28,6 +28,7 @@ Este diretório contém decisões de design que agentes **não devem reabrir** s
 | Pregame — overhaul visual/UX e presets oficiais de Advanced | `pregame-overhaul.md` |
 | Launch System — A Timing Snap, launcher físico, ponto de entrada e início imediato no quique | `launch-system-approval.md` |
 | Fluxo do Bey — borrão de giro, inclinação, poeira anime (3 ideias), vento, argolas, texto HIT/BLOCK/COUNTER (estilo A) e o modo alternativo "Bey Real" (prototipado, não aprovado) | `bey-flow-fx-approval.md` |
+| Bey Real — física realista, movimento automático (~30% de influência) e os quatro botões (protótipo, não aprovado) | `bey-real-physics-approval.md` |
 | Fluxo do Bey — **especificação detalhada dos efeitos** (integrados no jogo, sliders nas Configurações) | `flow-fx-effects.md` |
 | Inventário/histórico de labs | `visual-prototype-inventory.md` |
 

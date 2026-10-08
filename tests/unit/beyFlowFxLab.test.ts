@@ -473,6 +473,17 @@ describe('flow lab — anime wind', () => {
     expect(rings[0]!.position.y).toBeCloseTo(floorHeight(Math.hypot(2, 1)) + 0.55, 5); // from the middle of the contact, not above it
   });
 
+  it('a landing raises the floor crowns and a ring of dust, but no shock rings or star (nothing was hit)', () => {
+    const { layer, wind } = setup('wave');
+    wind.landing(3, 2, 0.8, TUNING, WIND_ON);
+    wind.update(DT, TUNING);
+    expect(layer.count()).toBe(2); // the two floor crowns
+    expect(wind.dustPuffs).toBeGreaterThanOrEqual(2);
+    const off = setup('wave');
+    off.wind.landing(3, 2, 0.8, TUNING, { dust: true, wind: true, crown: false });
+    expect(off.layer.count()).toBe(0);
+  });
+
   it('a Dash release raises the configured number of shock rings plus a fan of dust', () => {
     const { layer, wind } = setup('wave');
     wind.dashStart(0, fastBey(), TUNING, WIND_ON);

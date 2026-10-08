@@ -89,7 +89,7 @@ Reaproveita as peças aprovadas de `src/vfx/hybrid/fx` (`FxLayer`, `wakeStreakFx
 
 ## 4. Plano de integração
 
-> **Estado (0.54.0):** o item 1 abaixo (VFX, apresentação) foi **feito a pedido do owner** como `src/vfx/flow` + sliders nas Configurações, antes da aprovação final dos valores; a palavra BLOCK, o piloto automático, a física e a câmera continuam não feitos.
+> **Estado (0.57.0):** o protótipo do "Bey Real" (itens 2–4) agora existe como lab jogável: ver [`bey-real-physics-approval.md`](bey-real-physics-approval.md); nada está integrado no jogo. O item 1 abaixo (VFX, apresentação) foi **feito a pedido do owner** como `src/vfx/flow` + sliders nas Configurações, antes da aprovação final dos valores; a palavra BLOCK, o piloto automático, a física e a câmera continuam não feitos.
 
 1. **VFX** (só apresentação): portar os efeitos aprovados para `src/vfx/`, lendo eventos e estado do jogo (GDD 158: VFX nunca decide resultado), com respeito ao preset de qualidade / reduzir efeitos. **Texto de combate:** estilo A no HUD, atrás de uma opção nas Configurações (hoje o HUD só tem "COUNTER!", sob `counterFeedback`), depois de definido o que é BLOCK.
 2. **Modo "Bey Real" — controle:** um controlador de piloto automático na camada de controladores (mesmo canal da IA: `ControllerActions.moveIntent`), que mistura a intenção automática com o stick do jogador e repassa Ataque, Pulo e Esquiva sem mudança. Opção de pré-jogo, independente do `controlScheme`.
