@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lab do Bey Real</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07100b;
+        --panel: #0d1610;
+        --panel-2: #142019;
+        --line: #22342a;
+        --text: #e9f2ec;
+        --muted: #8ea597;
+        --accent: #6fd3ff;
+        --you: #ff6a4d;
+        --cpu: #4da3ff;
+        font-family: 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+      .lab { display: grid; grid-template-columns: 300px 1fr 310px; height: 100%; min-height: 560px; }
+      .lab.no-tuning { grid-template-columns: 300px 1fr; }
+      .lab.no-tuning .tuning { display: none; }
+      .panel, .tuning { background: var(--panel); padding: 18px 14px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+      .panel { border-right: 1px solid var(--line); }
+      .tuning { border-left: 1px solid var(--line); }
+      .kicker { font: 600 11px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+      h1 { margin: 6px 0 8px; font-size: 21px; }
+      h2 { margin: 0; font-size: 16px; }
+      h3 { margin: 0 0 8px; font: 700 11.5px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; }
+      .warn { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+      .hint { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; cursor: pointer; font: 12.5px inherit; font-family: inherit; padding: 7px 10px; }
+      kbd { font: 10px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--muted); background: var(--bg); }
+      .chip:hover { border-color: #3d5a49; }
+      .chip[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+      .chip:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .style-desc { margin: 6px 0 0; font-size: 12px; color: #c6d6cc; line-height: 1.45; }
+      .keys { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: #c6d6cc; align-items: baseline; }
+      .keys b { font-weight: 600; }
+      .slider-row { display: grid; grid-template-columns: 1fr 52px; gap: 2px 8px; align-items: center; }
+      .slider-row label { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
+      .slider-row input { width: 100%; accent-color: var(--accent); }
+      .slider-row output { font: 600 11.5px ui-monospace, Consolas, monospace; text-align: right; font-variant-numeric: tabular-nums; }
+      .slider-row.changed label { color: #ffb347; }
+      .slider-row.changed label::after { content: ' •'; }
+      .tune-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      .tune-actions button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 7px 8px; font: 600 11.5px/1.2 inherit; font-family: inherit; cursor: pointer; }
+      .tune-actions button:hover { border-color: #3d5a49; }
+      .tune-status { font-size: 11.5px; color: #c6d6cc; min-height: 1.4em; margin: 0; }
+      .tune-group { border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+      .tune-group summary { cursor: pointer; padding: 8px 10px; font: 700 11px ui-monospace, Consolas, monospace; letter-spacing: 0.08em; text-transform: uppercase; color: #c9d6cd; }
+      .tune-body { display: grid; gap: 9px; padding: 4px 10px 10px; }
+
+      .stage { position: relative; min-width: 0; overflow: hidden; background: #16301f; }
+      .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+      .callouts { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+      .hud-line { position: absolute; left: 12px; bottom: 10px; font: 11px ui-monospace, Consolas, monospace; color: rgba(255,255,255,0.75); text-shadow: 0 1px 2px #000; pointer-events: none; }
+
+      /* ---------------- HUD ---------------- */
+      .hud { position: absolute; inset: 0; pointer-events: none; font-size: 12px; }
+      .card { position: absolute; top: 10px; width: min(260px, 38%); background: rgba(8, 14, 10, 0.72); border: 1px solid rgba(255,255,255,0.12); border-top: 3px solid var(--c); border-radius: 6px; padding: 8px 10px; display: grid; gap: 5px; }
+      .card.you { left: 10px; --c: var(--you); }
+      .card.cpu { right: 10px; --c: var(--cpu); }
+      .card .name { font: 700 11px ui-monospace, Consolas, monospace; letter-spacing: 0.14em; color: #fff; display: flex; justify-content: space-between; }
+      .bar { height: 7px; background: rgba(255,255,255,0.12); border-radius: 4px; overflow: hidden; position: relative; }
+      .bar > i { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--fill, #7dffa0); }
+      .bar.stab > i { --fill: #6fd3ff; }
+      .bar.charge > i { --fill: #ffd23f; }
+      .barlabel { display: grid; grid-template-columns: 38px 1fr; gap: 6px; align-items: center; font: 10px ui-monospace, Consolas, monospace; color: rgba(255,255,255,0.7); }
+      .pips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+      .pip { font: 700 10px ui-monospace, Consolas, monospace; text-align: center; padding: 3px 0; border-radius: 4px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); position: relative; overflow: hidden; }
+      .pip > i { position: absolute; inset: 0 auto 0 0; width: 0%; background: rgba(255,255,255,0.18); }
+      .pip.ready { background: color-mix(in srgb, var(--c) 40%, transparent); color: #fff; }
+      .pip span { position: relative; }
+      .center { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(8, 14, 10, 0.72); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 6px 12px; font: 700 12px ui-monospace, Consolas, monospace; color: #fff; }
+      .center small { display: block; font-weight: 500; color: rgba(255,255,255,0.65); }
+      .banner { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%) scale(0.9); opacity: 0; transition: opacity 0.2s, transform 0.2s; text-align: center; text-shadow: 0 2px 8px #000; }
+      .banner.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      .banner b { display: block; font: italic 900 56px/1 Impact, 'Arial Black', sans-serif; color: #ffd23f; -webkit-text-stroke: 3px #1a0f0a; paint-order: stroke fill; }
+      .banner span { font-size: 16px; color: #fff; }
+      .log { position: absolute; right: 12px; bottom: 10px; display: grid; gap: 2px; justify-items: end; font: 11px ui-monospace, Consolas, monospace; }
+      .log div { background: rgba(8, 14, 10, 0.6); padding: 1px 6px; border-radius: 3px; color: #fff; }
+      .log .you { border-right: 3px solid var(--you); }
+      .log .cpu { border-right: 3px solid var(--cpu); }
+      .log .big { color: #ffd23f; font-weight: 700; }
+
+      /* ---------------- CALLOUTS (style A, the owner's choice) ---------------- */
+      .callout { position: absolute; transform: translate(-50%, -50%) rotate(var(--tilt)); white-space: nowrap; font-weight: 900; line-height: 1; animation-duration: var(--life); animation-fill-mode: forwards; animation-timing-function: linear; }
+      .callout.kind-hit { --c1: #ffd23f; --c2: #ff7a1a; }
+      .callout.kind-block { --c1: #bfe6ff; --c2: #3b78c8; }
+      .callout.kind-counter { --c1: #ff7ad2; --c2: #ffd23f; }
+      .callout.style-a { font: italic 900 calc(46px * var(--scale)) / 1 Impact, 'Arial Black', sans-serif; color: var(--c1); -webkit-text-stroke: calc(7px * var(--scale)) #1a0f0a; paint-order: stroke fill; text-shadow: calc(4px * var(--scale)) calc(4px * var(--scale)) 0 #1a0f0a; animation-name: pop-a; }
+      .callout.style-a::before { content: ''; position: absolute; inset: -42% -22%; z-index: -1; background: var(--c2); clip-path: polygon(100.0% 50.0%, 82.4% 56.4%, 96.2% 69.1%, 77.4% 68.3%, 85.4% 85.4%, 68.3% 77.4%, 69.1% 96.2%, 56.4% 82.4%, 50.0% 100.0%, 43.6% 82.4%, 30.9% 96.2%, 31.7% 77.4%, 14.6% 85.4%, 22.6% 68.3%, 3.8% 69.1%, 17.6% 56.4%, 0.0% 50.0%, 17.6% 43.6%, 3.8% 30.9%, 22.6% 31.7%, 14.6% 14.6%, 31.7% 22.6%, 30.9% 3.8%, 43.6% 17.6%, 50.0% 0.0%, 56.4% 17.6%, 69.1% 3.8%, 68.3% 22.6%, 85.4% 14.6%, 77.4% 31.7%, 96.2% 30.9%, 82.4% 43.6%); opacity: 0.92; }
+      @keyframes pop-a {
+        0% { scale: 0.2; translate: 0 0; rotate: -14deg; opacity: 0; }
+        12% { scale: 1.38; rotate: 4deg; opacity: 1; }
+        26% { scale: 0.96; rotate: -2deg; }
+        38% { scale: 1.04; rotate: 0deg; }
+        78% { scale: 1; translate: 0 -8px; opacity: 1; }
+        100% { scale: 0.9; translate: 0 -34px; opacity: 0; }
+      }
+      @media (max-width: 900px) {
+        .lab, .lab.no-tuning { grid-template-columns: 1fr; grid-template-rows: auto 60vh auto; height: auto; }
+        .panel, .tuning { border: 0; }
+        .stage { min-height: 60vh; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="lab" id="lab">
+      <aside class="panel">
+        <div>
+          <div class="kicker">Protótipo · não aprovado</div>
+          <h1>Lab do Bey Real</h1>
+          <p class="warn">
+            Modo alternativo de jogo (só gameplay): física realista, movimento automático em que você influencia uns 30%, e só
+            os quatro botões manuais. Simulação própria do lab (nada em <code>src/</code> muda), com as regras de Dash, Giratório
+            e Esquiva do próprio jogo. Todos os números são propostas: ajuste no painel da direita.
+          </p>
+        </div>
+
+        <section>
+          <h3>Controles</h3>
+          <ul class="keys">
+            <li><kbd>← ↑ → ↓</kbd></li><li><b>Influência no movimento</b> (o Bey anda sozinho; as setas só puxam uns 30%)</li>
+            <li><kbd>Z</kbd></li><li><b>Atacar:</b> toque = Giratório (defensivo, lança quem tocar); segure e solte = Dash (vira para o oponente na hora)</li>
+            <li><kbd>X</kbd></li><li><b>Pulo</b> (sem direção no ar: você escolhe só o momento)</li>
+            <li><kbd>C</kbd></li><li><b>Esquiva</b> (impulso fixo, invulnerável; sem setas vai de lado)</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>Física (presets)</h3>
+          <div class="chips" id="presets"></div>
+          <p class="style-desc" id="preset-desc"></p>
+        </section>
+
+        <section>
+          <h3>Oponente</h3>
+          <div class="chips" id="opponents"></div>
+          <p class="hint" style="margin-top: 6px">"Demo" põe os dois no automático: bom para ver o piloto automático e a física sozinhos.</p>
+        </section>
+
+        <section>
+          <h3>Câmera e arena</h3>
+          <div class="chips" id="views"></div>
+          <div class="chips" id="arenas" style="margin-top: 8px"></div>
+          <p class="hint" style="margin-top: 6px">"Alta e fixa" é a recomendada para o automático; "Perseguição" fica atrás do seu Bey (contraria a decisão de câmera do fix 8; só como comparação); "Do jogo" imita a Arena Fighter.</p>
+        </section>
+
+        <section>
+          <h3>Cena</h3>
+          <div class="chips" id="scene-buttons"></div>
+          <div class="slider-row" style="margin-top: 10px">
+            <label for="speed">Velocidade da cena</label>
+            <input id="speed" type="range" min="0.1" max="1.5" step="0.05" value="1" />
+            <output id="speed-out">1.0x</output>
+          </div>
+        </section>
+
+        <section>
+          <h3>Efeitos visuais</h3>
+          <div class="chips" id="effects"></div>
+          <p class="hint" style="margin-top: 6px">Os mesmos efeitos do Fluxo do Bey (poeira em volume, vento, argolas, sombra), com os seus números.</p>
+        </section>
+      </aside>
+
+      <main class="stage" id="stage">
+        <canvas id="canvas"></canvas>
+        <div class="callouts" id="callouts"></div>
+        <div class="hud" id="hud"></div>
+        <div class="hud-line" id="hud-line"></div>
+      </main>
+
+      <aside class="tuning" id="tuning">
+        <h2>Ajuste fino <kbd>P</kbd></h2>
+        <p class="hint">Cada valor da física e das regras. Linhas laranja diferem da proposta; o rascunho fica salvo neste navegador. Massa e sentido do giro valem na próxima rodada.</p>
+        <div class="tune-actions">
+          <button id="tune-copy" type="button">Copiar valores</button>
+          <button id="tune-reset" type="button">Voltar à proposta</button>
+        </div>
+        <p class="tune-status" id="tune-status" role="status"></p>
+        <div id="tune-groups"></div>
+      </aside>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

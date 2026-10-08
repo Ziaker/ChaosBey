@@ -248,6 +248,30 @@ export class FlowWind {
     this.dust.burst(new THREE.Vector3(b.x, floor, b.z), dir.clone().negate(), DASH_FAN_RAD, DASH_BURST, tuning.burstSizeM * tuning.intensity, BURST_LIFE_S);
   }
 
+  /** A Bey came down from the air at (x, z): the floor crowns and a ring of dust, no rings or star (nothing was hit). */
+  landing(x: number, z: number, m: number, tuning: FlowFxValues, flags: WindFlags): void {
+    if (!flags.crown) return;
+    const y = this.floor.heightAt(Math.hypot(x, z));
+    const size = tuning.crownSizeM * tuning.intensity * (0.35 + 0.35 * m);
+    for (let n = 0; n < CROWN_COUNT; n++) {
+      this.layer.add(
+        flatFx({
+          tex: jaggedRing(),
+          color: WIND_WHITE,
+          pos: new THREE.Vector3(x, y + CROWN_LIFT_M, z),
+          size: [0.6, size * (1 - n * 0.3)],
+          life: CROWN_LIFE_S * (1 - n * 0.2),
+          opacity: 1,
+          additive: false,
+          rotation: this.rng() * Math.PI,
+          conform: { floorHeightAt: (r) => this.floor.heightAt(r), lift: CROWN_LIFT_M },
+        }),
+      );
+    }
+    const n = Math.round(BURST_COUNT_MIN + (BURST_COUNT_MAX - BURST_COUNT_MIN) * m * 0.6);
+    this.dust.burst(new THREE.Vector3(x, y, z), null, 0, n, tuning.burstSizeM * (0.6 + 0.4 * m) * tuning.intensity, BURST_LIFE_S);
+  }
+
   /**
    * A hit, at the contact of the two Beys: the shock rings born at the contact and facing the attack, the crowns on the
    * floor and the flat star (the approved impact), plus the dust burst of the chosen composition.
