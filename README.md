@@ -4,7 +4,7 @@ A browser-based 3D spinning-top arena combat simulator, built with Three.js, Rap
 
 **Play it:** https://ziaker.github.io/ChaosBey/ — every merge to `main` is built, tested and deployed there automatically.
 
-**Version:** 0.52.0 (`package.json`). The game shows its version and the commit it was built from in the bottom-right corner of every screen (e.g. `v0.51.0 · 8d51f79`); if it doesn't match the latest `main`, reload with Ctrl+Shift+R (GitHub Pages caches the page for a few minutes).
+**Version:** 0.52.0 (`package.json`). The game shows its version and the commit it was built from in the bottom-right corner of every screen (e.g. `v0.52.0 · 8d51f79`); if it doesn't match the latest `main`, reload with Ctrl+Shift+R (GitHub Pages caches the page for a few minutes).
 
 **Standing rule (every change, no exceptions):** each PR that changes the game, its rules, its content or its tooling must (1) bump the version in `package.json` (and `package-lock.json`) — patch for fixes, minor for features/gameplay/content changes — so the number in the corner of the game moves, and (2) update this README (the **Version** line above and the **Status** / **Latest changes** notes below). A unit test (`tests/unit/versionSync.test.ts`) fails if `package.json`, `package-lock.json` and this README disagree. The rule is also written in `CLAUDE.md` (§4), `docs/design-decisions/README.md` and the PR template.
 
