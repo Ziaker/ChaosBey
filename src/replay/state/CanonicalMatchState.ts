@@ -97,6 +97,7 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     airControl: 'build-time config: MatchConfig.airControl (replay config snapshot)',
     turnSpeedRetention: 'build-time config: MatchConfig.turnSpeedRetention (replay config snapshot)',
     thrustCalibration: 'build-time config: derived from MatchConfig.gravityScale (replay config snapshot)',
+    funnelPullMps2: 'build-time config: MatchConfig.funnelPull × gravity (replay config snapshot)',
     highSpeedControl: 'build-time config: MatchConfig.highSpeedControl (replay config snapshot)',
   },
   SpinController: {

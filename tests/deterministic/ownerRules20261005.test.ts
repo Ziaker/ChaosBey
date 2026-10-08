@@ -73,7 +73,7 @@ describe('Pregame "Circular attack" on / off', () => {
     }
     expect(circularTicks).toBe(0);
     expect(dashes).toBeGreaterThan(3);
-  });
+  }, 60_000); // three AI matches of up to 1800 ticks: over the 5 s default on a loaded runner
 });
 
 describe('Pregame "Bey size"', () => {

@@ -184,3 +184,20 @@ export const IDLE_DAMPING_PER_S = 4;
 // only when the landing step slowed it along the same line: cos of the
 // largest direction change still counted as "the same line" (~8°).
 export const LANDING_SAME_LINE_COS = 0.99;
+
+// Funnel pull (owner, 2026-10-08: "o modo base ainda é lento, o problema é que a física não tá sendo aplicada ... o bey
+// só deveria ser capaz de ficar completamente parado quando estivesse dentro do funil, na parte plana"). The Bey's
+// horizontal velocity is rewritten every tick by the handling model (thrust, grip, idle damping, rolling drag), so the
+// slope's gravity never accumulated: a Bey let go at r = 25 m on the 8.5 m funnel stayed where it was (measured 0.6 m/s).
+// The slope's pull is now integrated as its own SLIDE velocity: a_h = g · gravityScale · funnelPull · n_y · (n_x, n_z)
+// (gravity's component along the floor, in the horizontal plane, toward the centre) added on top of whatever the
+// handling model drives — thrust, steering, grip and idle damping act on the DRIVEN part only, so the controls feel as
+// they did, while the funnel adds speed and direction to everything. On flat ground there is no pull, the slide dies
+// and the idle damping stops the Bey: it can rest only on the flat part of the floor (the funnel's centre).
+/** × the gravity's pull along the slope (0 = the old behaviour: none). Pregame slider. PROVISIONAL. */
+export const FUNNEL_PULL_DEFAULT = 1;
+export const FUNNEL_PULL_RANGE = { min: 0, max: 3, step: 0.1 } as const;
+/** Viscous loss of the slide velocity (1/s): a funnel is not frictionless. PROVISIONAL. */
+export const SLIDE_FRICTION_PER_S = 0.8;
+/** Constant (Coulomb) loss of the slide velocity (m/s²): a slope too gentle for it (the bottom) lets the Bey rest. PROVISIONAL. */
+export const SLIDE_ROLLING_RESISTANCE_MPS2 = 1.2;

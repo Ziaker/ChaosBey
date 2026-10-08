@@ -131,11 +131,17 @@ describe('Official presets', () => {
     const epic = presetValues('epic', setup);
     const smooth = presetValues('smooth', setup);
     const strat = presetValues('strategic', setup);
-    // Realistic: less extreme speed, less control at speed, lower air control, calmer knockback and effects.
-    expect(real.topSpeedScale).toBeLessThan(n.topSpeedScale as number);
+    // Realistic (owner, 2026-10-08): FAST but physical — never slower than Normal; a strong funnel pull; less control at speed
+    // and in the air; heavier; harder physical collisions; restrained effects.
+    expect(real.topSpeedScale).toBeGreaterThanOrEqual(n.topSpeedScale as number);
+    expect(real.accelerationScale).toBeGreaterThanOrEqual(n.accelerationScale as number);
+    expect(real.gameSpeed).toBeGreaterThanOrEqual(n.gameSpeed as number);
+    expect(real.funnelPull).toBeGreaterThan(n.funnelPull as number);
     expect(real.highSpeedControl).toBeLessThan(n.highSpeedControl as number);
     expect(real.airControl).toBeLessThan(n.airControl as number);
-    expect(real.knockbackScale).toBeLessThan(n.knockbackScale as number);
+    expect(real.gravityScale).toBeGreaterThan(n.gravityScale as number);
+    expect(real.knockbackScale).toBeGreaterThan(n.knockbackScale as number);
+    expect(real.clashLaunchMps).toBeGreaterThanOrEqual(n.clashLaunchMps as number);
     expect(real['vfx.intensity']).toBeLessThan(n['vfx.intensity'] as number);
     // Epic: faster, harder-hitting, bigger jumps, stronger effects.
     expect(epic.topSpeedScale).toBeGreaterThan(n.topSpeedScale as number);
