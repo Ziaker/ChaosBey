@@ -197,7 +197,8 @@ export const SCENARIO_PRESETS: readonly ScenarioPreset[] = [
     durationTicks: 5 * FIXED_TICKS_PER_SECOND,
     setup: ({ first, second }) => {
       placeBey(first, -6, -6, 0);
-      placeBey(second, 8, 8, 0);
+      // Far to the side: the funnel's pull (0.48.0) slides an idle Bey toward the centre, so it starts well outside the Dash's path.
+      placeBey(second, 22, -8, 0);
     },
     first: script(hold(Action.Attack, 0, SHORT_DASH_HOLD_TICKS)),
     second: idle,

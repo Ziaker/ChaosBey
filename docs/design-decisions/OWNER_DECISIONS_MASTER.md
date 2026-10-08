@@ -574,6 +574,8 @@ A arquitetura de yaw/composição inercial **não está aberta**. Permanecem ape
 
 ## 13.8 Rail Grinding — atualização futura
 
+**Fechado (owner, 2026-10-08):** quando os Rails forem implementados, eles **devem ser uma opção no Pregame** (liga/desliga no Advanced). Isso responde ao item 26 abaixo e à lista de decisões abertas em `RAIL_GRINDING_FUTURE_UPDATE.md`; o resto continua ASK FIRST.
+
 A direção do sistema está aprovada, mas os detalhes de implementação listados em `docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md` continuam **ASK FIRST** até nova decisão do owner.
 
 Não tratar a frase “similar a Dissidia” como autorização para copiar automaticamente controles, interrupções, colisões, UI ou apresentação do jogo de referência.

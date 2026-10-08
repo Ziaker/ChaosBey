@@ -40,7 +40,9 @@ async function perfectDodgeRun(features: PresentationFeatures): Promise<Run> {
     scene,
     camera,
     seedText: 'perfect-dodge-presentation',
-    matchConfig: resolveMatchConfig(),
+    // The scenario is two Beys placed face to face and left idle for 40 ticks before the dodge: with the funnel pull (0.48.0)
+    // they would slide apart from each other on the slope. The pull has its own tests; this one is about the dodge's timing.
+    matchConfig: { ...resolveMatchConfig(), funnelPull: 0 },
     attackProfileSettings: createDefaultAttackProfileSettings(),
     telemetry: new TelemetryRecorder(),
     stateMachine: new GameStateMachine(),
