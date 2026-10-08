@@ -31,6 +31,7 @@ Documentos detalhados:
 - `clash-presentation-approval.md` — apresentação do Clash;
 - `pregame-overhaul.md` — overhaul visual/UX aprovado do Pregame e presets oficiais de Advanced;
 - `m10-status.md` / `m11-status.md` — integração de player flow e pós-M11.
+- `docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md` — direção futura aprovada e contrato de preparação do Rail Grinding; gameplay/visual ainda não integrados.
 
 ---
 
@@ -171,6 +172,41 @@ Não criar uma quarta “arena genérica” para substituir essas direções num
 O que a aprovação visual **não decide sozinha** está listado na seção de pendências reais.
 
 ---
+
+## 5.1 Rail Grinding — DIREÇÃO FUTURA APROVADA, NÃO INTEGRADA (owner, 2026-10-07)
+
+O owner quer uma atualização futura com **rail grinding em todos os três stages** (Foundry Pit, Rift Crater e Tournament Stadium), **extremamente similar em função ao Grind / Quickmove de Dissidia Final Fantasy**, para:
+
+- dar aos Beys uma rota de traversal rápido;
+- permitir **ganho de velocidade**;
+- permitir **reposicionamento estratégico** durante a luta.
+
+Isto está **FECHADO como direção futura**, mas **NÃO está integrado**.
+
+A preparação detalhada está em `docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md`.
+
+Não inferir da referência Dissidia decisões ainda ausentes. Permanecem abertas, entre outras:
+
+- entrada automática vs. input;
+- sentido/reversão;
+- saída/interrupção;
+- ataques/jump/dodge/Clash durante grind;
+- colisões no rail;
+- Stamina/Stability;
+- números de velocidade/aceleração;
+- layout/quantidade de rails por stage;
+- AI;
+- câmera;
+- HUD;
+- VFX/áudio e aparência dos rails.
+
+Invariantes já fechadas continuam valendo:
+
+- rail não pode virar teleporte/snap grande;
+- momentum/heading/velocity continuam relevantes;
+- câmera observa e nunca move o Bey;
+- o sistema deve ser determinístico, telemetrado, replayable e inspecionável no Debug Lab;
+- visuais finais de rail passam pelo gate de aprovação antes de integração final.
 
 # 6. VFX — APROVADO
 
@@ -533,6 +569,14 @@ A arquitetura de yaw/composição inercial **não está aberta**. Permanecem ape
 - bloom/chromatic aberration e Post-FX final, se o owner decidir usar;
 - nomes finais/paletas onde ainda estiverem explicitamente provisórios;
 - balance numérico de gameplay que os documentos tratem como tuning/playtest, não arte aprovada.
+
+---
+
+## 13.8 Rail Grinding — atualização futura
+
+A direção do sistema está aprovada, mas os detalhes de implementação listados em `docs/planning/RAIL_GRINDING_FUTURE_UPDATE.md` continuam **ASK FIRST** até nova decisão do owner.
+
+Não tratar a frase “similar a Dissidia” como autorização para copiar automaticamente controles, interrupções, colisões, UI ou apresentação do jogo de referência.
 
 ---
 
