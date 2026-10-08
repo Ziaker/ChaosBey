@@ -35,6 +35,7 @@ import { CombatHud, type HudFeelOptions } from './CombatHud';
 import { roundEndBanner } from './hudModel';
 import { aiDifficultyTier } from '../../ai/difficulty/AiDifficultyTiers';
 import { AI_STYLE_LABELS } from './aiExplanation';
+import { presentationFeaturesFromLocation } from '../../presentation/features';
 import { applyQuality, presentationFor } from './quality';
 import { Action } from '../../input/actions/Action';
 import { GamepadMenuKeys } from '../../input/devices/GamepadMenuKeys';
@@ -440,5 +441,5 @@ export class PlayFlow {
 /** Owner, 2026-10-05: the HUD's game-feel switches from the player's settings. */
 function hudFeelOf(settings: PlayerSettings): HudFeelOptions {
   // The comic "COUNTER!" (Flow FX words) takes the place of the HUD's plain word while it is on.
-  return { counterFeedback: settings.counterFeedback && !settings.flowFx.comicWords, ringOutWarning: settings.ringOutWarning, refusedInputFeedback: settings.refusedInputFeedback };
+  return { counterFeedback: settings.counterFeedback && !(settings.flowFx.comicWords && presentationFeaturesFromLocation().hybridVfx), ringOutWarning: settings.ringOutWarning, refusedInputFeedback: settings.refusedInputFeedback };
 }
