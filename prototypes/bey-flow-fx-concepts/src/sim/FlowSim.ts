@@ -42,6 +42,29 @@ const HIT_COOLDOWN_S = 0.4;
 const HIT_FULL_SPEED_MPS = 16;       // closing speed that counts as magnitude 1
 // -----------------------------------------
 
+/**
+ * What the lab's stage needs of a simulation: two Beys to draw, the impact events to turn into effects, and a clock.
+ * `FlowSim` (the choreography of the Bey Flow FX lab) and `RealSim` (the Bey Real physics lab) both satisfy it.
+ */
+export interface StageSim {
+  readonly beys: readonly [FlowBey, FlowBey];
+  events: FlowEvent[];
+  /** Non-impact moments (a landing, a Dash release...) the stage may dress: only `land` is used by the stage itself. */
+  notes?: StageNote[];
+  time: number;
+  step(dt: number): void;
+  forceCallout(kind: CalloutKind): FlowEvent;
+}
+
+export interface StageNote {
+  kind: string;
+  side: 0 | 1 | null;
+  x: number;
+  z: number;
+  /** 0..1 strength. */
+  m: number;
+}
+
 export type CalloutKind = 'hit' | 'block' | 'counter';
 export const CALLOUT_CYCLE: readonly CalloutKind[] = ['hit', 'block', 'counter'];
 
@@ -69,6 +92,8 @@ export interface FlowBey {
   headZ: number;
   /** Orbit direction: +1 or -1. */
   dir: 1 | -1;
+  /** Height of the tip above the floor (m), for a Bey that is in the air. Absent = on the floor. */
+  height?: number;
 }
 
 export interface FlowEvent {
@@ -105,7 +130,7 @@ function makeBey(angle: number, dir: 1 | -1): FlowBey {
   return { x, z, vx, vz, ax: 0, az: 0, speed: ORBIT_SPEED_MPS, spin: 1, charging: false, dashing: false, dashDirX: -Math.cos(angle), dashDirZ: -Math.sin(angle), headX: vx / ORBIT_SPEED_MPS, headZ: vz / ORBIT_SPEED_MPS, dir };
 }
 
-export class FlowSim {
+export class FlowSim implements StageSim {
   readonly beys: [FlowBey, FlowBey] = [makeBey(0, 1), makeBey(Math.PI, -1)];
   /** Events produced by the last step (cleared each step). */
   events: FlowEvent[] = [];

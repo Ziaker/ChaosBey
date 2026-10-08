@@ -21,7 +21,7 @@ import { CONCEPTS } from '../../../bey-visual-concepts/src/concepts/conceptDefin
 import { FxLayer } from '../../../../src/vfx/hybrid/fx/FxLayer';
 import { FlowWind } from '../../../../src/vfx/flow/FlowWind';
 import type { DustStyle } from '../../../../src/vfx/flow/flowFxTuning';
-import { CALLOUT_CYCLE, FlowSim, floorHeight, floorSlope, type CalloutKind, type FlowEvent } from '../sim/FlowSim';
+import { CALLOUT_CYCLE, FlowSim, floorHeight, floorSlope, type CalloutKind, type FlowEvent, type StageNote, type StageSim } from '../sim/FlowSim';
 import { TUNING } from '../tuning';
 import { FlowRig, type FxFlags } from './FlowRig';
 
@@ -42,19 +42,32 @@ const GAME_HEIGHT_PER_M = 0.3;
 const GAME_AZIMUTH_RAD = 0.35;     // the camera sits behind the arena's +z side, a little to the side
 const GAME_FOCUS_Y_M = 0.5;
 const GAME_FOLLOW_PER_S = 4;
+const CHASE_BACK_M = 7.5;          // the "chase" camera: behind the followed Bey (opt-in; see camera-approval.md fix 8), a little above it
+const CHASE_HEIGHT_M = 3.4;
+const CHASE_LOOK_AHEAD_M = 3;
+const CHASE_FOLLOW_PER_S = 3;
 const BEY_IDS = ['attack-a', 'stamina-b'] as const;
 const DEFAULT_ARENA: ArenaPresetId = 'foundry';
 // -----------------------------------------
 
-export type ViewMode = 'game' | 'overview' | 'free';
+export type ViewMode = 'game' | 'overview' | 'free' | 'chase';
 
-export class FlowStage {
+export interface FlowStageOptions<S extends StageSim> {
+  /** Builds the simulation (and rebuilds it on a reset). Default: the Bey Flow FX lab's choreography. */
+  readonly createSim?: () => S;
+  /** Carries lab settings from the old simulation to the new one on a reset. */
+  readonly carryOver?: (previous: S, next: S) => void;
+  /** The Bey the "chase" camera follows (0 or 1). */
+  readonly chaseIndex?: 0 | 1;
+}
+
+export class FlowStage<S extends StageSim = FlowSim> {
   readonly renderer: THREE.WebGLRenderer;
   readonly camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, CAMERA_NEAR, CAMERA_FAR);
   readonly controls: OrbitControls;
   readonly scene = new THREE.Scene();
   readonly flags: FxFlags = { blur: true, lean: true, dust: true, wind: true, crown: true, shadow: true };
-  sim = new FlowSim();
+  sim: S;
   timeScale = 1;
   paused = false;
   private view: ViewMode = 'game';
@@ -65,6 +78,7 @@ export class FlowStage {
   private readonly camFocus = new THREE.Vector3();
   private camDistance = GAME_MIN_DISTANCE_M;
   private camReady = false;
+  private readonly chaseDir = { x: 1, z: 0 };
   private readonly rigs: [FlowRig, FlowRig];
   private readonly layer: FxLayer;
   private readonly wind: FlowWind;
@@ -73,8 +87,24 @@ export class FlowStage {
   private accumulator = 0;
   private lastMs = performance.now();
   private onEvent: (e: FlowEvent) => void = () => {};
+  private onNote: (n: StageNote) => void = () => {};
+  private readonly createSim: () => S;
+  private readonly carryOver: (previous: S, next: S) => void;
+  private readonly chaseIndex: 0 | 1;
 
-  constructor(canvas: HTMLCanvasElement, private readonly host: HTMLElement) {
+  constructor(canvas: HTMLCanvasElement, private readonly host: HTMLElement, options: FlowStageOptions<S> = {}) {
+    this.createSim = options.createSim ?? ((): S => new FlowSim() as unknown as S);
+    this.carryOver =
+      options.carryOver ??
+      ((previous: S, next: S): void => {
+        // The choreography keeps the lab's spin slider and the Dashes switch across a reset.
+        if (previous instanceof FlowSim && next instanceof FlowSim) {
+          next.spinTarget = previous.spinTarget;
+          next.dashesEnabled = previous.dashesEnabled;
+        }
+      });
+    this.chaseIndex = options.chaseIndex ?? 0;
+    this.sim = this.createSim();
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -109,6 +139,11 @@ export class FlowStage {
 
   setEventHandler(cb: (e: FlowEvent) => void): void {
     this.onEvent = cb;
+  }
+
+  /** Non-impact moments of the simulation (a Dash release, a jump, the end of a round...), for the lab's own UI. */
+  setNoteHandler(cb: (n: StageNote) => void): void {
+    this.onNote = cb;
   }
 
   /** Swaps the arena for one of the game's three approved ones (the same art, floor profile, fog and tone mapping the game uses). */
@@ -159,16 +194,44 @@ export class FlowStage {
     this.camera.lookAt(this.camFocus);
   }
 
+  /** Behind the followed Bey, looking where it is heading: the "Chase" option some references use. Opt-in only. */
+  private updateChaseCamera(dt: number): void {
+    const b = this.sim.beys[this.chaseIndex];
+    const k = this.camReady ? 1 - Math.exp(-CHASE_FOLLOW_PER_S * dt) : 1;
+    this.camReady = true;
+    const hl = Math.hypot(b.headX, b.headZ) || 1;
+    const hx = b.headX / hl;
+    const hz = b.headZ / hl;
+    // The look direction eases toward the heading, so a wobble of the Bey does not shake the picture.
+    this.chaseDir.x += (hx - this.chaseDir.x) * k;
+    this.chaseDir.z += (hz - this.chaseDir.z) * k;
+    const cl = Math.hypot(this.chaseDir.x, this.chaseDir.z) || 1;
+    const dx = this.chaseDir.x / cl;
+    const dz = this.chaseDir.z / cl;
+    const y = floorHeight(Math.hypot(b.x, b.z));
+    this.camFocus.set(b.x + dx * CHASE_LOOK_AHEAD_M, y + 0.6, b.z + dz * CHASE_LOOK_AHEAD_M);
+    this.camera.position.set(b.x - dx * CHASE_BACK_M, y + CHASE_HEIGHT_M, b.z - dz * CHASE_BACK_M);
+    this.camera.lookAt(this.camFocus);
+  }
+
+  /** World direction "up the screen" for the current camera, flattened to the floor (for mapping the arrows to the stick). */
+  screenForward(out: { x: number; z: number }): { x: number; z: number } {
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    const l = Math.hypot(dir.x, dir.z) || 1;
+    out.x = dir.x / l;
+    out.z = dir.z / l;
+    return out;
+  }
+
   get viewMode(): ViewMode {
     return this.view;
   }
 
   reset(): void {
-    const spin = this.sim.spinTarget;
-    const dashes = this.sim.dashesEnabled;
-    this.sim = new FlowSim();
-    this.sim.spinTarget = spin;
-    this.sim.dashesEnabled = dashes;
+    const previous = this.sim;
+    this.sim = this.createSim();
+    this.carryOver(previous, this.sim);
     this.layer.clear();
     this.wind.clear();
     this.prevDashing[0] = false;
@@ -213,6 +276,12 @@ export class FlowStage {
     this.wind.dustStyle = style;
   }
 
+  private handleNote(n: StageNote): void {
+    // A landing raises the floor crowns and a puff of dust where the Bey came down.
+    if (n.kind === 'land') this.wind.landing(n.x, n.z, n.m, TUNING, this.flags);
+    this.onNote(n);
+  }
+
   private handleEvent(e: FlowEvent): void {
     this.wind.impact(e.x, e.z, e.m, e.dirX, e.dirZ, TUNING, this.flags);
     this.onEvent(e);
@@ -242,9 +311,11 @@ export class FlowStage {
         this.prevDashing[i] = b.dashing;
       });
       for (const e of this.sim.events) this.handleEvent(e);
+      for (const n of this.sim.notes ?? []) this.handleNote(n);
     }
     if (this.view === 'free') this.controls.update();
     else if (this.view === 'game') this.updateGameCamera(real);
+    else if (this.view === 'chase') this.updateChaseCamera(real);
     if (this.arena) {
       this.arenaTime += real;
       this.arena.built.update({ time: this.arenaTime, dt: real, clash: 0 });

@@ -172,6 +172,9 @@ export class FlowRig {
     _normal.set(-rx * slope, 1, -rz * slope).normalize();
     this.slope.quaternion.setFromUnitVectors(_up, _normal);
 
+    // A Bey in the air rides above its floor point; its shadow stays on the floor.
+    this.lean.position.y = b.height ?? 0;
+
     // Direction of travel (kept while almost stopped).
     if (b.speed > 0.3) {
       this.lastDirX = b.vx / b.speed;
