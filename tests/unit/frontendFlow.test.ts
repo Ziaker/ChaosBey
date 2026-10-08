@@ -64,7 +64,7 @@ describe('match setup', () => {
         arenaBowlDepthM: 8.5, roundTimeLimitS: 0, winByKo: true, winByRingOut: true, winBySpinOut: true, accelerationScale: 1.9, topSpeedScale: 2.8, airControl: 1.5, jumpStaminaCost: 0, jumpCooldownS: 0,
         speedDamageGain: 0.5, dashCarriesSpeed: true,
         turnRateScale: 1.75, turnSpeedRetention: 0.9, jumpHoldForFullS: 0.15, gravityScale: 3.6, contactRepelMps: 16.5, attackRecoilMps: 15.5, highSpeedControl: 1, arenaSizeScale: 1, gameSpeed: 1.2, clashLaunchMps: 28, dodgeStaminaCost: 0, dodgeDistanceScale: 1, contactLiftMps: 4, knockbackScale: 1, spinStaminaDrain: 1, circularLockAfterHitS: 0.6, bodyContactControlLossScale: 0.8,
-        circularAttack: true, beySizeScale: 1, airRecoveryMinDelayS: 0.2, funnelPull: 1,
+        circularAttack: true, beySizeScale: 1, airRecoveryMinDelayS: 0.2, funnelPull: 1, railsEnabled: true,
       },
       visual: { intensity: 1, groundWaves: 1, dust: 1, effectSize: 1 },
       seedText: null,
