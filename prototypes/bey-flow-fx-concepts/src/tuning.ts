@@ -20,7 +20,7 @@
 // Units: the label names the unit; "x" values are multipliers (1 = proposal).
 // ============================================================
 
-export type TuningGroup = 'global' | 'blur' | 'lean' | 'dust' | 'wind' | 'crown' | 'callout';
+export type TuningGroup = 'global' | 'blur' | 'lean' | 'shadow' | 'dust' | 'wind' | 'crown' | 'callout';
 
 export interface Tuning {
   // --- Global ---
@@ -32,7 +32,13 @@ export interface Tuning {
   leanMaxDeg: number;
   leanAccelRefMps2: number;
   leanSmooth: number;
-  // --- Anime dust (three ideas): behind the tip and in the bursts ---
+  // --- Blob shadow: a small dark disc under each Bey ---
+  shadowOpacity: number;
+  shadowScale: number;
+  // --- Anime dust (three ideas, real volume): behind the tip and in the bursts ---
+  dustOpacity: number;
+  dustFade: number;
+  dustShrink: number;
   dustRate: number;
   dustSizeM: number;
   dustLifeS: number;
@@ -64,6 +70,7 @@ export const GROUP_TITLES: Readonly<Record<TuningGroup, string>> = {
   global: 'Geral',
   blur: 'Borrão de giro',
   lean: 'Inclinação na curva',
+  shadow: 'Sombra no chão',
   dust: 'Poeira anime',
   wind: 'Vento: riscos rasgados',
   crown: 'Coroas e explosão de impacto',
@@ -77,8 +84,13 @@ export const PROPOSED: Readonly<Tuning> = {
   leanMaxDeg: 26,
   leanAccelRefMps2: 13,
   leanSmooth: 9,
+  shadowOpacity: 0.55,
+  shadowScale: 1,
+  dustOpacity: 0.95,
+  dustFade: 0.6,
+  dustShrink: 0.5,
   dustRate: 17,
-  dustSizeM: 0.7,
+  dustSizeM: 0.55,
   dustLifeS: 0.55,
   dustDashBoost: 0.6,
   windRate: 30,
@@ -87,7 +99,7 @@ export const PROPOSED: Readonly<Tuning> = {
   windLifeS: 0.25,
   crownCount: 2,
   crownSizeM: 5.4,
-  burstSizeM: 1.3,
+  burstSizeM: 1,
   calloutScale: 0.55,
   calloutLifeS: 0.55,
 };
@@ -102,6 +114,12 @@ export const TUNING_SPEC: readonly TuningSpec[] = [
   { key: 'leanAccelRefMps2', group: 'lean', label: 'Aceleração lateral para o máximo (m/s²)', min: 4, max: 40, step: 1 },
   { key: 'leanSmooth', group: 'lean', label: 'Suavização (1/s)', min: 2, max: 30, step: 1 },
 
+  { key: 'shadowOpacity', group: 'shadow', label: 'Opacidade da sombra (0–1)', min: 0, max: 1, step: 0.05 },
+  { key: 'shadowScale', group: 'shadow', label: 'Tamanho da sombra (x o diâmetro do Bey)', min: 0.5, max: 2, step: 0.05 },
+
+  { key: 'dustOpacity', group: 'dust', label: 'Opacidade da nuvem (0–1)', min: 0.1, max: 1, step: 0.05 },
+  { key: 'dustFade', group: 'dust', label: 'Opacidade ao longo da vida: quão cedo a nuvem começa a sumir (0 = só no fim, 1 = desde o início)', min: 0, max: 1, step: 0.05 },
+  { key: 'dustShrink', group: 'dust', label: 'Quanto os blocos encolhem até o fim (0–1)', min: 0, max: 1, step: 0.05 },
   { key: 'dustRate', group: 'dust', label: 'Emissões por segundo', min: 0, max: 40, step: 1 },
   { key: 'dustSizeM', group: 'dust', label: 'Tamanho base (m)', min: 0.4, max: 4, step: 0.1 },
   { key: 'dustLifeS', group: 'dust', label: 'Vida (s)', min: 0.3, max: 2.5, step: 0.05 },

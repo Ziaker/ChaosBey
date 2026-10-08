@@ -27,6 +27,7 @@ const EFFECTS: ReadonlyArray<{ key: keyof FxFlags; label: string; key1: string }
   { key: 'dust', label: 'Poeira anime', key1: '3' },
   { key: 'wind', label: 'Vento: riscos', key1: '4' },
   { key: 'crown', label: 'Argolas e coroas de impacto', key1: '5' },
+  { key: 'shadow', label: 'Sombra no chão', key1: '6' },
 ];
 
 // ---------------- tuning draft (best effort) ----------------

@@ -44,8 +44,6 @@ const GAME_FOCUS_Y_M = 0.5;
 const GAME_FOLLOW_PER_S = 4;
 const BEY_IDS = ['attack-a', 'stamina-b'] as const;
 const DEFAULT_ARENA: ArenaPresetId = 'foundry';
-/** How much of the arena's fog colour the dust takes on: white is not the same white in every arena. */
-const DUST_FOG_TINT = 0.12;
 // -----------------------------------------
 
 export type ViewMode = 'game' | 'overview' | 'free';
@@ -55,7 +53,7 @@ export class FlowStage {
   readonly camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, CAMERA_NEAR, CAMERA_FAR);
   readonly controls: OrbitControls;
   readonly scene = new THREE.Scene();
-  readonly flags: FxFlags = { blur: true, lean: true, dust: true, wind: true, crown: true };
+  readonly flags: FxFlags = { blur: true, lean: true, dust: true, wind: true, crown: true, shadow: true };
   sim = new FlowSim();
   timeScale = 1;
   paused = false;
@@ -86,7 +84,7 @@ export class FlowStage {
     pmrem.dispose();
     this.scene.add(this.arenaRoot);
     this.layer = new FxLayer(this.scene, this.camera);
-    this.wind = new AnimeWind(this.layer, this.camera);
+    this.wind = new AnimeWind(this.layer, this.camera, this.scene);
     this.setArena(DEFAULT_ARENA);
 
     const [idA, idB] = BEY_IDS;
@@ -122,8 +120,6 @@ export class FlowStage {
     this.scene.environmentIntensity = built.environmentIntensity;
     const fog = built.fog?.color ?? new THREE.Color(0x05070a);
     this.scene.background = fog.clone();
-    // The dust takes a little of the arena's haze so it sits in the scene instead of on it.
-    this.wind.dustTint.setRGB(1, 1, 1).lerp(fog, DUST_FOG_TINT);
   }
 
   get arenaPreset(): ArenaPresetId {
@@ -174,6 +170,7 @@ export class FlowStage {
     this.sim.spinTarget = spin;
     this.sim.dashesEnabled = dashes;
     this.layer.clear();
+    this.wind.clear();
     this.prevDashing[0] = false;
     this.prevDashing[1] = false;
   }
@@ -217,7 +214,7 @@ export class FlowStage {
   }
 
   private handleEvent(e: FlowEvent): void {
-    this.wind.impact(e.x, e.z, e.m, TUNING, this.flags);
+    this.wind.impact(e.x, e.z, e.m, e.dirX, e.dirZ, TUNING, this.flags);
     this.onEvent(e);
   }
 
@@ -259,6 +256,7 @@ export class FlowStage {
       this.wind.trail(i as 0 | 1, b, rig.tip(this.tip), dt, TUNING, this.flags);
     });
     this.layer.tick(dt);
+    this.wind.update(dt, TUNING);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -266,6 +264,7 @@ export class FlowStage {
     this.renderer.setAnimationLoop(null);
     this.rigs.forEach((r) => r.dispose());
     this.layer.clear();
+    this.wind.dispose();
     this.arena?.dispose();
     this.renderer.dispose();
   }

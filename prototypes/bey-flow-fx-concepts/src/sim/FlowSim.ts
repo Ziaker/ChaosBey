@@ -61,6 +61,12 @@ export interface FlowBey {
   /** Unit vector toward the Dash target (the other Bey), set when a Dash starts and kept while it lasts. */
   dashDirX: number;
   dashDirZ: number;
+  /**
+   * Unit vector the Bey is heading: the Dash direction while it dashes (its velocity still lags that by a few ticks),
+   * otherwise its velocity direction (kept while it is almost stopped). Every effect that trails behind the Bey uses this.
+   */
+  headX: number;
+  headZ: number;
   /** Orbit direction: +1 or -1. */
   dir: 1 | -1;
 }
@@ -71,6 +77,9 @@ export interface FlowEvent {
   z: number;
   /** 0..1 closing speed. */
   m: number;
+  /** Unit vector of the attack: from the attacking Bey toward the one it hit. */
+  dirX: number;
+  dirZ: number;
 }
 
 /** The floor the game plays on by default: the funnel at its default depth (src/arena/floor), not a lab invention. */
@@ -93,7 +102,7 @@ function makeBey(angle: number, dir: 1 | -1): FlowBey {
   // Tangent velocity: perpendicular to the radius, sign = orbit direction.
   const vx = -Math.sin(angle) * ORBIT_SPEED_MPS * dir;
   const vz = Math.cos(angle) * ORBIT_SPEED_MPS * dir;
-  return { x, z, vx, vz, ax: 0, az: 0, speed: ORBIT_SPEED_MPS, spin: 1, charging: false, dashing: false, dashDirX: -Math.cos(angle), dashDirZ: -Math.sin(angle), dir };
+  return { x, z, vx, vz, ax: 0, az: 0, speed: ORBIT_SPEED_MPS, spin: 1, charging: false, dashing: false, dashDirX: -Math.cos(angle), dashDirZ: -Math.sin(angle), headX: vx / ORBIT_SPEED_MPS, headZ: vz / ORBIT_SPEED_MPS, dir };
 }
 
 export class FlowSim {
@@ -121,13 +130,25 @@ export class FlowSim {
     for (const b of this.beys) this.wall(b);
     this.beys[0].spin = this.spinTarget;
     this.beys[1].spin = this.spinTarget * 0.85;
-    for (const b of this.beys) b.speed = Math.hypot(b.vx, b.vz);
+    for (const b of this.beys) {
+      b.speed = Math.hypot(b.vx, b.vz);
+      if (b.dashing) {
+        b.headX = b.dashDirX;
+        b.headZ = b.dashDirZ;
+      } else if (b.speed > 0.3) {
+        b.headX = b.vx / b.speed;
+        b.headZ = b.vz / b.speed;
+      }
+    }
   }
 
   /** Fires a callout on demand (the page's buttons), at the midpoint of the pair. */
   forceCallout(kind: CalloutKind): FlowEvent {
     const [a, b] = this.beys;
-    const e: FlowEvent = { kind, x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, m: 0.7 };
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const e: FlowEvent = { kind, x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, m: 0.7, dirX: dx / d, dirZ: dz / d };
     this.events.push(e);
     return e;
   }
@@ -205,6 +226,8 @@ export class FlowSim {
     const nx = dx / d;
     const nz = dz / d;
     const closing = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz; // > 0 when approaching
+    // The attacker is the one driving into the other faster along the line between them (read before the bounce changes it).
+    const attackerSign = a.vx * nx + a.vz * nz >= -(b.vx * nx + b.vz * nz) ? 1 : -1;
     // Push apart whatever the speed.
     const overlap = (BEY_DIAMETER_M - d) / 2;
     a.x -= nx * overlap;
@@ -223,7 +246,8 @@ export class FlowSim {
     this.hitCooldown = HIT_COOLDOWN_S;
     const kind = CALLOUT_CYCLE[this.calloutIndex % CALLOUT_CYCLE.length]!;
     this.calloutIndex++;
-    this.events.push({ kind, x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, m: Math.min(1, closing / HIT_FULL_SPEED_MPS) });
+    const sign = attackerSign;
+    this.events.push({ kind, x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, m: Math.min(1, closing / HIT_FULL_SPEED_MPS), dirX: nx * sign, dirZ: nz * sign });
   }
 
   private wall(b: FlowBey): void {
