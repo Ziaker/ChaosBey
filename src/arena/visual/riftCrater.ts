@@ -8,7 +8,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
+import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, scaledCount, seededRandom, shadowed, skyDome, stageRigIntensity } from './common';
 import type { ArenaConcept, BuiltArena } from './types';
 
 // ---------------- TUNING ----------------
@@ -18,6 +18,19 @@ const FISSURE_COLOR = 0x8f6bff;       // Normal fissure glow (violet).
 const CLASH_COLOR = 0xff3fb4;         // Fissures + barrier shift to magenta on Clash.
 const FISSURE_GLOW = 1.1;             // Base emissive strength of the fissures.
 const RIM_ROCKS = scaledCount(34);      // Lab: 34 around the 12 m rim; GAME: same spacing around the real one.
+// GAME readability (owner playtest, 2026-10-08: "the second stage is too dark, the Beys are hard to see inside it"). The lab's basalt
+// albedo was ~1% and the whole crater lit by one moon and a 0.45 hemisphere, which reads as black through the game's camera.
+// Lighter basalt, a stronger cool fill and moon, and a shadowless rim light that gives the Beys an edge; the violet fissures stay the
+// brightest thing in the crater.
+const FLOOR_BASE = '#3a3846';         // Lab: #1c1a22.
+const FLOOR_SPECKLE = 40;             // Lab: 22 (+ up to 28 of noise).
+const FILL_SKY = 0x7d76b4;            // Lab: 0x3b2f70 at 0.45.
+const FILL_GROUND = 0x1a1330;         // Lab: 0x07050c.
+const FILL_INTENSITY = 1.15;
+const MOON_INTENSITY = 1.9;           // Lab: 1.3.
+const BEY_FILL_COLOR = 0xaab6f0;      // Cool light from the side opposite the moon: lifts the shadowed side of everything standing in the crater.
+const BEY_FILL_INTENSITY = 0.75;
+const GLOW_INTENSITY = 30;            // Per fissure point light (lab: 18).
 // -----------------------------------------
 
 // Funnel: the slope continues almost all the way to the center.
@@ -27,10 +40,10 @@ function paintFloor(): { color: THREE.CanvasTexture; glow: THREE.CanvasTexture }
   const { canvas, g, c, px } = floorCanvas();
   const glow = floorCanvas();
   const rnd = seededRandom(7);
-  g.fillStyle = '#1c1a22';
+  g.fillStyle = FLOOR_BASE;
   g.fillRect(0, 0, canvas.width, canvas.height);
   for (let i = 0; i < 9000; i++) {
-    const v = 22 + rnd() * 28;
+    const v = FLOOR_SPECKLE + rnd() * 34;
     g.fillStyle = `rgba(${v + 4},${v},${v + 10},0.5)`;
     const s = 2 + rnd() * 26;
     g.beginPath(); g.arc(rnd() * canvas.width, rnd() * canvas.height, s, 0, Math.PI * 2); g.fill();
@@ -101,13 +114,15 @@ export const RIFT_CRATER: ArenaConcept = {
     impact: 'Violet-cyan sparks; on Clash the fissures and barrier surge magenta',
   },
   defaultDepth: BOWL_DEPTH,
-  build(depth = BOWL_DEPTH, profile?: (r: number) => number): BuiltArena {
+  build(depth = BOWL_DEPTH, profile?: (r: number) => number, stageScale = 1): BuiltArena {
     // GAME: the real floor's profile when given (the lab always used its own bowl).
     const heightAt = profile ?? bowlProfile(depth);
     const root = new THREE.Group();
     const R = ARENA_RADIUS;
     const rim = heightAt(R);
     const rnd = seededRandom(3);
+    // GAME: the stage size stretches the root on X/Z only; the glow rig and the haze scale as a whole with `rigScale`.
+    const rigScale = ARENA_SCALE * stageScale;
 
     const tex = paintFloor();
     const floorMat = new THREE.MeshStandardMaterial({
@@ -118,11 +133,11 @@ export const RIFT_CRATER: ArenaConcept = {
     // Crater lip: a short sloped band from the floor edge up and outward.
     const lip = shadowed(new THREE.Mesh(new THREE.LatheGeometry([
       new THREE.Vector2(R, rim), new THREE.Vector2(R + 0.6, rim + 0.5), new THREE.Vector2(R + 2.5, rim + 0.7), new THREE.Vector2(R + 9, rim + 0.2),
-    ], scaledCount(128)), new THREE.MeshStandardMaterial({ color: 0x19171e, roughness: 0.95, side: THREE.DoubleSide })), false, true);
+    ], scaledCount(128)), new THREE.MeshStandardMaterial({ color: 0x2c2938, roughness: 0.95, side: THREE.DoubleSide })), false, true);
     root.add(lip);
 
     // Jagged rim rocks.
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x2a2630, roughness: 0.9, flatShading: true });
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x3f3a4f, roughness: 0.9, flatShading: true });
     for (let i = 0; i < RIM_ROCKS; i++) {
       const a = (i / RIM_ROCKS) * Math.PI * 2 + rnd() * 0.12;
       const s = 0.6 + rnd() * 1.1;
@@ -174,25 +189,29 @@ export const RIFT_CRATER: ArenaConcept = {
     root.add(shards);
 
     // Lights.
-    const moon = new THREE.DirectionalLight(0x9fb0ff, 1.3);
+    const moon = new THREE.DirectionalLight(0x9fb0ff, MOON_INTENSITY);
     moon.position.set(-14, 22, 10).multiplyScalar(ARENA_SCALE);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
     Object.assign(moon.shadow.camera, { left: -16 * ARENA_SCALE, right: 16 * ARENA_SCALE, top: 16 * ARENA_SCALE, bottom: -16 * ARENA_SCALE, near: 1, far: 70 * ARENA_SCALE });
     moon.shadow.bias = -0.0004;
     moon.shadow.normalBias = 0.03;
-    root.add(moon, new THREE.HemisphereLight(0x3b2f70, 0x07050c, 0.45));
+    root.add(moon, new THREE.HemisphereLight(FILL_SKY, FILL_GROUND, FILL_INTENSITY));
+    // GAME: a directional is the same at every stage size and bowl depth, so the fill never depends on either.
+    const beyFill = new THREE.DirectionalLight(BEY_FILL_COLOR, BEY_FILL_INTENSITY);
+    beyFill.position.set(16, 20, -12).multiplyScalar(ARENA_SCALE);
+    root.add(beyFill);
     const glows: THREE.PointLight[] = [];
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2;
-      const l = new THREE.PointLight(FISSURE_COLOR, rigIntensity(18, 1.8), 14 * ARENA_SCALE, 1.8);
-      l.position.set(Math.cos(a) * 4, 0.8, Math.sin(a) * 4).multiplyScalar(ARENA_SCALE); // GAME: the glow rig scaled as a whole
+      const l = new THREE.PointLight(FISSURE_COLOR, stageRigIntensity(GLOW_INTENSITY, 1.8, stageScale), 14 * rigScale, 1.8);
+      l.position.set(Math.cos(a) * 4 * ARENA_SCALE, 0.8 * rigScale, Math.sin(a) * 4 * ARENA_SCALE); // GAME: the glow rig scaled as a whole (X/Z by the root)
       glows.push(l);
       root.add(l);
     }
     const flashLight = new THREE.PointLight(0xa98bff, 0, 9, 2);
     root.add(flashLight);
-    const fog = new THREE.FogExp2(0x0c0918, 0.012 / ARENA_SCALE); // GAME: the lab's haze over the scaled distances
+    const fog = new THREE.FogExp2(0x0c0918, 0.012 / rigScale); // GAME: the lab's haze over the scaled distances
     let flashT = 0;
 
     const base = new THREE.Color(FISSURE_COLOR);
@@ -204,7 +223,7 @@ export const RIFT_CRATER: ArenaConcept = {
       floorHeightAt: heightAt,
       wallRadius: R,
       sparkColors: [0xd9ccff, 0x7f5cff],
-      exposure: 1.15,
+      exposure: 1.3,
       fog,
       environmentIntensity: 0.3,
       update({ time, dt, clash }) {
@@ -216,7 +235,7 @@ export const RIFT_CRATER: ArenaConcept = {
         (barrierMat.uniforms.uColor!.value as THREE.Color).copy(tmp);
         barrierMat.uniforms.uBoost!.value = clash * (0.7 + 0.3 * Math.sin(time * 12));
         (barrierBase.material as THREE.MeshBasicMaterial).color.copy(tmp);
-        glows.forEach((l) => { l.color.copy(tmp); l.intensity = rigIntensity(18, 1.8) * pulse * (1 + clash * 2); });
+        glows.forEach((l) => { l.color.copy(tmp); l.intensity = stageRigIntensity(GLOW_INTENSITY, 1.8, stageScale) * pulse * (1 + clash * 2); });
         shards.children.forEach((s) => { s.rotation.y += s.userData.spin * dt; s.position.y += Math.sin(time * 0.3 + s.position.x) * 0.002; });
         flashT = Math.max(0, flashT - dt * 4);
         flashLight.intensity = flashT * 50;

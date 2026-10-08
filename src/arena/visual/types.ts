@@ -62,5 +62,9 @@ export interface ArenaConcept {
   readonly defaultDepth: number;
   /** Builds the arena; `depth` overrides the default bowl depth (m). */
   /** GAME: `heightAt` is the real arena floor's profile (flat or an approved bowl), so the art sits on the surface the Beys actually stand on. Without it the lab's own bowl profile at `depth` is used. */
-  build(depth?: number, heightAt?: (r: number) => number): BuiltArena;
+  /**
+   * GAME: `stageScale` is the match's stage size (the Pregame's slider; 1 = the 36 m floor). The art root is stretched by it on X/Z
+   * only, so the parts that are not stretched with it (light heights and ranges, haze) take it here to scale as a whole.
+   */
+  build(depth?: number, heightAt?: (r: number) => number, stageScale?: number): BuiltArena;
 }
