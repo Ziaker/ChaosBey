@@ -32,6 +32,8 @@ export interface RailDefinition {
   readonly label: string;
   readonly enabled: boolean;
   readonly path: RailPath;
+  /** The floor radius the rail was resolved for (m): inside it a Bey is in the arena, beyond it the Bey is out over the wall. */
+  readonly arenaRadiusM: number;
 }
 
 /** The longest straight piece of a resolved rail (m): finer than the floor's curvature needs, coarse enough to stay cheap. */
@@ -65,5 +67,5 @@ export function resolveRail(blueprint: RailBlueprint, context: RailResolveContex
     const last = world[world.length - 1]!;
     samples.push({ x: last.x, y: floorHeightAt(context.floor, last.x, last.z) + last.heightM, z: last.z });
   }
-  return { id: blueprint.id, label: blueprint.label, enabled: true, path: new RailPath(samples, closed) };
+  return { id: blueprint.id, label: blueprint.label, enabled: true, path: new RailPath(samples, closed), arenaRadiusM: context.floorRadiusM };
 }

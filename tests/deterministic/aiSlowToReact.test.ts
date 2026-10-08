@@ -56,7 +56,7 @@ function repeatedAttacker(): ScriptedController {
 }
 
 async function run(personality: AiPersonality, seed: string): Promise<TickRecord[]> {
-  const harness = await CombatHarness.create({ x: 0, y: 0.6, z: -1.8 }, { x: 0, y: 0.6, z: 1.8 }, {}, new NullAiMashSource());
+  const harness = await CombatHarness.create({ x: 0, y: 0.6, z: -1.8 }, { x: 0, y: 0.6, z: 1.8 }, { railsEnabled: false }, new NullAiMashSource()) // the intent pipeline alone: no rail runs (RailPilot) in this test;
   const ai = new AIController(
     harness.physics,
     harness.second,

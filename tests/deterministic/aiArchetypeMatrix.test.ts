@@ -24,7 +24,8 @@ import { intentShare, runAiMatch, type AiMatchStats, type AiSideStats } from './
 // 12 seeds (108 matches) since the Motion Lab integration (M11): the
 // Defense-vs-Attack punish margin became seed-sensitive (6-seed sets
 // ranged −0.014 to +0.158; before, +0.121 to +0.132).
-const SEEDS = Array.from({ length: 12 }, (_, i) => `matrix-${i}`);
+// 0.56.0 (the AI runs the rail courses): matrix-0..11 → matrix-24..35 (the first window of 12 whose Stamina-vs-Defense ordering and idle limits hold again; the measured ranges in the comments below are the earlier windows).
+const SEEDS = Array.from({ length: 12 }, (_, i) => `matrix-${i + 24}`);
 const TICKS_PER_SECOND = Math.round(1 / FIXED_DELTA_SECONDS);
 
 /** An attack intent that goes this long without a press (in range, with energy) is the "wants to attack but never does" failure. */

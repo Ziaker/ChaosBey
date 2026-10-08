@@ -74,7 +74,7 @@ export type MatchRules = Pick<
   'ringOutDelayS' | 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce'
   | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'speedDamageGain' | 'dashCarriesSpeed'
   | 'turnRateScale' | 'turnSpeedRetention' | 'jumpHoldForFullS' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'highSpeedControl' | 'arenaSizeScale' | 'gameSpeed' | 'clashLaunchMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale'
-  | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS' | 'funnelPull' | 'railsEnabled'
+  | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS' | 'funnelPull' | 'railsEnabled' | 'railSpeed'
 >;
 
 /** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
@@ -82,7 +82,7 @@ export const MATCH_RULE_KEYS = [
   'ringOutDelayS', 'dashCooldownS', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyCollisionDamage', 'momentumLossOnCollision', 'jumpFullHeightM', 'jumpShortHopHeightM', 'movementStaminaDrain', 'dodgeCooldownS', 'circularLaunchForce',
   'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS', 'speedDamageGain', 'dashCarriesSpeed',
   'turnRateScale', 'turnSpeedRetention', 'jumpHoldForFullS', 'gravityScale', 'contactRepelMps', 'attackRecoilMps', 'highSpeedControl', 'arenaSizeScale', 'gameSpeed', 'clashLaunchMps', 'dodgeStaminaCost', 'dodgeDistanceScale', 'contactLiftMps', 'knockbackScale', 'spinStaminaDrain', 'circularLockAfterHitS', 'bodyContactControlLossScale',
-  'circularAttack', 'beySizeScale', 'airRecoveryMinDelayS', 'funnelPull', 'railsEnabled',
+  'circularAttack', 'beySizeScale', 'airRecoveryMinDelayS', 'funnelPull', 'railsEnabled', 'railSpeed',
 ] as const satisfies readonly (keyof MatchRules)[];
 
 /**
@@ -146,6 +146,7 @@ export function defaultMatchRules(): MatchRules {
     airRecoveryMinDelayS: config.airRecoveryMinDelayS,
     funnelPull: config.funnelPull,
     railsEnabled: config.railsEnabled,
+    railSpeed: config.railSpeed,
   };
 }
 
@@ -343,6 +344,7 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   airRecoveryMinDelayS: { name: 'recovery time', format: (v) => `${(v as number).toFixed(2)} s` },
   funnelPull: { name: 'funnel pull', format: (v) => `×${(v as number).toFixed(1)}` },
   railsEnabled: { name: 'Rails', format: (v) => (v ? 'on' : 'off') },
+  railSpeed: { name: 'rail speed', format: (v) => `×${(v as number).toFixed(2)}` },
 };
 
 /**

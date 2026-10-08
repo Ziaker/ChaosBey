@@ -232,4 +232,4 @@ Salvos em `localStorage` (`chaosbey.settings.player.v2`, campo `flowFx`); uma co
 6. **Integração ao jogo (0.54.0):** tudo acima como `FlowFxSystem` + sliders nas Configurações.
 
 ## 15. Reservado — física e gameplay do "Bey Real"
-*Escrito em [`bey-real-physics-approval.md`](bey-real-physics-approval.md) (0.55.0): protótipo jogável de física realista, movimento automático com ~30% de influência do jogador e os botões de carregar/soltar, giratório, pulo e esquiva. Nada está integrado no jogo; continua ASK FIRST.*
+*Escrito em [`bey-real-physics-approval.md`](bey-real-physics-approval.md) (0.57.0): protótipo jogável de física realista, movimento automático com ~30% de influência do jogador e os botões de carregar/soltar, giratório, pulo e esquiva. Nada está integrado no jogo; continua ASK FIRST.*

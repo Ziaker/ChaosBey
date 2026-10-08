@@ -29,6 +29,7 @@ import {
 import { JUMP_FULL_HEIGHT_DEFAULT_M, JUMP_SHORT_HOP_TARGET_APEX_M } from '../../drift/DriftTuning';
 import { MOVEMENT_STAMINA_DRAIN_DEFAULT } from '../../bey/stamina/StaminaTuning';
 import { FUNNEL_PULL_DEFAULT } from '../../bey/movement/MovementTuning';
+import { RAIL_SPEED_DEFAULT } from '../../arena/rails/RailTraversal';
 import { DODGE_COOLDOWN_S } from '../../dodge/DodgeTuning';
 import { CIRCULAR_LAUNCH_FORCE_DEFAULT } from '../../combat/attacks/AttackTuning';
 import { SPEED_DAMAGE_GAIN_DEFAULT } from '../../combat/attacks/SpeedDamage';
@@ -187,10 +188,15 @@ export interface MatchConfig {
    * yet (the layouts are an owner decision), so today this changes nothing. Pregame switch (Advanced › Arena). PROVISIONAL: on.
    */
   railsEnabled: boolean;
+  /**
+   * Owner, 2026-10-08 ("coloque um slider no jogo quanto a velocidade do bey no trajeto"): × the speed of a Bey on a rail
+   * (RAIL_SPEED_RANGE). 1 = the rail's own speeds. Pregame slider (Advanced › Arena). PROVISIONAL.
+   */
+  railSpeed: number;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed' | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS' | 'funnelPull' | 'railsEnabled'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed' | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS' | 'funnelPull' | 'railsEnabled' | 'railSpeed'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -232,6 +238,7 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     airRecoveryMinDelayS: config.airRecoveryMinDelayS ?? 0,
     funnelPull: config.funnelPull ?? 0,
     railsEnabled: config.railsEnabled ?? false,
+    railSpeed: config.railSpeed ?? RAIL_SPEED_DEFAULT,
   };
 }
 
@@ -289,6 +296,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     airRecoveryMinDelayS: AIR_RECOVERY_MIN_DELAY_DEFAULT_S,
     funnelPull: FUNNEL_PULL_DEFAULT,
     railsEnabled: true,
+    railSpeed: RAIL_SPEED_DEFAULT,
   });
 }
 
@@ -342,6 +350,7 @@ export const BEY_SIZE_SCALE_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
 /** Owner, 2026-10-05: the recovery time slider (the minimum; the launching force adds to it). PROVISIONAL. */
 export const AIR_RECOVERY_MIN_DELAY_DEFAULT_S = 0.2;
 export { FUNNEL_PULL_RANGE } from '../../bey/movement/MovementTuning';
+export { RAIL_SPEED_RANGE } from '../../arena/rails/RailTraversal';
 export const AIR_RECOVERY_MIN_DELAY_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
 export const ROUND_TIME_LIMIT_RANGE = { min: 0, max: 180, step: 15 } as const;
 export const ACCELERATION_SCALE_RANGE = { min: 0.25, max: 3, step: 0.05 } as const;

@@ -44,6 +44,7 @@ export default defineConfig(({ command, isPreview }) => ({
         launchSystemConcepts: fileURLToPath(new URL('./prototypes/launch-system-concepts/index.html', import.meta.url)),
         beyFlowFxConcepts: fileURLToPath(new URL('./prototypes/bey-flow-fx-concepts/index.html', import.meta.url)),
         beyRealPhysicsConcepts: fileURLToPath(new URL('./prototypes/bey-real-physics-concepts/index.html', import.meta.url)),
+        railCourseLab: fileURLToPath(new URL('./prototypes/rail-course-lab/index.html', import.meta.url)),
       },
     },
   },

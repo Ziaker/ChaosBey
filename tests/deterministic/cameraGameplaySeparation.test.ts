@@ -530,8 +530,9 @@ describe('C. offscreen rescue: the camera reframes itself, never the Bey', () =>
 describe('D. knockback follow: the camera follows the knocked Bey; the Bey follows physics only', () => {
   it('real knockback in a fight: identical knockback, velocities and positions with the camera on, off, frozen or hostile', async () => {
     // 'sep-knockback-3' since the owner audit (2026-10-04): 'sep-knockback' now lands one slow hit (speed scales an
-    // attack's force since 0.26.0) too small for the follow context; '-3' lands two the camera follows.
-    const runs = await runAll({ floor: 'flat', seed: 'sep-knockback-3', device: 'script', scheme: 'opponent', ticks: 1200 }, ['none', 'static', 'real', 'hostile']);
+    // attack's force since 0.26.0) too small for the follow context; '-3' lands two the camera follows. '-4' since 0.56.0 (the AI
+    // rides the rails through gates, so every AI fight changed): '-3' no longer lands a hit the camera follows.
+    const runs = await runAll({ floor: 'flat', seed: 'sep-knockback-4', device: 'script', scheme: 'opponent', ticks: 1200 }, ['none', 'static', 'real', 'hostile']);
     expect(runs.none.coverage.knockback, 'no knockback happened in this fight — the test would prove nothing').toBe(true);
     expect([...runs.real.camera.modifiers].some((m) => m.startsWith('knockback follow')), `KnockbackFollow never engaged (modifiers: ${[...runs.real.camera.modifiers].join(' | ')})`).toBe(true);
     expectIdentical(runs, 'none');

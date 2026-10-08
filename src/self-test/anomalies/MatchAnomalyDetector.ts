@@ -285,7 +285,9 @@ export class MatchAnomalyDetector {
       // radius went through the floor.
       if (input.roundState.ringOutClock[side] === 0) this.offArenaEpisode[side] = false;
       else if (radius > floorRadiusM) this.offArenaEpisode[side] = true;
-      const ringOutPending = this.offArenaEpisode[side];
+      // A Bey on a rail (Rail Grinding, 0.56.0) is carried round the OUTSIDE of the arena by design: it is neither out of the world nor under the floor.
+      const onRail = bey.rail.isOnRail();
+      const ringOutPending = this.offArenaEpisode[side] || onRail;
       if (this.latch(key('left'), roundRunning && radius > leftWorldRadiusM && !ringOutPending)) {
         emit('left-world', side, `centre ${radius.toFixed(2)} m from the arena centre (limit ${leftWorldRadiusM.toFixed(2)} m) with no ring-out declared`);
       }
