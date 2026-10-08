@@ -423,3 +423,30 @@ Este documento **não**:
 - aprova visuais.
 
 Ele somente registra a direção futura aprovada e prepara um contrato verificável para a implementação posterior.
+
+---
+
+## 16. Preparação implementada (0.50.0, owner 2026-10-08: "prepare o rail grinding")
+
+Feito com o que já está fechado; **nada disto é lido pelo gameplay** e **nenhum layout, controle ou número final foi inventado**:
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Rota | `src/arena/rails/RailPath.ts` | polilinha em arco (m): `sampleAt(progresso)` → posição + tangente unitária; `project(ponto)` → progresso/distância; aberta (clampa) ou fechada (dá a volta); determinística |
+| Autoria | `src/arena/rails/RailBlueprint.ts` | rail autorado em **raios do piso** (u, v) + altura sobre o piso; `resolveRail` o **assenta no piso real** (forma e profundidade do funil, tamanho do stage), subdividido a cada ≤ 1 m (§6) |
+| Stages | `src/arena/rails/StageRails.ts` | `STAGE_RAIL_BLUEPRINTS` — **vazio nos três stages** (layout = decisão do owner); `railsForMatch()` devolve `[]` com a opção desligada |
+| Estado e tuning | `src/arena/rails/RailTraversal.ts` | `RailTraversalState` (§5: railId, progresso, sentido, velocidade, velocidade de entrada, tempo, motivos de entrada/saída) e `RailTuning` com **todos** os valores do §12 num só lugar; `PLACEHOLDER_RAIL_TUNING` só para protótipos/testes |
+| Pregame | `MatchConfig.railsEnabled` | **Advanced › Arena › Rails** (liga/desliga, ligado por padrão — provisório); no replay, MODIFIED/Reset, regras salvas; hoje não muda nada (nenhum stage tem rail) |
+
+Testes: `tests/unit/rails.test.ts` (rota, assentamento no piso para profundidades 0–18 m, tamanho do stage, stages vazios, opção, contrato).
+
+### Falta (ordem em que as decisões **bloqueiam** a primeira versão jogável — ASK FIRST, §13)
+1. **Entrada** (item 1–2): automática por proximidade, botão ou contexto; haverá indicador?
+2. **Saída e sentido** (3–6): como escolhe o sentido, se inverte, como sai antes do fim, o que acontece no fim do rail.
+3. **Ações no rail** (7–9): Z / X / C funcionam? ataque, jump, dodge, Air Recovery interrompem?
+4. **Colisão** (10–12): dois Beys no mesmo rail; golpe tira do rail?; Clash?
+5. **Layout** (18–19): quantos rails por stage, onde, altura, e a relação com a borda / ring-out.
+6. Números (15–17), Stamina/Stability (13–14), AI (20), VFX/áudio/visual (21–25).
+
+Quando 1–3 e 5 estiverem decididos, o próximo passo é o protótipo de rota com geometria de debug (§14, passo 2) sobre a infraestrutura acima.
+
