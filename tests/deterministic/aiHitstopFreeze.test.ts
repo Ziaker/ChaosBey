@@ -34,8 +34,9 @@ const RUN_TICKS = 600;
  * enters a counter stance, so re-swept: -6 reaches them at ticks 28 / 112 / 365.
  * Re-swept for the Dash cooldown (owner, 2026-10-02: no more Attack Energy): -6
  * never reaches a counter stance; -2 is the first of -1..-15 that reaches all three.
+ * Re-swept for Rail Grinding (0.51.0: rails are on by default and change AI runs): -1 is the first that reaches all three.
  */
-const AI_SEED = 'hitstop-freeze-2';
+const AI_SEED = 'hitstop-freeze-1';
 /** ~0.2 s: a strong hit's hitstop. */
 const FREEZE_TICKS = 12;
 /** How long after the freeze the action sequence must match the control run. */

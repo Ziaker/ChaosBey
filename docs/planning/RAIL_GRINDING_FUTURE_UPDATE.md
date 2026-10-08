@@ -450,3 +450,17 @@ Testes: `tests/unit/rails.test.ts` (rota, assentamento no piso para profundidade
 
 Quando 1–3 e 5 estiverem decididos, o próximo passo é o protótipo de rota com geometria de debug (§14, passo 2) sobre a infraestrutura acima.
 
+
+---
+
+## 17. Primeira versão jogável (0.51.0) — respostas do owner e suposições
+
+**Owner, 2026-10-08 (respostas às 4 perguntas bloqueantes):**
+1. **Entrada:** *ao pular em direção* ao rail (sem botão dedicado, sem indicador).
+2. **Sentido:** *o caminho de ida e de volta são os mesmos* — um rail é uma rota única percorrida nos dois sentidos.
+3. **Ações no rail:** *apenas carregar ataque e pulo*; **pular faz o Bey sair precocemente do rail e voltar à arena**.
+4. **Layout:** *2 rails por stage para iniciar; escolha minha* (provisório — ver `STARTER_RAILS`).
+
+**Implementado:** `RailController` (grab/ride/leave), `MovementController.railOverride` (único escritor de velocidade), `DriftController.abortForRail`, `tickMatch.railStep`, estado hasheado no replay. Rails: arcos leste/oeste a 0,6 raio do piso, 1,6 m acima, ±50°, iguais nos 3 stages (o stage ainda não está no `MatchConfig`).
+
+**Suposições PROVISÓRIAS (confirmar com o owner):** o Bey precisa estar num pulo **próprio** e dentro de 1,8 m do rail, indo em direção a ele (só o pulo cheio alcança a altura); sentido = o que ele já seguia (ou o que encara); no fim do rail ele **sai** (não inverte); qualquer golpe/Clash o tira do rail; Dodge/Air Recovery indisponíveis; o AI ainda não usa rails; velocidades/aceleração/captura em `RAIL_TUNING`.
