@@ -553,7 +553,7 @@ Decisões fechadas:
 
 Os readouts numéricos de Power / Spin / Control / Entry speed do Lab são instrumentação/tuning de protótipo; a direção aprovada acima não transforma silenciosamente esses números em balance final.
 
-Ainda aberto sem reabrir esta aprovação: tuning exato da janela/efeitos do timing, política da IA para escolher ponto/qualidade de launch, input final de gamepad, replay/telemetry e detalhes de implementação.
+**Integrado na 0.61.0** (`launch-system-approval.md` §12): replay/telemetry feitos (o resultado do launch — ponto + qualidade — vai no config do replay e na telemetria). Ainda aberto sem reabrir esta aprovação: tuning exato da janela/efeitos do timing, política da IA para escolher ponto/qualidade de launch (há uma política provisória), input final de gamepad e detalhes de implementação.
 
 ## 13.4 Câmera — integrações específicas ainda registradas como abertas
 

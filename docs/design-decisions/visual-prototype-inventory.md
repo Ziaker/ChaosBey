@@ -58,7 +58,7 @@ O motivo de a `main` não mostrar esse material é histórico: o PR #9 mergeou a
 | Câmera de combate — 3 direções (A Arena Fighter, B Cinematic Hybrid, C Hyper Dynamic) com modos Combat Follow, High Speed, Close Combat, Knockback Follow, Clash, Ring-Out e Finisher | **APROVADO** sem alterações, como opções selecionáveis nas Configurações (uma por vez); 43 valores por direção; ainda não integrado | `prototypes/camera-concepts/` · `docs/design-decisions/camera-approval.md` |
 | Clash completo entre os Beys — energia, pulsos, mash e resolução | **PROTOTIPADO E APROVADO na apresentação: C Overdrive + câmera B; protótipo ainda fora da `main`** | `docs/design-decisions/clash-presentation-approval.md` · branch/PR histórico do Clash |
 | Pregame Setup — layout/UX + presets oficiais de Advanced | **DIREÇÃO APROVADA pelo owner em 07/10/2026; ainda não integrada** | `docs/design-decisions/pregame-overhaul.md` |
-| Launch System — A Timing Snap | **APROVADO pelo owner em 07/10/2026; protótipo no repo; ainda não integrado** | `prototypes/launch-system-concepts/` · `docs/design-decisions/launch-system-approval.md` |
+| Launch System — A Timing Snap | **APROVADO pelo owner em 07/10/2026; protótipo no repo; INTEGRADO no jogo na 0.61.0** | `prototypes/launch-system-concepts/` · `docs/design-decisions/launch-system-approval.md` |
 | Bloom / aberração cromática | **DECISÃO VISUAL AINDA NÃO TOMADA; não prototipado** | — |
 | Sparks, speed lines, trail, landing burst, shake, hitstop e FOV do jogo atual | **INTEGRADO NA MAIN, placeholder M4** | `src/vfx/`, `src/camera/` |
 | Mesh procedural atual do Bey (`ring / upper / lower / tip`) | **INTEGRADO NA MAIN, placeholder M1/M6** | `src/bey/procedural-model/createBeyMesh.ts` |
