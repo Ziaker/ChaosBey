@@ -195,6 +195,16 @@ export interface MatchConfig {
    */
   railSpeed: number;
   /**
+   * Launch System A — Timing Snap (owner, 2026-10-07; docs/design-decisions/launch-system-approval.md): the round starts with
+   * both Beys mounted in physical launchers, the player choosing the entry point and timing the release, instead of dropping
+   * both Beys onto their spawns. true = the player flow (MatchRunner, given a place for the launch HUD) runs the launch before
+   * the first tick. The match itself (the session, a replay, the Self Test) only needs the launch RESULT, which the replay
+   * config carries, so it ignores this flag: quick play, the Debug Lab and the tests, which never give the runner a launch
+   * HUD, start at once as every match did before 0.61.0. Not a Pregame option: the launch is the approved way a round of
+   * the player flow starts.
+   */
+  launchSequence: boolean;
+  /**
    * Bey Real (owner, 2026-10-09; docs/design-decisions/bey-real-physics-approval.md): present = the alternative mode, where the
    * Bey moves by itself like a real top (autopilot + the player's share of the steering, bowl pull, tip friction, precession,
    * wobble) and the four actions are the only buttons. Absent / null = the classic game, bit for bit. Gameplay: recorded in
@@ -306,6 +316,7 @@ export function createDefaultMatchConfig(): MatchConfig {
     funnelPull: FUNNEL_PULL_DEFAULT,
     railsEnabled: true,
     railSpeed: RAIL_SPEED_DEFAULT,
+    launchSequence: true,
   });
 }
 

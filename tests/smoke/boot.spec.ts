@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/launchFixture';
 
 test('production build boots under /ChaosBey/ to the Main Menu, PLAY starts the match, no fatal errors', async ({ page }) => {
   const consoleErrors: string[] = [];
@@ -56,7 +56,8 @@ test('production build boots under /ChaosBey/ to the Main Menu, PLAY starts the 
   await page.getByTestId('pregame-start').click();
   await expect(page.getByTestId('pregame')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getScreen()), { timeout: 15_000 }).toBe('match');
-  await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getSession()?.getTickIndex() ?? 0)).toBeGreaterThan(30);
+  // The round starts with the launch (0.61.0): the match's ticks begin once both Beys have arrived.
+  await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getSession()?.getTickIndex() ?? 0), { timeout: 30_000 }).toBeGreaterThan(30);
 
   // Let a few fixed ticks and render frames run to catch startup-only failures.
   await page.waitForTimeout(1000);

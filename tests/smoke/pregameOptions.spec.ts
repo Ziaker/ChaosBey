@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/launchFixture';
 import { baselineUrl } from './presentationBaseline';
 import { bowlDepthText } from './gameDefaults';
 import { openAdvanced, openCategory, showControl } from './support/pregameAdvanced';

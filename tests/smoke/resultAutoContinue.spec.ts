@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './support/launchFixture';
 import { baselineUrl } from './presentationBaseline';
 
 // Owner playtest (after M11): after WIN / LOSE / DRAW the result's own
@@ -28,6 +29,8 @@ const score = (page: Page) => page.evaluate(() => window.__chaosBeyPlay!.getScor
 
 async function waitForMatch(page: Page): Promise<void> {
   await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getScreen() === 'match' && window.__chaosBeyPlay.getSession() != null), { timeout: 20_000 }).toBe(true);
+  // The round starts with the launch (0.61.0, pressed by the fixture): the fight runs from the tick the Beys arrive.
+  await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getSession()?.getTickIndex() ?? 0), { timeout: 30_000 }).toBeGreaterThan(2);
   await page.waitForTimeout(300);
 }
 

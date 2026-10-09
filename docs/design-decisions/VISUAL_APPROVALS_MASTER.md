@@ -50,7 +50,7 @@ A existência de UI de debug, sliders ou readouts dentro de um lab **não** sign
 | HUD de combate completo | **AINDA NÃO APROVADO / lab dedicado pendente** | GDD + este arquivo |
 | Pregame Setup UI | **DIREÇÃO VISUAL/UX APROVADA — ainda não integrada** | `pregame-overhaul.md` |
 | Main Menu / Character Select / Pause / Results / Settings | **DIREÇÃO VISUAL FINAL AINDA ABERTA** | GDD + este arquivo |
-| Launch System | **A — TIMING SNAP APROVADO; launcher físico + ponto de entrada + chegada simultânea; sem countdown pós-pouso; não integrado** | `launch-system-approval.md` |
+| Launch System | **A — TIMING SNAP APROVADO E INTEGRADO (0.61.0); launcher físico + ponto de entrada + chegada simultânea; sem countdown pós-pouso; tuning do grau e política da AI provisórios** | `launch-system-approval.md` |
 | Fluxo do Bey — borrão de giro, inclinação, poeira anime (3 ideias), vento, argolas de impacto e texto HIT/BLOCK/COUNTER | **PROTOTIPADO, NÃO FINAL (owner, 2026-10-08): texto estilo A escolhido (opção nas Configurações); ficam borrão, inclinação, riscos de vento e argolas; poeira anime refeita como volume 3D na cena (5ª rodada: "as nuvens ainda são papel"), argolas/coroas de impacto restauradas, sombra sob os Beys e sliders de opacidade, para julgar. **INTEGRADO no jogo como apresentação com sliders nas Configurações (0.54.0, pedido do owner 2026-10-08; valores finais e composição da poeira ainda não aprovados; BLOCK e "Bey Real" não feitos)** | `prototypes/bey-flow-fx-concepts/` · `src/vfx/flow/` · `bey-flow-fx-approval.md` · `flow-fx-effects.md` |
 | Bey Real — física realista, piloto automático com ~30% de influência, Dash/Giratório/Pulo/Esquiva manuais e câmera (gameplay, não visual) | **PROTOTIPADO, NÃO APROVADO (owner, 2026-10-08): lab jogável com simulação própria; nada integrado; câmera, nome, escala da arena e drift/momentum em aberto** | `prototypes/bey-real-physics-concepts/` · `bey-real-physics-approval.md` |
 | Bloom / chromatic aberration | **NÃO PROTOTIPADOS / uso final não decidido** | inventário |
@@ -464,7 +464,7 @@ Direção final:
 - **sem 3 / 2 / 1 / GO após o pouso** e sem lockout equivalente;
 - B/C são histórico de exploração, não opções finais.
 
-A UI/readouts de debug do Lab não viram automaticamente HUD/balance final. O pacote está **APROVADO, AINDA NÃO INTEGRADO**.
+A UI/readouts de debug do Lab não viram automaticamente HUD/balance final. O pacote está **APROVADO e INTEGRADO na versão 0.61.0** (detalhes em `launch-system-approval.md` §12; tuning do grau e política da AI continuam provisórios).
 
 ## 11.3 Post-FX
 

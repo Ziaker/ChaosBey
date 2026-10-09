@@ -44,6 +44,7 @@ import type { CanonicalValue } from '../state/CanonicalValue';
 import { stateHash } from '../state/stateHash';
 import { isAction } from './recordedActions';
 import { REAL_BASE_PARAMS, realModeConfigOf } from '../../bey/real/RealTuning';
+import { parseLaunchResult } from '../../launch/LaunchResult';
 
 /** Both sides' actions for one fixed tick. */
 export interface ReplayFrame {
@@ -188,8 +189,11 @@ function validateFingerprint(v: Validator, value: unknown): void {
 }
 
 function validateConfig(v: Validator, value: unknown): void {
-  const config = v.record(value, 'config', ['seedText', 'rngScheme', 'stateSchema', 'matchConfig', 'attackProfileSettings', 'spawns', 'beys', 'fixedTicksPerSecond']);
+  // `launch` (0.61.0, the Launch System's result) exists only in a match that began with a launch.
+  const hasLaunch = value !== null && typeof value === 'object' && 'launch' in value;
+  const config = v.record(value, 'config', ['seedText', 'rngScheme', 'stateSchema', 'matchConfig', 'attackProfileSettings', 'spawns', 'beys', 'fixedTicksPerSecond', ...(hasLaunch ? ['launch'] : [])]);
   if (!config) return;
+  if (hasLaunch && parseLaunchResult(config.launch) === null) v.fail('wrong-type', 'config.launch', `${describe(config.launch)} is not a launch result`);
   v.string(config.seedText, 'config.seedText');
   v.version(config.rngScheme, RNG_SCHEME_VERSION, 'config.rngScheme');
   v.version(config.stateSchema, STATE_SCHEMA_VERSION, 'config.stateSchema');
@@ -210,6 +214,8 @@ function validateConfig(v: Validator, value: unknown): void {
   const hasMotion = has('motion');
   if (!hasFloor) delete matchTemplate.arenaFloor;
   if (!hasMotion) delete matchTemplate.motion;
+  // `launchSequence` (0.61.0): a replay recorded before the Launch System has no such field and started at the spawns.
+  if (!has('launchSequence')) delete matchTemplate.launchSequence;
   // Bey Real (0.59.0): `real` exists only in a Bey Real match's config (a classic match leaves it out entirely); when it is
   // there, its fields are checked against this build's own.
   if (has('real')) matchTemplate.real = realModeConfigOf(REAL_BASE_PARAMS);

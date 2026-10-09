@@ -37,6 +37,7 @@ import { checkAngularVelocity, checkLinearVelocity, type PhysicsAnomaly } from '
 import { FIXED_DELTA_SECONDS } from '../physics/fixed-step/FixedTimestepLoop';
 import { createRngStreams } from '../rng/SeededRng';
 import { SelfTestMatchWorld } from './SelfTestMatchWorld';
+import type { LaunchResult } from '../launch/LaunchResult';
 
 /** Speed (m/s) under which a Bey holding MoveForward outside the floor radius counts as wedged (see AiSideStats.longestWedgedTicks). */
 const WEDGED_MAX_SPEED_MPS = 0.1;
@@ -120,6 +121,8 @@ export interface AiMatchSetup {
   matchConfigOverrides?: Partial<MatchConfig>;
   /** M9: record this match as a ChaosBeyReplayV1 (returned in AiMatchRecord.replay). */
   record?: Omit<HeadlessCaptureInput, 'seedText' | 'spawns'>;
+  /** Launch System A: start both Beys at the arrival of this launch instead of at the spawns (a recording keeps it). */
+  launch?: LaunchResult | null;
   /** Called every tick after the match advanced — for extra invariant checks. */
   onTick?: (tick: number, world: SelfTestMatchWorld, firstActions: ControllerActions, secondActions: ControllerActions, firstAi: AIController, secondAi: AIController) => void;
 }
@@ -322,6 +325,7 @@ export async function simulateAiMatch(setup: AiMatchSetup & { slowTickThresholdM
     firstDefinition: setup.firstDefinition,
     secondDefinition: setup.secondDefinition,
     matchConfigOverrides: setup.matchConfigOverrides,
+    launch: setup.launch,
   });
   try {
     return runOnWorld(world, setup, setup.slowTickThresholdMs ?? DEFAULT_SLOW_TICK_THRESHOLD_MS);
@@ -373,7 +377,7 @@ export function* stepAiMatchOnWorld(world: SelfTestMatchWorld, setup: AiMatchSet
 
   // Before the first tick: the initial state is the replay's first checkpoint.
   const capture = setup.record
-    ? startHeadlessCapture(world, { matchConfig: resolveMatchConfig(setup.matchConfigOverrides ?? {}), ...setup.record, seedText: setup.seed, spawns: { first: setup.firstSpawn ?? matchSpawnsFor(arenaFloorOf(resolveMatchConfig(setup.matchConfigOverrides ?? {}))).first, second: setup.secondSpawn ?? matchSpawnsFor(arenaFloorOf(resolveMatchConfig(setup.matchConfigOverrides ?? {}))).second } })
+    ? startHeadlessCapture(world, { matchConfig: resolveMatchConfig(setup.matchConfigOverrides ?? {}), launch: setup.launch, ...setup.record, seedText: setup.seed, spawns: { first: setup.firstSpawn ?? matchSpawnsFor(arenaFloorOf(resolveMatchConfig(setup.matchConfigOverrides ?? {}))).first, second: setup.secondSpawn ?? matchSpawnsFor(arenaFloorOf(resolveMatchConfig(setup.matchConfigOverrides ?? {}))).second } })
     : null;
 
   const first = new SideTracker(firstPersonality.id);

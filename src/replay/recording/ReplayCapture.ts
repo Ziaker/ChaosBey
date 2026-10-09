@@ -24,6 +24,7 @@ import { captureDeterministicConfig } from '../format/configSnapshot';
 import { ReplayRecorder } from '../format/ReplayRecorder';
 import { stateHash } from '../state/stateHash';
 import { copyControllerActions } from '../playback/ReplayController';
+import type { LaunchResult } from '../../launch/LaunchResult';
 
 export interface ReplayCaptureOptions {
   readonly fingerprint: RuntimeFingerprint;
@@ -95,6 +96,8 @@ export interface HeadlessCaptureInput extends ReplayCaptureOptions {
   readonly matchConfig?: MatchConfig;
   /** Defaults to the default settings. The Bey digests are taken from the world's own definitions either way. */
   readonly attackProfileSettings?: BeyAttackProfileSettings;
+  /** The Launch System's result the world was started with (SelfTestMatchWorldOptions.launch), recorded so playback starts the same way. */
+  readonly launch?: LaunchResult | null;
 }
 
 /** A capture on a headless world, started now (before its first tick). */
@@ -105,6 +108,7 @@ export function startHeadlessCapture(world: SelfTestMatchWorld, input: HeadlessC
     attackProfileSettings: input.attackProfileSettings ?? createDefaultAttackProfileSettings(),
     spawns: input.spawns,
     beys: { first: world.first.definition, second: world.second.definition },
+    launch: input.launch,
   });
   return new ReplayCapture(config, input, (ticksCompleted) => stateHash(world.getCanonicalState(ticksCompleted)));
 }

@@ -1,6 +1,6 @@
 # ChaosBey — Launch System Approval
 
-**Status:** OWNER APPROVED · READY FOR IMPLEMENTATION · NOT YET INTEGRATED  
+**Status:** OWNER APPROVED · INTEGRATED in 0.61.0 (first integration; the tuning numbers and the AI policy are provisional, §12)  
 **Decision date:** 2026-10-07  
 **Approved prototype:** `prototypes/launch-system-concepts/index.html`
 
@@ -194,3 +194,48 @@ The following implementation details may still need tuning/engineering:
 - reduced-motion/accessibility treatment if needed.
 
 None of these open items permit reintroducing a post-landing countdown, removing the launcher, removing target selection, replacing the dual-arrival animation, or replacing Timing Snap with B/C.
+
+---
+
+## 12. Integration (0.61.0) — how the approved direction was built
+
+This section records the implementation; it changes nothing above. Everything in §1–§10 is honoured as written.
+
+**Flow.** Every round of the player flow (Character Select → Pregame → round, and every next round / restart) starts with the
+launch. `MatchRunner` runs it before the match's first tick, on the same fixed tick as the match (`GameState.Launch`, then
+`Combat`): both Beys sit in physical launchers (`src/presentation/launchRig.ts`, the prototype's launcher) → the player moves the
+entry point and the Timing Snap marker sweeps (`src/launch/LaunchSequence.ts`) → one press of LAUNCH releases both launchers →
+both Beys fly the prototype's arcs (the first leaves 0.07 s before the second) → on the tick the last Bey touches down the
+match's first tick follows. There is **no phase after landing**: the sequence is `done` on the arrival tick, and a test pins
+that its phases are `mounted → armed → release → flight → landed` and nothing else (§2, §10).
+
+**Input** (design doc §4: "production input mapping may be adapted"). The entry point moves with the arrows / D-pad / stick
+(screen-relative: up = toward the opponent), or is placed by clicking or dragging on the arena; "Center" puts it back. LAUNCH is
+Z or X on the keyboard, A or X on the pad, or the on-screen button. The point is clamped inside the valid landing area
+(29/36 of the floor radius, on the match's real floor profile), and two landings are kept apart. The player has as long as
+they need; a launch nobody presses releases itself after 15 s with the marker where it stands (no free perfect launch).
+
+**Determinism and replay** (§9). The interactive part is real time, so what the fight takes from it is a `LaunchResult` — each
+side's entry point and timing quality — and the arrival (position, speed, heading) is a pure function of it
+(`src/launch/LaunchResult.ts`, `applyLaunchArrival.ts`). The session, the headless Self Test world and a replay all start from
+the same arrival; the result is recorded in the replay's config (`config.launch`) and in telemetry (`Launch` event). A replay
+recorded before the Launch System has no `launch` and still plays back unchanged.
+
+**AI** (§11, open item): provisional policy in `src/launch/LaunchAiPolicy.ts` — the AI picks a point on its own half (nearer the
+centre the more aggressive its personality) and its release misses the sweet spot by a human-like error that grows with the
+difficulty tier's reaction delay and error rate (a Rookie launches worse than an Ace; nobody is perfect every time). It draws
+from a random stream of its own, so adding the launch moved no other draw.
+
+**What a grade is worth** (§8, open item): everything is in `src/launch/LaunchTuning.ts` — `launchOutcomeFor(quality)`. For now a
+better timing gives a faster entry (from 35 % to 100 % of the Bey's intended top speed) and a shorter flight; nothing else in the
+fight changes. PROVISIONAL, for playtest: the owner decides what the grade should really change.
+
+**Presentation.** The launch camera (behind the launcher → chase of the flight → a duel frame, handing over to the combat
+camera over 0.7 s), the target ring and dashed arc, the wind rings and trails, the speed lines and flash, and the grade word
+(PERFECT / STRONG / CLEAN / WEAK) follow the approved prototype. The prototype's Power / Spin / Control / Entry-speed readouts
+are not in the HUD (§8). The landing itself is the game's own: the Beys touch down as a small bounce and the existing landing
+VFX, dust and camera react as for any landing.
+
+**Still open** (§11): the exact timing window and speed, what a grade should change in the fight, the AI's real policy, a
+gamepad mapping beyond the one above, reduced-motion treatment. No Pregame switch turns the launch off: it is the approved way a
+round starts (quick play, the Debug Lab, the Self Test and the unit tests build matches without a launch HUD and start at once).

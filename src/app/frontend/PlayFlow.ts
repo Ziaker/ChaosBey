@@ -26,6 +26,7 @@ import { CharacterSelectScreen } from './CharacterSelectScreen';
 import { outcomeText } from './matchOutcome';
 import { AUTO_CONTINUE_S } from './AutoContinue';
 import { MatchResultsScreen, type MatchResultsAction } from './MatchResultsScreen';
+import type { LaunchView } from '../../launch/LaunchSequence';
 import { MatchRunner } from './MatchRunner';
 import { EMPTY_SCORE, matchWinner, roundSeed, scoreRound, type MatchScore } from './matchScore';
 import { activeRuleLines, createDefaultMatchSetup, loadLastSetup, matchBeysFor, matchConfigFor, opponentControllerFor, saveLastSetup, withDefaultRules, withPlayerBey, type MatchSetup } from './matchSetup';
@@ -73,6 +74,8 @@ export interface PlayFlowHandle {
   getPreviewVisualId(): string | null;
   /** The WebGL renderer, read-only for render-cost checks (`renderer.info`, timing the draw). Never written. */
   getRenderer(): WebGLRenderer;
+  /** Launch System A: the launch of the running round (its view, whether it is over), or null when the round started at once / the launch's rig is gone. */
+  getLaunch(): { readonly view: LaunchView; readonly finished: boolean } | null;
 }
 
 declare global {
@@ -121,6 +124,10 @@ export class PlayFlow {
       getMatchSeed: () => this.matchSeed,
       getPreviewVisualId: () => this.characterSelect?.previewVisualId ?? null,
       getRenderer: () => this.deps.appRenderer.renderer,
+      getLaunch: () => {
+        const launch = this.runner?.getLaunch();
+        return launch ? { view: launch.sequence.getView(), finished: launch.finished } : null;
+      },
     };
   }
 
@@ -182,6 +189,10 @@ export class PlayFlow {
     this.deps.stateMachine.transitionTo(GameState.MatchLoading);
     this.defeatCutscene = null;
     this.roundGameSpeed = matchConfigFor(this.setup!).gameSpeed ?? 1;
+    const player = rosterEntry(this.setup.playerBeyId);
+    const opponent = rosterEntry(this.setup.opponentBeyId);
+    // The Clash bar, cards and pips wear each Bey's own color; the same Bey on both sides (or two close colors) takes its second color.
+    const accents = sideAccentsCss(player.accentCss, player.definition.id, opponent.accentCss, opponent.definition.id);
     const runner = await MatchRunner.start(
       this.deps,
       {
@@ -194,8 +205,13 @@ export class PlayFlow {
         presentation: { ...presentationFor(this.settings), vfx: this.setup.visual },
         controlScheme: this.settings.controlScheme,
         realCamera: this.setup.real?.enabled ? this.setup.real.camera : undefined,
+        // Launch System A: the round starts with the launch (the HUD of it goes into the screen root).
+        launchMount: this.deps.screenRoot,
+        launchAccents: accents,
       },
       {
+        // The arrival is the start of the fight: the HUD says so on that very tick.
+        onLaunchEnd: () => this.hud?.beginFight(),
         onRoundOver: (outcome) => {
           // Owner, 2026-10-04: a Stability knock-out plays the defeat cutscene first (the Bey flies / bounces, then breaks
           // in 1.5 s of slow motion); the winner is announced after it.
@@ -250,10 +266,6 @@ export class PlayFlow {
     this.runner = runner;
     this.screen = 'match';
     this.padMenu.stop();
-    const player = rosterEntry(this.setup.playerBeyId);
-    const opponent = rosterEntry(this.setup.opponentBeyId);
-    // The Clash bar, cards and pips wear each Bey's own color; the same Bey on both sides (or two close colors) takes its second color.
-    const accents = sideAccentsCss(player.accentCss, player.definition.id, opponent.accentCss, opponent.definition.id);
     this.hud = new CombatHud(this.deps.screenRoot, {
       player: { label: player.label, accentCss: accents.first },
       opponent: { label: opponent.label, accentCss: accents.second, subtitle: `${aiDifficultyTier(this.setup.ai.tier).label} AI · ${AI_STYLE_LABELS[this.setup.ai.style]}` },
@@ -262,6 +274,7 @@ export class PlayFlow {
       roundsToWin: this.setup.roundsToWin,
       controlHints: this.settings.controlHints,
       feel: hudFeelOf(this.settings),
+      launching: runner.isLaunching(),
     });
   }
 

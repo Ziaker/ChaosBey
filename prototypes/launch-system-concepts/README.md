@@ -1,6 +1,6 @@
 # Launch System Lab — approved direction
 
-**Status:** OWNER APPROVED · NOT YET INTEGRATED  
+**Status:** OWNER APPROVED · INTEGRATED in the game (0.61.0)  
 **Owner approval:** 2026-10-07  
 **Canonical decision:** `docs/design-decisions/launch-system-approval.md`
 

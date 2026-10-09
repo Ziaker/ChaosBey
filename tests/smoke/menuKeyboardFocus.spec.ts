@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/launchFixture';
 import { BASELINE_MENU_URL, baselineUrl } from './presentationBaseline';
 
 // Enter on a focused button activates that button, not the screen's main

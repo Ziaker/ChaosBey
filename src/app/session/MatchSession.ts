@@ -78,6 +78,8 @@ import { AIController } from '../../ai/controllers/AIController';
 import { anomalyThresholdsFor, MatchAnomalyDetector, type DetectedAnomaly } from '../../self-test/anomalies/MatchAnomalyDetector';
 import type { ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
 import { matchSpawnsFor } from '../bootstrap/matchSpawns';
+import { applyLaunchArrivals } from '../../launch/applyLaunchArrival';
+import type { LaunchResult } from '../../launch/LaunchResult';
 import { floorHeightAt, floorRimHeight } from '../../arena/floor/ArenaFloorProfile';
 import type { ChaosBeyReplayV1 } from '../../replay/format/ChaosBeyReplayV1';
 import { captureDeterministicConfig } from '../../replay/format/configSnapshot';
@@ -122,6 +124,11 @@ export interface MatchSessionOptions {
   readonly flowFx?: FlowFxSettings;
   /** The renderer, for the approved arena art's tone mapping (only touched with the `arenaVisuals` flag, and restored). Render only. */
   readonly renderer?: { toneMapping: THREE.ToneMapping; toneMappingExposure: number };
+  /**
+   * Launch System A: a launch already made (a replay's, or a headless run's). Both Beys start at the arrival it gives. Omit
+   * for the plain opening — or to run the launch interactively first (MatchRunner) and hand its result to applyLaunchResult().
+   */
+  readonly launch?: LaunchResult | null;
 }
 
 export interface SessionTickOutput {
@@ -158,6 +165,11 @@ export interface SessionRenderView {
   readonly headingArrow?: boolean;
   /** Bey Real (0.59.0): a camera the runner drives instead of the combat directors (the mode's own, or the free orbit). Presentation only. */
   readonly externalCamera?: ExternalCamera;
+  /**
+   * Launch System A: the camera of the launch hands over to the combat director smoothly — this share (1 → 0) of the pose it
+   * left is kept for a moment (presentation only; the director's own framing is untouched once it reaches 0).
+   */
+  readonly cameraBlend?: { readonly weight: number; readonly eye: THREE.Vector3; readonly focus: THREE.Vector3; readonly fovDeg: number };
 }
 
 /** Owner, 2026-10-05 (game feel): beats the HUD shows. */
@@ -256,6 +268,7 @@ export class MatchSession {
       attackProfileSettings: this.attackProfileSettings,
       spawns: matchSpawnsFor(arenaFloorOf(resolveMatchConfig(this.matchConfig))),
       beys: { first: this.match.first.definition, second: this.match.second.definition },
+      launch: this.launchResult,
     });
     // Called inside tick() before this.tickIndex advances, so the count comes from the capture, not from this.tickIndex.
     const capture = new ReplayCapture(config, options, (ticksCompleted) =>
@@ -318,6 +331,8 @@ export class MatchSession {
   private readonly detectedAnomalies: DetectedAnomaly[] = [];
 
   private tickIndex = 0;
+  /** Launch System A: the launch this match began with (null = it began at the spawns). */
+  private launchResult: LaunchResult | null = null;
   private lastMatchResult: MatchTickResult | null = null;
   private lastCameraOutput: SessionCameraOutput | null = null;
   /** Which Bey left the ring, once the round ended by ring-out (camera only). */
@@ -392,6 +407,11 @@ export class MatchSession {
       geometry: arenaGeometryOf(options.matchConfig),
       theme: options.arenaTheme ?? FOUNDRY_PIT.theme,
     }, options.matchConfig.motion ?? 'B', presentationFeatures, beyMatchRulesOf(options.matchConfig));
+    if (options.launch) {
+      applyLaunchArrivals(this.match.first, this.match.second, options.launch);
+      this.launchResult = options.launch;
+      this.recordLaunch(options.launch);
+    }
     if (this.match.rails.length > 0) {
       const railFloor = arenaFloorOf(resolveMatchConfig(options.matchConfig));
       this.root.add(createRailVisuals(this.match.rails, RAIL_TUBE_RADIUS_M));
@@ -515,6 +535,46 @@ export class MatchSession {
     const physics = await PhysicsWorld.create();
     physics.setGravityScale(resolveMatchConfig(options.matchConfig).gravityScale ?? 1);
     return new MatchSession(options, physics);
+  }
+
+  /** The launch this match began with, or null when it began at the spawns. */
+  getLaunchResult(): LaunchResult | null {
+    return this.launchResult;
+  }
+
+  /**
+   * Launch System A: the launch is over, so both Beys take the arrival it gives and the match's first tick follows at
+   * once (no countdown, no hold). Only before the first tick, and once.
+   */
+  applyLaunchResult(result: LaunchResult): void {
+    if (this.tickIndex !== 0) throw new Error(`MatchSession.applyLaunchResult(): the match already ran (TickIndex ${this.tickIndex}).`);
+    if (this.launchResult) throw new Error('MatchSession.applyLaunchResult(): a launch was already applied.');
+    applyLaunchArrivals(this.match.first, this.match.second, result);
+    this.launchResult = result;
+    this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
+    this.recordLaunch(result);
+  }
+
+  private recordLaunch(result: LaunchResult): void {
+    this.telemetry.setCurrentTick(0);
+    this.telemetry.record({
+      kind: TelemetryEventKind.Launch,
+      first: { x: result.first.target.x, z: result.first.target.z, quality: result.first.quality },
+      second: { x: result.second.target.x, z: result.second.target.z, quality: result.second.quality },
+    });
+  }
+
+  /**
+   * Launch System A, while the launch runs (before the first tick): a Bey sits in its launcher or flies; its body follows the
+   * pose the sequence gives, at rest. Presentation drives it; no tick has run and none sees these poses.
+   */
+  setLaunchPose(side: Side, position: { x: number; y: number; z: number }, visual: BeyVisualPose = REST_VISUAL_POSE): void {
+    if (this.tickIndex !== 0 || this.launchResult) return;
+    const body = this.getBey(side).body;
+    body.setTranslation(position, true);
+    body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    this.lastVisual = { ...this.lastVisual, [side]: visual };
   }
 
   /** Owner, 2026-10-04: the defeated Bey of a KO / spin-out shows none of its own effects any more (presentation only). */
@@ -994,10 +1054,21 @@ export class MatchSession {
       // Camera effects off (Debug Lab, GDD section 70): no shake and the
       // base FOV, so the director's framing can be judged on its own.
       const shake = view.cameraEffects ? cameraOutput.shakeOffsetM : { x: 0, y: 0, z: 0 };
-      camera.position.set(cameraOutput.cameraPositionM.x + shake.x, cameraOutput.cameraPositionM.y + shake.y, cameraOutput.cameraPositionM.z + shake.z);
-      camera.lookAt(cameraOutput.focusPositionM.x, cameraOutput.focusPositionM.y, cameraOutput.focusPositionM.z);
+      const blend = view.cameraBlend;
+      const keep = blend ? Math.max(0, Math.min(1, blend.weight)) : 0;
+      const eye = { x: cameraOutput.cameraPositionM.x + shake.x, y: cameraOutput.cameraPositionM.y + shake.y, z: cameraOutput.cameraPositionM.z + shake.z };
+      const focus = cameraOutput.focusPositionM;
       // Camera effects off: no shake and no impact FOV punch; the framing itself (speed FOV, contexts) is the preset's.
-      camera.fov = view.cameraEffects ? cameraOutput.fovDeg : cameraOutput.fovDeg - cameraOutput.fovPunchDeg;
+      const fov = view.cameraEffects ? cameraOutput.fovDeg : cameraOutput.fovDeg - cameraOutput.fovPunchDeg;
+      if (blend && keep > 0) {
+        camera.position.set(eye.x + (blend.eye.x - eye.x) * keep, eye.y + (blend.eye.y - eye.y) * keep, eye.z + (blend.eye.z - eye.z) * keep);
+        camera.lookAt(focus.x + (blend.focus.x - focus.x) * keep, focus.y + (blend.focus.y - focus.y) * keep, focus.z + (blend.focus.z - focus.z) * keep);
+        camera.fov = fov + (blend.fovDeg - fov) * keep;
+      } else {
+        camera.position.set(eye.x, eye.y, eye.z);
+        camera.lookAt(focus.x, focus.y, focus.z);
+        camera.fov = fov;
+      }
       camera.updateProjectionMatrix();
     }
     if (this.cutsceneFocus && view.cameraView !== 'overview') this.followCutscene(camera, frameDeltaSeconds);

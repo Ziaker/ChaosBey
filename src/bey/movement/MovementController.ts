@@ -345,6 +345,14 @@ export class MovementController {
 
   /** Debug Lab teleport/prepare (GDD section 70) — points the Bey's heading; explicit mutation, never called by gameplay. */
   debugSetHeading(headingRad: number): void {
+    this.setHeadingRad(headingRad);
+  }
+
+  /**
+   * Points the Bey's heading before the match's first tick: the Launch System sets the way a Bey rolls in on arrival
+   * (src/launch/applyLaunchArrival.ts). Never called once the match runs.
+   */
+  setHeadingRad(headingRad: number): void {
     this.headingRad = headingRad;
     this.turnRateRadPerS = 0;
     this.lastHeadingForward = fromYaw(headingRad);
