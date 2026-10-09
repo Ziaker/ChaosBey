@@ -168,7 +168,7 @@ test('Debug Lab: restart() with an empty/whitespace seed does not crash or stran
   // normalizeSeedText() throws ("seed text must not be empty"), which used
   // to escape createSession() uncaught and leave `session` stuck at null.
   await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
-  await page.waitForFunction(() => window.__chaosBeyDebugLab?.getSession() !== null);
+  await page.waitForFunction(() => (window.__chaosBeyDebugLab?.getSession() ?? null) !== null);
 
   for (const blank of ['', '   ']) {
     let threw: string | null = null;
@@ -180,7 +180,7 @@ test('Debug Lab: restart() with an empty/whitespace seed does not crash or stran
       threw = String(error);
     }
     expect(threw, `restart(${JSON.stringify(blank)}) should not throw`).toBeNull();
-    expect(await page.evaluate(() => window.__chaosBeyDebugLab?.getSession() !== null)).toBe(true);
+    expect(await page.evaluate(() => (window.__chaosBeyDebugLab?.getSession() ?? null) !== null)).toBe(true);
     // The match still runs normally afterward.
     await page.evaluate(() => window.__chaosBeyDebugLab!.step(5));
     expect(await page.evaluate(() => window.__chaosBeyDebugLab!.getSession()!.getTickIndex())).toBeGreaterThan(0);
@@ -195,7 +195,7 @@ test('Debug Lab: record a match, download the replay, import it and watch it ver
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
   await page.goto(baselineUrl('/ChaosBey/?mode=debug-lab'));
-  await page.waitForFunction(() => window.__chaosBeyDebugLab?.getSession() !== null);
+  await page.waitForFunction(() => (window.__chaosBeyDebugLab?.getSession() ?? null) !== null);
   const status = page.getByTestId('debug-lab-status');
 
   // Record 400 ticks from tick 0 (AI vs AI), then stop and download the file.
