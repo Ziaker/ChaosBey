@@ -25,7 +25,7 @@ const idle: ControllerActions = { held: new Set(), pressedThisFrame: new Set(), 
 const body = (vx: number, vz: number, spin = 1, dir: 1 | -1 = 1, mass = 1): ContactBody => ({ velocity: { x: vx, z: vz }, mass, spin, dir });
 
 describe('Bey Real: every slider the Pregame shows is wired', () => {
-  it('all 69 values are live, and each key is read by the engine outside the tuning list and the Pregame panel', () => {
+  it('all 63 values are live, and each key is read by the engine outside the tuning list and the Pregame panel', () => {
     expect(REAL_PARAM_SPEC.filter((s) => !s.live).map((s) => s.key)).toEqual([]);
     const files: string[] = [];
     const walk = (dir: string): void => {

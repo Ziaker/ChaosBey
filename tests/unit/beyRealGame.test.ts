@@ -47,6 +47,7 @@ describe('Bey Real tuning', () => {
 
   it('every value has one spec, inside its own range, with a note of its own and a group', () => {
     const keys = Object.keys(OWNER_JSON).sort();
+    expect(keys, 'the owner\'s JSON has 63 values').toHaveLength(63);
     expect(REAL_PARAM_SPEC.map((s) => s.key).sort()).toEqual(keys);
     for (const spec of REAL_PARAM_SPEC) {
       expect(spec.min, spec.key).toBeLessThan(spec.max);
