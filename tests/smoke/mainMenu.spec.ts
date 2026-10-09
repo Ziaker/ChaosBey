@@ -91,9 +91,12 @@ test('Main Menu: PLAY enters in place without reloading the page, and Back retur
 
   await page.goto(baselineUrl('/ChaosBey/'));
   await expect(page.getByTestId('main-menu')).toBeVisible({ timeout: 15_000 });
-  // The menu itself loads no three.js and no physics engine: only its own few kilobytes.
-  const loadedAtMenu = await page.evaluate(() => performance.getEntriesByType('resource').map((r) => r.name.split('/').pop() ?? ''));
-  expect(loadedAtMenu.filter((n) => /three|MatchConfig|playMode|createRenderer/.test(n)), 'the menu must not pull the 3D engine in before PLAY').toEqual([]);
+  // The page's own boot payload (what index.html loads before anything runs) holds no three.js and no physics engine: those load
+  // lazily, and the browser fetches them while the menu is idle.
+  const html = await (await page.request.get(new URL('/ChaosBey/', page.url()).href)).text();
+  const boot = [...html.matchAll(/(?:src|href)="([^"]+\.js)"/g)].map((m) => (m[1] ?? '').split('/').pop() ?? '');
+  expect(boot.length).toBeGreaterThan(0);
+  expect(boot.filter((n) => /three|MatchConfig|playMode|createRenderer|SeededRng|TelemetryRecorder/.test(n)), 'the menu must not pull the 3D engine in before PLAY').toEqual([]);
   await page.evaluate(() => {
     (window as unknown as { __notReloaded: boolean }).__notReloaded = true;
   });

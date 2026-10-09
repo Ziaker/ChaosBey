@@ -110,6 +110,7 @@ test('one press of LAUNCH releases both Beys, they arrive, and Combat runs at on
     const seen: string[] = [];
     const log: { phases: string[]; landedAtMs: number | null; firstTickAtMs: number | null; flying: { first: boolean; second: boolean } } = { phases: seen, landedAtMs: null, firstTickAtMs: null, flying: { first: false, second: false } };
     (window as unknown as { __launchLog: typeof log }).__launchLog = log;
+    seen.push(window.__chaosBeyPlay!.getLaunch()?.view.phase ?? 'none'); // where it stands now (armed), before the press
     const step = (): void => {
       const flow = window.__chaosBeyPlay!.getLaunch();
       const session = window.__chaosBeyPlay!.getSession();
