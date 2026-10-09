@@ -112,6 +112,7 @@ export type MatchRules = Pick<
   | 'arenaBowlDepthM' | 'roundTimeLimitS' | 'winByKo' | 'winByRingOut' | 'winBySpinOut' | 'accelerationScale' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'speedDamageGain' | 'dashCarriesSpeed'
   | 'turnRateScale' | 'turnSpeedRetention' | 'jumpHoldForFullS' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'highSpeedControl' | 'arenaSizeScale' | 'gameSpeed' | 'clashLaunchMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale'
   | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS' | 'funnelPull' | 'railsEnabled' | 'railSpeed'
+  | 'stabilityMaxScale' | 'stabilityDamageScale' | 'stabilityRecoveryScale' | 'stabilityRecoveryDelayScale'
 >;
 
 /** The rule keys the Pregame offers (Lote 9: all of them reset together and are remembered between matches). */
@@ -120,6 +121,7 @@ export const MATCH_RULE_KEYS = [
   'arenaBowlDepthM', 'roundTimeLimitS', 'winByKo', 'winByRingOut', 'winBySpinOut', 'accelerationScale', 'topSpeedScale', 'airControl', 'jumpStaminaCost', 'jumpCooldownS', 'speedDamageGain', 'dashCarriesSpeed',
   'turnRateScale', 'turnSpeedRetention', 'jumpHoldForFullS', 'gravityScale', 'contactRepelMps', 'attackRecoilMps', 'highSpeedControl', 'arenaSizeScale', 'gameSpeed', 'clashLaunchMps', 'dodgeStaminaCost', 'dodgeDistanceScale', 'contactLiftMps', 'knockbackScale', 'spinStaminaDrain', 'circularLockAfterHitS', 'bodyContactControlLossScale',
   'circularAttack', 'beySizeScale', 'airRecoveryMinDelayS', 'funnelPull', 'railsEnabled', 'railSpeed',
+  'stabilityMaxScale', 'stabilityDamageScale', 'stabilityRecoveryScale', 'stabilityRecoveryDelayScale',
 ] as const satisfies readonly (keyof MatchRules)[];
 
 /**
@@ -184,6 +186,10 @@ export function defaultMatchRules(): MatchRules {
     funnelPull: config.funnelPull,
     railsEnabled: config.railsEnabled,
     railSpeed: config.railSpeed,
+    stabilityMaxScale: config.stabilityMaxScale,
+    stabilityDamageScale: config.stabilityDamageScale,
+    stabilityRecoveryScale: config.stabilityRecoveryScale,
+    stabilityRecoveryDelayScale: config.stabilityRecoveryDelayScale,
   };
 }
 
@@ -389,6 +395,10 @@ const RULE_SUMMARY: Readonly<Record<(typeof MATCH_RULE_KEYS)[number], { readonly
   funnelPull: { name: 'funnel pull', format: (v) => `×${(v as number).toFixed(1)}` },
   railsEnabled: { name: 'Rails', format: (v) => (v ? 'on' : 'off') },
   railSpeed: { name: 'rail speed', format: (v) => `×${(v as number).toFixed(2)}` },
+  stabilityMaxScale: { name: 'base Stability', format: (v) => `${Math.round(((v as number) - 1) * 100) >= 0 ? '+' : ''}${Math.round(((v as number) - 1) * 100)}%` },
+  stabilityDamageScale: { name: 'Stability damage taken', format: (v) => `×${(v as number).toFixed(2)}` },
+  stabilityRecoveryScale: { name: 'Stability recovery', format: (v) => `×${(v as number).toFixed(2)}` },
+  stabilityRecoveryDelayScale: { name: 'Stability recovery wait', format: (v) => `×${(v as number).toFixed(2)}` },
 };
 
 /**

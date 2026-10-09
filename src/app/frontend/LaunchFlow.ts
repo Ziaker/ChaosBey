@@ -70,7 +70,7 @@ export function launchDriversFor(session: MatchSession): Record<LaunchSide, Laun
       const personality = resolveAiPersonality(spec.personality, session.getBey(side));
       const difficulty = spec.difficulty ? aiDifficultyTier(spec.difficulty).profile : DEFAULT_AI_DIFFICULTY_PROFILE;
       const plan = planAiLaunch(side, arena, rng, personality, difficulty);
-      return { kind: 'plan', target: plan.target, quality: plan.quality };
+      return { kind: 'plan', target: plan.target, quality: plan.quality, releaseLagS: plan.releaseLagS };
     }
     return { kind: 'plan', target: defaultLaunchTarget(side, arena), quality: NEUTRAL_QUALITY };
   };

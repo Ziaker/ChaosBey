@@ -19,10 +19,6 @@ const STEER_RESPONSE_PER_S = 3;
 const GRIP_FULL_SPIN = 0.25;
 /** Grip left to a Broken Bey. */
 const BROKEN_GRIP = 0.3;
-/** Winding up a Dash: the Bey slows down hard and barely steers. */
-const CHARGE_BRAKE_PER_S = 5;
-const CHARGE_STEER_SCALE = 0.25;
-const CHARGE_CRUISE_SCALE = 0.25;
 /** Stability (0..100) under which the Bey starts to wobble. */
 const UNSTABLE_BELOW = 40;
 
@@ -39,8 +35,6 @@ export interface RealStepInput {
   readonly broken: boolean;
   /** Stability, 0..100. */
   readonly stability: number;
-  /** The Bey is winding up a Dash. */
-  readonly charging: boolean;
   /** MatchConfig.airControl: how much it can still steer in the air (0 = none). */
   readonly airControl: number;
 }
@@ -70,7 +64,8 @@ export class RealMotion {
     let ax = 0;
     let az = 0;
     let steerEffort = 0;
-    const cruise = config.cruiseSpeedMps * (0.5 + 0.5 * Math.sqrt(clamp(spin, 0, 1))) * (input.charging ? CHARGE_CRUISE_SCALE : 1);
+    // Winding up a Dash does not slow or stop the Bey (owner, 2026-10-09): it keeps moving at full pace while it charges.
+    const cruise = config.cruiseSpeedMps * (config.cruiseMinShare + (1 - config.cruiseMinShare) * Math.sqrt(clamp(spin, 0, 1)));
 
     if (!input.grounded) {
       // In the air: momentum only. The player picks the moment of the jump, not the direction — unless air control is on.
@@ -90,7 +85,7 @@ export class RealMotion {
         }
       }
       // Steering, limited by grip.
-      const grip = clamp(spin / GRIP_FULL_SPIN, 0, 1) * (input.broken ? BROKEN_GRIP : 1) * (input.charging ? CHARGE_STEER_SCALE : 1);
+      const grip = clamp(spin / GRIP_FULL_SPIN, 0, 1) * (input.broken ? BROKEN_GRIP : 1);
       let sax = (input.intent.x * cruise - vx) * STEER_RESPONSE_PER_S;
       let saz = (input.intent.z * cruise - vz) * STEER_RESPONSE_PER_S;
       const cap = config.steerAccelMps2 * grip;
@@ -102,10 +97,6 @@ export class RealMotion {
       ax += sax;
       az += saz;
       steerEffort = Math.hypot(sax, saz);
-      if (input.charging) {
-        ax -= vx * CHARGE_BRAKE_PER_S;
-        az -= vz * CHARGE_BRAKE_PER_S;
-      }
       // The tip's friction (more when the spin is low) and the drag.
       const speed = Math.hypot(vx, vz);
       if (speed > 1e-6) {

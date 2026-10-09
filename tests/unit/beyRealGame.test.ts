@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { ADVANCED_CONTROLS, isLockedByRealMode, writeAdvanced } from '../../src/app/frontend/advancedControls';
+import { ADVANCED_CONTROLS, isLockedByRealMode, isModified, readAdvanced, writeAdvanced } from '../../src/app/frontend/advancedControls';
 import { createDefaultMatchSetup, defaultRealSetup, isRealMode, loadLastSetup, matchConfigFor, sanitizeRealSetup, saveLastSetup, activeRuleLines } from '../../src/app/frontend/matchSetup';
 import { AssistedController } from '../../src/bey/real/AssistedController';
 import { autopilotIntent, blendSteering } from '../../src/bey/real/RealAutopilot';
@@ -26,16 +26,16 @@ import { FreeOrbitCamera, RealModeCamera } from '../../src/camera/real/RealCamer
 import { REAL_CAMERA_MODES } from '../../src/camera/real/RealCameraModes';
 import { Action, type CombatController, type ControllerActions } from '../../src/input/actions/Action';
 
-/** The owner's tuned numbers, as pasted on 2026-10-09 ("esse preset atual … é pra ser o base"). */
+/** The owner's tuned numbers, as pasted on 2026-10-09 ("esse preset atual … é pra ser o base"), with the same day's request for more movement (faster cruise and steering, a livelier orbit, no slowing down with low spin). */
 const OWNER_JSON: RealParams = {
-  influence: 0.75, steerAccelMps2: 30, cruiseSpeedMps: 14, pursuit: 1, orbitRadiusFrac: 0.8, bowlPull: 20, dragPerS: 0.1, tipFrictionMps2: 0.7, precessionRadPerS: 0.9,
+  influence: 0.75, steerAccelMps2: 40, cruiseSpeedMps: 18, pursuit: 1, orbitRadiusFrac: 0.8, orbitBreath: 0.35, orbitBreathRadPerS: 0.7, cruiseMinShare: 0.75, bowlPull: 20, dragPerS: 0.1, tipFrictionMps2: 0.7, precessionRadPerS: 0.9,
   spinDecayPerS: 0.007, spinMoveLossPerM: 0.00035, spinSteerLoss: 0.00025, wobbleSpin: 0.35, wobbleAccelMps2: 10, massSecond: 1, sameSpin: 0, restitutionLow: 0.7,
   restitutionHigh: 0.92, rimFriction: 0.4, spinExchange: 0.012, hitSpinLoss: 0.004, rubSpinLoss: 0.0016, hitStability: 0.6, wallRestitution: 0.9, wallSpinLoss: 0.0016,
   dashMinSpeedMps: 10, dashMaxSpeedMps: 30, dashChargeMaxS: 1.6, dashDurationS: 0.8, dashCooldownS: 1.5, dashSnapRadPerS: 40, dashSnapWindowS: 0.08, dashLockRadPerS: 5,
   dashMassBoost: 1.8, dashStabilityMin: 10, dashStabilityMax: 25, dashSpinCost: 0.012, dashWhiffRecoveryS: 1.6, circularRadiusM: 1.55, circularDurationS: 0.35,
   circularRecoveryS: 0.95, circularLaunchMps: 9, circularLaunchUpMps: 7, circularKeepFraction: 0.65, circularStability: 12, dodgeSpeedMps: 22, dodgeBurstS: 0.17,
   dodgeInvulnS: 0.5, dodgeCooldownS: 3, dodgePerfectS: 0.2, dodgeSpinCost: 0.01, jumpSpeedMps: 10.5, gravityMps2: 31, airControl: 0, jumpCooldownS: 0.4,
-  stageRadiusM: 15, wallHeightM: 1.6, ringOutDelayS: 0.6, timeLimitS: 150, stabilityRegenPerS: 5, brokenS: 2.4, aiAggression: 1, aiSkill: 0.85,
+  stageRadiusM: 15, bowlDepthScale: 1, wallHeightM: 1.6, ringOutDelayS: 0.6, timeLimitS: 150, gameSpeed: 1, stabilityRegenPerS: 5, brokenS: 2.4, aiAggression: 1, aiSkill: 0.85,
 };
 
 describe('Bey Real tuning', () => {
@@ -47,7 +47,7 @@ describe('Bey Real tuning', () => {
 
   it('every value has one spec, inside its own range, with a note of its own and a group', () => {
     const keys = Object.keys(OWNER_JSON).sort();
-    expect(keys, 'the owner\'s JSON has 63 values').toHaveLength(63);
+    expect(keys, 'the owner\'s JSON has 68 values').toHaveLength(68);
     expect(REAL_PARAM_SPEC.map((s) => s.key).sort()).toEqual(keys);
     for (const spec of REAL_PARAM_SPEC) {
       expect(spec.min, spec.key).toBeLessThan(spec.max);
@@ -149,6 +149,32 @@ describe('Bey Real setup', () => {
     expect(sanitizeRealSetup({ enabled: 'yes', camera: 'sideways', params: { influence: 9 } })).toMatchObject({ enabled: false, camera: 'real', params: { influence: 1 } });
   });
 
+  it('the arena controls stay available in Bey Real: they edit the mode\'s own values, and the match follows them', () => {
+    const off = createDefaultMatchSetup();
+    const on = { ...off, real: { ...defaultRealSetup(), enabled: true } };
+    for (const key of ['arenaSizeScale', 'arenaBowlDepthM', 'wallHeightM', 'wallRestitution', 'gameSpeed'] as const) {
+      const control = ADVANCED_CONTROLS.find((c) => c.key === key)!;
+      expect(isLockedByRealMode(control, on), key).toBe(false);
+      expect(control.kind === 'slider' && control.disabledWhen?.(on), key).toBeFalsy();
+    }
+    const bigger = writeAdvanced(on, 'arenaSizeScale', 1);
+    expect(bigger.real!.params.stageRadiusM).toBeCloseTo(36, 6);
+    expect(readAdvanced(bigger, 'arenaSizeScale')).toBeCloseTo(1, 6);
+    expect(bigger.rules.arenaSizeScale).toBe(off.rules.arenaSizeScale); // the classic value is untouched
+    const deep = writeAdvanced(on, 'arenaBowlDepthM', 4);
+    expect(readAdvanced(deep, 'arenaBowlDepthM')).toBeCloseTo(4, 6);
+    const tall = writeAdvanced(on, 'wallHeightM', 10);
+    expect(tall.real!.params.wallHeightM).toBe(10);
+    expect(matchConfigFor(tall).arenaWallHeightM).toBe(10);
+    expect(matchConfigFor(bigger).arenaSizeScale).toBeCloseTo(1, 6);
+    expect(matchConfigFor(deep).arenaBowlDepthM).toBeCloseTo(4, 6);
+    expect(matchConfigFor(writeAdvanced(on, 'gameSpeed', 1.5)).gameSpeed).toBe(1.5);
+    // off: the classic values, untouched by the mode
+    expect(writeAdvanced(off, 'wallHeightM', 9).arena.geometry.wallHeightM).toBe(9);
+    expect(isModified(on, 'arenaSizeScale')).toBe(false);
+    expect(isModified(bigger, 'arenaSizeScale')).toBe(true);
+  });
+
   it('says so in the active rules', () => {
     const setup = { ...createDefaultMatchSetup(), real: { ...defaultRealSetup(), enabled: true } };
     expect(activeRuleLines(setup).some((l) => l.startsWith('Bey Real'))).toBe(true);
@@ -159,7 +185,7 @@ describe('Bey Real setup', () => {
     const off = createDefaultMatchSetup();
     const on = { ...off, real: { ...defaultRealSetup(), enabled: true } };
     const locked = ADVANCED_CONTROLS.filter((c) => isLockedByRealMode(c, on)).map((c) => c.key);
-    for (const key of ['gravityScale', 'jumpFullHeightM', 'airControl', 'arenaSizeScale', 'wallHeightM', 'wallRestitution', 'ringOutDelayS', 'roundTimeLimitS', 'accelerationScale', 'topSpeedScale', 'dashCooldownS', 'dodgeCooldownS']) {
+    for (const key of ['gravityScale', 'jumpFullHeightM', 'airControl', 'ringOutDelayS', 'roundTimeLimitS', 'accelerationScale', 'topSpeedScale', 'dashCooldownS', 'dodgeCooldownS']) {
       expect(locked, key).toContain(key);
     }
     for (const control of ADVANCED_CONTROLS) {
@@ -299,13 +325,23 @@ describe('Bey Real motion model', () => {
     expect(side(0.1)).toBeGreaterThan(0.05);
   });
 
-  it('in the air only momentum, unless air control is on; winding up a Dash brakes hard', () => {
+  it('in the air only momentum, unless air control is on', () => {
     const air = (airControl: number) => new RealMotion(config, 1).step({ ...idle, grounded: false, airControl, velocity: { x: 5, z: 0 }, intent: { x: 0, z: 1 }, floorNormal: null }).velocity;
     expect(air(0)).toEqual({ x: 5, z: 0 });
     expect(air(1).z).toBeGreaterThan(0);
-    const braking = new RealMotion({ ...config, bowlPull: 0, precessionRadPerS: 0, wobbleAccelMps2: 0 }, 1).step({ ...idle, charging: true, velocity: { x: 10, z: 0 }, floorNormal: null }).velocity.x;
-    const free = new RealMotion({ ...config, bowlPull: 0, precessionRadPerS: 0, wobbleAccelMps2: 0 }, 1).step({ ...idle, velocity: { x: 10, z: 0 }, floorNormal: null }).velocity.x;
-    expect(braking).toBeLessThan(free);
+  });
+
+  it('keeps its pace as the spin runs low as much as "Velocidade que sobra com giro baixo" says', () => {
+    const tired = { ...idle, spin: 0.2, velocity: { x: 0, z: 0 }, intent: { x: 1, z: 0 }, floorNormal: null };
+    const still = { ...config, bowlPull: 0, precessionRadPerS: 0, wobbleAccelMps2: 0, steerAccelMps2: 80 };
+    const withShare = (cruiseMinShare: number): number => new RealMotion({ ...still, cruiseMinShare }, 1).step(tired).velocity.x;
+    expect(withShare(1)).toBeGreaterThan(withShare(0.5));
+    expect(withShare(0.5)).toBeGreaterThan(withShare(0));
+  });
+
+  it('winding up a Dash neither brakes nor slows the Bey (the step has no notion of charging)', () => {
+    const step = new RealMotion({ ...config, bowlPull: 0, precessionRadPerS: 0, wobbleAccelMps2: 0 }, 1).step({ ...idle, velocity: { x: 10, z: 0 }, intent: { x: 1, z: 0 }, floorNormal: null }).velocity.x;
+    expect(step).toBeGreaterThan(9.5);
   });
 
   it('is deterministic: the same inputs give the same numbers, and the wobble phase is its only memory', () => {

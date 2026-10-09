@@ -17,7 +17,7 @@ import { button, el, ensureFrontendStyle, keyHint } from './frontendStyle';
 import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
 import { changedRuleLines, defaultMatchRules, deleteRuleConfig, loadRuleConfigs, matchupLines, normalizeSeedText, saveRuleConfig, withArenaFloor, withArenaPreset, withDefaultRules, withRuleConfig, type MatchSetup } from './matchSetup';
-import { ADVANCED_CATEGORIES, ADVANCED_CATEGORY_LABELS, ADVANCED_CONTROLS, isLockedByRealMode, isModified, isToggle, modifiedCount, normalOriginalValue, readAdvanced, resetCategory, writeAdvanced, type AdvancedCategory, type AdvancedControl } from './advancedControls';
+import { ADVANCED_CATEGORIES, ADVANCED_CATEGORY_LABELS, ADVANCED_CONTROLS, isLockedByRealMode, isModified, isSharedWithRealMode, isToggle, modifiedCount, normalOriginalValue, readAdvanced, resetCategory, writeAdvanced, type AdvancedCategory, type AdvancedControl } from './advancedControls';
 import { RealModePanel } from './RealModePanel';
 import { OFFICIAL_PRESETS, applyPreset, detectPreset, presetLabel, type OfficialPresetId } from './pregamePresets';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
@@ -493,7 +493,7 @@ export class PregameScreen {
         const disabled = control.disabledWhen?.(setup) ?? false;
         view.input.disabled = disabled;
         view.wrapper.classList.toggle('is-disabled', disabled);
-        view.wrapper.title = isLockedByRealMode(control, setup) ? 'Bloqueado: o modo Bey Real (bloco abaixo) controla este valor.' : '';
+        view.wrapper.title = isLockedByRealMode(control, setup) ? 'Bloqueado: o modo Bey Real (bloco abaixo) controla este valor.' : isSharedWithRealMode(control, setup) ? 'Em Bey Real este controle é o mesmo do bloco Bey Real (arena e regras).' : '';
       }
       view.modified.hidden = !isMod;
       view.wrapper.classList.toggle('is-modified', isMod);

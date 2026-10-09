@@ -10,9 +10,7 @@ import type { RealModeConfig } from './RealTuning';
 
 /** The Bey's radius the arena edge is measured with is not needed here: the containment starts at 82% of the stage. */
 const EDGE_FRACTION = 0.82;
-/** The orbit radius breathes (so two Beys on the same orbit meet): amplitude, rad/s, and each side's phase. */
-const ORBIT_BREATH = 0.2;
-const ORBIT_BREATH_RAD_PER_S = 0.45;
+/** The orbit radius breathes (so two Beys on the same orbit meet): its amplitude and rate are sliders; each side has its own phase. */
 const ORBIT_PHASE = [0, 2.1] as const;
 /** Close up the pursuit fades out so two Beys do not lean on each other. */
 const PURSUIT_FADE_START_M = 1.8;
@@ -41,7 +39,7 @@ export function autopilotIntent(config: RealModeConfig, input: AutopilotInput): 
   // Orbit the way the spin turns it.
   const tx = -rz * input.spinDir;
   const tz = rx * input.spinDir;
-  const target = config.stageRadiusM * config.orbitRadiusFrac * (1 + ORBIT_BREATH * Math.sin(ORBIT_BREATH_RAD_PER_S * input.timeS + ORBIT_PHASE[input.side]));
+  const target = config.stageRadiusM * config.orbitRadiusFrac * (1 + config.orbitBreath * Math.sin(config.orbitBreathRadPerS * input.timeS + ORBIT_PHASE[input.side]));
   const radial = clamp((target - radius) / 3, -1, 1) * 0.9;
   const edge = EDGE_FRACTION * config.stageRadiusM;
   const contain = radius > edge ? -clamp((radius - edge) / Math.max(1e-6, config.stageRadiusM - edge), 0, 1) * 2 : 0;

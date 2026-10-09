@@ -31,3 +31,14 @@ export const STABILITY_BROKEN_RECOVERY_FLOOR = 20;
 // Wall/floor impacts also cost Stability (GDD section 37), scaled by how
 // hard the hit was (MovementController's detected impact speed delta).
 export const WALL_IMPACT_STABILITY_DAMAGE_PER_MPS = 0.8;
+
+// Owner, 2026-10-09 ("sliders para a mecânica de estabilidade, especialmente um que aumenta a estabilidade base em até 200%"):
+// four Pregame scales on the numbers above. 1 = the game as it was. PROVISIONAL ranges.
+/** × the Stability a Bey starts with and refills to (3 = +200%). The Broken recovery floor scales with it. */
+export const STABILITY_MAX_SCALE_RANGE = { min: 0.25, max: 3, step: 0.05 } as const;
+/** × the Stability every hit, Clash and wall impact takes away (0 = nothing ever costs Stability). */
+export const STABILITY_DAMAGE_SCALE_RANGE = { min: 0, max: 3, step: 0.05 } as const;
+/** × how fast Stability climbs back (0 = never). */
+export const STABILITY_RECOVERY_SCALE_RANGE = { min: 0, max: 4, step: 0.05 } as const;
+/** × the wait after a hit before Stability starts to climb back, and the Broken wait (0 = at once). */
+export const STABILITY_RECOVERY_DELAY_SCALE_RANGE = { min: 0, max: 3, step: 0.05 } as const;

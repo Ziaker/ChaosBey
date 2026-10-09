@@ -371,6 +371,20 @@ describe('the AI launch policy', () => {
     expect(attackR).toBeLessThan(defenseR);
   });
 
+  it('varies a lot from round to round: targets spread over the half, qualities over the whole range, and the release lags', () => {
+    const plans = Array.from({ length: 200 }, (_, i) => plan(`v${i}`, ATTACK_AI_PERSONALITY, ACE_TIER));
+    const xs = plans.map((p) => p.target.x);
+    const radii = plans.map((p) => Math.hypot(p.target.x, p.target.z));
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(ARENA.floorRadiusM * 0.6); // well out to both sides
+    expect(Math.max(...radii) - Math.min(...radii)).toBeGreaterThan(ARENA.floorRadiusM * 0.3); // close and far
+    expect(plans.some((p) => p.quality < 0.5)).toBe(true); // a weak launch happens even for an Ace
+    expect(plans.some((p) => p.quality >= 0.93)).toBe(true);
+    const lags = plans.map((p) => p.releaseLagS);
+    expect(Math.min(...lags)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...lags)).toBeGreaterThan(0.15);
+    expect(Math.max(...lags)).toBeLessThanOrEqual(0.3);
+  });
+
   it('a Rookie times its release worse than an Ace on average, and nobody is perfect every time', () => {
     let rookie = 0;
     let ace = 0;

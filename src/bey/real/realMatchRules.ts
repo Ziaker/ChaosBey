@@ -35,7 +35,7 @@ export function realMatchOverrides(params: RealParams): Partial<MatchConfig> {
     arenaSizeScale: params.stageRadiusM / ARENA_FLOOR_RADIUS,
     arenaWallHeightM: params.wallHeightM,
     arenaWallRestitution: params.wallRestitution,
-    arenaBowlDepthM: labEquivalentBowlDepthM(params.stageRadiusM),
+    arenaBowlDepthM: labEquivalentBowlDepthM(params.stageRadiusM) * params.bowlDepthScale,
     ringOutDelayS: params.ringOutDelayS,
     roundTimeLimitS: params.timeLimitS,
     // jump: the apex follows from the launch speed and the gravity
@@ -51,8 +51,8 @@ export function realMatchOverrides(params: RealParams): Partial<MatchConfig> {
     circularLaunchForce: params.circularLaunchMps / CIRCULAR_LAUNCH_HORIZONTAL_MPS,
     // The Dash is the lab's own (10 to 30 m/s): the classic top-speed scale (×2.8) must not multiply it.
     topSpeedScale: 1,
-    // The lab ran in real time; the classic game's 20% faster clock is its own owner decision.
-    gameSpeed: 1,
+    // The lab ran in real time (×1); the classic game's 20% faster clock is its own owner decision. The mode has its own slider.
+    gameSpeed: params.gameSpeed,
     // The mode has its own slope pull (bowlPull): the classic funnel slide must not add to it.
     funnelPull: 0,
   };

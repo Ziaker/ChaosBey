@@ -195,6 +195,15 @@ export interface MatchConfig {
    */
   railSpeed: number;
   /**
+   * Owner, 2026-10-09 ("sliders para a mecânica de estabilidade, especialmente um que aumenta a estabilidade base em até 200%"):
+   * × the Stability maximum (3 = +200%), × the Stability every hit takes, × how fast it recovers, × the wait before it recovers
+   * (also the Broken wait). 1 = the game as it was. Pregame sliders (Advanced › Combat). PROVISIONAL.
+   */
+  stabilityMaxScale: number;
+  stabilityDamageScale: number;
+  stabilityRecoveryScale: number;
+  stabilityRecoveryDelayScale: number;
+  /**
    * Launch System A — Timing Snap (owner, 2026-10-07; docs/design-decisions/launch-system-approval.md): the round starts with
    * both Beys mounted in physical launchers, the player choosing the entry point and timing the release, instead of dropping
    * both Beys onto their spawns. true = the player flow (MatchRunner, given a place for the launch HUD) runs the launch before
@@ -214,7 +223,7 @@ export interface MatchConfig {
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed' | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS' | 'funnelPull' | 'railsEnabled' | 'railSpeed' | 'real'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed' | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS' | 'funnelPull' | 'railsEnabled' | 'railSpeed' | 'stabilityMaxScale' | 'stabilityDamageScale' | 'stabilityRecoveryScale' | 'stabilityRecoveryDelayScale' | 'real'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -257,6 +266,10 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     funnelPull: config.funnelPull ?? 0,
     railsEnabled: config.railsEnabled ?? false,
     railSpeed: config.railSpeed ?? RAIL_SPEED_DEFAULT,
+    stabilityMaxScale: config.stabilityMaxScale ?? 1,
+    stabilityDamageScale: config.stabilityDamageScale ?? 1,
+    stabilityRecoveryScale: config.stabilityRecoveryScale ?? 1,
+    stabilityRecoveryDelayScale: config.stabilityRecoveryDelayScale ?? 1,
     real: config.real ?? null,
   };
 }
@@ -316,6 +329,10 @@ export function createDefaultMatchConfig(): MatchConfig {
     funnelPull: FUNNEL_PULL_DEFAULT,
     railsEnabled: true,
     railSpeed: RAIL_SPEED_DEFAULT,
+    stabilityMaxScale: 1,
+    stabilityDamageScale: 1,
+    stabilityRecoveryScale: 1,
+    stabilityRecoveryDelayScale: 1,
     launchSequence: true,
   });
 }
@@ -371,6 +388,7 @@ export const BEY_SIZE_SCALE_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
 export const AIR_RECOVERY_MIN_DELAY_DEFAULT_S = 0.2;
 export { FUNNEL_PULL_RANGE } from '../../bey/movement/MovementTuning';
 export { RAIL_SPEED_RANGE } from '../../arena/rails/RailTraversal';
+export { STABILITY_DAMAGE_SCALE_RANGE, STABILITY_MAX_SCALE_RANGE, STABILITY_RECOVERY_DELAY_SCALE_RANGE, STABILITY_RECOVERY_SCALE_RANGE } from '../../bey/stability/StabilityTuning';
 export const AIR_RECOVERY_MIN_DELAY_RANGE = { min: 0, max: 1.5, step: 0.05 } as const;
 export const ROUND_TIME_LIMIT_RANGE = { min: 0, max: 180, step: 15 } as const;
 export const ACCELERATION_SCALE_RANGE = { min: 0.25, max: 3, step: 0.05 } as const;

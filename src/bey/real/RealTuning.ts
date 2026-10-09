@@ -22,6 +22,9 @@ export interface RealParams {
   cruiseSpeedMps: number;
   pursuit: number;
   orbitRadiusFrac: number;
+  orbitBreath: number;
+  orbitBreathRadPerS: number;
+  cruiseMinShare: number;
   // --- Physics ---
   bowlPull: number;
   dragPerS: number;
@@ -80,9 +83,11 @@ export interface RealParams {
   jumpCooldownS: number;
   // --- Rules ---
   stageRadiusM: number;
+  bowlDepthScale: number;
   wallHeightM: number;
   ringOutDelayS: number;
   timeLimitS: number;
+  gameSpeed: number;
   stabilityRegenPerS: number;
   brokenS: number;
   // --- AI ---
@@ -129,10 +134,13 @@ const x2 = (v: number): string => `×${v.toFixed(2)}`;
 /** The owner's tuned numbers: the base preset (and the defaults of a "Bey Real" match). */
 export const REAL_BASE_PARAMS: Readonly<RealParams> = Object.freeze({
   influence: 0.75,
-  steerAccelMps2: 30,
-  cruiseSpeedMps: 14,
+  steerAccelMps2: 40,
+  cruiseSpeedMps: 18,
   pursuit: 1,
   orbitRadiusFrac: 0.8,
+  orbitBreath: 0.35,
+  orbitBreathRadPerS: 0.7,
+  cruiseMinShare: 0.75,
   bowlPull: 20,
   dragPerS: 0.1,
   tipFrictionMps2: 0.7,
@@ -184,7 +192,9 @@ export const REAL_BASE_PARAMS: Readonly<RealParams> = Object.freeze({
   airControl: 0,
   jumpCooldownS: 0.4,
   stageRadiusM: 15,
+  bowlDepthScale: 1,
   wallHeightM: 1.6,
+  gameSpeed: 1,
   ringOutDelayS: 0.6,
   timeLimitS: 150,
   stabilityRegenPerS: 5,
@@ -199,14 +209,20 @@ export const REAL_PARAM_SPEC: readonly RealParamSpec[] = [
   { key: 'influence', group: 'control', live: true, min: 0, max: 1, step: 0.05, format: pct, label: 'Influência do jogador no movimento',
     note: 'Quanto da direção é sua quando você segura a seta. 0% = só o piloto automático conduz (você só aperta os botões); 100% = a seta manda sozinha. Sem seta apertada, o automático conduz o Bey inteiro.' },
   // ---- autopilot ----
-  { key: 'steerAccelMps2', group: 'auto', live: true, min: 2, max: 30, step: 0.5, format: fix(1, ' m/s²'), label: 'Força de direção',
+  { key: 'steerAccelMps2', group: 'auto', live: true, min: 2, max: 80, step: 0.5, format: fix(1, ' m/s²'), label: 'Força de direção',
     note: 'A aceleração máxima com que o Bey muda de rumo. Mais = curvas e arrancadas mais bruscas; menos = o Bey faz curvas largas e pesadas. Cai com o giro baixo e com o Bey quebrado.' },
-  { key: 'cruiseSpeedMps', group: 'auto', live: true, min: 3, max: 14, step: 0.5, format: fix(1, ' m/s'), label: 'Velocidade de cruzeiro',
+  { key: 'cruiseSpeedMps', group: 'auto', live: true, min: 3, max: 28, step: 0.5, format: fix(1, ' m/s'), label: 'Velocidade de cruzeiro',
     note: 'A velocidade que o Bey tenta manter sozinho. Mais = partida veloz e perigosa; menos = giro lento e tático. Diminui quando o giro acaba.' },
   { key: 'pursuit', group: 'auto', live: true, min: 0, max: 1, step: 0.05, format: pct, label: 'Perseguição ao oponente',
     note: 'O quanto o automático puxa o Bey para cima do oponente (mais ainda quando o oponente está cansado). 0% = só orbita a arena; 100% = persegue sem parar. De perto a perseguição some, para os Beys não grudarem.' },
   { key: 'orbitRadiusFrac', group: 'auto', live: true, min: 0.2, max: 0.8, step: 0.05, format: pct, label: 'Raio da órbita',
     note: 'A que distância do centro o automático gira, como fração do raio da arena. Menos = gira no fundo da cuba, todo mundo se encontra; mais = gira perto da parede, com risco de ring-out.' },
+  { key: 'orbitBreath', group: 'auto', live: true, min: 0, max: 0.6, step: 0.05, format: pct, label: 'Variação da órbita',
+    note: 'O quanto o raio da órbita respira (sobe e desce) ao longo da luta, para os Beys não repetirem o mesmo círculo. Mais = rotas bem variadas, cruzando o meio e a borda; 0 = círculo fixo.' },
+  { key: 'orbitBreathRadPerS', group: 'auto', live: true, min: 0.1, max: 2, step: 0.05, format: fix(2, ' rad/s'), label: 'Ritmo da variação da órbita',
+    note: 'A rapidez com que a órbita respira. Mais = o Bey troca de rota o tempo todo.' },
+  { key: 'cruiseMinShare', group: 'auto', live: true, min: 0, max: 1, step: 0.05, format: pct, label: 'Velocidade que sobra com giro baixo',
+    note: 'Quanto da velocidade de cruzeiro o Bey mantém quando o giro está acabando. 100% = anda com o mesmo pique até o fim; 0% = vai parando junto com o giro.' },
   // ---- physics ----
   { key: 'bowlPull', group: 'physics', live: true, min: 0, max: 40, step: 1, format: x2, label: 'Puxão da cuba',
     note: 'A força com que a inclinação da arena puxa o Bey para o centro. Mais = tudo escorrega para o meio e os Beys se cruzam o tempo todo; 0 = arena plana, ninguém é puxado.' },
@@ -314,14 +330,18 @@ export const REAL_PARAM_SPEC: readonly RealParamSpec[] = [
   { key: 'jumpCooldownS', group: 'jump', live: true, min: 0, max: 2, step: 0.05, format: fix(2, ' s'), label: 'Recarga do pulo',
     note: 'Tempo depois de um pulo até poder pular de novo.' },
   // ---- rules ----
-  { key: 'stageRadiusM', group: 'rules', live: true, min: 7, max: 20, step: 0.5, format: fix(1, ' m'), label: 'Raio da arena de jogo',
+  { key: 'stageRadiusM', group: 'rules', live: true, min: 7, max: 40, step: 0.5, format: fix(1, ' m'), label: 'Raio da arena de jogo',
     note: 'O tamanho da arena (a de Bey Real é bem menor que a normal, de 36 m). Mais = mais espaço para orbitar e menos encontros; menos = luta apertada. A cuba acompanha o tamanho.' },
-  { key: 'wallHeightM', group: 'rules', live: true, min: 0.3, max: 3, step: 0.1, format: fix(1, ' m'), label: 'Altura da parede',
+  { key: 'bowlDepthScale', group: 'rules', live: true, min: 0, max: 3, step: 0.05, format: x2, label: 'Profundidade da cuba (funil)',
+    note: '×1 = a cuba que acompanha o tamanho da arena (a inclinação que você afinou). Mais = a arena afunda mais no meio e a borda fica bem mais alta; 0 = chão plano. Quem puxa o Bey para o centro continua sendo o "Puxão da cuba".' },
+  { key: 'wallHeightM', group: 'rules', live: true, min: 0.3, max: 10, step: 0.1, format: fix(1, ' m'), label: 'Altura da parede',
     note: 'Parede baixa deixa um Bey lançado voar para fora (ring-out); parede alta o mantém dentro.' },
   { key: 'ringOutDelayS', group: 'rules', live: true, min: 0, max: 3, step: 0.1, format: fix(1, ' s'), label: 'Tempo fora da arena até perder',
     note: 'Quanto tempo o Bey precisa ficar fora para o ring-out contar (se voltar antes, zera). 0 = instantâneo.' },
   { key: 'timeLimitS', group: 'rules', live: true, min: 0, max: 300, step: 10, format: (v) => (v === 0 ? 'sem limite' : `${v.toFixed(0)} s`), label: 'Limite de tempo',
     note: 'Quando acaba o tempo sem vencedor, o round é empate. 0 = sem limite.' },
+  { key: 'gameSpeed', group: 'rules', live: true, min: 0.5, max: 2, step: 0.05, format: x2, label: 'Velocidade do jogo',
+    note: 'A partida inteira roda nesta velocidade: movimento, ataques, gravidade e efeitos. ×1 = tempo real (como o laboratório).' },
   { key: 'stabilityRegenPerS', group: 'rules', live: true, min: 0, max: 20, step: 0.5, format: fix(1, ' /s'), label: 'Recuperação de Estabilidade',
     note: 'A rapidez com que o Bey se recompõe depois de apanhar.' },
   { key: 'brokenS', group: 'rules', live: true, min: 0.5, max: 6, step: 0.1, format: fix(1, ' s'), label: 'Tempo Quebrado',

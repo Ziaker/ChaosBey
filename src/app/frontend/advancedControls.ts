@@ -36,6 +36,10 @@ import {
   GRAVITY_SCALE_RANGE,
   FUNNEL_PULL_RANGE,
   RAIL_SPEED_RANGE,
+  STABILITY_DAMAGE_SCALE_RANGE,
+  STABILITY_MAX_SCALE_RANGE,
+  STABILITY_RECOVERY_DELAY_SCALE_RANGE,
+  STABILITY_RECOVERY_SCALE_RANGE,
   IMPACT_PUSH_RANGE,
   JUMP_COOLDOWN_RANGE,
   JUMP_STAMINA_COST_RANGE,
@@ -47,7 +51,9 @@ import {
   TURN_SPEED_RETENTION_RANGE,
 } from '../../config/match/MatchConfig';
 import { DEFAULT_VFX_OPTIONS, VFX_DUST_RANGE, VFX_EFFECT_SIZE_RANGE, VFX_GROUND_WAVES_RANGE, VFX_INTENSITY_RANGE, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
-import { REAL_OWNED_RULE_KEYS } from '../../bey/real/realMatchRules';
+import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
+import { REAL_OWNED_RULE_KEYS, labEquivalentBowlDepthM } from '../../bey/real/realMatchRules';
+import { REAL_BASE_PARAMS, realSpecOf, type RealParamKey, type RealParams } from '../../bey/real/RealTuning';
 import { CLASH_IMPACT_RANGE, MATCH_RULE_KEYS, RING_OUT_OFF_TIME_LIMIT_S, defaultMatchRules, sanitizeMatchRules, type MatchRules, type MatchSetup } from './matchSetup';
 
 export const ADVANCED_CATEGORIES = ['movement', 'jump', 'combat', 'arena', 'round', 'visual'] as const;
@@ -152,6 +158,10 @@ const CLASSIC_CONTROLS: readonly AdvancedControl[] = [
   { kind: 'slider', category: 'arena', id: 'bowl-depth', label: 'Bowl depth (funnel)', range: ARENA_BOWL_DEPTH_RANGE, key: 'arenaBowlDepthM', format: meters, note: 'How deep the bowl is (rim above the centre): the floor\'s collider, art, spawns and effects all follow it. 0 = flat. Owner base rule on the Funnel.' },
   { kind: 'slider', category: 'arena', id: 'wall-height', label: 'Wall height', range: ARENA_WALL_HEIGHT_RANGE, key: 'wallHeightM', format: (v) => `${v.toFixed(1)} m`, note: 'A low wall lets a launched Bey fly out of the arena; a tall one keeps it in. The default is the arena\'s own.' },
   { kind: 'slider', category: 'arena', id: 'wall-bounce', label: 'Wall bounce', range: ARENA_WALL_BOUNCE_RANGE, key: 'wallRestitution', format: (v) => v.toFixed(2), note: 'How hard the wall throws a Bey back into the fight. The default is the arena\'s own.' },
+  { kind: 'slider', category: 'combat', id: 'stability-max', label: 'Base Stability', range: STABILITY_MAX_SCALE_RANGE, key: 'stabilityMaxScale', format: (v) => `${v >= 1 ? '+' : ''}${Math.round((v - 1) * 100)}% (${Math.round(100 * v)})`, note: 'How much Stability each Bey starts with and refills to. +0% = the usual 100; +200% = 300, so it takes three times the beating to Break. The Broken recovery floor grows with it. Provisional.' },
+  { kind: 'slider', category: 'combat', id: 'stability-damage', label: 'Stability damage taken', range: STABILITY_DAMAGE_SCALE_RANGE, key: 'stabilityDamageScale', format: times, note: 'Multiplies every Stability loss: hits, Dashes, Clashes, wall impacts. 0 = nothing ever costs Stability (nobody Breaks). Provisional.' },
+  { kind: 'slider', category: 'combat', id: 'stability-recovery', label: 'Stability recovery speed', range: STABILITY_RECOVERY_SCALE_RANGE, key: 'stabilityRecoveryScale', format: times, note: 'How fast Stability climbs back once it starts. 0 = never recovers. Provisional.' },
+  { kind: 'slider', category: 'combat', id: 'stability-recovery-delay', label: 'Stability recovery wait', range: STABILITY_RECOVERY_DELAY_SCALE_RANGE, key: 'stabilityRecoveryDelayScale', format: times, note: 'The wait after a hit before Stability starts to climb back, and the longer wait while Broken. 0 = it recovers at once. Provisional.' },
   { kind: 'toggle', category: 'arena', id: 'rails', label: 'Rails', key: 'railsEnabled', note: 'Rail grinding: long rails with two gates inside the wall that carry a jumping Bey out of the arena and back in. The Bey is untouchable on a rail. Off = the match is played as if the stages had no rails. Provisional.' },
   { kind: 'slider', category: 'arena', id: 'rail-speed', label: 'Rail speed', range: RAIL_SPEED_RANGE, key: 'railSpeed', format: (v) => `×${v.toFixed(2)}`, note: 'How fast a Bey travels along a rail (the speed it starts at, the one it builds toward, and how quickly). ×1 = 8 → 32 m/s over about 6 s. Provisional.' },
   // ---- round ----
@@ -168,17 +178,55 @@ const CLASSIC_CONTROLS: readonly AdvancedControl[] = [
 ];
 
 /**
+ * Bey Real: the arena controls (stage size, funnel, wall height and bounce, game speed) stay available while the mode is on — they
+ * read and write the mode's own values (RealParams), so there is still one place for each number: the slider here and the one in
+ * the Bey Real block are the same setting.
+ */
+interface RealArenaRoute {
+  readonly read: (params: RealParams) => number;
+  /** The new params after the slider was moved to `value` (clamped into the mode's own range). */
+  readonly write: (params: RealParams, value: number) => RealParams;
+}
+
+const clampReal = (key: RealParamKey, value: number): number => {
+  const spec = realSpecOf(key);
+  return Math.min(spec.max, Math.max(spec.min, value));
+};
+const directRoute = (key: RealParamKey): RealArenaRoute => ({ read: (p) => p[key], write: (p, v) => ({ ...p, [key]: clampReal(key, v) }) });
+
+const REAL_ARENA_ROUTES: Partial<Record<AdvancedKey, RealArenaRoute>> = {
+  arenaSizeScale: { read: (p) => p.stageRadiusM / ARENA_FLOOR_RADIUS, write: (p, v) => ({ ...p, stageRadiusM: clampReal('stageRadiusM', v * ARENA_FLOOR_RADIUS) }) },
+  arenaBowlDepthM: {
+    read: (p) => labEquivalentBowlDepthM(p.stageRadiusM) * p.bowlDepthScale,
+    write: (p, v) => ({ ...p, bowlDepthScale: clampReal('bowlDepthScale', v / Math.max(1e-6, labEquivalentBowlDepthM(p.stageRadiusM))) }),
+  },
+  wallHeightM: directRoute('wallHeightM'),
+  wallRestitution: directRoute('wallRestitution'),
+  gameSpeed: directRoute('gameSpeed'),
+};
+
+const realRouteOf = (setup: MatchSetup, key: AdvancedKey): RealArenaRoute | null => (setup.real?.enabled ? REAL_ARENA_ROUTES[key] ?? null : null);
+
+/**
  * Bey Real (0.59.0): the mode's own block sets these (its sliders reach them through realMatchRules.ts) or the mode does not use
  * them at all (the classic handling model, momentum's top speed, the control-loss window). While the mode is on their classic
  * sliders are locked — one place to change each value, and no slider that does nothing.
  */
-const REAL_LOCKED_KEYS: ReadonlySet<AdvancedKey> = new Set<AdvancedKey>([...REAL_OWNED_RULE_KEYS, 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyContactControlLossScale', 'wallHeightM', 'wallRestitution']);
+const REAL_LOCKED_KEYS: ReadonlySet<AdvancedKey> = new Set<AdvancedKey>([
+  ...REAL_OWNED_RULE_KEYS.filter((key) => !(key in REAL_ARENA_ROUTES)),
+  'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyContactControlLossScale',
+]);
 const realModeOn = (setup: MatchSetup): boolean => setup.real?.enabled === true;
 
 /** Every Advanced control, grouped by category and in the order the Pregame shows them. */
 export const ADVANCED_CONTROLS: readonly AdvancedControl[] = CLASSIC_CONTROLS.map((control) =>
   control.kind === 'slider' && REAL_LOCKED_KEYS.has(control.key) ? { ...control, disabledWhen: (setup: MatchSetup) => realModeOn(setup) || (control.disabledWhen?.(setup) ?? false) } : control,
 );
+
+/** True when the Bey Real block shares this control (it edits the mode's own value while the mode is on). */
+export function isSharedWithRealMode(control: AdvancedControl, setup: MatchSetup): boolean {
+  return realRouteOf(setup, control.key) !== null;
+}
 
 /** True when this control is locked by the Bey Real block (so the Pregame can say why). */
 export function isLockedByRealMode(control: AdvancedControl, setup: MatchSetup): boolean {
@@ -210,6 +258,8 @@ function visualField(key: VisualKey): keyof VfxOptions {
 
 /** The current value of one Advanced setting. */
 export function readAdvanced(setup: MatchSetup, key: AdvancedKey): AdvancedValue {
+  const route = realRouteOf(setup, key);
+  if (route) return route.read(setup.real!.params);
   if (key === 'clashImpact') return setup.clashImpactMultiplier;
   if (key === 'wallHeightM') return setup.arena.geometry.wallHeightM;
   if (key === 'wallRestitution') return setup.arena.geometry.wallRestitution;
@@ -222,6 +272,8 @@ export function readAdvanced(setup: MatchSetup, key: AdvancedKey): AdvancedValue
  * condition stays on; ring-out off needs a timer) — the toggles use it, the sliders do not, as before the overhaul.
  */
 export function writeAdvanced(setup: MatchSetup, key: AdvancedKey, value: AdvancedValue, enforce = false): MatchSetup {
+  const route = realRouteOf(setup, key);
+  if (route) return { ...setup, real: { ...setup.real!, params: route.write(setup.real!.params, value as number) } };
   if (key === 'clashImpact') return { ...setup, clashImpactMultiplier: value as number };
   if (key === 'wallHeightM') return { ...setup, arena: { ...setup.arena, geometry: { ...setup.arena.geometry, wallHeightM: value as number } } };
   if (key === 'wallRestitution') return { ...setup, arena: { ...setup.arena, geometry: { ...setup.arena.geometry, wallRestitution: value as number } } };
@@ -235,6 +287,8 @@ export function writeAdvanced(setup: MatchSetup, key: AdvancedKey, value: Advanc
  * never a second copy), and for the wall height and bounce the default of the arena the player picked.
  */
 export function normalOriginalValue(setup: MatchSetup, key: AdvancedKey): AdvancedValue {
+  // In Bey Real the "original" of these is the mode's own base (its small stage, its funnel, its clock).
+  if (realRouteOf(setup, key)) return REAL_ARENA_ROUTES[key]!.read(REAL_BASE_PARAMS);
   if (key === 'clashImpact') return CLASH_IMPACT_MULTIPLIER_DEFAULT;
   if (key === 'wallHeightM') return arenaPreset(setup.arena.presetId).geometry.wallHeightM;
   if (key === 'wallRestitution') return arenaPreset(setup.arena.presetId).geometry.wallRestitution;
