@@ -20,7 +20,7 @@ import type { MatchConfig } from '../../config/match/MatchConfig';
 import type { ArenaTheme } from '../../arena/presets/ArenaPresets';
 import type { RoundOutcome } from '../../combat/round-rules/RoundState';
 import type { DebugOverlay } from '../../debug/overlay/DebugOverlay';
-import { buildCombatOverlayFields, type CombatOverlayFields } from '../../debug/overlay/buildOverlayState';
+import { buildCombatOverlayFields } from '../../debug/overlay/buildOverlayState';
 import type { AttackProfileSettingsPanel } from '../../debug/settings/AttackProfileSettingsPanel';
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { KeyboardController } from '../../input/devices/KeyboardController';
@@ -126,7 +126,6 @@ export class MatchRunner {
   private readonly loop: FixedTimestepLoop;
   private roundOverReported = false;
   private presentation: MatchPresentation = { cameraEffects: true, trails: true };
-  private overlayFields: CombatOverlayFields | null = null;
   private readonly frameLimiter = new FrameLimiter(DEFAULT_FRAME_LIMIT);
   private readonly adaptive: AdaptiveResolution;
   /** Frame time (scaled by the game speed) of frames the limiter skipped: handed to the next drawn one, so effects keep pace. */
@@ -162,7 +161,6 @@ export class MatchRunner {
         const { firstActions } = launching ? { firstActions: this.tickLaunch() } : session.tick();
         if (firstActions.pressedThisFrame.has(Action.DebugToggle)) debugOverlay.toggle();
         if (firstActions.pressedThisFrame.has(Action.SettingsToggle)) attackProfileSettingsPanel.toggle();
-        this.overlayFields = launching ? null : buildCombatOverlayFields(session);
         this.events.onTick?.(session, firstActions);
         if (launching && this.launch?.finished) this.endLaunch();
         if (!this.roundOverReported && session.roundState.isOver) {
@@ -195,7 +193,9 @@ export class MatchRunner {
         session.renderFrame(frameDeltaSeconds, appRenderer.camera, this.renderView());
         appRenderer.render();
         this.events.onFrame?.(session, frameDeltaSeconds);
-        if (this.overlayFields) {
+        // The overlay's ~60 fields are built only while it is up, once per drawn frame (0.62.0; they used to be built on every tick).
+        const overlayFields = debugOverlay.isVisible() && !this.isLaunching() ? buildCombatOverlayFields(session) : null;
+        if (overlayFields) {
           debugOverlay.update({
             fps: frameDeltaSeconds > 0 ? 1 / frameDeltaSeconds : 0,
             frameTimeMs: frameDeltaSeconds * 1000,
@@ -203,7 +203,7 @@ export class MatchRunner {
             tickIndex: session.getTickIndex(),
             seedText: session.rngStreams.rootSeedText,
             gameState: stateMachine.getCurrentState(),
-            ...this.overlayFields,
+            ...overlayFields,
           });
         }
       },
