@@ -12,14 +12,14 @@
 import * as THREE from 'three';
 import { DEFAULT_AI_DIFFICULTY_PROFILE } from '../../ai/difficulty/AiDifficultyProfile';
 import { aiDifficultyTier } from '../../ai/difficulty/AiDifficultyTiers';
-import { LaunchCamera } from '../../camera/launch/LaunchCamera';
+import { LaunchCamera, type LaunchShot } from '../../camera/launch/LaunchCamera';
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { launchArenaOf, launchShapeOf } from '../../launch/applyLaunchArrival';
 import { planAiLaunch } from '../../launch/LaunchAiPolicy';
-import { defaultLaunchTarget } from '../../launch/LaunchGeometry';
+import { defaultLaunchTarget, launcherForward, launcherRight } from '../../launch/LaunchGeometry';
 import type { LaunchResult } from '../../launch/LaunchResult';
 import { LaunchSequence, type LaunchDriver } from '../../launch/LaunchSequence';
-import { LAUNCH_SIDES, LAUNCH_TUNING, type LaunchSide } from '../../launch/LaunchTuning';
+import { LAUNCH_SIDES, LAUNCH_TUNING, launchOutcomeFor, type LaunchSide } from '../../launch/LaunchTuning';
 import { LaunchRig } from '../../presentation/launchRig';
 import { SeededRng } from '../../rng/SeededRng';
 import { normalizeSeedText } from '../../rng/stringSeed';
@@ -108,7 +108,8 @@ export class LaunchFlow {
     });
     this.people = LAUNCH_SIDES.filter((s) => drivers[s].kind === 'person');
     this.rig = new LaunchRig(session.getSceneRoot(), arena, { first: deps.accentsCss.first, second: deps.accentsCss.second });
-    this.camera = new LaunchCamera(this.sequence, this.people[0] ?? 'first');
+    const cameraSide: LaunchSide = this.people[0] ?? 'first';
+    this.camera = new LaunchCamera(() => this.shotFor(cameraSide));
     this.hud = new LaunchHud(deps.mount, {
       accentCss: this.people[0] === 'second' ? deps.accentsCss.second : deps.accentsCss.first,
       onLaunch: () => {
@@ -125,6 +126,23 @@ export class LaunchFlow {
 
   get finished(): boolean {
     return this.sequence.done;
+  }
+
+  /** The launch as the camera needs it, as plain numbers (the camera imports nothing of the launch). */
+  private shotFor(side: LaunchSide): LaunchShot {
+    const seq = this.sequence;
+    const other: LaunchSide = side === 'first' ? 'second' : 'first';
+    const plan = seq.getFlightPlan(side);
+    const result = seq.getResult();
+    return {
+      phase: seq.currentPhase,
+      own: seq.getPose(side).position,
+      other: seq.getPose(other).position,
+      forward: launcherForward(side),
+      right: launcherRight(side),
+      travel: plan ? { x: plan.end.x - plan.start.x, z: plan.end.z - plan.start.z } : null,
+      power: result ? launchOutcomeFor(result[side].quality).power : 0,
+    };
   }
 
   /** True while a person still has to decide something: the match must not time out their launch for them. */

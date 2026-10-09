@@ -410,6 +410,7 @@ export class MatchSession {
     if (options.launch) {
       applyLaunchArrivals(this.match.first, this.match.second, options.launch);
       this.launchResult = options.launch;
+      this.recordLaunch(options.launch);
     }
     if (this.match.rails.length > 0) {
       const railFloor = arenaFloorOf(resolveMatchConfig(options.matchConfig));
@@ -551,6 +552,16 @@ export class MatchSession {
     applyLaunchArrivals(this.match.first, this.match.second, result);
     this.launchResult = result;
     this.lastVelocity = { first: copy3(this.match.first.body.linvel()), second: copy3(this.match.second.body.linvel()) };
+    this.recordLaunch(result);
+  }
+
+  private recordLaunch(result: LaunchResult): void {
+    this.telemetry.setCurrentTick(0);
+    this.telemetry.record({
+      kind: TelemetryEventKind.Launch,
+      first: { x: result.first.target.x, z: result.first.target.z, quality: result.first.quality },
+      second: { x: result.second.target.x, z: result.second.target.z, quality: result.second.quality },
+    });
   }
 
   /**

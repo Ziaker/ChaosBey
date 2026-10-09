@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './support/launchFixture';
 import { GAME_DEFAULTS } from './gameDefaults';
 
 // The normal game (0.16.0): no query string at all. The five approved

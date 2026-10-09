@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/launchFixture';
 
 test('production build boots under /ChaosBey/ to the Main Menu, PLAY starts the match, no fatal errors', async ({ page }) => {
   const consoleErrors: string[] = [];

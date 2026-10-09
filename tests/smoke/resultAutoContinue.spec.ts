@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './support/launchFixture';
 import { baselineUrl } from './presentationBaseline';
 
 // Owner playtest (after M11): after WIN / LOSE / DRAW the result's own

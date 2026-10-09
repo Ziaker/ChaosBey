@@ -30,6 +30,8 @@ export enum TelemetryEventKind {
   ClashResult = 'ClashResult',
   ClashEnd = 'ClashEnd',
   AiDecision = 'AiDecision',
+  /** Launch System A: the round began with a launch (the entry point and timing each side chose). */
+  Launch = 'Launch',
   /** A Debug Lab mutation (teleport, set resource, forced input...) — the run is no longer a pure seed replay from here on. */
   DebugMutation = 'DebugMutation',
 }
@@ -109,6 +111,13 @@ export interface RingOutTelemetryEvent extends TelemetryEventBase {
 export interface KoEvent extends TelemetryEventBase {
   kind: TelemetryEventKind.Ko;
   targetIsFirst: boolean;
+}
+
+/** Launch System A (0.61.0): the launch the round began with — where each Bey entered and how well its release was timed (0..1). */
+export interface LaunchTelemetryEvent extends TelemetryEventBase {
+  kind: TelemetryEventKind.Launch;
+  first: { x: number; z: number; quality: number };
+  second: { x: number; z: number; quality: number };
 }
 
 export interface RoundEndEvent extends TelemetryEventBase {
@@ -196,6 +205,7 @@ export type TelemetryEvent =
   | RingOutTelemetryEvent
   | KoEvent
   | RoundEndEvent
+  | LaunchTelemetryEvent
   | DodgedEvent
   | PerfectDodgeEvent
   | ClashStartEvent

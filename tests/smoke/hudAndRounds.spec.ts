@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './support/launchFixture';
 import { baselineUrl } from './presentationBaseline';
 import { ROUND_WALL_TIMEOUT_MS, describeRun, playRoundToEnd } from './support/playRoundToEnd';
 import { GAME_DEFAULTS } from './gameDefaults';

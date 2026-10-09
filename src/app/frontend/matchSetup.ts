@@ -213,8 +213,6 @@ function classicMatchConfigFor(setup: MatchSetup): MatchConfig {
     arenaWallRestitution: setup.arena.geometry.wallRestitution,
     arenaFloor: setup.arena.geometry.floor ?? DEFAULT_ARENA_FLOOR,
     motion: setup.motion ?? DEFAULT_MOTION_DIRECTION,
-    // Owner, 2026-10-07: a round starts with the Launch System A (docs/design-decisions/launch-system-approval.md). Not a rule the Pregame changes.
-    launchSequence: true,
     ...sanitizeMatchRules({ ...defaultMatchRules(), ...(setup.rules ?? {}) }),
   });
 }

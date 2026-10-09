@@ -114,7 +114,7 @@ describe('the launch in the session', () => {
     expect(plain.getLaunchResult()).toBeNull();
     const t = plain.getBey('first').body.translation();
     expect(Math.abs(t.z)).toBeLessThan(10); // the opening spawns, in the basin
-    expect(createDefaultMatchConfig().launchSequence).toBe(false); // only the player flow turns the interactive launch on
+    expect(createDefaultMatchConfig().launchSequence).toBe(true); // the flag the player flow reads; the session itself only takes a result
     plain.dispose();
   });
 });

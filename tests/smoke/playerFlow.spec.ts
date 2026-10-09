@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/launchFixture';
 import { BASELINE_MENU_URL, baselineUrl } from './presentationBaseline';
 import { showControl } from './support/pregameAdvanced';
 import { ROUND_WALL_TIMEOUT_MS, describeRun, playRoundToEnd } from './support/playRoundToEnd';

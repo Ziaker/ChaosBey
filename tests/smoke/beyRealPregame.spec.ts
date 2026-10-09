@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/launchFixture';
 import { baselineUrl } from './presentationBaseline';
 
 // Owner, 2026-10-09: Bey Real in the Pregame — a switch, the three cameras, the "avançadamente avançado" block with every slider

@@ -9,9 +9,23 @@
 
 import * as THREE from 'three';
 import type { ExternalCamera, ExternalCameraFrame } from '../real/RealCameras';
-import { launcherForward, launcherRight } from '../../launch/LaunchGeometry';
-import type { LaunchSequence } from '../../launch/LaunchSequence';
-import { launchOutcomeFor, type LaunchSide } from '../../launch/LaunchTuning';
+
+/** What the camera needs to know about the launch, as plain numbers: it never touches the launch's own objects. */
+export interface LaunchShot {
+  readonly phase: 'mounted' | 'armed' | 'release' | 'flight' | 'landed';
+  /** The Bey the first shot sits behind, and the other one (m). */
+  readonly own: { readonly x: number; readonly y: number; readonly z: number };
+  readonly other: { readonly x: number; readonly y: number; readonly z: number };
+  /** The launcher's forward axis (toward the arena's centre) and its right-hand side on a screen that looks along it. */
+  readonly forward: { readonly x: number; readonly z: number };
+  readonly right: { readonly x: number; readonly z: number };
+  /** Horizontal direction of the person's flight (start → end), once released. */
+  readonly travel: { readonly x: number; readonly z: number } | null;
+  /** 0..1: how powerful the person's launch was (widens the chase's field of view), once released. */
+  readonly power: number;
+}
+
+export type LaunchShotSource = () => LaunchShot;
 
 const SET_FOV_DEG = 52;
 const FLIGHT_FOV_DEG = 62;
@@ -46,21 +60,11 @@ export class LaunchCamera implements ExternalCamera {
   readonly lastFocus = new THREE.Vector3();
   lastFovDeg = SET_FOV_DEG;
 
-  constructor(
-    private readonly sequence: LaunchSequence,
-    /** The side whose launcher the first shot sits behind (the person's). */
-    private readonly side: LaunchSide,
-  ) {}
+  constructor(private readonly shot: LaunchShotSource) {}
 
   apply(camera: THREE.PerspectiveCamera, frame: ExternalCameraFrame): void {
     const dt = Math.max(0, frame.dt);
-    const seq = this.sequence;
-    const own = seq.getPose(this.side).position;
-    const otherSide: LaunchSide = this.side === 'first' ? 'second' : 'first';
-    const other = seq.getPose(otherSide).position;
-    const phase = seq.currentPhase;
-    const f = launcherForward(this.side);
-    const right = launcherRight(this.side);
+    const { own, other, phase, forward: f, right, travel: flightTravel, power } = this.shot();
     const desiredEye = new THREE.Vector3();
     const desiredFocus = new THREE.Vector3();
     let desiredFov = SET_FOV_DEG;
@@ -72,15 +76,13 @@ export class LaunchCamera implements ExternalCamera {
       desiredFocus.set(own.x + f.x * SET_LOOK_AHEAD_M, own.y - SET_LOOK_DOWN_M, own.z + f.z * SET_LOOK_AHEAD_M);
       desiredFov = SET_FOV_DEG;
     } else if (phase === 'release' || phase === 'flight') {
-      const plan = seq.getFlightPlan(this.side);
       const mid = new THREE.Vector3(own.x, own.y, own.z).lerp(new THREE.Vector3(other.x, other.y, other.z), FLIGHT_MID_SHARE);
-      const travel = plan ? new THREE.Vector3(plan.end.x - plan.start.x, 0, plan.end.z - plan.start.z).normalize() : new THREE.Vector3(f.x, 0, f.z);
+      const travel = new THREE.Vector3(flightTravel?.x ?? f.x, 0, flightTravel?.z ?? f.z).normalize();
       desiredEye.set(own.x - travel.x * FLIGHT_BEHIND_M + right.x * FLIGHT_RIGHT_M, own.y + FLIGHT_UP_M, own.z - travel.z * FLIGHT_BEHIND_M + right.z * FLIGHT_RIGHT_M);
       desiredFocus.set(mid.x, mid.y + 0.5, mid.z);
-      const quality = seq.getResult()?.[this.side].quality ?? 0;
-      desiredFov = FLIGHT_FOV_DEG + launchOutcomeFor(quality).power * FLIGHT_FOV_POWER_DEG;
+      desiredFov = FLIGHT_FOV_DEG + power * FLIGHT_FOV_POWER_DEG;
       rate = FOLLOW_RATE_FLIGHT_PER_S;
-      if (this.lastPhase !== 'release' && phase === 'release') this.shake = 0.14 + launchOutcomeFor(quality).power * 0.18; // the kick of the release
+      if (this.lastPhase !== 'release' && phase === 'release') this.shake = 0.14 + power * 0.18; // the kick of the release
     } else {
       // Landed: the duel frame, from the side, between the two Beys.
       const target = new THREE.Vector3(own.x, own.y, own.z).lerp(new THREE.Vector3(other.x, other.y, other.z), 0.52);

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './support/launchFixture';
 import { baselineUrl } from './presentationBaseline';
 import * as fs from 'fs';
 
