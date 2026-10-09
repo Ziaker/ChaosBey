@@ -17,7 +17,9 @@ import { LAUNCH_SIDES, LAUNCH_TUNING, launchGrade, launchOutcomeFor, markerAt, t
 export type LaunchPhase = 'mounted' | 'armed' | 'release' | 'flight' | 'landed';
 
 /** Who decides a side's launch: a person (moves the point, presses LAUNCH) or the match itself (a prepared plan, e.g. the AI's). */
-export type LaunchDriver = { readonly kind: 'person' } | { readonly kind: 'plan'; readonly target: GroundPoint; readonly quality: number };
+export type LaunchDriver =
+  | { readonly kind: 'person' }
+  | { readonly kind: 'plan'; readonly target: GroundPoint; readonly quality: number; /** Extra seconds before the Bey leaves its launcher (the AI lets go a beat early or late). */ readonly releaseLagS?: number };
 
 export interface LaunchSideSetup {
   readonly driver: LaunchDriver;
@@ -102,7 +104,7 @@ export class LaunchSequence {
     const runtimeFor = (side: LaunchSide): SideRuntime => {
       const driver = this.setup[side].driver;
       const target = driver.kind === 'plan' ? clampLaunchTarget(driver.target, this.arena, side) : defaultLaunchTarget(side, this.arena);
-      return { target, pressed: false, quality: null, plan: null, delayS: side === 'second' ? LAUNCH_TUNING.secondLeadS : 0, landed: false };
+      return { target, pressed: false, quality: null, plan: null, delayS: (side === 'second' ? LAUNCH_TUNING.secondLeadS : 0) + (driver.kind === 'plan' ? Math.max(0, driver.releaseLagS ?? 0) : 0), landed: false };
     };
     this.runtime = { first: runtimeFor('first'), second: runtimeFor('second') };
     this.poses = { first: this.mountedPose('first'), second: this.mountedPose('second') };

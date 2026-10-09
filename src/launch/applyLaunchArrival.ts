@@ -14,9 +14,14 @@ import { launchArrivals, type LaunchArrival, type LaunchBeyShape, type LaunchRes
 import type { LaunchSide } from './LaunchTuning';
 
 /** The arena a match is played on, as the launch needs it: the match's floor profile and the current stage radius. */
-export function launchArenaOf(floor: Bey['arenaFloor']): LaunchArena {
-  return { floor, floorRadiusM: arenaFloorRadius() };
+export function launchArenaOf(floor: Bey['arenaFloor'], presetId?: string): LaunchArena {
+  const floorRadiusM = arenaFloorRadius();
+  // The Tournament Stadium has a deck between its wall and its stands: the launchers stand on it, outside the wall.
+  return presetId === 'tournament' ? { floor, floorRadiusM, launcherRadiusM: floorRadiusM + STADIUM_LAUNCHER_OUTSIDE_WALL_M } : { floor, floorRadiusM };
 }
+
+/** From the wall to the launcher's centre on the Stadium's deck: the base (3.5 m deep, its front 2.3 m ahead of the centre) clears the wall. */
+export const STADIUM_LAUNCHER_OUTSIDE_WALL_M = 2.6;
 
 export function launchShapeOf(bey: Bey): LaunchBeyShape {
   return { colliderHalfHeightM: bey.definition.physical.colliderHalfHeightM, colliderRadiusM: bey.definition.physical.colliderRadiusM };

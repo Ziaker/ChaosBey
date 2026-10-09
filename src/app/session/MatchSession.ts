@@ -232,6 +232,13 @@ export class MatchSession {
   private presentationFloorAt: ((x: number, z: number) => number) | null = null;
   /** The approved Clash Overdrive presentation, attached only with the `clashPresentation` flag (render only). */
   private clashPresentation: ClashPresentationSystem | null = null;
+  private arenaPresetId: string = FOUNDRY_PIT.id;
+
+  /** The arena preset this match is played on (its theme's id; the Foundry Pit when none was given). */
+  getArenaPresetId(): string {
+    return this.arenaPresetId;
+  }
+
   /** The approved arena art, attached only with the `arenaVisuals` flag (render only; colliders untouched). */
   private arenaVisuals: ArenaVisualsSystem | null = null;
   /** Owner playtest (after M11): skid marks, sparks and grip-regain ring while a Bey drifts. Render only. */
@@ -441,6 +448,7 @@ export class MatchSession {
     this.impactFeedback.effectScale = effectScale;
     this.impactFeedback.effectSize = options.vfx?.effectSize ?? 1;
     const theme = options.arenaTheme ?? FOUNDRY_PIT.theme;
+    this.arenaPresetId = ARENA_PRESETS.find((preset) => preset.theme === theme)?.id ?? FOUNDRY_PIT.id;
     const floorAt = (x: number, z: number): number => floorHeightAt(arenaFloor, x, z);
     this.presentationFloorAt = floorAt;
     this.driftVfx = { first: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt, effectScale), second: new DriftVfx(theme.sparkHotHex, theme.sparkCoolHex, floorAt, effectScale) };

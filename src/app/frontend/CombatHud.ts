@@ -237,6 +237,11 @@ export class CombatHud {
    */
   private updateRingOutWarning(session: MatchSession): void {
     if (!this.feel.ringOutWarning) return;
+    // Mounted in a launcher (the Stadium's stand outside the wall) is not leaving the arena.
+    if (this.waitingForFight) {
+      this.ringOutVignette.style.opacity = '0';
+      return;
+    }
     const bey = session.getBey('first');
     // Out over the wall on a rail is the ride, not a danger (the ring-out clock does not run there).
     if (bey.rail.isOnRail()) {

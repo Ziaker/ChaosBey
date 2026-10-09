@@ -33,7 +33,6 @@
 
 import type { Bey } from '../../bey/core/Bey';
 import { WOBBLE_ENERGY_MAX } from '../../bey/spin/SpinTuning';
-import { STABILITY_BROKEN_RECOVERY_FLOOR } from '../../bey/stability/StabilityTuning';
 import { ARENA_FLOOR_RADIUS, ARENA_WALL_HEIGHT, ARENA_WALL_THICKNESS, arenaFloorRadius } from '../../arena/colliders/ArenaTuning';
 import { floorRimHeight } from '../../arena/floor/ArenaFloorProfile';
 import { arenaFloorOf, type MatchConfig } from '../../config/match/MatchConfig';
@@ -318,9 +317,9 @@ export class MatchAnomalyDetector {
         if (this.latch(key(`resource-${name}`), bad)) emit('resource-out-of-range', side, `${name} = ${resource.value} outside [0, ${resource.max}]`);
       }
 
-      const brokenAboveFloor = bey.stability.isBroken && bey.stability.resource.value >= STABILITY_BROKEN_RECOVERY_FLOOR;
+      const brokenAboveFloor = bey.stability.isBroken && bey.stability.resource.value >= bey.stability.recoveryFloor;
       if (this.latch(key('broken'), brokenAboveFloor)) {
-        emit('state-contradiction', side, `Broken with Stability ${bey.stability.resource.value.toFixed(2)} ≥ recovery floor ${STABILITY_BROKEN_RECOVERY_FLOOR}`);
+        emit('state-contradiction', side, `Broken with Stability ${bey.stability.resource.value.toFixed(2)} ≥ recovery floor ${bey.stability.recoveryFloor}`);
       }
 
       if (this.streak(key('dodging'), bey.dodge.getState() === DodgeState.Dodging, t.maxDodgingTicks, frozen)) {

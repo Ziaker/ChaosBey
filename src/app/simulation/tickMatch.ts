@@ -415,7 +415,7 @@ export function tickMatch(
     dodgeOverride: firstDodge.dodgeOverride,
     floorNormal: floorNormalUnder(first, firstGrounded),
     railOverride: firstRail.override,
-    real: realInputOf(first, firstAttack.state),
+    real: realInputOf(first),
   });
   second.movement.applyPreStep(second.body, {
     actions: secondActions,
@@ -430,7 +430,7 @@ export function tickMatch(
     dodgeOverride: secondDodge.dodgeOverride,
     floorNormal: floorNormalUnder(second, secondGrounded),
     railOverride: secondRail.override,
-    real: realInputOf(second, secondAttack.state),
+    real: realInputOf(second),
   });
 
   first.spin.tick(first.body, fixedDeltaSeconds, firstCondition, firstGrounded, firstDrift.driftState === DriftState.Drifting ? first.movement.getHeadingRad() : null, axisCondition(first));
@@ -945,13 +945,12 @@ export function tickMatch(
  */
 /** The lower of a Bey's Stamina and Stability fractions: what the render-only axis wobble/precession ramp reads (Lote 6). */
 /** Bey Real: what the motion model reads from the Bey's other systems this tick (null in the classic game). */
-function realInputOf(bey: Bey, attackState: AttackState): { spin: number; broken: boolean; stability: number; charging: boolean } | null {
+function realInputOf(bey: Bey): { spin: number; broken: boolean; stability: number } | null {
   if (!bey.rules.real) return null;
   return {
     spin: bey.stamina.resource.fraction,
     broken: bey.stability.isBroken,
     stability: bey.stability.resource.fraction * 100,
-    charging: attackState === AttackState.ChargingDash,
   };
 }
 

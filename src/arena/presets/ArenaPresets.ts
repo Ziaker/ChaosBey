@@ -70,7 +70,7 @@ export interface ArenaPreset {
 export const STANDARD_ARENA_GEOMETRY: ArenaGeometry = { wallHeightM: ARENA_WALL_HEIGHT, wallRestitution: 0.8 };
 
 /** Slider ranges on the Pregame screen. */
-export const ARENA_WALL_HEIGHT_RANGE = { min: 0.6, max: 3, step: 0.2 } as const;
+export const ARENA_WALL_HEIGHT_RANGE = { min: 0.6, max: 10, step: 0.2 } as const;
 export const ARENA_WALL_BOUNCE_RANGE = { min: 0.2, max: 0.9, step: 0.05 } as const;
 
 export const FOUNDRY_PIT: ArenaPreset = {

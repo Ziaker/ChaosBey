@@ -18,7 +18,7 @@ import { DodgeController } from '../../dodge/DodgeController';
 import { DriftController } from '../../drift/DriftController';
 import { MovementController } from '../movement/MovementController';
 import { SpinController } from '../spin/SpinController';
-import { StabilitySystem } from '../stability/StabilitySystem';
+import { StabilitySystem, stabilityScalesOf } from '../stability/StabilitySystem';
 import { StaminaSystem } from '../stamina/StaminaSystem';
 import { MomentumSystem } from '../momentum/MomentumSystem';
 import { RailController } from '../../arena/rails/RailController';
@@ -100,7 +100,7 @@ export function createBey(
     drift: new DriftController(movement.getLateralGripPerS(), matchRules),
     dodge: new DodgeController(rules.dodgeCooldownS, rules.dodgeStaminaCost ?? DODGE_STAMINA_COST, rules.dodgeDistanceScale ?? 1, matchRules !== undefined, matchRules !== undefined ? (rules.airRecoveryMinDelayS ?? 0) : null, rules.real ? dodgeTuningOf(rules.real) : undefined),
     stamina: new StaminaSystem(stats.stamina, rules.movementStaminaDrain, rules.spinStaminaDrain ?? 1, rules.real ? realSpinDrainOf(rules.real) : null),
-    stability: new StabilitySystem(rules.real ? stabilityRecoveryOf(rules.real) : undefined),
+    stability: new StabilitySystem(rules.real ? stabilityRecoveryOf(rules.real) : undefined, stabilityScalesOf(rules)),
     attack: new AttackController(rules.real ? attackProfileOf(definition.attack, rules.real) : definition.attack, rules.dashCooldownS, rules.dashCarriesSpeed ?? false, rules.topSpeedScale ?? 1, rules.circularAttack ?? true, rules.real ? attackTuningOf(rules.real) : undefined),
     momentum: new MomentumSystem(rules),
     // A short hop's launch speed, from the Bey's own jump rules: what a Jump press gives when it leaves a rail.

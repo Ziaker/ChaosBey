@@ -35,10 +35,49 @@ export const DEFAULT_STABILITY_RECOVERY: StabilityRecoveryTuning = {
   brokenDurationS: null,
 };
 
-export class StabilitySystem {
-  readonly resource = new Resource(STABILITY_MAX);
+/** The Pregame's Stability scales (MatchConfig.stability*Scale): 1 everywhere = the game as it was. */
+export interface StabilityScales {
+  readonly maxScale: number;
+  readonly damageScale: number;
+  readonly recoveryScale: number;
+  readonly recoveryDelayScale: number;
+}
 
-  constructor(private readonly recovery: StabilityRecoveryTuning = DEFAULT_STABILITY_RECOVERY) {}
+export const DEFAULT_STABILITY_SCALES: StabilityScales = { maxScale: 1, damageScale: 1, recoveryScale: 1, recoveryDelayScale: 1 };
+
+/** The Stability scales a match's rules carry (anything missing = 1: a bare construction or an older config). */
+export function stabilityScalesOf(rules: {
+  readonly stabilityMaxScale?: number;
+  readonly stabilityDamageScale?: number;
+  readonly stabilityRecoveryScale?: number;
+  readonly stabilityRecoveryDelayScale?: number;
+} | undefined): StabilityScales {
+  return {
+    maxScale: rules?.stabilityMaxScale ?? 1,
+    damageScale: rules?.stabilityDamageScale ?? 1,
+    recoveryScale: rules?.stabilityRecoveryScale ?? 1,
+    recoveryDelayScale: rules?.stabilityRecoveryDelayScale ?? 1,
+  };
+}
+
+export class StabilitySystem {
+  readonly resource: Resource;
+  /** Stability the Bey climbs back to when it leaves Broken (scales with the maximum). */
+  readonly recoveryFloor: number;
+  private readonly recovery: StabilityRecoveryTuning;
+  private readonly damageScale: number;
+
+  constructor(recovery: StabilityRecoveryTuning = DEFAULT_STABILITY_RECOVERY, private readonly scales: StabilityScales = DEFAULT_STABILITY_SCALES) {
+    const maxScale = Math.max(0.01, scales.maxScale);
+    this.resource = new Resource(STABILITY_MAX * maxScale);
+    this.recoveryFloor = STABILITY_BROKEN_RECOVERY_FLOOR * maxScale;
+    this.damageScale = Math.max(0, scales.damageScale);
+    this.recovery = {
+      recoveryDelayS: recovery.recoveryDelayS * scales.recoveryDelayScale,
+      recoveryPerS: recovery.recoveryPerS * scales.recoveryScale,
+      brokenDurationS: recovery.brokenDurationS === null ? null : recovery.brokenDurationS * scales.recoveryDelayScale,
+    };
+  }
 
   /** Seconds since the last Stability damage (Infinity if never hit) — Debug Lab inspection only (GDD section 69). */
   getTimeSinceLastDamageS(): number {
@@ -58,14 +97,14 @@ export class StabilitySystem {
     if (this.broken) {
       if (this.recovery.brokenDurationS !== null) {
         if (this.timeSinceLastDamageS >= this.recovery.brokenDurationS) {
-          this.resource.set(Math.max(this.resource.value, STABILITY_BROKEN_RECOVERY_FLOOR));
+          this.resource.set(Math.max(this.resource.value, this.recoveryFloor));
           this.broken = false;
         }
         return;
       }
-      if (this.timeSinceLastDamageS >= STABILITY_BROKEN_RECOVERY_DELAY_AFTER_HIT_S) {
+      if (this.timeSinceLastDamageS >= STABILITY_BROKEN_RECOVERY_DELAY_AFTER_HIT_S * this.scales.recoveryDelayScale) {
         this.resource.add(this.recovery.recoveryPerS * fixedDeltaSeconds);
-        if (this.resource.value >= STABILITY_BROKEN_RECOVERY_FLOOR) {
+        if (this.resource.value >= this.recoveryFloor) {
           this.broken = false;
         }
       }
@@ -81,7 +120,7 @@ export class StabilitySystem {
   applyDamage(amount: number): { causedBreak: boolean; isQualifyingKoHit: boolean } {
     const wasBrokenBeforeThisHit = this.broken;
     this.timeSinceLastDamageS = 0;
-    this.resource.subtract(amount);
+    this.resource.subtract(amount * this.damageScale);
 
     let causedBreak = false;
     if (this.resource.isEmpty && !this.broken) {
@@ -102,7 +141,7 @@ export class StabilitySystem {
   debugSetValue(value: number): void {
     this.resource.set(value);
     if (this.resource.isEmpty) this.broken = true;
-    else if (this.resource.value >= STABILITY_BROKEN_RECOVERY_FLOOR) this.broken = false;
+    else if (this.resource.value >= this.recoveryFloor) this.broken = false;
   }
 
   /** Only round-rules calls this, once a KO has actually been resolved — resets Broken for the next round. */

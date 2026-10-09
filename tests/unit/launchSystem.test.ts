@@ -10,6 +10,7 @@ import { ACE_TIER, ROOKIE_TIER } from '../../src/ai/difficulty/AiDifficultyTiers
 import { INTENDED_MAX_SPEED_MPS } from '../../src/bey/movement/MovementTuning';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { SeededRng } from '../../src/rng/SeededRng';
+import { STADIUM_LAUNCHER_OUTSIDE_WALL_M, launchArenaOf } from '../../src/launch/applyLaunchArrival';
 import { planAiLaunch } from '../../src/launch/LaunchAiPolicy';
 import { clampLaunchTarget, defaultLaunchTarget, flightPlan, flightPose, launcherBase, launcherForward, launcherRight, separateTargets, socketPosition } from '../../src/launch/LaunchGeometry';
 import { launchArrivals, parseLaunchResult, validTargets, type LaunchResult } from '../../src/launch/LaunchResult';
@@ -339,6 +340,26 @@ describe('the sequence', () => {
   });
 });
 
+describe('where the launchers stand', () => {
+  it('on the floor at the prototype\'s radius, except on the Tournament Stadium, where they stand on the deck outside the wall', () => {
+    const plain = launchArenaOf(FLOOR, 'foundry');
+    expect(plain.launcherRadiusM).toBeUndefined();
+    expect(Math.abs(launcherBase('first', plain).z)).toBeCloseTo(ARENA_FLOOR_RADIUS * LAUNCH_TUNING.launcherRadiusShare, 6);
+    const stadium = launchArenaOf(FLOOR, 'tournament');
+    expect(Math.abs(launcherBase('first', stadium).z)).toBeCloseTo(ARENA_FLOOR_RADIUS + STADIUM_LAUNCHER_OUTSIDE_WALL_M, 6);
+    expect(launcherBase('first', stadium).z).toBeLessThan(0);
+    expect(launcherBase('second', stadium).z).toBeGreaterThan(0);
+  });
+
+  it('the arrival never depends on it: the same result lands the same Bey on every stage', () => {
+    const result: LaunchResult = { first: { target: { x: 3, z: -6 }, quality: 0.8 }, second: { target: { x: -2, z: 9 }, quality: 0.6 } };
+    const shape = { colliderHalfHeightM: 0.6, colliderRadiusM: 0.9 };
+    const a = launchArrivals(result, launchArenaOf(FLOOR, 'foundry'), { first: shape, second: shape });
+    const b = launchArrivals(result, launchArenaOf(FLOOR, 'tournament'), { first: shape, second: shape });
+    expect(b).toEqual(a);
+  });
+});
+
 describe('the AI launch policy', () => {
   const plan = (seed: string, personality = ATTACK_AI_PERSONALITY, tier = ACE_TIER) => planAiLaunch('second', ARENA, SeededRng.fromSeedText(seed), personality, tier.profile);
 
@@ -369,6 +390,20 @@ describe('the AI launch policy', () => {
       defenseR += Math.hypot(d.target.x, d.target.z);
     }
     expect(attackR).toBeLessThan(defenseR);
+  });
+
+  it('varies a lot from round to round: targets spread over the half, qualities over the whole range, and the release lags', () => {
+    const plans = Array.from({ length: 200 }, (_, i) => plan(`v${i}`, ATTACK_AI_PERSONALITY, ACE_TIER));
+    const xs = plans.map((p) => p.target.x);
+    const radii = plans.map((p) => Math.hypot(p.target.x, p.target.z));
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(ARENA.floorRadiusM * 0.6); // well out to both sides
+    expect(Math.max(...radii) - Math.min(...radii)).toBeGreaterThan(ARENA.floorRadiusM * 0.3); // close and far
+    expect(plans.some((p) => p.quality < 0.5)).toBe(true); // a weak launch happens even for an Ace
+    expect(plans.some((p) => p.quality >= 0.93)).toBe(true);
+    const lags = plans.map((p) => p.releaseLagS);
+    expect(Math.min(...lags)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...lags)).toBeGreaterThan(0.15);
+    expect(Math.max(...lags)).toBeLessThanOrEqual(0.3);
   });
 
   it('a Rookie times its release worse than an Ace on average, and nobody is perfect every time', () => {

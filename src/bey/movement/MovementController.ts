@@ -105,7 +105,7 @@ export interface MovementPreStepInput {
    * Bey Real (MatchConfig.real): the live state its motion model needs. Present only in a Bey Real match; there the Bey is not
    * driven like a kart but moved by RealMotion's forces (a Dash, a Dodge and a rail still override it as always).
    */
-  real?: { spin: number; broken: boolean; stability: number; charging: boolean } | null;
+  real?: { spin: number; broken: boolean; stability: number } | null;
 }
 
 export interface MovementSnapshot {
@@ -693,7 +693,6 @@ export class MovementController {
       spin: real.spin,
       broken: real.broken,
       stability: real.stability,
-      charging: real.charging,
       airControl: this.airControl,
     });
     let velocity = result.velocity;
