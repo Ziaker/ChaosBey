@@ -116,6 +116,8 @@ export async function buildPlaybackWorld(replay: ChaosBeyReplayV1, beys: { reado
     aiMashSource: new NullAiMashSource(),
     firstDefinition: beys.first,
     secondDefinition: beys.second,
+    // A match that began with a launch starts with both Beys at the arrival the recorded result gives.
+    launch: replay.config.launch ?? null,
   });
   setup?.({ first: world.first, second: world.second });
   return world;

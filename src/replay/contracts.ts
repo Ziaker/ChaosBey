@@ -22,6 +22,7 @@ import type { Action } from '../input/actions/Action';
 import type { MatchConfig } from '../config/match/MatchConfig';
 import type { BeyAttackProfileSettings } from '../config/attack-profile/AttackProfileSettings';
 import type { SpawnPositionM } from '../app/bootstrap/matchSpawns';
+import type { LaunchResult } from '../launch/LaunchResult';
 
 /**
  * Replay file format id new recordings are written in. V2 (M11) adds the
@@ -122,6 +123,12 @@ export interface DeterministicConfigSnapshot {
   readonly spawns: { readonly first: SpawnPositionM; readonly second: SpawnPositionM };
   readonly beys: { readonly first: RecordedBey; readonly second: RecordedBey };
   readonly fixedTicksPerSecond: number;
+  /**
+   * Launch System A (0.61.0): the entry point and timing each side chose before the fight, when the match started with a
+   * launch. Playback puts both Beys at the arrival it computes from them (src/launch/applyLaunchArrival.ts). Absent = the
+   * match started at the spawns, as every match before the Launch System did.
+   */
+  readonly launch?: LaunchResult;
 }
 
 /** General compatibility metadata. A mismatch is reported, never silently ignored (GDD 77). */

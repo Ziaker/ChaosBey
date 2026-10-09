@@ -15,6 +15,7 @@ import type { SpawnPositionM } from '../../app/bootstrap/matchSpawns';
 import type { BeyDefinition } from '../../bey/archetype/BeyDefinition';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
 import type { MatchConfig } from '../../config/match/MatchConfig';
+import type { LaunchResult } from '../../launch/LaunchResult';
 import { FIXED_TICKS_PER_SECOND } from '../../physics/fixed-step/FixedTimestepLoop';
 import { RNG_SCHEME_VERSION, STATE_SCHEMA_VERSION, type DeterministicConfigSnapshot, type RecordedBey } from '../contracts';
 import { plainData } from '../state/CanonicalValue';
@@ -44,6 +45,8 @@ export interface ConfigSnapshotInput {
   readonly spawns: { readonly first: SpawnPositionM; readonly second: SpawnPositionM };
   /** The definitions the match actually used (attack-profile settings already applied). */
   readonly beys: { readonly first: BeyDefinition; readonly second: BeyDefinition };
+  /** The Launch System's result for this match, if it began with a launch. */
+  readonly launch?: LaunchResult | null;
 }
 
 /**
@@ -62,5 +65,6 @@ export function captureDeterministicConfig(input: ConfigSnapshotInput): Determin
     spawns: { first: copy(input.spawns.first), second: copy(input.spawns.second) },
     beys: { first: recordBey(input.beys.first), second: recordBey(input.beys.second) },
     fixedTicksPerSecond: FIXED_TICKS_PER_SECOND,
+    ...(input.launch ? { launch: copy(input.launch) } : {}),
   };
 }
