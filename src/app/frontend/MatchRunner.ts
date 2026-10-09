@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import type { AppRenderer } from '../bootstrap/createRenderer';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
 import { GameState, type GameStateMachine } from '../lifecycle/GameState';
-import { MatchSession } from '../session/MatchSession';
+import { MatchSession, type SessionRenderView } from '../session/MatchSession';
 import type { SideControllerSpec } from '../session/SideControllers';
 import { recordError } from '../modes/appTelemetry';
 import type { BeyAttackProfileSettings } from '../../config/attack-profile/AttackProfileSettings';
@@ -29,7 +29,9 @@ import { createPlayerControl } from '../../input/directional/createPlayerControl
 import { controlSetupFor } from './controlReferences';
 import type { DirectionalController, DirectionalDebug } from '../../input/directional/DirectionalController';
 import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ConditionLayerSetting, type ControlScheme } from '../../config/settings/PlayerSettings';
-import { FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
+import { FIXED_DELTA_SECONDS, FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
+import { screenVectorFromDigital, screenVectorFromStick, screenLength } from '../../input/directional/screenDirection';
+import { LaunchFlow, type LaunchInput } from './LaunchFlow';
 import { AdaptiveResolution } from './adaptiveResolution';
 import { FrameLimiter } from './frameLimiter';
 import { DEFAULT_FRAME_LIMIT, type FrameLimitSetting } from '../../config/settings/FrameLimit';
@@ -62,7 +64,20 @@ export interface MatchRunnerStart {
   readonly controlScheme?: ControlScheme;
   /** Bey Real: which camera the match is watched with. Omit (or `original`) for the game's combat directors. */
   readonly realCamera?: RealCameraMode;
+  /**
+   * Launch System A: where the launch's HUD goes. With `matchConfig.launchSequence` on and a mount given, the round starts
+   * with the launch (mounted Beys, the entry point, Timing Snap, both Beys arriving) and the match's first tick follows the
+   * arrival at once. Omit it and the match starts at once, as quick play and the tests do.
+   */
+  readonly launchMount?: HTMLElement;
+  /** Each Bey's color (CSS) for the launchers. */
+  readonly launchAccents?: { readonly first: string; readonly second: string };
 }
+
+/** After the arrival the launchers, the grade and the wind stay up this long (seconds); the match already runs. */
+const LAUNCH_LINGER_S = 1.4;
+/** The combat camera takes over from the launch's last pose over this long (seconds, presentation only). */
+const CAMERA_BLEND_S = 0.7;
 
 /** Player settings that change how the match is drawn, never what it computes. */
 export interface MatchPresentation {
@@ -100,6 +115,8 @@ export interface MatchRunnerEvents {
   readonly onTick?: (session: MatchSession, firstActions: ControllerActions) => void;
   /** Every rendered frame, after the match drew (HUD interpolation). */
   readonly onFrame?: (session: MatchSession, frameDeltaSeconds: number) => void;
+  /** Once, on the tick the launch ends and the match begins (the same tick the Beys arrive). */
+  readonly onLaunchEnd?: () => void;
 }
 
 export class MatchRunner {
@@ -116,6 +133,12 @@ export class MatchRunner {
   private running = false;
   /** Bey Real: the camera this match is watched with instead of the combat directors; null = the originals. */
   private externalCamera: ExternalCamera | null = null;
+  /** Launch System A: the launch running before the first tick (null once it has ended and its rig is gone, or when the match starts at once). */
+  private launch: LaunchFlow | null = null;
+  /** After the arrival the launchers and the grade stay up for a moment, while the match already runs. */
+  private launchLingerS = 0;
+  /** After the arrival the combat camera takes over from the launch's pose over this long (presentation only). */
+  private cameraBlend: { leftS: number; readonly eye: THREE.Vector3; readonly focus: THREE.Vector3; readonly fovDeg: number } | null = null;
 
   private constructor(
     readonly session: MatchSession,
@@ -132,11 +155,13 @@ export class MatchRunner {
     this.adaptive = new AdaptiveResolution(appRenderer.getRenderScale());
     this.loop = new FixedTimestepLoop({
       onFixedTick: () => {
-        const { firstActions } = session.tick();
+        const launching = this.launch !== null && !this.launch.finished;
+        const { firstActions } = launching ? { firstActions: this.tickLaunch() } : session.tick();
         if (firstActions.pressedThisFrame.has(Action.DebugToggle)) debugOverlay.toggle();
         if (firstActions.pressedThisFrame.has(Action.SettingsToggle)) attackProfileSettingsPanel.toggle();
-        this.overlayFields = buildCombatOverlayFields(session);
+        this.overlayFields = launching ? null : buildCombatOverlayFields(session);
         this.events.onTick?.(session, firstActions);
+        if (launching && this.launch?.finished) this.endLaunch();
         if (!this.roundOverReported && session.roundState.isOver) {
           this.roundOverReported = true;
           this.events.onRoundOver?.(session.roundState.result);
@@ -163,7 +188,8 @@ export class MatchRunner {
           }
         }
         this.lastDrawMs = nowMs;
-        session.renderFrame(frameDeltaSeconds, appRenderer.camera, { cameraView: 'game', cameraEffects: this.presentation.cameraEffects, externalCamera: this.externalCamera ?? undefined });
+        this.frameLaunch(frameDeltaSeconds);
+        session.renderFrame(frameDeltaSeconds, appRenderer.camera, this.renderView());
         appRenderer.render();
         this.events.onFrame?.(session, frameDeltaSeconds);
         if (this.overlayFields) {
@@ -232,9 +258,20 @@ export class MatchRunner {
       renderer: deps.appRenderer.renderer,
     });
     sessionForJumpBuffer = session;
-    // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states).
-    deps.stateMachine.transitionTo(GameState.Combat);
+    const launching = start.matchConfig.launchSequence === true && start.launchMount !== undefined;
+    // A real two-Bey match is running from here (GDD section 9: Combat and RoundEnd are separate states) — after the launch, when the round starts with one.
+    deps.stateMachine.transitionTo(launching ? GameState.Launch : GameState.Combat);
     const runner = new MatchRunner(session, keyboard, gamepad, directional, deps, events, start.matchConfig.gameSpeed ?? 1);
+    if (launching) {
+      runner.launch = new LaunchFlow({
+        session,
+        camera: deps.appRenderer.camera,
+        canvas: deps.appRenderer.renderer.domElement,
+        mount: start.launchMount!,
+        accentsCss: start.launchAccents ?? { first: '#6ee7ff', second: '#ff6b6b' },
+        sampleInput: () => runner.sampleLaunchInput(),
+      });
+    }
     // The arena's sky: the scene's clear color while this match owns the renderer (restored on stop).
     if (start.arenaTheme) {
       runner.savedBackground = deps.appRenderer.scene.background;
@@ -292,8 +329,86 @@ export class MatchRunner {
 
   /** Draws one frame without ticking (behind a pause menu, after a settings change). */
   redraw(): void {
-    this.session.renderFrame(0, this.deps.appRenderer.camera, { cameraView: 'game', cameraEffects: this.presentation.cameraEffects, externalCamera: this.externalCamera ?? undefined });
+    this.session.renderFrame(0, this.deps.appRenderer.camera, this.renderView());
     this.deps.appRenderer.render();
+  }
+
+  /** True while the round's launch is running (the match's first tick has not happened yet). */
+  isLaunching(): boolean {
+    return this.launch !== null && !this.launch.finished;
+  }
+
+  /** The launch in progress (or just ended, for a moment), for the HUD and the tests. */
+  getLaunch(): LaunchFlow | null {
+    return this.launch;
+  }
+
+  // ---- Launch System A: the round start ----
+
+  /** The person's input for one launch tick: the same chain the match reads, and the arrows / stick as a screen vector. */
+  sampleLaunchInput(): LaunchInput {
+    const actions = this.directional.sampleActions({ fixedDeltaSeconds: FIXED_DELTA_SECONDS });
+    const stickAxes = this.gamepad.getStick();
+    const stick = screenVectorFromStick(stickAxes[0], stickAxes[1]);
+    let aim = screenVectorFromDigital(
+      actions.held.has(Action.MoveForward),
+      actions.held.has(Action.MoveBackward),
+      actions.held.has(Action.SteerLeft),
+      actions.held.has(Action.SteerRight),
+    );
+    // Under directional control the arrows were turned into a world intent and MoveForward/Backward dropped from `held`: its own screen vector is the aim.
+    if (this.directional.isEnabled()) aim = this.directional.getDebug().screen;
+    if (screenLength(stick) > 0) aim = stick;
+    return { actions, aim };
+  }
+
+  /** One fixed tick of the launch: no simulation runs, so no tick index advances. */
+  private tickLaunch(): ControllerActions {
+    const actions = this.launch!.tick();
+    if (actions.pressedThisFrame.has(Action.DebugToggle)) this.deps.debugOverlay.toggle();
+    if (actions.pressedThisFrame.has(Action.SettingsToggle)) this.deps.attackProfileSettingsPanel.toggle();
+    return actions;
+  }
+
+  /** The tick the last Bey touches down: the result goes to the match, which runs from the next tick — no countdown, no hold. */
+  private endLaunch(): void {
+    const launch = this.launch!;
+    this.session.applyLaunchResult(launch.getResult());
+    this.deps.stateMachine.transitionTo(GameState.Combat);
+    this.launchLingerS = LAUNCH_LINGER_S;
+    this.cameraBlend = { leftS: CAMERA_BLEND_S, eye: launch.camera.lastEye.clone(), focus: launch.camera.lastFocus.clone(), fovDeg: launch.camera.lastFovDeg };
+    this.events.onLaunchEnd?.();
+  }
+
+  /** Per rendered frame: the launch's rig, HUD and spin; once it is over, the moment it lingers and the camera hand-over. */
+  private frameLaunch(frameDeltaSeconds: number): void {
+    const launch = this.launch;
+    if (!launch) return;
+    launch.frame(frameDeltaSeconds);
+    if (launch.finished) {
+      this.launchLingerS -= frameDeltaSeconds;
+      if (this.launchLingerS <= 0) {
+        launch.dispose();
+        this.launch = null;
+      }
+    }
+    if (this.cameraBlend) {
+      this.cameraBlend.leftS -= frameDeltaSeconds;
+      if (this.cameraBlend.leftS <= 0) this.cameraBlend = null;
+    }
+  }
+
+  /** How the session is drawn this frame: the launch's camera while it runs, the combat camera (blended from the launch's) after. */
+  private renderView(): SessionRenderView {
+    const launch = this.launch;
+    const base = { cameraView: 'game' as const, cameraEffects: this.presentation.cameraEffects };
+    if (launch && !launch.finished) return { ...base, externalCamera: launch.camera, headingArrow: false };
+    const blend = this.cameraBlend;
+    if (blend) {
+      const t = Math.max(0, Math.min(1, blend.leftS / CAMERA_BLEND_S));
+      return { ...base, externalCamera: this.externalCamera ?? undefined, cameraBlend: { weight: t * t * (3 - 2 * t), eye: blend.eye, focus: blend.focus, fovDeg: blend.fovDeg } };
+    }
+    return { ...base, externalCamera: this.externalCamera ?? undefined };
   }
 
   isRoundOver(): boolean {
@@ -307,6 +422,8 @@ export class MatchRunner {
     this.pause();
     this.externalCamera?.dispose();
     this.externalCamera = null;
+    this.launch?.dispose();
+    this.launch = null;
     this.session.dispose();
     if (this.savedBackground !== undefined) this.deps.appRenderer.scene.background = this.savedBackground;
   }

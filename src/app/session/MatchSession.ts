@@ -165,6 +165,11 @@ export interface SessionRenderView {
   readonly headingArrow?: boolean;
   /** Bey Real (0.59.0): a camera the runner drives instead of the combat directors (the mode's own, or the free orbit). Presentation only. */
   readonly externalCamera?: ExternalCamera;
+  /**
+   * Launch System A: the camera of the launch hands over to the combat director smoothly — this share (1 → 0) of the pose it
+   * left is kept for a moment (presentation only; the director's own framing is untouched once it reaches 0).
+   */
+  readonly cameraBlend?: { readonly weight: number; readonly eye: THREE.Vector3; readonly focus: THREE.Vector3; readonly fovDeg: number };
 }
 
 /** Owner, 2026-10-05 (game feel): beats the HUD shows. */
@@ -1038,10 +1043,21 @@ export class MatchSession {
       // Camera effects off (Debug Lab, GDD section 70): no shake and the
       // base FOV, so the director's framing can be judged on its own.
       const shake = view.cameraEffects ? cameraOutput.shakeOffsetM : { x: 0, y: 0, z: 0 };
-      camera.position.set(cameraOutput.cameraPositionM.x + shake.x, cameraOutput.cameraPositionM.y + shake.y, cameraOutput.cameraPositionM.z + shake.z);
-      camera.lookAt(cameraOutput.focusPositionM.x, cameraOutput.focusPositionM.y, cameraOutput.focusPositionM.z);
+      const blend = view.cameraBlend;
+      const keep = blend ? Math.max(0, Math.min(1, blend.weight)) : 0;
+      const eye = { x: cameraOutput.cameraPositionM.x + shake.x, y: cameraOutput.cameraPositionM.y + shake.y, z: cameraOutput.cameraPositionM.z + shake.z };
+      const focus = cameraOutput.focusPositionM;
       // Camera effects off: no shake and no impact FOV punch; the framing itself (speed FOV, contexts) is the preset's.
-      camera.fov = view.cameraEffects ? cameraOutput.fovDeg : cameraOutput.fovDeg - cameraOutput.fovPunchDeg;
+      const fov = view.cameraEffects ? cameraOutput.fovDeg : cameraOutput.fovDeg - cameraOutput.fovPunchDeg;
+      if (blend && keep > 0) {
+        camera.position.set(eye.x + (blend.eye.x - eye.x) * keep, eye.y + (blend.eye.y - eye.y) * keep, eye.z + (blend.eye.z - eye.z) * keep);
+        camera.lookAt(focus.x + (blend.focus.x - focus.x) * keep, focus.y + (blend.focus.y - focus.y) * keep, focus.z + (blend.focus.z - focus.z) * keep);
+        camera.fov = fov + (blend.fovDeg - fov) * keep;
+      } else {
+        camera.position.set(eye.x, eye.y, eye.z);
+        camera.lookAt(focus.x, focus.y, focus.z);
+        camera.fov = fov;
+      }
       camera.updateProjectionMatrix();
     }
     if (this.cutsceneFocus && view.cameraView !== 'overview') this.followCutscene(camera, frameDeltaSeconds);

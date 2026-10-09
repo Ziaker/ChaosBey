@@ -38,6 +38,8 @@ export interface CombatHudOptions {
   readonly controlHints: boolean;
   /** Owner, 2026-10-05 (game feel): the HUD's own switches. Absent = all on. */
   readonly feel?: HudFeelOptions;
+  /** Launch System A: the round starts with the launch. The banner says ROUND N until the Beys arrive, then FIGHT! (beginFight). */
+  readonly launching?: boolean;
 }
 
 export interface HudFeelOptions {
@@ -110,6 +112,8 @@ export class CombatHud {
   /** Owner, 2026-10-05: false when the match has no Circular ("Ataque giratório: desligado"). */
   private hintsCircular = true;
   private hintsOn: boolean;
+  /** Launch System A: true until the Beys arrive; the arrow cue and the banner's FIGHT! wait for it. */
+  private waitingForFight = false;
 
   constructor(
     mount: HTMLElement,
@@ -143,7 +147,17 @@ export class CombatHud {
     this.root.append(this.cards.first.root, center, this.cards.second.root, this.clashBar, this.banner, this.hints, this.upCue, this.driftTag, this.recoverAlert, this.breakFlash, this.ringOutVignette, this.counterWord);
     mount.append(this.root);
     this.refreshHints();
-    this.showBanner(`ROUND ${options.roundNumber}`, 'FIGHT!', START_BANNER_MS);
+    this.waitingForFight = options.launching === true;
+    // During the launch the Launch HUD owns the screen (its label, its meter and its own key hints); the round pill above says which round.
+    if (this.waitingForFight) this.hints.hidden = true;
+    else this.showBanner(`ROUND ${options.roundNumber}`, 'FIGHT!', START_BANNER_MS);
+  }
+
+  /** Launch System A: the Beys have arrived — the fight is on from this tick (the banner is only a caption; nothing waits for it). */
+  beginFight(): void {
+    this.waitingForFight = false;
+    this.hints.hidden = !this.hintsOn;
+    this.showBanner(`ROUND ${this.options.roundNumber}`, 'FIGHT!', START_BANNER_MS);
   }
 
   /** Call after each rendered frame. */
@@ -259,7 +273,7 @@ export class CombatHud {
   }
 
   setControlHints(visible: boolean): void {
-    this.hints.hidden = !visible;
+    this.hints.hidden = !visible || this.waitingForFight;
     this.hintsOn = visible;
     this.hintsKey = null;
     if (visible) this.refreshHints();
@@ -413,6 +427,10 @@ export class CombatHud {
    * fading over its last second. Presentation only (it reads the player's held arrows; nothing reaches the match).
    */
   private updateUpCue(session: MatchSession, dt: number): void {
+    if (this.waitingForFight) {
+      this.upCue.hidden = true;
+      return;
+    }
     const intent = session.getLastActions('first')?.moveIntent;
     const steering = intent !== undefined && Math.hypot(intent.x, intent.z) > 0.2;
     const cue = stepUpCue(this.upCueLeftS, steering, this.hintsOn, dt);
