@@ -271,8 +271,12 @@ export class LaunchRig {
     }
   }
 
-  /** The launchers' own sockets are where the Beys sit; this is how tall the rig stands (m), for the camera. */
-  static readonly SOCKET_HEIGHT_M = 3.7;
+  /** After the fight has begun the launchers sink away: 0 = standing, 1 = gone (each shrinks about its own foot). */
+  retract(amount: number): void {
+    const k = Math.max(0, Math.min(1, amount));
+    const scale = Math.max(0.001, 1 - k * k * (3 - 2 * k));
+    for (const side of LAUNCH_SIDES) this.launchers[side].group.scale.setScalar(scale);
+  }
 
   dispose(): void {
     for (const side of LAUNCH_SIDES) this.launchers[side].dispose();

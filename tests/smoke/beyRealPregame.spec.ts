@@ -61,6 +61,8 @@ test('Pregame › Bey Real: switch, camera, advanced block, presets, and a real 
   const config = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.matchConfig);
   expect(config.real).toMatchObject({ influence: 0.75, cruiseSpeedMps: 14, stageRadiusM: 15 });
   expect(config.arenaSizeScale).toBeCloseTo(15 / 36, 5);
+  // The round starts with the launch (0.61.0): measure after both Beys have arrived and the fight has run a while.
+  await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getTickIndex()), { timeout: 30_000 }).toBeGreaterThan(30);
   await page.waitForTimeout(2500);
   const speeds = await page.evaluate(() => {
     const s = window.__chaosBeyPlay!.getSession()!;

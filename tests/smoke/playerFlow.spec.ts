@@ -95,7 +95,8 @@ test('Character Select and Pregame set up the match that really runs, and Result
   expect(match.ringOutDelayS).toBe(0.5);
   expect(match.dashCooldownS).toBe(2.5);
 
-  // Play the round for real (F3 shows the overlay the helper reads).
+  // Play the round for real (F3 shows the overlay the helper reads). The round starts with the launch (0.61.0, pressed by the fixture): the fight, and the overlay, run from the tick the Beys arrive.
+  await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getTickIndex()), { timeout: 30_000 }).toBeGreaterThan(2);
   await page.keyboard.press('F3');
   const overlay = page.locator('#debug-overlay-root pre');
   await expect(overlay).toContainText('Combat');

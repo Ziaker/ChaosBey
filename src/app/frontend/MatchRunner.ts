@@ -76,6 +76,8 @@ export interface MatchRunnerStart {
 
 /** After the arrival the launchers, the grade and the wind stay up this long (seconds); the match already runs. */
 const LAUNCH_LINGER_S = 1.4;
+/** The launchers sink away over the last part of that (seconds). */
+const LAUNCH_RETRACT_S = 0.45;
 /** The combat camera takes over from the launch's last pose over this long (seconds, presentation only). */
 const CAMERA_BLEND_S = 0.7;
 
@@ -387,6 +389,7 @@ export class MatchRunner {
     launch.frame(frameDeltaSeconds);
     if (launch.finished) {
       this.launchLingerS -= frameDeltaSeconds;
+      launch.retract(1 - this.launchLingerS / LAUNCH_RETRACT_S);
       if (this.launchLingerS <= 0) {
         launch.dispose();
         this.launch = null;

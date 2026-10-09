@@ -177,6 +177,11 @@ export class LaunchFlow {
     return input.actions;
   }
 
+  /** The launchers sink away once the fight has begun (0 = standing, 1 = gone). */
+  retract(amount: number): void {
+    this.rig.retract(amount);
+  }
+
   /** Once per rendered frame: the Beys' spin, the rig, the HUD. */
   frame(dt: number): void {
     if (this.disposed) return;
