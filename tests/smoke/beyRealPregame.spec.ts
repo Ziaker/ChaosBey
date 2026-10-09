@@ -38,6 +38,7 @@ test('Pregame › Bey Real: switch, camera, advanced block, presets, and a real 
 
   // The advanced-advanced block: every slider with its own explanation, in groups, with a filter.
   await page.getByTestId('pregame-real-deep').locator('summary').first().click();
+  await page.getByTestId('pregame-real-group-control').locator('summary').first().click();
   await page.getByTestId('pregame-real-group-auto').locator('summary').first().click();
   await expect(page.getByTestId('pregame-real-influence-value')).toHaveText('75%');
   await expect(page.getByTestId('pregame-real-cruiseSpeedMps-value')).toHaveText('18.0 m/s');
