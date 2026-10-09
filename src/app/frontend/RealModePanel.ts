@@ -1,7 +1,8 @@
 // ============================================================
 // BEY REAL — THE PREGAME BLOCK
-// Owner, 2026-10-09: the alternative mode's switch, its camera, its presets and — in a block of its own, "avançadamente
-// avançado" — every slider of the mode, each with its own explanation always visible under it. The values live in the
+// Owner, 2026-10-09: the alternative mode's camera, its presets and — in a block of its own, "avançadamente avançado" — every
+// slider of the mode, each with its own explanation always visible under it. The mode is chosen in the Pregame's own "Game mode"
+// step (PregameScreen), not here: this block is only on screen while Bey Real is the chosen mode. The values live in the
 // MatchSetup (`setup.real`, RealTuning.ts); this panel only draws them and writes them back through `onChange`.
 //
 // Only the sliders a match already uses are shown (RealTuning's `live`), so none is dead; the rest come as the engine learns them.
@@ -40,12 +41,13 @@ interface ControlView {
 /** What stays the same as the classic game, and what changes — shown once, at the top of the block. */
 const INHERITS_TEXT =
   'Continua igual: a mesma arena e física (Rapier), Clash, Estabilidade/Quebra/KO, ring-out, spin-out e tempo, a mesma IA de ataque e defesa, HUD, efeitos, replays e as regras do Pregame. ' +
-  'Muda: o Bey é conduzido por um piloto automático (você influencia), a física é de pião real (cuba, atrito, giro), sem Drift e sem controle no ar, e os sliders de movimento normais ficam travados.';
+  'Muda: o Bey é conduzido por um piloto automático (você influencia), a física é de pião real (cuba, atrito, giro), sem Drift e sem controle no ar, e os sliders de movimento do Advanced ficam travados (os de arena, estabilidade e visual continuam valendo).';
 
 export class RealModePanel {
-  readonly element = el('details', 'cb-pregame__advanced cb-real', 'pregame-real');
-  private readonly state = el('span', 'cb-pregame__chip', 'pregame-real-state');
-  private readonly enabledInput = el('input', 'cb-pregame__toggle', 'pregame-real-enabled');
+  readonly element = el('section', 'cb-pregame__advanced cb-real', 'pregame-real');
+  private readonly groups: { readonly group: HTMLDetailsElement; readonly count: HTMLElement; readonly views: ControlView[] }[] = [];
+  private readonly filterInput = el('input', 'cb-pregame__seed cb-real__filter', 'pregame-real-filter');
+  private readonly filterEmpty = el('p', 'cb-hint', 'pregame-real-filter-empty');
   private readonly cameraButtons = new Map<RealCameraMode, HTMLButtonElement>();
   private readonly presetButtons = new Map<string, HTMLButtonElement>();
   private readonly presetText = el('p', 'cb-hint cb-real__preset-text', 'pregame-real-preset-text');
@@ -56,25 +58,20 @@ export class RealModePanel {
 
   constructor(private readonly options: RealModePanelOptions) {
     injectRealStyle();
-    const summary = el('summary');
-    const title = el('span');
+    const title = el('h2', 'cb-pregame__heading');
     title.textContent = 'Bey Real';
-    summary.append(title, this.state);
 
     const intro = el('p', 'cb-hint');
-    intro.textContent = 'Modo alternativo: o Bey gira e se move sozinho como um pião de verdade, você influencia o rumo e aperta só Dash, Giratório, Pulo e Esquiva.';
+    intro.textContent = 'O Bey gira e se move sozinho como um pião de verdade, você influencia o rumo e aperta só Dash, Giratório, Pulo e Esquiva.';
 
-    const enabledLabel = el('label', 'cb-real__switch');
-    this.enabledInput.type = 'checkbox';
-    this.enabledInput.addEventListener('change', () => this.write((r) => ({ ...r, enabled: this.enabledInput.checked })));
-    const enabledText = el('span');
-    enabledText.textContent = 'Jogar no modo Bey Real';
-    enabledLabel.append(this.enabledInput, enabledText);
+    const inherits = el('details', 'cb-real__inherits', 'pregame-real-inherits');
+    const inheritsSummary = el('summary');
+    inheritsSummary.textContent = 'O que muda em relação ao Classic';
+    const inheritsText = el('p', 'cb-hint');
+    inheritsText.textContent = INHERITS_TEXT;
+    inherits.append(inheritsSummary, inheritsText);
 
-    const inherits = el('p', 'cb-hint cb-real__inherits', 'pregame-real-inherits');
-    inherits.textContent = INHERITS_TEXT;
-
-    this.element.append(summary, intro, enabledLabel, inherits, this.buildCamera(), this.buildDeep());
+    this.element.append(title, intro, this.buildPresets(), this.buildCamera(), this.buildDeep(), inherits);
   }
 
   private real(): RealSetup {
@@ -113,7 +110,45 @@ export class RealModePanel {
     this.deep.append(summary);
 
     const hint = el('p', 'cb-hint');
-    hint.textContent = 'Todos os sliders do modo, cada um com a sua explicação. O preset Base são os números que você afinou no laboratório.';
+    hint.textContent = 'Todos os sliders do modo, cada um com a sua explicação, em grupos que abrem e fecham. Use o filtro para achar um pelo nome.';
+    this.filterInput.type = 'search';
+    this.filterInput.placeholder = 'filtrar sliders (ex.: parede, dash, giro)';
+    this.filterInput.maxLength = 40;
+    this.filterInput.spellcheck = false;
+    this.filterInput.setAttribute('aria-label', 'Filtrar sliders do Bey Real');
+    this.filterInput.addEventListener('input', () => this.applyFilter());
+    this.filterEmpty.textContent = 'Nenhum slider com esse nome.';
+    this.filterEmpty.hidden = true;
+    this.deep.append(hint, this.filterInput, this.filterEmpty);
+
+    const specs = liveRealSpecs();
+    for (const group of REAL_GROUP_ORDER) {
+      const inGroup = specs.filter((s) => s.group === group);
+      if (inGroup.length === 0) continue;
+      const section = el('details', 'cb-real__group', `pregame-real-group-${group}`);
+      const heading = el('summary', 'cb-pregame__heading');
+      const headingText = el('span');
+      headingText.textContent = REAL_GROUP_TITLES[group];
+      const count = el('span', 'cb-pregame__chip');
+      heading.append(headingText, count);
+      section.append(heading);
+      const views: ControlView[] = [];
+      for (const spec of inGroup) {
+        section.append(this.buildControl(spec));
+        views.push(this.views[this.views.length - 1]!);
+      }
+      this.groups.push({ group: section, count, views });
+      this.deep.append(section);
+    }
+    this.deep.append(this.resetButton);
+    return this.deep;
+  }
+
+  /** Presets: the way into the mode, always on screen (not behind the sliders). */
+  private buildPresets(): HTMLElement {
+    const block = el('div', 'cb-real__block', 'pregame-real-presets-block');
+    const label = el('span', 'cb-field-label');
+    label.textContent = 'Preset';
     const presets = el('div', 'cb-real__presets', 'pregame-real-presets');
     presets.setAttribute('role', 'radiogroup');
     presets.setAttribute('aria-label', 'Presets do Bey Real');
@@ -124,21 +159,26 @@ export class RealModePanel {
       this.presetButtons.set(preset.id, node);
       presets.append(node);
     }
-    this.deep.append(hint, presets, this.presetText);
+    block.append(label, presets, this.presetText);
+    return block;
+  }
 
-    const specs = liveRealSpecs();
-    for (const group of REAL_GROUP_ORDER) {
-      const inGroup = specs.filter((s) => s.group === group);
-      if (inGroup.length === 0) continue;
-      const section = el('section', 'cb-real__group', `pregame-real-group-${group}`);
-      const heading = el('h3', 'cb-pregame__heading');
-      heading.textContent = REAL_GROUP_TITLES[group];
-      section.append(heading);
-      for (const spec of inGroup) section.append(this.buildControl(spec));
-      this.deep.append(section);
+  /** Shows only the sliders whose name or note has what was typed; a group with none left is hidden, with matches it opens. */
+  private applyFilter(): void {
+    const query = this.filterInput.value.trim().toLowerCase();
+    let shown = 0;
+    for (const { group, views } of this.groups) {
+      let visible = 0;
+      for (const view of views) {
+        const match = query === '' || view.spec.label.toLowerCase().includes(query) || view.spec.note.toLowerCase().includes(query);
+        view.wrapper.hidden = !match;
+        if (match) visible += 1;
+      }
+      group.hidden = visible === 0;
+      if (query !== '' && visible > 0) group.open = true;
+      shown += visible;
     }
-    this.deep.append(this.resetButton);
-    return this.deep;
+    this.filterEmpty.hidden = shown > 0;
   }
 
   private buildControl(spec: RealParamSpec): HTMLElement {
@@ -185,9 +225,6 @@ export class RealModePanel {
   /** Redraws from the setup (called by the Pregame after every change). */
   refresh(setup: MatchSetup): void {
     const real = setup.real ?? defaultRealSetup();
-    this.state.textContent = real.enabled ? 'ligado' : 'desligado';
-    this.state.classList.toggle('is-modified', real.enabled);
-    this.enabledInput.checked = real.enabled;
     for (const [mode, node] of this.cameraButtons) {
       node.setAttribute('aria-checked', String(real.camera === mode));
       node.classList.toggle('is-selected', real.camera === mode);
@@ -213,6 +250,12 @@ export class RealModePanel {
       view.input.disabled = !real.enabled;
       view.wrapper.classList.toggle('is-disabled', !real.enabled);
     }
+    for (const { count, views } of this.groups) {
+      const n = views.filter((v) => Math.round(real.params[v.spec.key] * 1e6) !== Math.round(REAL_BASE_PARAMS[v.spec.key] * 1e6)).length;
+      count.textContent = n > 0 ? `${n} alterado${n === 1 ? '' : 's'}` : '';
+      count.classList.toggle('is-modified', n > 0);
+      count.hidden = n === 0;
+    }
     this.deepCount.textContent = changed > 0 ? `${changed} alterado${changed === 1 ? '' : 's'}` : 'base';
     this.deepCount.classList.toggle('is-modified', changed > 0);
     this.resetButton.disabled = changed === 0;
@@ -233,15 +276,19 @@ function injectRealStyle(): void {
     .cb-real { display: flex; flex-direction: column; gap: 12px; }
     .cb-real > summary { margin-bottom: 0; }
     .cb-real[open] > summary { margin-bottom: 4px; }
-    .cb-real__switch { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
-    .cb-real__inherits { margin: 0; }
+    .cb-real[hidden], .cb-pregame__section[hidden], .cb-real__group[hidden], .cb-real__ctl[hidden] { display: none; }
+    .cb-real__inherits { margin: 0; font-size: 12px; color: var(--cb-text-dim); }
+    .cb-real__inherits > summary { cursor: pointer; }
+    .cb-real__filter { width: 100%; box-sizing: border-box; }
+    .cb-real__group > summary { cursor: pointer; display: flex; align-items: center; gap: 10px; list-style-position: inside; }
     .cb-real__block { display: flex; flex-direction: column; gap: 8px; }
     .cb-real__camera, .cb-real__presets { display: flex; flex-wrap: wrap; gap: 8px; }
     .cb-real__camera-option.is-selected, .cb-real__presets .is-selected { border-color: var(--cb-accent); color: #fff; background: rgba(255, 255, 255, 0.06); }
     .cb-real__deep { border: 1px solid var(--cb-line); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
     .cb-real__deep > summary { cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--cb-text-dim); font-weight: 600; }
     .cb-real__deep[open] > summary { margin-bottom: 4px; }
-    .cb-real__group { display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--cb-line); padding-top: 12px; }
+    .cb-real__group { border-top: 1px solid var(--cb-line); padding-top: 12px; }
+    .cb-real__group[open] { display: flex; flex-direction: column; gap: 14px; }
     .cb-real__ctl.is-disabled { opacity: 0.45; }
     .cb-real__note { display: block; margin: 0; }
     .cb-real__preset-text { margin: 0; }

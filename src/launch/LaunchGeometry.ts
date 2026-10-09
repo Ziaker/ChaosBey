@@ -24,6 +24,12 @@ export interface LaunchArena {
   readonly floor: ArenaFloor;
   /** The floor radius of this match (m): 36 m × the stage size. */
   readonly floorRadiusM: number;
+  /**
+   * Where the launchers stand, as a distance from the centre (m). Absent = the prototype's 29.5 / 36 of the floor, on the floor
+   * itself; a stage with a deck outside its wall (the Tournament Stadium) puts them there instead, so they never stand in the
+   * playing field or hide the entry point (owner, 2026-10-09). Presentation only: the arrival never reads it.
+   */
+  readonly launcherRadiusM?: number;
 }
 
 /** Unit vector from a side's launcher toward the arena's centre. `first` stands at −z (the opening axis of the game), `second` at +z. */
@@ -39,7 +45,7 @@ export function launcherRight(side: LaunchSide): GroundPoint {
 
 /** The foot of a side's launcher, on the floor. */
 export function launcherBase(side: LaunchSide, arena: LaunchArena): Vec3 {
-  const z = (side === 'first' ? -1 : 1) * arena.floorRadiusM * LAUNCH_TUNING.launcherRadiusShare;
+  const z = (side === 'first' ? -1 : 1) * (arena.launcherRadiusM ?? arena.floorRadiusM * LAUNCH_TUNING.launcherRadiusShare);
   return { x: 0, y: floorHeightAt(arena.floor, 0, z) + LAUNCH_TUNING.launcherBaseLiftM, z };
 }
 

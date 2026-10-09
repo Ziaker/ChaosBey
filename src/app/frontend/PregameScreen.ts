@@ -16,7 +16,7 @@ import { BEY_ROSTER, rosterEntry } from './beyRoster';
 import { button, el, ensureFrontendStyle, keyHint } from './frontendStyle';
 import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
-import { changedRuleLines, defaultMatchRules, deleteRuleConfig, loadRuleConfigs, matchupLines, normalizeSeedText, saveRuleConfig, withArenaFloor, withArenaPreset, withDefaultRules, withRuleConfig, type MatchSetup } from './matchSetup';
+import { changedRuleLines, defaultMatchRules, defaultRealSetup, isRealMode, deleteRuleConfig, loadRuleConfigs, matchupLines, normalizeSeedText, saveRuleConfig, withArenaFloor, withArenaPreset, withDefaultRules, withRuleConfig, type MatchSetup } from './matchSetup';
 import { ADVANCED_CATEGORIES, ADVANCED_CATEGORY_LABELS, ADVANCED_CONTROLS, isLockedByRealMode, isModified, isSharedWithRealMode, isToggle, modifiedCount, normalOriginalValue, readAdvanced, resetCategory, writeAdvanced, type AdvancedCategory, type AdvancedControl } from './advancedControls';
 import { RealModePanel } from './RealModePanel';
 import { OFFICIAL_PRESETS, applyPreset, detectPreset, presetLabel, type OfficialPresetId } from './pregamePresets';
@@ -30,9 +30,12 @@ export interface PregameOptions {
   readonly onBack: (setup: MatchSetup) => void;
 }
 
-type SectionId = 'preset' | 'opponent' | 'ai' | 'arena' | 'match';
+type GameModeId = 'classic' | 'real';
+
+type SectionId = 'mode' | 'preset' | 'opponent' | 'ai' | 'arena' | 'match';
 
 const SECTION_TITLES: Readonly<Record<SectionId, string>> = {
+  mode: 'Game mode',
   preset: 'Preset',
   opponent: 'Opponent',
   ai: 'AI',
@@ -70,6 +73,19 @@ const ARENA_FLOOR_SHORT_LABELS: Readonly<Record<ArenaFloorId, string>> = {
 
 // Row order is the keyboard order (↑/↓). The preset row first, as in the screen.
 const ROWS: readonly AnyChoiceRow[] = [
+  // The game mode is its own first step (owner, 2026-10-09: "a escolha de modo de jogo devia ser algo mais separado"): what is
+  // below it follows the choice — the classic Preset and Advanced rules, or the Bey Real block.
+  row<GameModeId>({
+    id: 'mode',
+    section: 'mode',
+    label: 'Game mode',
+    options: [
+      { value: 'classic', label: 'Classic', description: 'Você pilota o Bey: movimento, Drift, Dash, Giratório, Pulo e Esquiva, com os presets e as regras avançadas do jogo.' },
+      { value: 'real', label: 'Bey Real', description: 'Modo alternativo: o Bey gira e se move sozinho como um pião de verdade; você influencia o rumo e aperta só os botões de ataque.' },
+    ],
+    get: (s) => (isRealMode(s) ? 'real' : 'classic'),
+    set: (s, v) => ({ ...s, real: { ...(s.real ?? defaultRealSetup()), enabled: v === 'real' } }),
+  }),
   row<OfficialPresetId>({
     id: 'preset',
     section: 'preset',
@@ -164,6 +180,7 @@ interface TabView {
 export class PregameScreen {
   private readonly root = el('div', 'cb-screen cb-screen--opaque cb-pregame', 'pregame');
   private readonly rowButtons: HTMLButtonElement[][] = [];
+  private readonly sectionNodes = new Map<SectionId, HTMLElement>();
   private readonly customTile = el('div', 'cb-preset-custom', 'pregame-preset-custom');
   private readonly presetState = el('p', 'cb-pregame__state', 'pregame-preset-state');
   private readonly summary = el('dl', 'cb-pregame__facts', 'pregame-summary');
@@ -172,6 +189,7 @@ export class PregameScreen {
   private readonly tabs: TabView[] = [];
   private readonly seedInput = el('input', 'cb-pregame__seed', 'pregame-seed');
   private readonly advanced = el('details', 'cb-pregame__advanced', 'pregame-advanced');
+  private readonly advancedTitle = el('span');
   private readonly advancedCount = el('span', 'cb-pregame__chip', 'pregame-advanced-count');
   /** Bey Real (0.59.0): the alternative mode's switch, camera, presets and every slider of the mode. */
   private readonly real = new RealModePanel({ getSetup: () => this.setup, onChange: (next) => this.update(next) });
@@ -211,11 +229,12 @@ export class PregameScreen {
       heading.textContent = SECTION_TITLES[id];
       section.append(heading);
       sections.set(id, section);
+      this.sectionNodes.set(id, section);
       controls.append(section);
     }
     ROWS.forEach((choiceRow, rowIndex) => sections.get(choiceRow.section)!.append(this.buildRow(choiceRow, rowIndex)));
     sections.get('preset')!.append(this.presetState, this.savedConfigsRow());
-    controls.append(this.buildAdvanced(), this.real.element);
+    controls.append(this.real.element, this.buildAdvanced());
 
     const side = el('section', 'cb-panel cb-pregame__side');
     side.setAttribute('aria-label', 'Match summary');
@@ -258,18 +277,20 @@ export class PregameScreen {
 
   private buildRow(choiceRow: AnyChoiceRow, rowIndex: number): HTMLElement {
     const isPreset = choiceRow.id === 'preset';
+    // Rows whose options carry a description (the presets, the game mode) are drawn as cards.
+    const cards = choiceRow.options.some((o) => o.description !== undefined);
     // A single row under a section of the same name (Opponent, Arena) keeps its label for screen readers only.
-    const quietLabel = isPreset || choiceRow.id === 'opponent-bey' || choiceRow.id === 'arena';
-    const wrapper = el('div', isPreset ? 'cb-pregame__row cb-pregame__row--presets' : 'cb-pregame__row');
+    const quietLabel = cards || choiceRow.id === 'opponent-bey' || choiceRow.id === 'arena';
+    const wrapper = el('div', cards ? 'cb-pregame__row cb-pregame__row--presets' : 'cb-pregame__row');
     const label = el('span', quietLabel ? 'cb-field-label cb-visually-hidden' : 'cb-field-label');
     label.id = `pregame-label-${choiceRow.id}`;
     label.textContent = choiceRow.label;
-    const group = el('div', isPreset ? 'cb-segments cb-presets' : 'cb-segments', `pregame-${choiceRow.id}`);
+    const group = el('div', cards ? 'cb-segments cb-presets' : 'cb-segments', `pregame-${choiceRow.id}`);
     group.setAttribute('role', 'radiogroup');
     group.setAttribute('aria-labelledby', label.id);
     const buttons: HTMLButtonElement[] = [];
     for (const option of choiceRow.options) {
-      const node = el('button', isPreset ? 'cb-segment cb-preset' : 'cb-segment', `pregame-${choiceRow.id}-${String(option.value)}`);
+      const node = el('button', cards ? 'cb-segment cb-preset' : 'cb-segment', `pregame-${choiceRow.id}-${String(option.value)}`);
       node.type = 'button';
       node.setAttribute('role', 'radio');
       if (option.description) {
@@ -305,7 +326,7 @@ export class PregameScreen {
 
   private buildAdvanced(): HTMLElement {
     const summary = el('summary');
-    const summaryTitle = el('span');
+    const summaryTitle = this.advancedTitle;
     summaryTitle.textContent = 'Advanced';
     summary.append(summaryTitle, this.advancedCount);
     this.advanced.append(summary);
@@ -507,6 +528,12 @@ export class PregameScreen {
       view.count.textContent = count > 0 ? String(count) : '';
       view.tab.title = count > 0 ? `${count} modified` : 'All default';
     }
+    // What is shown follows the game mode: the classic Preset only means something to the classic rules; the Bey Real block only
+    // to Bey Real. Nothing the mode does not use stays on screen to be mistaken for a setting.
+    const realMode = isRealMode(setup);
+    this.sectionNodes.get('preset')!.hidden = realMode;
+    this.real.element.hidden = !realMode;
+    this.advancedTitle.textContent = realMode ? 'Advanced · shared rules' : 'Advanced';
     this.real.refresh(setup);
     this.advancedCount.textContent = modified > 0 ? `${modified} modified` : 'default';
     this.advancedCount.classList.toggle('is-modified', modified > 0);
@@ -539,7 +566,7 @@ export class PregameScreen {
       { key: 'mode', label: 'Mode', value: setup.real?.enabled ? `Bey Real · ${setup.real.camera === 'real' ? 'Bey Real' : setup.real.camera} camera` : 'Classic' },
       { key: 'preset', label: 'Preset', value: presetLabel(preset) },
       { key: 'modified', label: 'Advanced', value: modified === 0 ? 'All Normal Original' : `${modified} ${modified === 1 ? 'setting differs' : 'settings differ'} from Normal Original` },
-    ];
+    ].filter((fact) => !(isRealMode(setup) && fact.key === 'preset'));
     const nodes: HTMLElement[] = [];
     for (const fact of facts) {
       const term = el('dt');
@@ -652,6 +679,26 @@ export class PregameScreen {
     this.focusCheckedIn(this.focusRow);
   }
 
+  /** A row is on screen unless the game mode hides its section (the classic Preset in Bey Real). */
+  private rowVisible(rowIndex: number): boolean {
+    return !(ROWS[rowIndex]!.section === 'preset' && isRealMode(this.setup));
+  }
+
+  private lastVisibleRow(): number {
+    for (let i = ROWS.length - 1; i >= 0; i--) if (this.rowVisible(i)) return i;
+    return 0;
+  }
+
+  /** The next visible row in a direction (wrapping). */
+  private stepRow(delta: 1 | -1): number {
+    let index = this.focusRow;
+    for (let i = 0; i < ROWS.length; i++) {
+      index = wrapIndex(index, delta, ROWS.length);
+      if (this.rowVisible(index)) return index;
+    }
+    return this.focusRow;
+  }
+
   private focusCheckedIn(rowIndex: number): void {
     const buttons = this.rowButtons[rowIndex];
     (buttons?.find((b) => b.getAttribute('aria-checked') === 'true') ?? buttons?.[0])?.focus();
@@ -689,11 +736,11 @@ export class PregameScreen {
     event.preventDefault();
     switch (intent) {
       case 'previous':
-        this.focusRow = target?.tagName === 'SUMMARY' ? ROWS.length - 1 : wrapIndex(this.focusRow, -1, ROWS.length);
+        this.focusRow = target?.tagName === 'SUMMARY' ? this.lastVisibleRow() : this.stepRow(-1);
         this.focusCheckedIn(this.focusRow);
         break;
       case 'next':
-        this.focusRow = wrapIndex(this.focusRow, 1, ROWS.length);
+        this.focusRow = this.stepRow(1);
         this.focusCheckedIn(this.focusRow);
         break;
       case 'decrease':

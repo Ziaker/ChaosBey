@@ -282,3 +282,9 @@ Um teste (`tests/unit/beyRealActions.test.ts`) falha se algum slider listado nã
 
 ### 14.6 Em aberto (decisão do owner)
 Os rails ficam ligados por padrão (opção do Pregame, como no jogo normal) — no modo podem poluir a visão; o número final de cada slider; a poeira; o BLOCK; o nome do modo; drift/momentum (hoje: sem drift, momentum sem efeito na velocidade).
+
+### 14.7 Ajustes do owner (0.63.0, 2026-10-09)
+- **Carregar um ataque não freia mais o Bey** (`RealMotion`: o freio, a perda de direção e o corte de cruzeiro do Dash carregado foram removidos).
+- **Mais movimento** (jogador automático e IA, o mesmo piloto): base nova `cruiseSpeedMps` 18 (era 14), `steerAccelMps2` 40 (era 30), órbita mais viva (`orbitBreath` 0,35 / `orbitBreathRadPerS` 0,7) e `cruiseMinShare` 0,75 (com giro baixo o Bey mantém 75 % do pique). Limites maiores: cruzeiro até 28 m/s, força de direção até 80. Sliders novos: variação da órbita, ritmo da variação, velocidade que sobra com giro baixo.
+- **Opções de arena disponíveis em Bey Real:** Stage size, Bowl depth, Wall height, Wall bounce e Game speed do Advanced › Arena editam os valores do próprio modo (`bowlDepthScale`, `wallHeightM`, `stageRadiusM`, `wallRestitution`, `gameSpeed`; arena até 40 m, parede até 10 m). Só os de movimento/combate de toque continuam travados.
+- **Pregame:** o modo de jogo (Classic / Bey Real) é o primeiro passo, separado; o bloco Bey Real só aparece nesse modo, com presets e câmera no topo e os sliders em grupos recolhíveis com filtro.

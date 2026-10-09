@@ -10,6 +10,7 @@ import { ACE_TIER, ROOKIE_TIER } from '../../src/ai/difficulty/AiDifficultyTiers
 import { INTENDED_MAX_SPEED_MPS } from '../../src/bey/movement/MovementTuning';
 import { FIXED_DELTA_SECONDS } from '../../src/physics/fixed-step/FixedTimestepLoop';
 import { SeededRng } from '../../src/rng/SeededRng';
+import { STADIUM_LAUNCHER_OUTSIDE_WALL_M, launchArenaOf } from '../../src/launch/applyLaunchArrival';
 import { planAiLaunch } from '../../src/launch/LaunchAiPolicy';
 import { clampLaunchTarget, defaultLaunchTarget, flightPlan, flightPose, launcherBase, launcherForward, launcherRight, separateTargets, socketPosition } from '../../src/launch/LaunchGeometry';
 import { launchArrivals, parseLaunchResult, validTargets, type LaunchResult } from '../../src/launch/LaunchResult';
@@ -336,6 +337,26 @@ describe('the sequence', () => {
     }
     phases.add(seq.currentPhase);
     expect([...phases].sort()).toEqual(['flight', 'landed', 'release']);
+  });
+});
+
+describe('where the launchers stand', () => {
+  it('on the floor at the prototype\'s radius, except on the Tournament Stadium, where they stand on the deck outside the wall', () => {
+    const plain = launchArenaOf(FLOOR, 'foundry');
+    expect(plain.launcherRadiusM).toBeUndefined();
+    expect(Math.abs(launcherBase('first', plain).z)).toBeCloseTo(ARENA_FLOOR_RADIUS * LAUNCH_TUNING.launcherRadiusShare, 6);
+    const stadium = launchArenaOf(FLOOR, 'tournament');
+    expect(Math.abs(launcherBase('first', stadium).z)).toBeCloseTo(ARENA_FLOOR_RADIUS + STADIUM_LAUNCHER_OUTSIDE_WALL_M, 6);
+    expect(launcherBase('first', stadium).z).toBeLessThan(0);
+    expect(launcherBase('second', stadium).z).toBeGreaterThan(0);
+  });
+
+  it('the arrival never depends on it: the same result lands the same Bey on every stage', () => {
+    const result: LaunchResult = { first: { target: { x: 3, z: -6 }, quality: 0.8 }, second: { target: { x: -2, z: 9 }, quality: 0.6 } };
+    const shape = { colliderHalfHeightM: 0.6, colliderRadiusM: 0.9 };
+    const a = launchArrivals(result, launchArenaOf(FLOOR, 'foundry'), { first: shape, second: shape });
+    const b = launchArrivals(result, launchArenaOf(FLOOR, 'tournament'), { first: shape, second: shape });
+    expect(b).toEqual(a);
   });
 });
 

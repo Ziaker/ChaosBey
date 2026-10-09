@@ -60,7 +60,7 @@ export interface LaunchFlowDeps {
 
 /** The drivers of a launch for this match's sides: a person where the keyboard/pad plays, the AI's plan where an AI does. */
 export function launchDriversFor(session: MatchSession): Record<LaunchSide, LaunchDriver> {
-  const arena = launchArenaOf(session.getBey('first').arenaFloor);
+  const arena = launchArenaOf(session.getBey('first').arenaFloor, session.getArenaPresetId());
   const { seedUint32 } = normalizeSeedText(session.seedText);
   const rng = SeededRng.fromSeedUint32((seedUint32 ^ LAUNCH_RNG_SALT) >>> 0);
   const driverFor = (side: LaunchSide): LaunchDriver => {
@@ -88,6 +88,8 @@ export class LaunchFlow {
   private readonly people: LaunchSide[];
   private readonly spin: Record<LaunchSide, number> = { first: 0, second: 0 };
   private released = false;
+  /** True when the launchers stand outside the wall (the Stadium's deck). */
+  private readonly outside: boolean;
   private disposed = false;
   private dragging = false;
   private readonly raycaster = new THREE.Raycaster();
@@ -97,7 +99,8 @@ export class LaunchFlow {
 
   constructor(private readonly deps: LaunchFlowDeps) {
     const { session } = deps;
-    const arena = launchArenaOf(session.getBey('first').arenaFloor);
+    const arena = launchArenaOf(session.getBey('first').arenaFloor, session.getArenaPresetId());
+    this.outside = arena.launcherRadiusM !== undefined;
     const drivers = launchDriversFor(session);
     this.sequence = new LaunchSequence({
       arena,
@@ -142,6 +145,8 @@ export class LaunchFlow {
       right: launcherRight(side),
       travel: plan ? { x: plan.end.x - plan.start.x, z: plan.end.z - plan.start.z } : null,
       power: result ? launchOutcomeFor(result[side].quality).power : 0,
+      // A launcher outside the wall: the camera stands closer and higher, so the stands and the wall do not hide the entry point.
+      vantage: this.outside ? { behindM: 4.5, rightM: 9, upM: 10.5 } : null,
     };
   }
 

@@ -239,3 +239,15 @@ VFX, dust and camera react as for any landing.
 **Still open** (§11): the exact timing window and speed, what a grade should change in the fight, the AI's real policy, a
 gamepad mapping beyond the one above, reduced-motion treatment. No Pregame switch turns the launch off: it is the approved way a
 round starts (quick play, the Debug Lab, the Self Test and the unit tests build matches without a launch HUD and start at once).
+
+## 13. Owner follow-up (0.63.0, 2026-10-09)
+
+- **Tournament Stadium: the launchers stand outside the arena.** In the Stadium they were inside the playing field and hid both
+  the entry point and the Bey's flight. They now stand on the deck between the wall and the stands (centre 2.6 m beyond the
+  wall; `launchArenaOf(floor, 'tournament')` → `LaunchArena.launcherRadiusM`). Presentation only — the arrival is still a pure
+  function of the recorded result, so replays are unchanged. The launch camera takes a closer, higher vantage there
+  (`LaunchShot.vantage`) and the ring-out warning is off while the Beys are mounted. The Foundry Pit and Rift Crater keep the
+  prototype's place (29.5 / 36 of the floor) until the owner asks otherwise.
+- **The AI's launches vary far more** (`LaunchAiPolicy.ts`): the entry point is anywhere across its own half (up to ±77° round
+  its axis, 12 %–100 % of the landing area, the personality still biasing it), 22 % of its presses are wild whatever its skill,
+  and it lets go 0–0.3 s late. Provisional, as the rest of §11's AI policy; still its own RNG stream.
