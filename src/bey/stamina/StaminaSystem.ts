@@ -86,6 +86,17 @@ export class StaminaSystem {
     this.resource.subtract((drainPerS / this.staminaStat) * fixedDeltaSeconds);
   }
 
+  /** Bey Real: an action that costs a share of the full spin (a Dash). 0 = nothing. */
+  spendSpinShare(share: number): void {
+    if (share > 0) this.resource.subtract(share * STAMINA_MAX);
+  }
+
+  /** Bey Real: spin moved by a contact — a share of the full spin, signed (negative = lost). */
+  addSpinShare(share: number): void {
+    if (share > 0) this.resource.add(share * STAMINA_MAX);
+    else if (share < 0) this.resource.subtract(-share * STAMINA_MAX);
+  }
+
   getPhysicalCondition(): PhysicalCondition {
     const penaltyProgress = 1 - Math.min(1, this.resource.fraction / STAMINA_PENALTY_START_FRACTION);
     return {

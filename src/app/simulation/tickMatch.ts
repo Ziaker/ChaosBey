@@ -51,6 +51,9 @@ import { isOutOfArena } from '../../arena/ringout/RingOut';
 import { RoundState } from '../../combat/round-rules/RoundState';
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { WALL_IMPACT_STABILITY_DAMAGE_PER_MPS } from '../../bey/stability/StabilityTuning';
+import { resolveRealContact } from '../../bey/real/RealContact';
+import type { RealModeConfig } from '../../bey/real/RealTuning';
+import { realSecondSpinDir } from '../../bey/real/realTunings';
 import type { MovementSnapshot } from '../../bey/movement/MovementController';
 import type { SpinSnapshot } from '../../bey/spin/SpinController';
 import { DriftState } from '../../drift/DriftController';
@@ -371,6 +374,8 @@ export function tickMatch(
   // Owner, 2026-10-04: no defensive Circular while being knocked around.
   if (first.movement.isKnockbackPlaying()) first.attack.blockCircularFor(fixedDeltaSeconds * 2);
   if (second.movement.isKnockbackPlaying()) second.attack.blockCircularFor(fixedDeltaSeconds * 2);
+  const firstAttackBefore = first.attack.getState();
+  const secondAttackBefore = second.attack.getState();
   const firstAttack = first.attack.tick(
     firstAttackActions,
     first.movement.getHeadingRad(),
@@ -389,6 +394,10 @@ export function tickMatch(
     length(horizontalVelocity(second.body)),
     horizontalVelocity(first.body),
   );
+
+  // Bey Real: a Dash costs spin the moment it is released.
+  if (firstAttackBefore !== AttackState.DashActive && firstAttack.state === AttackState.DashActive) first.stamina.spendSpinShare(first.rules.real?.dashSpinCost ?? 0);
+  if (secondAttackBefore !== AttackState.DashActive && secondAttack.state === AttackState.DashActive) second.stamina.spendSpinShare(second.rules.real?.dashSpinCost ?? 0);
 
   const firstCondition = first.stamina.getPhysicalCondition();
   const secondCondition = second.stamina.getPhysicalCondition();
@@ -481,13 +490,23 @@ export function tickMatch(
   // airborne, not merely "some impact occurred" (a wall clip while still
   // grounded must never arm it for a later, unrelated normal jump).
   // (An active Circular's user takes no impact damage from the other Bey's contact either — item 13.)
+  // Bey Real: every impact costs Stability at the mode's own rate (the "Estabilidade perdida por impacto" slider); a wall impact
+  // also costs spin; a Bey-to-Bey contact is judged by the real contact model below (resolveBodyCollision), not by the
+  // solver's bounce measured here.
+  const realRules = first.rules.real ?? null;
+  const impactStabilityPerMps = realRules ? realRules.hitStability : WALL_IMPACT_STABILITY_DAMAGE_PER_MPS;
+  const realBeyContact = realRules !== null && beysTouching;
+  if (realRules && !beysTouching) {
+    if (firstMovement.impactDeltaSpeedMps > 0) first.stamina.addSpinShare(-realRules.wallSpinLoss * firstMovement.impactDeltaSpeedMps);
+    if (secondMovement.impactDeltaSpeedMps > 0) second.stamina.addSpinShare(-realRules.wallSpinLoss * secondMovement.impactDeltaSpeedMps);
+  }
   if (firstMovement.impactDeltaSpeedMps > 0 && !(firstCircularActive && beysTouching)) {
     first.spin.registerImpact(first.body, firstMovement.impactDeltaSpeedMps, firstMovement.impactDirection);
-    first.stability.applyDamage(firstMovement.impactDeltaSpeedMps * WALL_IMPACT_STABILITY_DAMAGE_PER_MPS);
+    if (!realBeyContact) first.stability.applyDamage(firstMovement.impactDeltaSpeedMps * impactStabilityPerMps);
   }
   if (secondMovement.impactDeltaSpeedMps > 0 && !(secondCircularActive && beysTouching)) {
     second.spin.registerImpact(second.body, secondMovement.impactDeltaSpeedMps, secondMovement.impactDirection);
-    second.stability.applyDamage(secondMovement.impactDeltaSpeedMps * WALL_IMPACT_STABILITY_DAMAGE_PER_MPS);
+    if (!realBeyContact) second.stability.applyDamage(secondMovement.impactDeltaSpeedMps * impactStabilityPerMps);
   }
 
   // Owner, 2026-10-04: "o dash NÃO DEVIA NEM GASTAR STAMINA". A Dash (and its recovery, still at Dash speed) costs no
@@ -632,6 +651,7 @@ export function tickMatch(
   // The defensive Circular (owner, 2026-10-02, item 13): launches whoever touches an active Circular — strong
   // knockback away from it plus lift, × MatchConfig.circularLaunchForce. Once per Bey per tick.
   const launchedThisTick = { first: false, second: false };
+  const circularLaunchUpMps = first.rules.real?.circularLaunchUpMps ?? CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS;
   const bothCircular = firstAttack.state === AttackState.CircularActive && secondAttack.state === AttackState.CircularActive;
   function launchAwayFromCircular(targetIsFirst: boolean): void {
     const key = targetIsFirst ? 'first' : 'second';
@@ -641,7 +661,7 @@ export function tickMatch(
     const force = first.rules.circularLaunchForce * knockbackScale;
     const dir = normalize(subtract(targetIsFirst ? firstPos : secondPos, targetIsFirst ? secondPos : firstPos));
     const vel = target.body.linvel();
-    target.body.setLinvel({ x: dir.x * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force, y: Math.max(0, vel.y) + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS * force, z: dir.z * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force }, true);
+    target.body.setLinvel({ x: dir.x * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force, y: Math.max(0, vel.y) + circularLaunchUpMps * force, z: dir.z * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force }, true);
     target.movement.registerKnockback();
     target.momentum.loseOnCollision();
     // A genuine launch: arm Air Recovery at once if already airborne, else the short pending window.
@@ -666,8 +686,8 @@ export function tickMatch(
       // The pre-2026-10-02 rule (bare constructions only): a Circular catching an active Dash launches the dasher
       // upward and stops most of its run (GDD section 23/107).
       const vel = defender.body.linvel();
-      const keep = CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP;
-      defender.body.setLinvel({ x: vel.x * keep, y: vel.y + CIRCULAR_CATCHES_DASH_LAUNCH_UP_MPS, z: vel.z * keep }, true);
+      const keep = first.rules.real?.circularKeepFraction ?? CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP;
+      defender.body.setLinvel({ x: vel.x * keep, y: vel.y + circularLaunchUpMps, z: vel.z * keep }, true);
       defender.movement.registerKnockback();
       defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
       applyStabilityDamageAndTrackKo(defenderIsFirst, defender, attackHitDamage(hit, attacker, defender));
@@ -755,18 +775,48 @@ export function tickMatch(
     }
   }
 
+  function resolveRealBodyContact(real: RealModeConfig): void {
+    if (firstDodge.hasIFrames || secondDodge.hasIFrames) return;
+    const normal = normalize(subtract(secondPos, firstPos));
+    if (normal.x === 0 && normal.z === 0) return;
+    const outcome = resolveRealContact(
+      real,
+      { velocity: firstVelBefore, mass: first.definition.physical.massKg, spin: first.stamina.resource.fraction, dir: 1 },
+      { velocity: secondVelBefore, mass: second.definition.physical.massKg * real.massSecond, spin: second.stamina.resource.fraction, dir: realSecondSpinDir(real) },
+      normal,
+    );
+    if (!outcome) return;
+    first.body.setLinvel({ x: outcome.velocityA.x, y: first.body.linvel().y, z: outcome.velocityA.z }, true);
+    second.body.setLinvel({ x: outcome.velocityB.x, y: second.body.linvel().y, z: outcome.velocityB.z }, true);
+    first.stamina.addSpinShare(outcome.spinDeltaA);
+    second.stamina.addSpinShare(outcome.spinDeltaB);
+    const damage = real.hitStability * outcome.impulse;
+    if (damage > 0) {
+      applyStabilityDamageAndTrackKo(true, first, damage);
+      applyStabilityDamageAndTrackKo(false, second, damage);
+    }
+    combatEvents.push({ kind: 'bodyCollision', targetIsFirst: true, damage, speedDifferenceMps: outcome.closingMps });
+    combatEvents.push({ kind: 'bodyCollision', targetIsFirst: false, damage, speedDifferenceMps: outcome.closingMps });
+  }
+
   function resolveBodyCollision(): void {
     first.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
     second.momentum.startCollisionCooldown(BODY_COLLISION_COOLDOWN_S);
     // Owner, 2026-10-04: any touch throws both Beys apart, whatever their speeds (dodge i-frames / an active Circular excepted).
-    if (!firstDodge.hasIFrames && firstAttack.state !== AttackState.CircularActive) pushApart(true, first.rules.contactRepelMps ?? 0, true);
-    if (!secondDodge.hasIFrames && secondAttack.state !== AttackState.CircularActive) pushApart(false, first.rules.contactRepelMps ?? 0, true);
+    // Bey Real: a plain touch is the real contact model's (below), not a fixed push.
+    if (!first.rules.real && !firstDodge.hasIFrames && firstAttack.state !== AttackState.CircularActive) pushApart(true, first.rules.contactRepelMps ?? 0, true);
+    if (!first.rules.real && !secondDodge.hasIFrames && secondAttack.state !== AttackState.CircularActive) pushApart(false, first.rules.contactRepelMps ?? 0, true);
     // The defensive Circular (item 13): touching an active Circular launches you; its user is unaffected.
     const firstCircular = firstAttack.state === AttackState.CircularActive;
     const secondCircular = secondAttack.state === AttackState.CircularActive;
     if (defensiveCircular && (firstCircular || secondCircular)) {
       if (firstCircular && !secondCircular) launchAwayFromCircular(false);
       if (secondCircular && !firstCircular) launchAwayFromCircular(true);
+      return;
+    }
+    // Bey Real: two plain bodies meet the way two real tops do (RealContact.ts), not by the classic damage/knockback rules.
+    if (realRules) {
+      resolveRealBodyContact(realRules);
       return;
     }
     const scaleDamage = first.rules.bodyCollisionDamage;

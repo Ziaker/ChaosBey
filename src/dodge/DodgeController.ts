@@ -67,6 +67,21 @@ export interface DodgeTickResult {
   staminaCostThisTick: number;
 }
 
+/**
+ * The dodge's timings a match can change: the game's own constants by default (DodgeTuning.ts); a Bey Real match fills them from
+ * its sliders (MatchConfig.real).
+ */
+export interface DodgeTuningValues {
+  /** How long the dodge (and its i-frames) lasts, s. */
+  readonly activeDurationS: number;
+  /** How long of that the burst velocity replaces the Bey's own, s (the rest is the i-frames only). */
+  readonly burstDurationS: number;
+  /** The Perfect Dodge window at the start of the dodge, s. */
+  readonly perfectWindowS: number;
+}
+
+export const DEFAULT_DODGE_TUNING: DodgeTuningValues = { activeDurationS: DODGE_ACTIVE_DURATION_S, burstDurationS: DODGE_ACTIVE_DURATION_S, perfectWindowS: DODGE_PERFECT_WINDOW_S };
+
 export class DodgeController {
   /** MatchConfig.dodgeCooldownS (owner, 2026-10-02: a Pregame slider). */
   constructor(
@@ -87,6 +102,8 @@ export class DodgeController {
      * constructions keep the old recovery).
      */
     private readonly recoveryMinDelayS: number | null = null,
+    /** The dodge's timings of this match (Bey Real changes them); omitted = the game's own constants. */
+    private readonly tuning: DodgeTuningValues = DEFAULT_DODGE_TUNING,
   ) {}
 
   /**
@@ -276,7 +293,7 @@ export class DodgeController {
 
       case DodgeState.Dodging:
         this.activeTimerS += fixedDeltaSeconds;
-        if (this.activeTimerS >= DODGE_ACTIVE_DURATION_S) {
+        if (this.activeTimerS >= this.tuning.activeDurationS) {
           this.state = DodgeState.Cooldown;
           this.cooldownTimerS = 0;
           this.latchedDirection = null;
@@ -300,7 +317,7 @@ export class DodgeController {
     // velocity. Never set outside Dodging (Idle, Cooldown, or the one-shot
     // airborne recovery path above, which only flips triggeredAirRecovery
     // and never touches latchedDirection).
-    const dodgeOverride = this.state === DodgeState.Dodging && this.latchedDirection ? { velocityMps: scale(this.latchedDirection, DODGE_BURST_SPEED_MPS * this.distanceScale) } : null;
+    const dodgeOverride = this.state === DodgeState.Dodging && this.latchedDirection && this.activeTimerS <= this.tuning.burstDurationS ? { velocityMps: scale(this.latchedDirection, DODGE_BURST_SPEED_MPS * this.distanceScale) } : null;
 
     return {
       state: this.state,
@@ -308,7 +325,7 @@ export class DodgeController {
       dodgeOverride,
       // Owner, 2026-10-05: invincible for the whole dodge, on the ground or carried off it into the air.
       hasIFrames: this.state === DodgeState.Dodging,
-      isPerfectWindow: this.state === DodgeState.Dodging && this.activeTimerS <= DODGE_PERFECT_WINDOW_S,
+      isPerfectWindow: this.state === DodgeState.Dodging && this.activeTimerS <= this.tuning.perfectWindowS,
       triggeredAirRecovery,
       staminaCostThisTick,
     };

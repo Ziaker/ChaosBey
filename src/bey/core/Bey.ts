@@ -31,7 +31,7 @@ import { DEFAULT_BEY_DEFINITION, scaledBeyDefinition, type BeyDefinition } from 
 import { resolveBeyStats } from '../archetype/BeyStatsResolution';
 import type { BeyStats } from '../archetype/BeyStats';
 import { motionParams, type MotionParams } from '../motion/MotionPresets';
-import { realSpinDrainOf } from '../real/RealTuning';
+import { attackProfileOf, attackTuningOf, dodgeTuningOf, realSpinDrainOf, stabilityRecoveryOf } from '../real/realTunings';
 import { beyMatchRulesOf, createDefaultMatchConfig, type BeyMatchRules } from '../../config/match/MatchConfig';
 
 export interface Bey {
@@ -98,10 +98,10 @@ export function createBey(
     spin: new SpinController(motion),
     // Bare constructions (no match rules: the Camera Lab, physics-only tests) keep the old immediate full-jump launch.
     drift: new DriftController(movement.getLateralGripPerS(), matchRules),
-    dodge: new DodgeController(rules.dodgeCooldownS, rules.dodgeStaminaCost ?? DODGE_STAMINA_COST, rules.dodgeDistanceScale ?? 1, matchRules !== undefined, matchRules !== undefined ? (rules.airRecoveryMinDelayS ?? 0) : null),
+    dodge: new DodgeController(rules.dodgeCooldownS, rules.dodgeStaminaCost ?? DODGE_STAMINA_COST, rules.dodgeDistanceScale ?? 1, matchRules !== undefined, matchRules !== undefined ? (rules.airRecoveryMinDelayS ?? 0) : null, rules.real ? dodgeTuningOf(rules.real) : undefined),
     stamina: new StaminaSystem(stats.stamina, rules.movementStaminaDrain, rules.spinStaminaDrain ?? 1, rules.real ? realSpinDrainOf(rules.real) : null),
-    stability: new StabilitySystem(),
-    attack: new AttackController(definition.attack, rules.dashCooldownS, rules.dashCarriesSpeed ?? false, rules.topSpeedScale ?? 1, rules.circularAttack ?? true),
+    stability: new StabilitySystem(rules.real ? stabilityRecoveryOf(rules.real) : undefined),
+    attack: new AttackController(rules.real ? attackProfileOf(definition.attack, rules.real) : definition.attack, rules.dashCooldownS, rules.dashCarriesSpeed ?? false, rules.topSpeedScale ?? 1, rules.circularAttack ?? true, rules.real ? attackTuningOf(rules.real) : undefined),
     momentum: new MomentumSystem(rules),
     // A short hop's launch speed, from the Bey's own jump rules: what a Jump press gives when it leaves a rail.
     rail: new RailController(matchRules !== undefined && (rules.railsEnabled ?? false) ? rails : [], { tuning: scaleRailTuning(RAIL_TUNING, rules.railSpeed ?? RAIL_SPEED_DEFAULT), jumpExitLiftMps: Math.sqrt(2 * Math.abs(GRAVITY_Y) * (rules.gravityScale ?? 1) * (rules.jumpShortHopHeightM ?? JUMP_SHORT_HOP_TARGET_APEX_M)) }),
