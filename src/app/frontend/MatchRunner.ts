@@ -32,6 +32,7 @@ import { DEFAULT_PLAYER_SETTINGS, type CameraPresetSetting, type ConditionLayerS
 import { FIXED_DELTA_SECONDS, FixedTimestepLoop } from '../../physics/fixed-step/FixedTimestepLoop';
 import { screenVectorFromDigital, screenVectorFromStick, screenLength } from '../../input/directional/screenDirection';
 import { LaunchFlow, type LaunchInput } from './LaunchFlow';
+import { warmUpRenderer } from '../bootstrap/warmUpRenderer';
 import { AdaptiveResolution } from './adaptiveResolution';
 import { FrameLimiter } from './frameLimiter';
 import { DEFAULT_FRAME_LIMIT, type FrameLimitSetting } from '../../config/settings/FrameLimit';
@@ -282,6 +283,9 @@ export class MatchRunner {
     if (start.presentation) runner.setPresentation(start.presentation);
     if (start.realCamera === 'real') runner.externalCamera = new RealModeCamera();
     else if (start.realCamera === 'free') runner.externalCamera = new FreeOrbitCamera();
+    // Everything the round draws is in the scene now (arena, Beys, rails, launchers, effect pools): compile its shaders and
+    // upload its textures behind the loading screen, not on the first frames of the round (0.62.0).
+    await warmUpRenderer(deps.appRenderer.renderer, deps.appRenderer.scene, deps.appRenderer.camera);
     return runner;
   }
 
