@@ -8,6 +8,7 @@
 // ============================================================
 
 import * as THREE from 'three';
+import { mergeStaticMeshes } from '../../presentation/mergeStaticMeshes';
 import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, onCircle, scaledCount, seededRandom, shadowed, skyDome, spotAngleToCover, stageCoveragePoints, stageRigIntensity } from './common';
 import type { ArenaConcept, BuiltArena } from './types';
 
@@ -150,10 +151,13 @@ export const FOUNDRY_PIT: ArenaConcept = {
     const bolts = new THREE.InstancedMesh(boltGeometry, boltMat, WALL_SEGMENTS * 10);
     const boltMatrix = new THREE.Matrix4();
     let boltIndex = 0;
+    // The 48 panels and 48 ribs never move: one mesh per material instead of 96 draw calls (0.62.0; the look is the same).
+    const wallParts = new THREE.Group();
+    wallParts.name = 'wall-parts';
     for (let i = 0; i < WALL_SEGMENTS; i++) {
       const a = (i / WALL_SEGMENTS) * Math.PI * 2;
       const panel = onCircle(shadowed(new THREE.Mesh(new THREE.BoxGeometry(chord, WALL_HEIGHT + 0.4, 0.5), panelMat)), R + 0.35, a, rim + WALL_HEIGHT / 2 - 0.2);
-      root.add(panel);
+      wallParts.add(panel);
       panel.updateMatrix();
       for (let k = -2; k <= 2; k++) {
         for (const y of [-0.55, 0.55]) {
@@ -162,8 +166,10 @@ export const FOUNDRY_PIT: ArenaConcept = {
         }
       }
       const rib = new THREE.Mesh(new THREE.BoxGeometry(0.25, WALL_HEIGHT + 0.5, 0.7), darkMat);
-      root.add(onCircle(shadowed(rib), R + 0.4, a + Math.PI / WALL_SEGMENTS, rim + WALL_HEIGHT / 2 - 0.15));
+      wallParts.add(onCircle(shadowed(rib), R + 0.4, a + Math.PI / WALL_SEGMENTS, rim + WALL_HEIGHT / 2 - 0.15));
     }
+    mergeStaticMeshes(wallParts);
+    root.add(wallParts);
     bolts.instanceMatrix.needsUpdate = true;
     root.add(bolts);
     const hazardMat = new THREE.MeshStandardMaterial({ map: hazardTexture(), roughness: 0.55, metalness: 0.3, emissive: 0xff7a1a, emissiveIntensity: 0 });

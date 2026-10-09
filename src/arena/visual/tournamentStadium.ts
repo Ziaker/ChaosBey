@@ -8,6 +8,7 @@
 // ============================================================
 
 import * as THREE from 'three';
+import { mergeStaticMeshes } from '../../presentation/mergeStaticMeshes';
 import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, rigIntensity, scaledCount, seededRandom, shadowed, skyDome } from './common';
 import type { ArenaConcept, BuiltArena } from './types';
 
@@ -109,12 +110,14 @@ export const TOURNAMENT_STADIUM: ArenaConcept = {
     glass.position.y = rim + 0.35 + (WALL_HEIGHT - 0.35) / 2;
     glass.renderOrder = 2;
     root.add(kick, glass);
+    const staticParts = new THREE.Group(); // posts and stand steps never move: merged by material (0.62.0; the look is the same)
+    staticParts.name = 'static-parts';
     for (let i = 0; i < POSTS; i++) {
       const a = (i / POSTS) * Math.PI * 2;
       const post = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.14, WALL_HEIGHT + 0.1, 0.22), metal));
       post.position.set(Math.cos(a) * (R + 0.18), rim + (WALL_HEIGHT + 0.1) / 2, Math.sin(a) * (R + 0.18));
       post.lookAt(0, post.position.y, 0);
-      root.add(post);
+      staticParts.add(post);
     }
     const rail = shadowed(new THREE.Mesh(new THREE.TorusGeometry(R + 0.12, 0.08, 10, scaledCount(160)).rotateX(Math.PI / 2), metal));
     rail.position.y = rim + WALL_HEIGHT + 0.05;
@@ -137,7 +140,7 @@ export const TOURNAMENT_STADIUM: ArenaConcept = {
       step.position.y = y / 2;
       const tread = new THREE.Mesh(new THREE.RingGeometry(r0, r0 + 1.8, scaledCount(96)).rotateX(-Math.PI / 2), standMat);
       tread.position.y = y;
-      root.add(step, tread);
+      staticParts.add(step, tread);
       const count = Math.round((CROWD / tiers) * (r0 / 20));
       for (let k = 0; k < count; k++) {
         if (rnd() < 0.18) continue; // empty seats
@@ -145,6 +148,8 @@ export const TOURNAMENT_STADIUM: ArenaConcept = {
         seats.push(new THREE.Vector3(Math.cos(a) * (r0 + 0.9), y + 0.4, Math.sin(a) * (r0 + 0.9)));
       }
     }
+    mergeStaticMeshes(staticParts);
+    root.add(staticParts);
     const crowdMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
     const crowd = new THREE.InstancedMesh(new THREE.BoxGeometry(0.45, 0.8, 0.4), crowdMat, seats.length);
     const m = new THREE.Matrix4();

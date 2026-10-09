@@ -51,7 +51,12 @@ export interface MainMenuOptions {
   readonly location?: { readonly pathname: string; readonly search: string };
 }
 
-export function startMainMenu(mount: HTMLElement, options: MainMenuOptions = {}): void {
+/** What the menu hands back: take it off the page (PLAY enters in place, so the menu must go). */
+export interface MainMenuHandle {
+  dispose(): void;
+}
+
+export function startMainMenu(mount: HTMLElement, options: MainMenuOptions = {}): MainMenuHandle {
   const location = options.location ?? window.location;
   const navigate = options.navigate ?? ((href: string) => window.location.assign(href));
   injectStyle();
@@ -117,6 +122,7 @@ export function startMainMenu(mount: HTMLElement, options: MainMenuOptions = {})
   root.append(title, top, developer);
   mount.append(root);
   top.querySelector('button')?.focus();
+  return { dispose: () => root.remove() };
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string): HTMLElementTagNameMap[K] {

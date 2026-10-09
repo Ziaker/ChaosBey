@@ -18,6 +18,7 @@
 // vertically (exploded view) to show the four pieces separately.
 // ============================================================
 
+import { mergeStaticMeshes } from '../../../presentation/mergeStaticMeshes';
 import * as THREE from 'three';
 import { createMaterialKit } from './materials';
 import { detailed } from './geometry';
@@ -55,7 +56,7 @@ export interface BuiltConcept {
   dispose(): void;
 }
 
-export function assembleConcept(definition: ConceptDefinition): BuiltConcept {
+export function assembleConcept(definition: ConceptDefinition, options: { readonly mergeMeshes?: boolean } = {}): BuiltConcept {
   const mats = createMaterialKit(definition.palette);
   const ctx = { mats };
   const built = Object.fromEntries(
@@ -99,6 +100,9 @@ export function assembleConcept(definition: ConceptDefinition): BuiltConcept {
     root.add(holders[name]);
   }
 
+  root.updateMatrixWorld(true);
+  // One draw call per material per piece (the look and the bounds are unchanged; see mergeStaticMeshes.ts).
+  if (options.mergeMeshes !== false) for (const name of PIECE_ORDER) mergeStaticMeshes(holders[name]);
   root.updateMatrixWorld(true);
   const pieces = Object.fromEntries(PIECE_ORDER.map((name) => [name, measure(holders[name])])) as Record<PieceName, PieceMeasurement>;
   const box = new THREE.Box3().setFromObject(root);

@@ -162,6 +162,10 @@ export class DebugOverlay {
     this.applyVisibility();
   }
 
+  isVisible(): boolean {
+    return this.visible;
+  }
+
   toggle(): void {
     this.visible = !this.visible;
     this.applyVisibility();

@@ -80,3 +80,35 @@ test('Main Menu: unknown modes fall back to the menu', async ({ page }) => {
   await page.goto('/ChaosBey/?mode=nonsense');
   await expect(page.getByTestId('main-menu')).toBeVisible({ timeout: 15_000 });
 });
+
+// 0.62.0: PLAY enters in place (no second page load), the address becomes ?mode=play, and the browser Back button returns to the menu.
+test('Main Menu: PLAY enters in place without reloading the page, and Back returns to the menu', async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
+
+  await page.goto(baselineUrl('/ChaosBey/'));
+  await expect(page.getByTestId('main-menu')).toBeVisible({ timeout: 15_000 });
+  // The page's own boot payload (what index.html loads before anything runs) holds no three.js and no physics engine: those load
+  // lazily, and the browser fetches them while the menu is idle.
+  const html = await (await page.request.get(new URL('/ChaosBey/', page.url()).href)).text();
+  const boot = [...html.matchAll(/(?:src|href)="([^"]+\.js)"/g)].map((m) => (m[1] ?? '').split('/').pop() ?? '');
+  expect(boot.length).toBeGreaterThan(0);
+  expect(boot.filter((n) => /three|MatchConfig|playMode|createRenderer|SeededRng|TelemetryRecorder/.test(n)), 'the menu must not pull the 3D engine in before PLAY').toEqual([]);
+  await page.evaluate(() => {
+    (window as unknown as { __notReloaded: boolean }).__notReloaded = true;
+  });
+  await page.getByTestId('main-menu-play').click();
+  await expect(page).toHaveURL(/\/ChaosBey\/\?pfx=&mode=play$|\/ChaosBey\/\?mode=play$/);
+  await expect(page.getByTestId('character-select')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('main-menu')).toHaveCount(0);
+  // The same page: nothing was reloaded.
+  expect(await page.evaluate(() => (window as unknown as { __notReloaded?: boolean }).__notReloaded)).toBe(true);
+  await expect(page.locator('#app-canvas')).toBeVisible();
+
+  await page.goBack();
+  await expect(page.getByTestId('main-menu')).toBeVisible({ timeout: 15_000 });
+  expect(consoleErrors).toEqual([]);
+});

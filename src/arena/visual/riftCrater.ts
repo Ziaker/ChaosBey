@@ -8,6 +8,7 @@
 // ============================================================
 
 import * as THREE from 'three';
+import { mergeStaticMeshes } from '../../presentation/mergeStaticMeshes';
 import { ARENA_RADIUS, ARENA_SCALE, bowlFloor, canvasTexture, disposeTree, floorCanvas, scaledCount, seededRandom, shadowed, skyDome, stageRigIntensity } from './common';
 import type { ArenaConcept, BuiltArena } from './types';
 
@@ -138,6 +139,8 @@ export const RIFT_CRATER: ArenaConcept = {
 
     // Jagged rim rocks.
     const rockMat = new THREE.MeshStandardMaterial({ color: 0x3f3a4f, roughness: 0.9, flatShading: true });
+    const rimRocks = new THREE.Group(); // static: merged into one mesh (0.62.0; the look is the same)
+    rimRocks.name = 'rim-rocks';
     for (let i = 0; i < RIM_ROCKS; i++) {
       const a = (i / RIM_ROCKS) * Math.PI * 2 + rnd() * 0.12;
       const s = 0.6 + rnd() * 1.1;
@@ -146,8 +149,10 @@ export const RIFT_CRATER: ArenaConcept = {
       rock.position.set(Math.cos(a) * rr, rim + s * 0.35, Math.sin(a) * rr);
       rock.scale.set(1, 0.7 + rnd() * 0.9, 1);
       rock.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
-      root.add(rock);
+      rimRocks.add(rock);
     }
+    mergeStaticMeshes(rimRocks);
+    root.add(rimRocks);
 
     // Energy barrier.
     const barrierMat = barrierMaterial();
