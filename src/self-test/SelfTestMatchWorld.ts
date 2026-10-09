@@ -10,6 +10,7 @@
 // in exactly one place.
 // ============================================================
 
+import { realSecondSpinDir } from '../bey/real/realTunings';
 import * as THREE from 'three';
 import { matchSpawnsFor, type SpawnPositionM } from '../app/bootstrap/matchSpawns';
 import { ClashOrchestration } from '../app/simulation/ClashOrchestration';
@@ -77,7 +78,7 @@ export class SelfTestMatchWorld {
     const spawns = matchSpawnsFor(floor);
     const rails = railsOfMatch(config.railsEnabled, floor, arenaFloorRadius()); // the same rails createMatchScene builds
     const first = createBey(physics, options.firstSpawn ?? spawns.first, options.firstDefinition, floor, motion, beyMatchRulesOf(config), rails, 1);
-    const second = createBey(physics, options.secondSpawn ?? spawns.second, options.secondDefinition, floor, motion, beyMatchRulesOf(config), rails, -1);
+    const second = createBey(physics, options.secondSpawn ?? spawns.second, options.secondDefinition, floor, motion, beyMatchRulesOf(config), rails, config.real ? realSecondSpinDir(config.real) : -1);
     const clash = options.aiMashSource !== undefined ? new ClashOrchestration(config, options.aiMashSource) : new ClashOrchestration(config);
     return { physics, first, second, roundState: new RoundState(roundStateOptionsOf(config)), clash };
   }

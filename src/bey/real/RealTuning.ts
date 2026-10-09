@@ -226,83 +226,83 @@ export const REAL_PARAM_SPEC: readonly RealParamSpec[] = [
     note: 'Quando o giro cai abaixo deste valor o Bey começa a cambalear. Mais = começa a balançar cedo; menos = firme até quase parar.' },
   { key: 'wobbleAccelMps2', group: 'physics', live: true, min: 0, max: 10, step: 0.1, format: fix(1, ' m/s²'), label: 'Força do balanço',
     note: 'O quanto o balanço empurra o Bey para os lados quando o giro está baixo (ou ele está quebrado). Mais = fim de partida errático; 0 = sem balanço.' },
-  { key: 'massSecond', group: 'physics', live: false, min: 0.5, max: 2, step: 0.05, format: x2, label: 'Massa do 2º Bey',
-    note: 'A massa do oponente em relação à sua. Mais = ele joga você mais longe nas batidas.' },
-  { key: 'sameSpin', group: 'physics', live: false, min: 0, max: 1, step: 1, format: (v) => (v >= 0.5 ? 'iguais' : 'opostos'), label: 'Sentido do giro dos dois',
+  { key: 'massSecond', group: 'physics', live: true, min: 0.5, max: 2, step: 0.05, format: x2, label: 'Massa do 2º Bey',
+    note: 'A massa do oponente em relação à sua, nas batidas corpo a corpo. Mais = ele joga você mais longe e você quase não o move.' },
+  { key: 'sameSpin', group: 'physics', live: true, min: 0, max: 1, step: 1, format: (v) => (v >= 0.5 ? 'iguais' : 'opostos'), label: 'Sentido do giro dos dois',
     note: 'Opostos: os Beys se engrenam e se empurram. Iguais: as bordas se raspam e roubam giro um do outro.' },
   // ---- collision ----
-  { key: 'restitutionLow', group: 'collision', live: false, min: 0.1, max: 1, step: 0.01, format: fix(2, ''), label: 'Quique com giro baixo',
+  { key: 'restitutionLow', group: 'collision', live: true, min: 0.1, max: 1, step: 0.01, format: fix(2, ''), label: 'Quique com giro baixo',
     note: 'O quanto os Beys quicam um do outro quando o giro está baixo. Mais = rebatem mais.' },
-  { key: 'restitutionHigh', group: 'collision', live: false, min: 0.1, max: 1, step: 0.01, format: fix(2, ''), label: 'Quique com giro alto',
+  { key: 'restitutionHigh', group: 'collision', live: true, min: 0.1, max: 1, step: 0.01, format: fix(2, ''), label: 'Quique com giro alto',
     note: 'O quanto quicam com o giro cheio. Mais = batidas explosivas no começo da partida.' },
-  { key: 'rimFriction', group: 'collision', live: false, min: 0, max: 1, step: 0.01, format: fix(2, ''), label: 'Atrito entre as bordas',
+  { key: 'rimFriction', group: 'collision', live: true, min: 0, max: 1, step: 0.01, format: fix(2, ''), label: 'Atrito entre as bordas',
     note: 'Atrito no ponto de contato: transforma a batida em desvio lateral e troca de giro. Mais = batidas rasantes desviam e roubam mais.' },
-  { key: 'spinExchange', group: 'collision', live: false, min: 0, max: 0.05, step: 0.001, format: fix(3, ''), label: 'Troca de giro no contato',
+  { key: 'spinExchange', group: 'collision', live: true, min: 0, max: 0.05, step: 0.001, format: fix(3, ''), label: 'Troca de giro no contato',
     note: 'Quanto giro passa de um Bey para o outro no atrito. Mais = quem gira mais rouba do outro.' },
-  { key: 'hitSpinLoss', group: 'collision', live: false, min: 0, max: 0.01, step: 0.0002, format: fix(4, ''), label: 'Giro perdido por impacto',
+  { key: 'hitSpinLoss', group: 'collision', live: true, min: 0, max: 0.01, step: 0.0002, format: fix(4, ''), label: 'Giro perdido por impacto',
     note: 'Giro que os dois perdem em uma batida forte. Mais = cada batida encurta a partida.' },
-  { key: 'rubSpinLoss', group: 'collision', live: false, min: 0, max: 0.01, step: 0.0002, format: fix(4, ''), label: 'Giro perdido por raspão',
+  { key: 'rubSpinLoss', group: 'collision', live: true, min: 0, max: 0.01, step: 0.0002, format: fix(4, ''), label: 'Giro perdido por raspão',
     note: 'Giro perdido em um encostão leve.' },
-  { key: 'hitStability', group: 'collision', live: false, min: 0, max: 3, step: 0.05, format: fix(2, ''), label: 'Estabilidade perdida por impacto',
-    note: 'Quanto de Estabilidade cada batida tira. Mais = o Bey quebra mais fácil e fica vulnerável ao KO.' },
+  { key: 'hitStability', group: 'collision', live: true, min: 0, max: 3, step: 0.05, format: fix(2, ''), label: 'Estabilidade perdida por impacto',
+    note: 'Estabilidade perdida por m/s de cada impacto (batida entre os corpos ou na parede). Mais = o Bey quebra mais fácil e fica vulnerável ao KO.' },
   { key: 'wallRestitution', group: 'collision', live: true, min: 0, max: 1, step: 0.01, format: fix(2, ''), label: 'Quique na parede',
     note: 'Quanto o Bey volta ao bater na parede. Mais = a parede devolve o Bey para o meio; 0 = ele gruda e desliza.' },
-  { key: 'wallSpinLoss', group: 'collision', live: false, min: 0, max: 0.01, step: 0.0002, format: fix(4, ''), label: 'Giro perdido na parede',
+  { key: 'wallSpinLoss', group: 'collision', live: true, min: 0, max: 0.01, step: 0.0002, format: fix(4, ''), label: 'Giro perdido na parede',
     note: 'Giro perdido a cada batida na parede.' },
   // ---- dash ----
-  { key: 'dashMinSpeedMps', group: 'dash', live: false, min: 4, max: 20, step: 0.5, format: fix(1, ' m/s'), label: 'Velocidade mínima',
+  { key: 'dashMinSpeedMps', group: 'dash', live: true, min: 4, max: 20, step: 0.5, format: fix(1, ' m/s'), label: 'Velocidade mínima',
     note: 'Velocidade de um Dash sem carga.' },
-  { key: 'dashMaxSpeedMps', group: 'dash', live: false, min: 6, max: 30, step: 0.5, format: fix(1, ' m/s'), label: 'Velocidade máxima',
+  { key: 'dashMaxSpeedMps', group: 'dash', live: true, min: 6, max: 30, step: 0.5, format: fix(1, ' m/s'), label: 'Velocidade máxima',
     note: 'Velocidade de um Dash com carga cheia.' },
-  { key: 'dashChargeMaxS', group: 'dash', live: false, min: 0.3, max: 3, step: 0.05, format: fix(2, ' s'), label: 'Carga até o máximo',
+  { key: 'dashChargeMaxS', group: 'dash', live: true, min: 0.3, max: 3, step: 0.05, format: fix(2, ' s'), label: 'Carga até o máximo',
     note: 'Quanto tempo segurando o botão para carregar tudo. Menos = Dash cheio quase instantâneo.' },
-  { key: 'dashDurationS', group: 'dash', live: false, min: 0.2, max: 1.2, step: 0.05, format: fix(2, ' s'), label: 'Duração',
+  { key: 'dashDurationS', group: 'dash', live: true, min: 0.2, max: 1.2, step: 0.05, format: fix(2, ' s'), label: 'Duração',
     note: 'Quanto tempo o Dash dura. Mais = alcança de mais longe.' },
   { key: 'dashCooldownS', group: 'dash', live: true, min: 0.5, max: 5, step: 0.25, format: fix(2, ' s'), label: 'Recarga do Dash',
     note: 'Tempo, depois de um Dash, até poder carregar o próximo (vale para você e para a IA). Mais = Dashes mais raros e pensados.' },
-  { key: 'dashSnapRadPerS', group: 'dash', live: false, min: 0, max: 80, step: 1, format: fix(0, ' rad/s'), label: 'Virada imediata ao soltar',
+  { key: 'dashSnapRadPerS', group: 'dash', live: true, min: 0, max: 80, step: 1, format: fix(0, ' rad/s'), label: 'Virada imediata ao soltar',
     note: 'A rapidez com que o Dash gira na direção do oponente logo ao soltar.' },
-  { key: 'dashSnapWindowS', group: 'dash', live: false, min: 0, max: 0.3, step: 0.01, format: fix(2, ' s'), label: 'Janela da virada imediata',
+  { key: 'dashSnapWindowS', group: 'dash', live: true, min: 0, max: 0.3, step: 0.01, format: fix(2, ' s'), label: 'Janela da virada imediata',
     note: 'Por quanto tempo vale a virada rápida.' },
-  { key: 'dashLockRadPerS', group: 'dash', live: false, min: 0, max: 12, step: 0.5, format: fix(1, ' rad/s'), label: 'Mira depois da virada',
+  { key: 'dashLockRadPerS', group: 'dash', live: true, min: 0, max: 12, step: 0.5, format: fix(1, ' rad/s'), label: 'Mira depois da virada',
     note: 'O quanto o Dash ainda persegue o oponente depois da virada. Mais = difícil de desviar.' },
-  { key: 'dashMassBoost', group: 'dash', live: false, min: 1, max: 4, step: 0.1, format: x2, label: 'Massa efetiva no Dash',
-    note: 'O Dash bate como se pesasse mais. Mais = joga o oponente bem mais longe.' },
-  { key: 'dashStabilityMin', group: 'dash', live: false, min: 0, max: 50, step: 1, format: fix(0, ''), label: 'Estabilidade tirada, carga mínima',
+  { key: 'dashMassBoost', group: 'dash', live: true, min: 1, max: 4, step: 0.1, format: x2, label: 'Massa efetiva no Dash',
+    note: 'O Dash bate como se pesasse mais: multiplica a força do arremesso do Dash (1,8 = o arremesso normal do jogo). Mais = joga o oponente bem mais longe.' },
+  { key: 'dashStabilityMin', group: 'dash', live: true, min: 0, max: 50, step: 1, format: fix(0, ''), label: 'Estabilidade tirada, carga mínima',
     note: 'Dano de Estabilidade de um Dash sem carga.' },
-  { key: 'dashStabilityMax', group: 'dash', live: false, min: 0, max: 80, step: 1, format: fix(0, ''), label: 'Estabilidade tirada, carga máxima',
+  { key: 'dashStabilityMax', group: 'dash', live: true, min: 0, max: 80, step: 1, format: fix(0, ''), label: 'Estabilidade tirada, carga máxima',
     note: 'Dano de Estabilidade de um Dash carregado.' },
-  { key: 'dashSpinCost', group: 'dash', live: false, min: 0, max: 0.06, step: 0.001, format: fix(3, ''), label: 'Custo de giro',
+  { key: 'dashSpinCost', group: 'dash', live: true, min: 0, max: 0.06, step: 0.001, format: fix(3, ''), label: 'Custo de giro',
     note: 'Giro gasto a cada Dash.' },
-  { key: 'dashWhiffRecoveryS', group: 'dash', live: false, min: 0, max: 2, step: 0.05, format: fix(2, ' s'), label: 'Recuperação se errar',
+  { key: 'dashWhiffRecoveryS', group: 'dash', live: true, min: 0, max: 2, step: 0.05, format: fix(2, ' s'), label: 'Recuperação se errar',
     note: 'Tempo vulnerável depois de um Dash que não acertou.' },
   // ---- circular ----
-  { key: 'circularRadiusM', group: 'circular', live: false, min: 0.6, max: 3, step: 0.05, format: fix(2, ' m'), label: 'Alcance',
+  { key: 'circularRadiusM', group: 'circular', live: true, min: 0.6, max: 3, step: 0.05, format: fix(2, ' m'), label: 'Alcance',
     note: 'O raio do ataque giratório.' },
-  { key: 'circularDurationS', group: 'circular', live: false, min: 0.1, max: 0.8, step: 0.05, format: fix(2, ' s'), label: 'Duração ativa',
+  { key: 'circularDurationS', group: 'circular', live: true, min: 0.1, max: 0.8, step: 0.05, format: fix(2, ' s'), label: 'Duração ativa',
     note: 'Quanto tempo o giratório fica ativo.' },
-  { key: 'circularRecoveryS', group: 'circular', live: false, min: 0, max: 1, step: 0.05, format: fix(2, ' s'), label: 'Recuperação',
+  { key: 'circularRecoveryS', group: 'circular', live: true, min: 0, max: 1, step: 0.05, format: fix(2, ' s'), label: 'Recuperação',
     note: 'Tempo parado depois do giratório.' },
   { key: 'circularLaunchMps', group: 'circular', live: true, min: 0, max: 20, step: 0.5, format: fix(1, ' m/s'), label: 'Lançamento horizontal',
     note: 'A velocidade com que o giratório joga para longe quem o toca. Mais = defesa que arremessa para fora da arena.' },
-  { key: 'circularLaunchUpMps', group: 'circular', live: false, min: 0, max: 14, step: 0.5, format: fix(1, ' m/s'), label: 'Lançamento para cima',
-    note: 'A parte do arremesso que vai para cima.' },
-  { key: 'circularKeepFraction', group: 'circular', live: false, min: 0, max: 1, step: 0.05, format: pct, label: 'Velocidade que um Dash capturado mantém',
+  { key: 'circularLaunchUpMps', group: 'circular', live: true, min: 0, max: 14, step: 0.5, format: fix(1, ' m/s'), label: 'Lançamento para cima',
+    note: 'A parte do arremesso do giratório que vai para cima (escala junto com o lançamento horizontal, como no jogo). Mais = o oponente sobe mais e demora a cair.' },
+  { key: 'circularKeepFraction', group: 'circular', live: true, min: 0, max: 1, step: 0.05, format: pct, label: 'Velocidade que um Dash capturado mantém',
     note: 'Quanto da velocidade um Dash mantém ao ser pego por um giratório.' },
-  { key: 'circularStability', group: 'circular', live: false, min: 0, max: 40, step: 1, format: fix(0, ''), label: 'Estabilidade tirada de quem toca',
+  { key: 'circularStability', group: 'circular', live: true, min: 0, max: 40, step: 1, format: fix(0, ''), label: 'Estabilidade tirada de quem toca',
     note: 'Dano de Estabilidade em quem encosta no giratório.' },
   // ---- dodge ----
   { key: 'dodgeSpeedMps', group: 'dodge', live: true, min: 4, max: 24, step: 0.5, format: fix(1, ' m/s'), label: 'Velocidade da esquiva',
     note: 'A velocidade do impulso da esquiva. Mais = a esquiva percorre mais distância.' },
-  { key: 'dodgeBurstS', group: 'dodge', live: false, min: 0.1, max: 0.6, step: 0.01, format: fix(2, ' s'), label: 'Duração do impulso',
-    note: 'Quanto tempo dura o impulso da esquiva.' },
-  { key: 'dodgeInvulnS', group: 'dodge', live: false, min: 0.1, max: 1, step: 0.05, format: fix(2, ' s'), label: 'Invulnerável por',
-    note: 'Quanto tempo você fica invulnerável após esquivar.' },
+  { key: 'dodgeBurstS', group: 'dodge', live: true, min: 0.1, max: 0.6, step: 0.01, format: fix(2, ' s'), label: 'Duração do impulso',
+    note: 'Por quanto tempo o impulso da esquiva substitui o seu movimento. Mais = a esquiva anda mais longe (velocidade × duração).' },
+  { key: 'dodgeInvulnS', group: 'dodge', live: true, min: 0.1, max: 1, step: 0.05, format: fix(2, ' s'), label: 'Invulnerável por',
+    note: 'Quanto tempo você fica invulnerável e atravessa o oponente depois de esquivar. Mais = esquiva mais segura, mas o resto do tempo você já está se movendo de novo.' },
   { key: 'dodgeCooldownS', group: 'dodge', live: true, min: 0.5, max: 6, step: 0.25, format: fix(2, ' s'), label: 'Recarga da esquiva',
     note: 'Tempo entre duas esquivas. Mais = cada esquiva precisa ser guardada para o momento certo.' },
-  { key: 'dodgePerfectS', group: 'dodge', live: false, min: 0.05, max: 0.4, step: 0.01, format: fix(2, ' s'), label: 'Janela da esquiva perfeita',
+  { key: 'dodgePerfectS', group: 'dodge', live: true, min: 0.05, max: 0.4, step: 0.01, format: fix(2, ' s'), label: 'Janela da esquiva perfeita',
     note: 'A tolerância de tempo para esquivar no último instante.' },
-  { key: 'dodgeSpinCost', group: 'dodge', live: false, min: 0, max: 0.06, step: 0.001, format: fix(3, ''), label: 'Custo de giro da esquiva',
+  { key: 'dodgeSpinCost', group: 'dodge', live: true, min: 0, max: 0.06, step: 0.001, format: fix(3, ''), label: 'Custo de giro da esquiva',
     note: 'Giro gasto a cada esquiva.' },
   // ---- jump ----
   { key: 'jumpSpeedMps', group: 'jump', live: true, min: 3, max: 14, step: 0.5, format: fix(1, ' m/s'), label: 'Impulso do pulo',
@@ -322,15 +322,15 @@ export const REAL_PARAM_SPEC: readonly RealParamSpec[] = [
     note: 'Quanto tempo o Bey precisa ficar fora para o ring-out contar (se voltar antes, zera). 0 = instantâneo.' },
   { key: 'timeLimitS', group: 'rules', live: true, min: 0, max: 300, step: 10, format: (v) => (v === 0 ? 'sem limite' : `${v.toFixed(0)} s`), label: 'Limite de tempo',
     note: 'Quando acaba o tempo sem vencedor, o round é empate. 0 = sem limite.' },
-  { key: 'stabilityRegenPerS', group: 'rules', live: false, min: 0, max: 20, step: 0.5, format: fix(1, ' /s'), label: 'Recuperação de Estabilidade',
+  { key: 'stabilityRegenPerS', group: 'rules', live: true, min: 0, max: 20, step: 0.5, format: fix(1, ' /s'), label: 'Recuperação de Estabilidade',
     note: 'A rapidez com que o Bey se recompõe depois de apanhar.' },
-  { key: 'brokenS', group: 'rules', live: false, min: 0.5, max: 6, step: 0.1, format: fix(1, ' s'), label: 'Tempo Quebrado',
+  { key: 'brokenS', group: 'rules', live: true, min: 0.5, max: 6, step: 0.1, format: fix(1, ' s'), label: 'Tempo Quebrado',
     note: 'Quanto tempo o Bey fica Quebrado (vulnerável ao KO) depois de perder toda a Estabilidade.' },
   // ---- ai ----
-  { key: 'aiAggression', group: 'ai', live: false, min: 0, max: 1, step: 0.05, format: pct, label: 'Agressividade da IA',
-    note: 'A frequência com que o oponente ataca.' },
-  { key: 'aiSkill', group: 'ai', live: false, min: 0, max: 1, step: 0.05, format: pct, label: 'Reação da IA',
-    note: 'A rapidez e precisão com que o oponente reage a você.' },
+  { key: 'aiAggression', group: 'ai', live: true, min: 0, max: 1, step: 0.05, format: pct, label: 'Agressividade da IA',
+    note: 'Substitui, no modo, a agressividade do estilo da IA escolhido no Pregame: a frequência com que o oponente parte para o ataque. 100% = ataca sempre que pode.' },
+  { key: 'aiSkill', group: 'ai', live: true, min: 0, max: 1, step: 0.05, format: pct, label: 'Reação da IA',
+    note: 'Substitui, no modo, a reação, os erros e a esquiva do nível de dificuldade da IA escolhido no Pregame: quão rápido e limpo o oponente reage. Nunca é perfeito.' },
 ];
 
 export function realSpecOf(key: RealParamKey): RealParamSpec {
@@ -389,51 +389,12 @@ export function matchingRealPreset(params: RealParams): string | null {
 // ---------------- what the engine reads ----------------
 
 /**
- * The movement model's own numbers (MatchConfig.real): the autopilot and the physics of a Bey that moves by itself.
- * Everything else the sliders change goes through the match's existing rules (realMatchRules.ts).
+ * What a Bey Real match carries in its config (MatchConfig.real): every value of the mode, as the sliders hold them. The systems
+ * read the part they own (the motion model, the autopilot, the attacks, the dodge, the stability, the contacts); what already has
+ * a rule in the match (stage size, gravity, cooldowns…) also reaches it through that rule (realMatchRules.ts).
  */
-export interface RealModeConfig {
-  readonly influence: number;
-  readonly steerAccelMps2: number;
-  readonly cruiseSpeedMps: number;
-  readonly pursuit: number;
-  readonly orbitRadiusFrac: number;
-  readonly bowlPull: number;
-  readonly dragPerS: number;
-  readonly tipFrictionMps2: number;
-  readonly precessionRadPerS: number;
-  readonly wobbleSpin: number;
-  readonly wobbleAccelMps2: number;
-  /** The spin (Stamina) drain: just by spinning, per metre travelled, per unit of steering effort — shares of the full spin. */
-  readonly spinDecayPerS: number;
-  readonly spinMoveLossPerM: number;
-  readonly spinSteerLoss: number;
-  /** The play area's radius (m): the autopilot's orbit and the wall it keeps away from. */
-  readonly stageRadiusM: number;
-}
+export type RealModeConfig = Readonly<RealParams>;
 
 export function realModeConfigOf(params: RealParams): RealModeConfig {
-  return {
-    influence: params.influence,
-    steerAccelMps2: params.steerAccelMps2,
-    cruiseSpeedMps: params.cruiseSpeedMps,
-    pursuit: params.pursuit,
-    orbitRadiusFrac: params.orbitRadiusFrac,
-    bowlPull: params.bowlPull,
-    dragPerS: params.dragPerS,
-    tipFrictionMps2: params.tipFrictionMps2,
-    precessionRadPerS: params.precessionRadPerS,
-    wobbleSpin: params.wobbleSpin,
-    wobbleAccelMps2: params.wobbleAccelMps2,
-    spinDecayPerS: params.spinDecayPerS,
-    spinMoveLossPerM: params.spinMoveLossPerM,
-    spinSteerLoss: params.spinSteerLoss,
-    stageRadiusM: params.stageRadiusM,
-  };
-}
-
-
-/** The Stamina drain of a Bey Real match (StaminaSystem.realDrain). */
-export function realSpinDrainOf(config: RealModeConfig): { readonly decayPerS: number; readonly perMeter: number; readonly perSteer: number } {
-  return { decayPerS: config.spinDecayPerS, perMeter: config.spinMoveLossPerM, perSteer: config.spinSteerLoss };
+  return { ...params };
 }

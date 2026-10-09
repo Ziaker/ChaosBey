@@ -83,6 +83,42 @@ function turnTowardRad(current: number, target: number, maxDeltaRad: number): nu
   return current + clampedDiff;
 }
 
+/**
+ * The attack numbers a match can change: the game's own constants by default (AttackTuning.ts); a Bey Real match fills them from
+ * its sliders (MatchConfig.real). One object, so the controller never reads a constant that a slider is meant to move.
+ */
+export interface AttackTuningValues {
+  readonly dashMaxChargeS: number;
+  readonly dashActiveDurationS: number;
+  readonly dashWhiffRecoveryS: number;
+  /** Turn rate toward the opponent while the Dash is still young (rad/s), and for how long (s); afterwards `dashLockOnRadPerS`. */
+  readonly dashSnapRadPerS: number;
+  readonly dashSnapWindowS: number;
+  readonly dashLockOnRadPerS: number;
+  readonly dashMinStabilityDamage: number;
+  readonly dashMaxStabilityDamage: number;
+  /** × the Dash's knockback force (1 = the game's own). */
+  readonly dashKnockbackScale: number;
+  readonly circularActiveDurationS: number;
+  readonly circularRecoveryS: number;
+  readonly circularStabilityDamage: number;
+}
+
+export const DEFAULT_ATTACK_TUNING: AttackTuningValues = {
+  dashMaxChargeS: DASH_MAX_CHARGE_S,
+  dashActiveDurationS: DASH_ACTIVE_DURATION_S,
+  dashWhiffRecoveryS: DASH_WHIFF_RECOVERY_S,
+  dashSnapRadPerS: DASH_LOCK_ON_MAX_TURN_RATE_RAD_S,
+  dashSnapWindowS: 0,
+  dashLockOnRadPerS: DASH_LOCK_ON_MAX_TURN_RATE_RAD_S,
+  dashMinStabilityDamage: DASH_MIN_STABILITY_DAMAGE,
+  dashMaxStabilityDamage: DASH_MAX_STABILITY_DAMAGE,
+  dashKnockbackScale: 1,
+  circularActiveDurationS: CIRCULAR_ACTIVE_DURATION_S,
+  circularRecoveryS: CIRCULAR_RECOVERY_S,
+  circularStabilityDamage: CIRCULAR_STABILITY_DAMAGE,
+};
+
 export class AttackController {
   private state = AttackState.Neutral;
   private bufferTimerS = 0;
@@ -121,6 +157,8 @@ export class AttackController {
     private readonly dashSpeedScale: number = 1,
     /** MatchConfig.circularAttack (owner, 2026-10-05): false = a tap starts nothing (the Dash is unchanged). */
     private readonly circularEnabled: boolean = true,
+    /** The attack numbers of this match (Bey Real changes them); omitted = the game's own constants. */
+    private readonly tuning: AttackTuningValues = DEFAULT_ATTACK_TUNING,
   ) {}
 
   /** MatchConfig.circularAttack: whether this match has the Circular at all. */
@@ -218,11 +256,11 @@ export class AttackController {
   private attackBlockedRemainingS(): { remainingS: number; totalS: number } {
     switch (this.state) {
       case AttackState.DashRecovery:
-        return { remainingS: Math.max(0, DASH_WHIFF_RECOVERY_S - this.recoveryTimerS), totalS: DASH_WHIFF_RECOVERY_S };
+        return { remainingS: Math.max(0, this.tuning.dashWhiffRecoveryS - this.recoveryTimerS), totalS: this.tuning.dashWhiffRecoveryS };
       case AttackState.CircularActive:
-        return { remainingS: Math.max(0, CIRCULAR_ACTIVE_DURATION_S - this.activeTimerS) + CIRCULAR_RECOVERY_S, totalS: CIRCULAR_ACTIVE_DURATION_S + CIRCULAR_RECOVERY_S };
+        return { remainingS: Math.max(0, this.tuning.circularActiveDurationS - this.activeTimerS) + this.tuning.circularRecoveryS, totalS: this.tuning.circularActiveDurationS + this.tuning.circularRecoveryS };
       case AttackState.CircularRecovery:
-        return { remainingS: Math.max(0, CIRCULAR_RECOVERY_S - this.recoveryTimerS), totalS: CIRCULAR_ACTIVE_DURATION_S + CIRCULAR_RECOVERY_S };
+        return { remainingS: Math.max(0, this.tuning.circularRecoveryS - this.recoveryTimerS), totalS: this.tuning.circularActiveDurationS + this.tuning.circularRecoveryS };
       default:
         return { remainingS: 0, totalS: 0 };
     }
@@ -284,7 +322,7 @@ export class AttackController {
         break;
 
       case AttackState.ChargingDash:
-        this.chargeTimerS = Math.min(DASH_MAX_CHARGE_S, this.chargeTimerS + fixedDeltaSeconds);
+        this.chargeTimerS = Math.min(this.tuning.dashMaxChargeS, this.chargeTimerS + fixedDeltaSeconds);
         if (!attackHeld) {
           this.state = AttackState.DashActive;
           this.activeTimerS = 0;
@@ -303,9 +341,10 @@ export class AttackController {
         // Tracks from the Dash's own line (not the Bey's heading, which an impact can whirl), toward where the
         // opponent is going.
         const desiredHeading = headingRadToward(ownPositionXZ, this.leadTarget(ownPositionXZ, opponentPositionXZ, opponentVelocityXZ));
-        this.dashHeadingRad = turnTowardRad(this.dashHeadingRad ?? ownHeadingRad, desiredHeading, DASH_LOCK_ON_MAX_TURN_RATE_RAD_S * fixedDeltaSeconds);
+        const turnRate = this.activeTimerS <= this.tuning.dashSnapWindowS ? this.tuning.dashSnapRadPerS : this.tuning.dashLockOnRadPerS;
+        this.dashHeadingRad = turnTowardRad(this.dashHeadingRad ?? ownHeadingRad, desiredHeading, turnRate * fixedDeltaSeconds);
         dashOverride = { headingRad: this.dashHeadingRad, longitudinalSpeedMps: speed };
-        if (this.activeTimerS >= DASH_ACTIVE_DURATION_S) {
+        if (this.activeTimerS >= this.tuning.dashActiveDurationS) {
           this.state = AttackState.DashRecovery;
           this.dashHeadingRad = null;
           this.recoveryTimerS = 0;
@@ -316,12 +355,12 @@ export class AttackController {
 
       case AttackState.DashRecovery:
         this.recoveryTimerS += fixedDeltaSeconds;
-        if (this.recoveryTimerS >= DASH_WHIFF_RECOVERY_S) this.endRecovery(attackHeld);
+        if (this.recoveryTimerS >= this.tuning.dashWhiffRecoveryS) this.endRecovery(attackHeld);
         break;
 
       case AttackState.CircularActive:
         this.activeTimerS += fixedDeltaSeconds;
-        if (this.activeTimerS >= CIRCULAR_ACTIVE_DURATION_S) {
+        if (this.activeTimerS >= this.tuning.circularActiveDurationS) {
           this.state = AttackState.CircularRecovery;
           this.recoveryTimerS = 0;
         }
@@ -329,7 +368,7 @@ export class AttackController {
 
       case AttackState.CircularRecovery:
         this.recoveryTimerS += fixedDeltaSeconds;
-        if (this.recoveryTimerS >= CIRCULAR_RECOVERY_S) this.endRecovery(attackHeld);
+        if (this.recoveryTimerS >= this.tuning.circularRecoveryS) this.endRecovery(attackHeld);
         break;
     }
 
@@ -410,7 +449,7 @@ export class AttackController {
   }
 
   private dashChargeFraction(): number {
-    return clamp01((this.chargeTimerS - DASH_MIN_CHARGE_S) / (DASH_MAX_CHARGE_S - DASH_MIN_CHARGE_S));
+    return clamp01((this.chargeTimerS - DASH_MIN_CHARGE_S) / Math.max(1e-6, this.tuning.dashMaxChargeS - DASH_MIN_CHARGE_S));
   }
 
   private computeActiveHitbox(): ActiveHitbox | null {
@@ -419,7 +458,7 @@ export class AttackController {
         kind: 'circular',
         radiusM: this.profile.circularHitboxRadiusM,
         knockbackForce: CIRCULAR_BASE_KNOCKBACK_FORCE,
-        stabilityDamage: CIRCULAR_STABILITY_DAMAGE,
+        stabilityDamage: this.tuning.circularStabilityDamage,
       };
     }
     if (this.state === AttackState.DashActive) {
@@ -427,8 +466,8 @@ export class AttackController {
       return {
         kind: 'dash',
         radiusM: this.profile.dashHitboxRadiusM,
-        knockbackForce: lerp(DASH_MIN_KNOCKBACK_FORCE, DASH_MAX_KNOCKBACK_FORCE, t),
-        stabilityDamage: lerp(DASH_MIN_STABILITY_DAMAGE, DASH_MAX_STABILITY_DAMAGE, t),
+        knockbackForce: lerp(DASH_MIN_KNOCKBACK_FORCE, DASH_MAX_KNOCKBACK_FORCE, t) * this.tuning.dashKnockbackScale,
+        stabilityDamage: lerp(this.tuning.dashMinStabilityDamage, this.tuning.dashMaxStabilityDamage, t),
         referenceSpeedMps: this.nominalDashSpeedMps(),
       };
     }

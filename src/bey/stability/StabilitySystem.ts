@@ -17,8 +17,28 @@ import {
 } from './StabilityTuning';
 import type { CanonicalRecord } from '../../replay/state/CanonicalValue';
 
+/** The Stability recovery numbers of a match: the game's own by default; a Bey Real match fills them from its sliders. */
+export interface StabilityRecoveryTuning {
+  /** Seconds without taking damage before Stability starts to climb back. */
+  readonly recoveryDelayS: number;
+  readonly recoveryPerS: number;
+  /**
+   * null = the classic Broken (recovers after STABILITY_BROKEN_RECOVERY_DELAY_AFTER_HIT_S, then climbs to the floor).
+   * A number = Broken ends this many seconds after the last damage, back at the recovery floor (Bey Real's "Tempo Quebrado").
+   */
+  readonly brokenDurationS: number | null;
+}
+
+export const DEFAULT_STABILITY_RECOVERY: StabilityRecoveryTuning = {
+  recoveryDelayS: STABILITY_RECOVERY_DELAY_AFTER_HIT_S,
+  recoveryPerS: STABILITY_RECOVERY_PER_S,
+  brokenDurationS: null,
+};
+
 export class StabilitySystem {
   readonly resource = new Resource(STABILITY_MAX);
+
+  constructor(private readonly recovery: StabilityRecoveryTuning = DEFAULT_STABILITY_RECOVERY) {}
 
   /** Seconds since the last Stability damage (Infinity if never hit) — Debug Lab inspection only (GDD section 69). */
   getTimeSinceLastDamageS(): number {
@@ -36,8 +56,15 @@ export class StabilitySystem {
     this.timeSinceLastDamageS += fixedDeltaSeconds;
 
     if (this.broken) {
+      if (this.recovery.brokenDurationS !== null) {
+        if (this.timeSinceLastDamageS >= this.recovery.brokenDurationS) {
+          this.resource.set(Math.max(this.resource.value, STABILITY_BROKEN_RECOVERY_FLOOR));
+          this.broken = false;
+        }
+        return;
+      }
       if (this.timeSinceLastDamageS >= STABILITY_BROKEN_RECOVERY_DELAY_AFTER_HIT_S) {
-        this.resource.add(STABILITY_RECOVERY_PER_S * fixedDeltaSeconds);
+        this.resource.add(this.recovery.recoveryPerS * fixedDeltaSeconds);
         if (this.resource.value >= STABILITY_BROKEN_RECOVERY_FLOOR) {
           this.broken = false;
         }
@@ -45,8 +72,8 @@ export class StabilitySystem {
       return;
     }
 
-    if (this.timeSinceLastDamageS >= STABILITY_RECOVERY_DELAY_AFTER_HIT_S) {
-      this.resource.add(STABILITY_RECOVERY_PER_S * fixedDeltaSeconds);
+    if (this.timeSinceLastDamageS >= this.recovery.recoveryDelayS) {
+      this.resource.add(this.recovery.recoveryPerS * fixedDeltaSeconds);
     }
   }
 

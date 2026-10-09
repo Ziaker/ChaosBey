@@ -5,6 +5,7 @@
 // (GDD section 1.4); each Bey's systems still own their own logic.
 // ============================================================
 
+import { realSecondSpinDir } from '../../bey/real/realTunings';
 import { BOWL_DEPTH_M, type ArenaFloor } from '../../arena/floor/ArenaFloorProfile';
 import { beyMatchRulesOf, createDefaultMatchConfig, type BeyMatchRules } from '../../config/match/MatchConfig';
 import * as THREE from 'three';
@@ -131,7 +132,7 @@ export function createMatchScene(
   const secondBase = applyAttackProfileSettings(beys.second, attackProfileSettings);
   const rails = railsOfMatch(rules.railsEnabled ?? false, floor, arenaFloorRadius());
   const first = createBey(physics, spawns.first, firstBase, floor, motionValues, rules, rails, 1);
-  const second = createBey(physics, spawns.second, secondBase, floor, motionValues, rules, rails, -1);
+  const second = createBey(physics, spawns.second, secondBase, floor, motionValues, rules, rails, rules.real ? realSecondSpinDir(rules.real) : -1);
 
   // The same resolution Character Select's preview uses (beyVisualDefinitionFor):
   // the approved concept with `newBeyVisuals` on, the legacy placeholder

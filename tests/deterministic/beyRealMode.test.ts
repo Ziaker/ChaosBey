@@ -75,7 +75,7 @@ describe('Bey Real match', () => {
     for (const side of ['first', 'second'] as const) {
       const fraction = s.getBey(side).stamina.resource.fraction;
       expect(fraction).toBeLessThan(1);
-      expect(fraction, 'about 0.7%/s of spin just by spinning, plus the travel').toBeGreaterThan(0.7);
+      expect(fraction, 'the spin goes down by spinning, travelling, steering and hitting — but a fight is not over in 12 s').toBeGreaterThan(0.3);
     }
     s.dispose();
   }, 60_000);
@@ -148,6 +148,53 @@ describe('Bey Real match', () => {
       s.dispose();
     }
   }, 120_000);
+});
+
+describe('Bey Real contacts and actions in a real match', () => {
+  it('two Beys that meet are judged by the real contact model: the spin and the Stability drop, nothing goes wild', async () => {
+    // The stick drives the first Bey at the opponent (full influence), so they meet within a few seconds.
+    const config = realConfig({ influence: 1, pursuit: 1, aiAggression: 0 });
+    const s = await session(config, new HeldStick(0, 1), 'idle');
+    let bodyCollisions = 0;
+    let maxSpeed = 0;
+    for (let i = 0; i < 60 * 10 && !s.roundState.isOver; i++) {
+      const out = s.tick();
+      for (const event of out.result.combatEvents) if (event.kind === 'bodyCollision') bodyCollisions++;
+      for (const side of ['first', 'second'] as const) {
+        const v = s.getBey(side).body.linvel();
+        expect(Number.isFinite(v.x + v.y + v.z)).toBe(true);
+        maxSpeed = Math.max(maxSpeed, Math.hypot(v.x, v.z));
+      }
+    }
+    expect(bodyCollisions, 'the Beys touched at least once').toBeGreaterThan(0);
+    expect(maxSpeed).toBeLessThan(60);
+    const spin = s.getBey('second').stamina.resource.fraction;
+    expect(spin).toBeLessThan(0.99);
+    s.dispose();
+  }, 60_000);
+
+  it('a Dash costs its share of the spin and runs the slider\'s speed; the Dash cooldown is the slider\'s', async () => {
+    const hold = new ScriptedController([{ fromTick: 5, held: [Action.Attack] }, { fromTick: 5 + 60, held: [] }]);
+    const dashSpinCost = 0.05;
+    const s = await session(realConfig({ dashSpinCost, dashMinSpeedMps: 20, dashMaxSpeedMps: 26, influence: 0, aiAggression: 0 }), hold, 'idle');
+    let beforeSpin = 0;
+    let peak = 0;
+    for (let i = 0; i < 60 * 4; i++) {
+      if (i === 65) beforeSpin = s.getBey('first').stamina.resource.fraction;
+      s.tick();
+      if (i > 65) {
+        const v = s.getBey('first').body.linvel();
+        peak = Math.max(peak, Math.hypot(v.x, v.z));
+      }
+    }
+    expect(peak, 'the Dash runs at the mode\'s speeds, not the game\'s ×2.8 top-speed scale').toBeGreaterThan(18);
+    expect(peak).toBeLessThan(40);
+    expect(beforeSpin).toBeGreaterThan(0.9);
+    // 60 ticks of charge (1 s) and the release: spin share 0.05 was spent on release on top of the drain
+    const after = s.getBey('first').stamina.resource.fraction;
+    expect(beforeSpin - after).toBeGreaterThan(dashSpinCost * 0.9);
+    s.dispose();
+  }, 60_000);
 });
 
 describe('the classic game is untouched', () => {

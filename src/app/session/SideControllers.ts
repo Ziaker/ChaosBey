@@ -24,6 +24,7 @@ import { IdleController } from '../../automation/scripted-scenarios/IdleControll
 import { ScriptedController, type ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
 import type { CombatController, ControllerActions } from '../../input/actions/Action';
 import { AssistedController } from '../../bey/real/AssistedController';
+import { realAiDifficulty, realAiPersonality } from '../../bey/real/realAi';
 import type { RealModeConfig } from '../../bey/real/RealTuning';
 import { ReplayController } from '../../replay/playback/ReplayController';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
@@ -88,17 +89,21 @@ function createBaseSideController(spec: SideControllerSpec, deps: SideController
       return new ScriptedController([...spec.frames]);
     case 'replay':
       return new ReplayController(spec.frames, spec.label);
-    case 'ai':
+    case 'ai': {
+      const personality = resolveAiPersonality(spec.personality, deps.ownBey);
+      const difficulty = spec.difficulty ? aiDifficultyTier(spec.difficulty).profile : DEFAULT_AI_DIFFICULTY_PROFILE;
+      // Bey Real: the mode's two AI sliders stand in for the personality's aggression and the difficulty's reaction/error/evasion.
       return new AIController(
         deps.physics,
         deps.ownBey,
         deps.opponentBey,
         deps.clashController,
-        resolveAiPersonality(spec.personality, deps.ownBey),
-        spec.difficulty ? aiDifficultyTier(spec.difficulty).profile : DEFAULT_AI_DIFFICULTY_PROFILE,
+        deps.real ? realAiPersonality(personality, deps.real.config) : personality,
+        deps.real ? realAiDifficulty(difficulty, deps.real.config) : difficulty,
         deps.aiRng,
         deps.telemetry,
       );
+    }
   }
 }
 

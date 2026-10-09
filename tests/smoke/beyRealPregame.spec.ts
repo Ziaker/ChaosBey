@@ -31,7 +31,7 @@ test('Pregame › Bey Real: switch, camera, advanced block, presets, and a real 
   await expect(page.getByTestId('pregame-real-cruiseSpeedMps-value')).toHaveText('14.0 m/s');
   await expect(page.getByTestId('pregame-real-stageRadiusM-value')).toHaveText('15.0 m');
   const notes = await page.locator('[data-testid^="pregame-real-note"], .cb-real__note').allTextContents();
-  expect(notes.length).toBeGreaterThan(25);
+  expect(notes.length).toBe(69); // every value of the owner's preset, each with its own explanation
   expect(new Set(notes).size).toBe(notes.length);
   await expect(page.getByTestId('pregame-real-influence')).toBeDisabled(); // sliders wait for the switch
 

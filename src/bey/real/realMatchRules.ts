@@ -12,6 +12,7 @@ import { CIRCULAR_LAUNCH_HORIZONTAL_MPS } from '../../combat/attacks/AttackTunin
 import type { MatchConfig } from '../../config/match/MatchConfig';
 import { DODGE_BURST_SPEED_MPS } from '../../dodge/DodgeTuning';
 import { GRAVITY_MPS2 } from '../../physics/world/PhysicsWorld';
+import { STAMINA_MAX } from '../stamina/StaminaTuning';
 import { realModeConfigOf, type RealParams } from './RealTuning';
 
 /** The lab drew the game's funnel (7 m deep over a 36 m floor) and played on a small stage: the slope the owner tuned against. */
@@ -46,7 +47,10 @@ export function realMatchOverrides(params: RealParams): Partial<MatchConfig> {
     dashCooldownS: params.dashCooldownS,
     dodgeCooldownS: params.dodgeCooldownS,
     dodgeDistanceScale: params.dodgeSpeedMps / DODGE_BURST_SPEED_MPS,
+    dodgeStaminaCost: params.dodgeSpinCost * STAMINA_MAX,
     circularLaunchForce: params.circularLaunchMps / CIRCULAR_LAUNCH_HORIZONTAL_MPS,
+    // The Dash is the lab's own (10 to 30 m/s): the classic top-speed scale (×2.8) must not multiply it.
+    topSpeedScale: 1,
     // The lab ran in real time; the classic game's 20% faster clock is its own owner decision.
     gameSpeed: 1,
     // The mode has its own slope pull (bowlPull): the classic funnel slide must not add to it.
@@ -57,7 +61,9 @@ export function realMatchOverrides(params: RealParams): Partial<MatchConfig> {
 /** The rule keys a Bey Real match takes from the mode's sliders: the classic Advanced controls for these are locked while the mode is on. */
 export const REAL_OWNED_RULE_KEYS = [
   'arenaSizeScale', 'arenaBowlDepthM', 'ringOutDelayS', 'roundTimeLimitS', 'gravityScale', 'jumpFullHeightM', 'airControl', 'jumpCooldownS',
-  'dashCooldownS', 'dodgeCooldownS', 'dodgeDistanceScale', 'circularLaunchForce', 'gameSpeed', 'funnelPull',
+  'dashCooldownS', 'dodgeCooldownS', 'dodgeDistanceScale', 'dodgeStaminaCost', 'circularLaunchForce', 'gameSpeed', 'funnelPull',
   // the classic handling model: the mode moves the Bey with its own forces
   'accelerationScale', 'topSpeedScale', 'turnRateScale', 'turnSpeedRetention', 'highSpeedControl', 'spinStaminaDrain', 'movementStaminaDrain',
+  // a plain touch between two Beys is the real contact model's: the classic body-collision damage and momentum loss do not run
+  'bodyCollisionDamage', 'momentumLossOnCollision',
 ] as const;

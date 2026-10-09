@@ -13,6 +13,7 @@ import type { Bey } from '../core/Bey';
 import { Action, type CombatController, type ControllerActions, type ControllerContext } from '../../input/actions/Action';
 import { autopilotIntent, blendSteering } from './RealAutopilot';
 import type { RealModeConfig } from './RealTuning';
+import { realSecondSpinDir } from './realTunings';
 
 const STEERING_KEYS: readonly Action[] = [Action.SteerLeft, Action.SteerRight, Action.MoveForward, Action.MoveBackward];
 
@@ -39,7 +40,7 @@ export class AssistedController implements CombatController {
       position: { x: position.x, z: position.z },
       opponentPosition: { x: opponentPosition.x, z: opponentPosition.z },
       opponentSpin: this.opponent.stamina.resource.fraction,
-      spinDir: this.side === 0 ? 1 : -1,
+      spinDir: this.side === 0 ? 1 : realSecondSpinDir(this.config),
       side: this.side,
       timeS: this.timeS,
     });
