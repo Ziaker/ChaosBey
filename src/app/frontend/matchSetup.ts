@@ -13,6 +13,9 @@ import { DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaF
 import { CLASH_IMPACT_MULTIPLIER_DEFAULT } from '../../combat/clash/ClashTuning';
 import { createDefaultMatchConfig, type MatchConfig, resolveMatchConfig } from '../../config/match/MatchConfig';
 import { DEFAULT_MOTION_DIRECTION, type MotionDirectionId } from '../../bey/motion/MotionPresets';
+import { REAL_BASE_PARAMS, sanitizeRealParams, type RealParams } from '../../bey/real/RealTuning';
+import { DEFAULT_REAL_CAMERA, REAL_CAMERA_MODES, type RealCameraMode } from '../../camera/real/RealCameraModes';
+import { realMatchOverrides } from '../../bey/real/realMatchRules';
 import type { MatchBeys } from '../bootstrap/createMatchScene';
 import type { AiPersonalityChoice, SideControllerSpec } from '../session/SideControllers';
 import { BEY_ROSTER, rosterEntry } from './beyRoster';
@@ -35,6 +38,39 @@ export interface MatchSetup {
   readonly rules: MatchRules;
   /** Lote 9: visual options (presentation only — not MatchConfig, not the replay). */
   readonly visual: VfxOptions;
+  /** Bey Real (0.59.0): the alternative mode — off by default. Absent on a setup saved before it existed. */
+  readonly real?: RealSetup;
+}
+
+/** The Bey Real block of the Pregame: whether the mode is on, the camera, and every value of the mode (RealTuning.ts). */
+export interface RealSetup {
+  readonly enabled: boolean;
+  readonly camera: RealCameraMode;
+  /** Which preset the values came from, for the label; the values themselves are what counts. */
+  readonly presetId: string;
+  readonly params: RealParams;
+}
+
+export function defaultRealSetup(): RealSetup {
+  return { enabled: false, camera: DEFAULT_REAL_CAMERA, presetId: 'base', params: { ...REAL_BASE_PARAMS } };
+}
+
+/** A saved or typed Bey Real block, checked field by field (anything unknown falls back to the base). */
+export function sanitizeRealSetup(raw: unknown): RealSetup {
+  const base = defaultRealSetup();
+  if (!raw || typeof raw !== 'object') return base;
+  const value = raw as Partial<RealSetup>;
+  return {
+    enabled: value.enabled === true,
+    camera: (REAL_CAMERA_MODES as readonly unknown[]).includes(value.camera) ? (value.camera as RealCameraMode) : base.camera,
+    presetId: typeof value.presetId === 'string' ? value.presetId : base.presetId,
+    params: sanitizeRealParams(value.params as Partial<Record<keyof RealParams, unknown>> | undefined),
+  };
+}
+
+/** True while the setup plays Bey Real. */
+export function isRealMode(setup: MatchSetup): boolean {
+  return setup.real?.enabled === true;
 }
 
 /** Range the Pregame slider offers for the Clash impact multiplier. */
@@ -65,6 +101,7 @@ export function createDefaultMatchSetup(playerBeyId: string = BEY_ROSTER[0]!.def
     seedText: null,
     rules: defaultMatchRules(),
     visual: DEFAULT_VFX_OPTIONS,
+    real: defaultRealSetup(),
   };
 }
 
@@ -164,6 +201,12 @@ export function matchBeysFor(setup: MatchSetup): MatchBeys {
 
 /** The resolved match rules (the one MatchConfig path, GDD 101/166). */
 export function matchConfigFor(setup: MatchSetup): MatchConfig {
+  const config = classicMatchConfigFor(setup);
+  // Bey Real: the same config path, with the mode's rules on top (realMatchRules.ts) and `real` for the motion model.
+  return setup.real?.enabled ? { ...config, ...realMatchOverrides(setup.real.params) } : config;
+}
+
+function classicMatchConfigFor(setup: MatchSetup): MatchConfig {
   return resolveMatchConfig({
     clashImpactMultiplier: setup.clashImpactMultiplier,
     arenaWallHeightM: setup.arena.geometry.wallHeightM,
@@ -281,6 +324,7 @@ export function loadLastSetup(storage: Pick<Storage, 'getItem'> | null = safeSto
     motion: saved.motion ?? base.motion,
     rules: sanitizeMatchRules(rules as unknown as MatchRules),
     visual: visual as unknown as VfxOptions,
+    real: sanitizeRealSetup((raw as { real?: unknown }).real),
   };
 }
 
@@ -375,6 +419,7 @@ export function activeRuleLines(setup: MatchSetup): string[] {
   if (!isPresetGeometry(setup.arena.presetId, walls)) lines.push(`Walls ${walls.wallHeightM.toFixed(1)} m high, bounce ${walls.wallRestitution.toFixed(2)}`);
   if (setup.clashImpactMultiplier !== CLASH_IMPACT_MULTIPLIER_DEFAULT) lines.push(`Clash impact ×${setup.clashImpactMultiplier.toFixed(2)}`);
   if ((setup.motion ?? DEFAULT_MOTION_DIRECTION) !== DEFAULT_MOTION_DIRECTION) lines.push(`Movement direction ${setup.motion}`);
+  if (isRealMode(setup)) lines.push(`Bey Real (influence ${Math.round(setup.real!.params.influence * 100)}%, ${setup.real!.params.stageRadiusM.toFixed(0)} m stage)`);
   return [...lines, ...changedRuleLines(setup)];
 }
 

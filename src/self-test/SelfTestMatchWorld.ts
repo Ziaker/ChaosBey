@@ -76,8 +76,8 @@ export class SelfTestMatchWorld {
     const floor = arenaFloorOf(config); // Lote 9: profile + depth
     const spawns = matchSpawnsFor(floor);
     const rails = railsOfMatch(config.railsEnabled, floor, arenaFloorRadius()); // the same rails createMatchScene builds
-    const first = createBey(physics, options.firstSpawn ?? spawns.first, options.firstDefinition, floor, motion, beyMatchRulesOf(config), rails);
-    const second = createBey(physics, options.secondSpawn ?? spawns.second, options.secondDefinition, floor, motion, beyMatchRulesOf(config), rails);
+    const first = createBey(physics, options.firstSpawn ?? spawns.first, options.firstDefinition, floor, motion, beyMatchRulesOf(config), rails, 1);
+    const second = createBey(physics, options.secondSpawn ?? spawns.second, options.secondDefinition, floor, motion, beyMatchRulesOf(config), rails, -1);
     const clash = options.aiMashSource !== undefined ? new ClashOrchestration(config, options.aiMashSource) : new ClashOrchestration(config);
     return { physics, first, second, roundState: new RoundState(roundStateOptionsOf(config)), clash };
   }

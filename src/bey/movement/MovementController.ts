@@ -43,6 +43,8 @@ import { DEFAULT_HANDLING_PROFILE, type BeyHandlingProfile } from '../archetype/
 import { labImpactSpeed, motionParams, motionRatio, type MotionParams } from '../motion/MotionPresets';
 import { vec2, type CanonicalRecord } from '../../replay/state/CanonicalValue';
 import { headingErrorRad, intentMagnitude } from './directionalIntent';
+import { RealMotion } from '../real/RealMotion';
+import type { RealModeConfig } from '../real/RealTuning';
 
 import { GRAVITY_MPS2 } from '../../physics/world/PhysicsWorld';
 
@@ -99,6 +101,11 @@ export interface MovementPreStepInput {
    * (a Bey on a rail can't do either). A wall or another Bey still interrupts it through the post-step impact detector.
    */
   railOverride?: { velocity: { x: number; y: number; z: number }; headingRad: number } | null;
+  /**
+   * Bey Real (MatchConfig.real): the live state its motion model needs. Present only in a Bey Real match; there the Bey is not
+   * driven like a kart but moved by RealMotion's forces (a Dash, a Dodge and a rail still override it as always).
+   */
+  real?: { spin: number; broken: boolean; stability: number; charging: boolean } | null;
 }
 
 export interface MovementSnapshot {
@@ -125,6 +132,11 @@ export interface MovementSnapshot {
   /** Unit vector of the velocity deviation that triggered impactDeltaSpeedMps; zero vector when there was no impact this tick. */
   impactDirection: Vec2;
 }
+
+/** Bey Real: how fast the heading swings round to face the way of travel (rad/s). */
+const REAL_HEADING_TURN_RATE_RAD_S = 10;
+/** Bey Real: under this speed (m/s) the heading is left alone. */
+const REAL_HEADING_MIN_SPEED_MPS = 0.5;
 
 /** Rail Grinding: how fast the heading swings round to face the way of travel (rad/s). PROVISIONAL. */
 const RAIL_HEADING_TURN_RATE_RAD_S = 14;
@@ -210,6 +222,10 @@ export class MovementController {
   private readonly funnelPullMps2: number;
   /** The funnel's slide velocity (m/s, horizontal): the part of the body's velocity the slope's pull put there. Not driven by the handling model. */
   private slide: Vec2 = { x: 0, z: 0 };
+  /** Bey Real: the motion model; null in the classic game. */
+  private readonly realMotion: RealMotion | null;
+  /** Bey Real: the steering acceleration applied last tick (m/s²) — what it costs the spin. */
+  private realSteerEffortMps2 = 0;
   /**
    * Owner, 2026-10-04 ("não é pra ser possível realizar nenhum movimento (no caso do perdedor) até se recuperar no
    * ar"): the Clash loser takes no input at all — the only thing it can do is the Air Recovery — until it recovers in
@@ -225,8 +241,9 @@ export class MovementController {
     handling: BeyHandlingProfile = DEFAULT_HANDLING_PROFILE,
     private readonly motion: MotionParams = motionParams(),
     /** Owner, 2026-10-02 (Lote 9 / GDD 12): the match's acceleration, top speed and air control multipliers (1 = as designed). */
-    scales: { readonly acceleration: number; readonly topSpeed: number; readonly airControl: number; readonly turnRate?: number; readonly turnSpeedRetention?: number; readonly highSpeedControl?: number; readonly thrustCalibration?: ThrustCalibration; readonly funnelPull?: number; readonly gravityScale?: number } = { acceleration: 1, topSpeed: 1, airControl: 1 },
+    scales: { readonly acceleration: number; readonly topSpeed: number; readonly airControl: number; readonly turnRate?: number; readonly turnSpeedRetention?: number; readonly highSpeedControl?: number; readonly thrustCalibration?: ThrustCalibration; readonly funnelPull?: number; readonly gravityScale?: number; readonly real?: RealModeConfig; readonly realSpinDir?: 1 | -1 } = { acceleration: 1, topSpeed: 1, airControl: 1 },
   ) {
+    this.realMotion = scales.real ? new RealMotion(scales.real, scales.realSpinDir ?? 1) : null;
     this.airControl = scales.airControl;
     this.turnSpeedRetention = Math.max(0, Math.min(1, scales.turnSpeedRetention ?? 0));
     this.highSpeedControl = Math.max(0, Math.min(1, scales.highSpeedControl ?? 0));
@@ -401,6 +418,12 @@ export class MovementController {
     if (dodgeOverride) {
       this.driftFloorLossMps = 0;
       this.applyDodgeOverride(body, dodgeOverride, grounded, fixedDeltaSeconds, floorNormal);
+      return;
+    }
+
+    // Bey Real: the motion model moves the Bey (a Dash still takes the classic path below).
+    if (this.realMotion && input.real && !dashOverride) {
+      this.applyRealStep(body, input, input.real);
       return;
     }
 
@@ -636,6 +659,61 @@ export class MovementController {
       this.preStepVerticalMps = vertical;
       this.intendedVelocityThisTick = withSlide;
     }
+    const carried = body.linvel();
+    this.preStepHorizontal = { x: carried.x, z: carried.z };
+  }
+
+  /** The steering effort of the last Bey Real step (m/s²); 0 in the classic game. */
+  getRealSteerEffortMps2(): number {
+    return this.realSteerEffortMps2;
+  }
+
+  /**
+   * Bey Real: the velocity is the state. The model's forces change the velocity the body carries into this tick (which already
+   * holds whatever the last physics step did to it: a hit, a wall), and the result goes back into the body. There is no
+   * "control lost" window — a knockback just changes the velocity, and the steering is limited by the grip the spin has left.
+   */
+  private applyRealStep(body: RAPIER.RigidBody, input: MovementPreStepInput, real: NonNullable<MovementPreStepInput['real']>): void {
+    const { fixedDeltaSeconds: dt, grounded, floorNormal } = input;
+    const current = body.linvel();
+    const result = this.realMotion!.step({
+      velocity: { x: current.x, z: current.z },
+      intent: input.actions.moveIntent ?? { x: 0, z: 0 },
+      floorNormal: grounded ? floorNormal ?? null : null,
+      grounded,
+      dt,
+      spin: real.spin,
+      broken: real.broken,
+      stability: real.stability,
+      charging: real.charging,
+      airControl: this.airControl,
+    });
+    let velocity = result.velocity;
+    const speed = length(velocity);
+    if (speed > NUMERICAL_SPEED_CLAMP_MPS) velocity = scale(velocity, NUMERICAL_SPEED_CLAMP_MPS / speed);
+    this.realSteerEffortMps2 = result.steerEffortMps2;
+
+    // The heading follows the way of travel (the visual and a Dash's start read it).
+    if (speed > REAL_HEADING_MIN_SPEED_MPS) {
+      const target = Math.atan2(velocity.x, velocity.z);
+      const error = Math.atan2(Math.sin(target - this.headingRad), Math.cos(target - this.headingRad));
+      const step = REAL_HEADING_TURN_RATE_RAD_S * dt;
+      this.headingRad += Math.max(-step, Math.min(step, error));
+    }
+    this.turnRateRadPerS = 0;
+    this.whirlRadPerS = 0;
+    this.slide = { x: 0, z: 0 };
+    this.driftFloorLossMps = 0;
+    if (this.postImpactCooldownRemainingS > 0) {
+      this.postImpactCooldownRemainingS = Math.max(0, this.postImpactCooldownRemainingS - dt);
+      if (this.postImpactCooldownRemainingS === 0) this.knockbackPlaying = false;
+    }
+
+    const vertical = this.verticalFor(velocity, current, grounded ? floorNormal : null);
+    body.setLinvel({ x: velocity.x, y: vertical, z: velocity.z }, true);
+    this.preStepVerticalMps = vertical;
+    this.lastHeadingForward = fromYaw(this.headingRad);
+    this.intendedVelocityThisTick = velocity;
     const carried = body.linvel();
     this.preStepHorizontal = { x: carried.x, z: carried.z };
   }
@@ -906,6 +984,8 @@ export class MovementController {
       clashStunLeftGround: this.clashStunLeftGround,
       actionLockS: this.actionLockS,
       slide: vec2(this.slide),
+      // Bey Real only: a classic match's hash is unchanged.
+      ...(this.realMotion ? { realWobblePhase: this.realMotion.getPhase() } : {}),
     };
   }
 }

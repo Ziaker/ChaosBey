@@ -43,6 +43,7 @@ import {
 import type { CanonicalValue } from '../state/CanonicalValue';
 import { stateHash } from '../state/stateHash';
 import { isAction } from './recordedActions';
+import { REAL_BASE_PARAMS, realModeConfigOf } from '../../bey/real/RealTuning';
 
 /** Both sides' actions for one fixed tick. */
 export interface ReplayFrame {
@@ -209,6 +210,9 @@ function validateConfig(v: Validator, value: unknown): void {
   const hasMotion = has('motion');
   if (!hasFloor) delete matchTemplate.arenaFloor;
   if (!hasMotion) delete matchTemplate.motion;
+  // Bey Real (0.59.0): `real` exists only in a Bey Real match's config (a classic match leaves it out entirely); when it is
+  // there, its fields are checked against this build's own.
+  if (has('real')) matchTemplate.real = realModeConfigOf(REAL_BASE_PARAMS);
   v.sameShape(recordedMatch, matchTemplate, 'config.matchConfig');
   if (hasFloor && !isArenaFloorId((recordedMatch as Record<string, unknown>).arenaFloor)) {
     v.fail('wrong-type', 'config.matchConfig.arenaFloor', `${describe((recordedMatch as Record<string, unknown>).arenaFloor)} is not a floor profile`);

@@ -23,6 +23,8 @@ import type { ClashController } from '../../combat/clash/ClashController';
 import { IdleController } from '../../automation/scripted-scenarios/IdleController';
 import { ScriptedController, type ScriptedFrame } from '../../automation/scripted-scenarios/ScriptedController';
 import type { CombatController, ControllerActions } from '../../input/actions/Action';
+import { AssistedController } from '../../bey/real/AssistedController';
+import type { RealModeConfig } from '../../bey/real/RealTuning';
 import { ReplayController } from '../../replay/playback/ReplayController';
 import type { PhysicsWorld } from '../../physics/world/PhysicsWorld';
 import type { SeededRng } from '../../rng/SeededRng';
@@ -48,6 +50,8 @@ export interface SideControllerDeps {
   readonly aiRng: SeededRng;
   readonly telemetry: TelemetryRecorder | null;
   readonly keyboard: CombatController;
+  /** Bey Real match: the autopilot's settings and which side this is. Absent = the classic game. */
+  readonly real?: { readonly config: RealModeConfig; readonly side: 0 | 1 } | null;
 }
 
 export const AI_PERSONALITY_CHOICES: readonly AiPersonalityChoice[] = ['archetype', 'attack', 'defense', 'stamina'];
@@ -66,6 +70,15 @@ export function resolveAiPersonality(choice: AiPersonalityChoice, ownBey: Bey): 
 }
 
 export function createSideController(spec: SideControllerSpec, deps: SideControllerDeps): CombatController {
+  const base = createBaseSideController(spec, deps);
+  // Bey Real: a person's side and the AI's side steer by autopilot (the person's stick takes a share of it).
+  if (deps.real && (spec.kind === 'keyboard' || spec.kind === 'ai')) {
+    return new AssistedController(base, deps.real.config, deps.ownBey, deps.opponentBey, deps.real.side, spec.kind === 'keyboard');
+  }
+  return base;
+}
+
+function createBaseSideController(spec: SideControllerSpec, deps: SideControllerDeps): CombatController {
   switch (spec.kind) {
     case 'keyboard':
       return deps.keyboard;

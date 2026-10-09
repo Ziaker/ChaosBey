@@ -130,8 +130,8 @@ export function createMatchScene(
   const firstBase = applyAttackProfileSettings(beys.first, attackProfileSettings);
   const secondBase = applyAttackProfileSettings(beys.second, attackProfileSettings);
   const rails = railsOfMatch(rules.railsEnabled ?? false, floor, arenaFloorRadius());
-  const first = createBey(physics, spawns.first, firstBase, floor, motionValues, rules, rails);
-  const second = createBey(physics, spawns.second, secondBase, floor, motionValues, rules, rails);
+  const first = createBey(physics, spawns.first, firstBase, floor, motionValues, rules, rails, 1);
+  const second = createBey(physics, spawns.second, secondBase, floor, motionValues, rules, rails, -1);
 
   // The same resolution Character Select's preview uses (beyVisualDefinitionFor):
   // the approved concept with `newBeyVisuals` on, the legacy placeholder

@@ -33,6 +33,19 @@ export const FULL_PHYSICAL_CONDITION: PhysicalCondition = {
   spinDecayMultiplier: 1,
 };
 
+/**
+ * Bey Real (docs/design-decisions/bey-real-physics-approval.md): the spin is a share of the full spin that only goes down —
+ * a little just for spinning, a little per metre travelled, a little per unit of steering effort. Replaces the classic drain.
+ */
+export interface RealSpinDrain {
+  /** Share of the full spin lost per second just by spinning. */
+  readonly decayPerS: number;
+  /** Share lost per metre travelled. */
+  readonly perMeter: number;
+  /** Share lost per (m/s² of steering effort × second). */
+  readonly perSteer: number;
+}
+
 export class StaminaSystem {
   readonly resource: Resource;
 
@@ -54,12 +67,19 @@ export class StaminaSystem {
     private readonly movementDrainScale: number = 1,
     /** MatchConfig.spinStaminaDrain (owner, 2026-10-04): × the base spin drain. */
     private readonly spinDrainScale: number = 1,
+    /** Bey Real: the mode's own drain; omitted = the classic drain above. */
+    private readonly realDrain: RealSpinDrain | null = null,
   ) {
     this.resource = new Resource(STAMINA_MAX * staminaStat);
   }
 
   /** Stamina only ever drains during a round (owner decision 2026-09-25: no passive in-round regen) — a small baseline drain from continuous spin/combat, plus extra drain the faster the Bey moves. */
-  tick(currentSpeedMps: number, fixedDeltaSeconds: number): void {
+  tick(currentSpeedMps: number, fixedDeltaSeconds: number, steerEffortMps2 = 0): void {
+    if (this.realDrain) {
+      const share = this.realDrain.decayPerS + this.realDrain.perMeter * currentSpeedMps + this.realDrain.perSteer * steerEffortMps2;
+      this.resource.subtract((share * this.resource.max * fixedDeltaSeconds) / this.staminaStat);
+      return;
+    }
     const speedFraction = currentSpeedMps / INTENDED_MAX_SPEED_MPS;
     const extraEffortFraction = Math.max(0, speedFraction - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION) / (1 - STAMINA_DRAIN_SPEED_THRESHOLD_FRACTION);
     const drainPerS = STAMINA_BASE_DRAIN_PER_S * this.spinDrainScale + STAMINA_EXTRA_DRAIN_PER_S_AT_FULL_SPEED * this.movementDrainScale * Math.min(1, extraEffortFraction);

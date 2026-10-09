@@ -17,7 +17,8 @@ import { button, el, ensureFrontendStyle, keyHint } from './frontendStyle';
 import { navigationIntent, wrapIndex } from './listNavigation';
 import { ROUNDS_TO_WIN_CHOICES, describeRoundsToWin, type RoundsToWin } from './matchScore';
 import { changedRuleLines, defaultMatchRules, deleteRuleConfig, loadRuleConfigs, matchupLines, normalizeSeedText, saveRuleConfig, withArenaFloor, withArenaPreset, withDefaultRules, withRuleConfig, type MatchSetup } from './matchSetup';
-import { ADVANCED_CATEGORIES, ADVANCED_CATEGORY_LABELS, ADVANCED_CONTROLS, isModified, isToggle, modifiedCount, normalOriginalValue, readAdvanced, resetCategory, writeAdvanced, type AdvancedCategory, type AdvancedControl } from './advancedControls';
+import { ADVANCED_CATEGORIES, ADVANCED_CATEGORY_LABELS, ADVANCED_CONTROLS, isLockedByRealMode, isModified, isToggle, modifiedCount, normalOriginalValue, readAdvanced, resetCategory, writeAdvanced, type AdvancedCategory, type AdvancedControl } from './advancedControls';
+import { RealModePanel } from './RealModePanel';
 import { OFFICIAL_PRESETS, applyPreset, detectPreset, presetLabel, type OfficialPresetId } from './pregamePresets';
 import { ARENA_FLOORS, ARENA_FLOOR_IDS, DEFAULT_ARENA_FLOOR, type ArenaFloorId } from '../../arena/floor/ArenaFloorProfile';
 import { DEFAULT_MOTION_DIRECTION, MOTION_DIRECTIONS, MOTION_DIRECTION_IDS, type MotionDirectionId } from '../../bey/motion/MotionPresets';
@@ -172,6 +173,8 @@ export class PregameScreen {
   private readonly seedInput = el('input', 'cb-pregame__seed', 'pregame-seed');
   private readonly advanced = el('details', 'cb-pregame__advanced', 'pregame-advanced');
   private readonly advancedCount = el('span', 'cb-pregame__chip', 'pregame-advanced-count');
+  /** Bey Real (0.59.0): the alternative mode's switch, camera, presets and every slider of the mode. */
+  private readonly real = new RealModePanel({ getSetup: () => this.setup, onChange: (next) => this.update(next) });
   private readonly resetCategoryButton = button('Reset category', 'cb-button--small', 'pregame-reset-category', () => this.update(resetCategory(this.setup, this.activeCategory)));
   private readonly resetAllButton = button('Reset all', 'cb-button--small', 'pregame-reset-defaults', () => this.update(withDefaultRules(this.setup)));
   private setup: MatchSetup;
@@ -212,7 +215,7 @@ export class PregameScreen {
     }
     ROWS.forEach((choiceRow, rowIndex) => sections.get(choiceRow.section)!.append(this.buildRow(choiceRow, rowIndex)));
     sections.get('preset')!.append(this.presetState, this.savedConfigsRow());
-    controls.append(this.buildAdvanced());
+    controls.append(this.buildAdvanced(), this.real.element);
 
     const side = el('section', 'cb-panel cb-pregame__side');
     side.setAttribute('aria-label', 'Match summary');
@@ -490,6 +493,7 @@ export class PregameScreen {
         const disabled = control.disabledWhen?.(setup) ?? false;
         view.input.disabled = disabled;
         view.wrapper.classList.toggle('is-disabled', disabled);
+        view.wrapper.title = isLockedByRealMode(control, setup) ? 'Bloqueado: o modo Bey Real (bloco abaixo) controla este valor.' : '';
       }
       view.modified.hidden = !isMod;
       view.wrapper.classList.toggle('is-modified', isMod);
@@ -503,6 +507,7 @@ export class PregameScreen {
       view.count.textContent = count > 0 ? String(count) : '';
       view.tab.title = count > 0 ? `${count} modified` : 'All default';
     }
+    this.real.refresh(setup);
     this.advancedCount.textContent = modified > 0 ? `${modified} modified` : 'default';
     this.advancedCount.classList.toggle('is-modified', modified > 0);
     this.resetCategoryButton.textContent = `Reset ${ADVANCED_CATEGORY_LABELS[this.activeCategory].toLowerCase()}`;
@@ -531,6 +536,7 @@ export class PregameScreen {
       { key: 'arena', label: 'Arena', value: `${arena.label} · ${floor.label}` },
       { key: 'length', label: 'Match length', value: describeRoundsToWin(setup.roundsToWin) },
       { key: 'wins', label: 'A round ends on', value: `${ways.join(' · ')}${r.roundTimeLimitS > 0 ? ` · draw after ${r.roundTimeLimitS.toFixed(0)} s` : ''}` },
+      { key: 'mode', label: 'Mode', value: setup.real?.enabled ? `Bey Real · ${setup.real.camera === 'real' ? 'Bey Real' : setup.real.camera} camera` : 'Classic' },
       { key: 'preset', label: 'Preset', value: presetLabel(preset) },
       { key: 'modified', label: 'Advanced', value: modified === 0 ? 'All Normal Original' : `${modified} ${modified === 1 ? 'setting differs' : 'settings differ'} from Normal Original` },
     ];
@@ -674,7 +680,7 @@ export class PregameScreen {
       return;
     }
     // Inside the open Advanced panel everything but Enter / Esc keeps its native keys (sliders: ← → ↑ ↓; checkboxes: Space).
-    const inAdvanced = target !== null && this.advanced.contains(target) && target.tagName !== 'SUMMARY';
+    const inAdvanced = target !== null && (this.advanced.contains(target) || this.real.contains(target)) && target.tagName !== 'SUMMARY';
     if (inAdvanced && intent !== 'confirm' && intent !== 'back') return;
     if (target?.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox' && event.code === 'Space') return;
     if (target?.tagName === 'SUMMARY' && intent === 'confirm' && event.code !== 'KeyZ') return;

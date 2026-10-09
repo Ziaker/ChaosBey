@@ -100,6 +100,8 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     thrustCalibration: 'build-time config: derived from MatchConfig.gravityScale (replay config snapshot)',
     funnelPullMps2: 'build-time config: MatchConfig.funnelPull × gravity (replay config snapshot)',
     highSpeedControl: 'build-time config: MatchConfig.highSpeedControl (replay config snapshot)',
+    realMotion: 'Bey Real: build-time config (MatchConfig.real, replay config snapshot); its only memory, the wobble phase, is in the state as realWobblePhase',
+    realSteerEffortMps2: 'per-tick output of the Bey Real step (read by the Stamina drain the same tick)',
   },
   SpinController: {
     motion: 'build-time config: the motion direction (MatchConfig.motion, replay config snapshot)',
@@ -126,7 +128,7 @@ export const CANONICAL_STATE_EXCLUSIONS: Readonly<Record<string, Readonly<Record
     legacyLaunch: 'build-time config: whether the match supplied jump rules (a bare construction keeps the immediate launch)',
   },
   DodgeController: { cooldownS: 'build-time config: MatchConfig.dodgeCooldownS (replay config snapshot)', staminaCost: 'build-time config: MatchConfig.dodgeStaminaCost (replay config snapshot)', distanceScale: 'build-time config: MatchConfig.dodgeDistanceScale (replay config snapshot)', recoveryUsesDodge: 'build-time config: on for every match Bey (createBey with match rules)', recoveryMinDelayS: 'build-time config: MatchConfig.airRecoveryMinDelayS (replay config snapshot)' },
-  StaminaSystem: { staminaStat: 'build-time config (resolved Bey stat)', movementDrainScale: 'build-time config: MatchConfig.movementStaminaDrain (replay config snapshot)', spinDrainScale: 'build-time config: MatchConfig.spinStaminaDrain (replay config snapshot)' },
+  StaminaSystem: { staminaStat: 'build-time config (resolved Bey stat)', movementDrainScale: 'build-time config: MatchConfig.movementStaminaDrain (replay config snapshot)', spinDrainScale: 'build-time config: MatchConfig.spinStaminaDrain (replay config snapshot)', realDrain: 'build-time config: MatchConfig.real (replay config snapshot)' },
   StabilitySystem: {},
   AttackController: { profile: 'build-time config (attack profile settings, in the replay config snapshot)', dashCooldownS: 'build-time config: MatchConfig.dashCooldownS (replay config snapshot)', dashCarriesSpeed: 'build-time config: MatchConfig.dashCarriesSpeed (replay config snapshot)', dashSpeedScale: 'build-time config: MatchConfig.topSpeedScale (replay config snapshot)', circularEnabled: 'build-time config: MatchConfig.circularAttack (replay config snapshot)' },
   RailController: {
