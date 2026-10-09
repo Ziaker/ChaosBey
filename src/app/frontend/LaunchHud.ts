@@ -50,7 +50,7 @@ export class LaunchHud {
   private readonly flashLayer = el('div', 'cb-launch__flash', 'launch-flash');
   private gradeLeftS = 0;
   private flash = 0;
-  private lastPhase: LaunchView['phase'] | null = null;
+  private gradeShown = false;
   private hintKey = '';
 
   constructor(mount: HTMLElement, options: LaunchHudOptions) {
@@ -113,9 +113,10 @@ export class LaunchHud {
       this.button.disabled = view.phase !== 'armed';
       this.refreshHint();
     }
-    if (view.phase !== this.lastPhase) {
-      if (view.phase === 'release') this.showRelease(view);
-      this.lastPhase = view.phase;
+    // The grade shows on the first frame after the release, whichever phase that frame lands in (a slow frame can skip the short 'release').
+    if (!this.gradeShown && view.grade !== null) {
+      this.gradeShown = true;
+      this.showRelease(view);
     }
   }
 
