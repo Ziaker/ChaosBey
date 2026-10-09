@@ -32,6 +32,7 @@ import { ClashOutcome, ClashState } from '../../combat/clash/ClashController';
 import { NullAiMashSource } from '../../combat/clash/ClashMash';
 import { CLASH_PROGRESSIVE_VFX_INTERVAL_TICKS, CLASH_TARGET_DURATION_S } from '../../combat/clash/ClashTuning';
 import { CameraRig, type CameraObserver } from '../../camera/director/CameraRig';
+import type { ExternalCamera } from '../../camera/real/RealCameras';
 import { buildFightFrame, speedLinesScreenDirection, type FightFrameBey, type SessionCameraOutput } from '../../camera/director/sessionCamera';
 import type { PresetId } from '../../camera/director/CameraParams';
 import { buildImpactEventsForTick, type ImpactEvent, type WorldPositionM } from '../simulation/impact/ImpactEvents';
@@ -155,6 +156,8 @@ export interface SessionRenderView {
   readonly cameraEffects: boolean;
   /** M11: the floor arrow showing the player's Bey's physical heading (default on). */
   readonly headingArrow?: boolean;
+  /** Bey Real (0.59.0): a camera the runner drives instead of the combat directors (the mode's own, or the free orbit). Presentation only. */
+  readonly externalCamera?: ExternalCamera;
 }
 
 /** Owner, 2026-10-05 (game feel): beats the HUD shows. */
@@ -980,7 +983,9 @@ export class MatchSession {
     }
 
     const cameraOutput = this.lastCameraOutput;
-    if (view.cameraView === 'overview') {
+    if (view.externalCamera) {
+      view.externalCamera.apply(camera, { dt: frameDeltaSeconds, first: match.first.body.translation(), second: match.second.body.translation(), arenaRadiusM: arenaFloorRadius() });
+    } else if (view.cameraView === 'overview') {
       camera.position.set(OVERVIEW_CAMERA_POSITION_M.x, OVERVIEW_CAMERA_POSITION_M.y, OVERVIEW_CAMERA_POSITION_M.z);
       camera.lookAt(0, 0, 0);
       camera.fov = OVERVIEW_CAMERA_FOV_DEG;
@@ -1107,6 +1112,7 @@ export class MatchSession {
       aiRng: side === 'first' ? this.rngStreams.aiFirst : this.rngStreams.aiSecond,
       telemetry: this.telemetry,
       keyboard: this.keyboard,
+      real: this.matchConfig.real ? { config: this.matchConfig.real, side: side === 'first' ? 0 : 1 } : null,
     };
   }
 

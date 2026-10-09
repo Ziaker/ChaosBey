@@ -1,6 +1,6 @@
 # Bey Real — física realista, movimento automático e os quatro botões (protótipo)
 
-**Status:** PROTOTIPADO (1ª rodada), **NÃO APROVADO**. Nada disto está em `src/` do jogo: é um laboratório com simulação própria. A integração (modo de jogo selecionável) continua **ASK FIRST** até o owner aprovar o que sentiu no lab.
+**Status:** PROTOTIPADO no lab (1ª rodada) e **INTEGRADO NO JOGO como modo opcional desde a 0.59.0** (o owner pediu: 2026-10-09, "todos estes sliders no pré jogo … o preset atual é o base"; ver §14). O modo é desligado por padrão e o jogo clássico não muda. Os números finais e o que ainda falta ligar (§14.5) continuam em aberto.
 **Data:** 2026-10-08
 **Lab:** `prototypes/bey-real-physics-concepts/` (página `/prototypes/bey-real-physics-concepts/`). Arquivo único para abrir sem servidor: `lab-bey-real-v1.html` (Three.js vem do jsdelivr).
 **Documentos irmãos:** [`bey-flow-fx-approval.md`](bey-flow-fx-approval.md) (o pedido original e o histórico), [`flow-fx-effects.md`](flow-fx-effects.md) (os efeitos visuais, que o lab reaproveita).
@@ -244,3 +244,33 @@ Cada etapa é uma PR própria, com testes determinísticos e de replay.
 | `prototypes/bey-flow-fx-concepts/src/sim/FlowSim.ts` | `StageSim`, `StageNote`, `FlowBey.height` |
 | `src/vfx/flow/FlowWind.ts` | `landing()` (coroas e poeira no pouso) |
 | `tests/unit/beyRealPhysicsLab.test.ts` | Verificações do lab (não são testes de gameplay) |
+
+## 14. Integração no jogo (0.59.0, pedido do owner em 2026-10-09)
+
+O owner colou os números que afinou no lab (**é o preset Base**) e pediu: (1) câmera como opção — livre, a do modo e a original; (2) slider do controle do jogador sobre o automático; (3) todos os sliders no Pregame, cada um com a sua explicação, num bloco "avançadamente avançado", com presets; (4) saber o que o modo herda do jogo normal.
+
+### 14.1 Onde fica e como se liga
+- **Pregame › "Bey Real"** (abaixo de Advanced): chave **Jogar no modo Bey Real** (desligada por padrão), **Câmera** (3 botões), e o bloco **Avançadamente avançado** com os presets e os sliders por grupo. Cada slider mostra o valor, o "base" ao lado, o selo **Alterado** (clique volta ao base) e a **explicação própria sempre visível** embaixo. Os sliders ficam travados até a chave ser ligada.
+- **Presets** (`REAL_PRESETS`): **Base (do dono)**, Proposta original (a do lab), Mais automático (influência 30%), Só botões (0%), Pesado e inercial, Selvagem. O preset ativo é derivado dos valores (vira "Personalizado" ao mexer).
+- Os valores moram em `MatchSetup.real` (lembrados com o resto do Pregame; um save antigo sem o campo lê como desligado). Fonte única da lista: `src/bey/real/RealTuning.ts` (o lab e o jogo leem a mesma).
+
+### 14.2 O que o motor faz (um caminho só: `MatchConfig`)
+- `MatchConfig.real` (opcional; **ausente = jogo clássico, bit a bit**; gravado no replay, validado pelo formato) carrega o modelo de movimento. O resto do que os sliders mexem vira **regras que o jogo já tem** (`realMatchRules.ts`): raio da arena → tamanho do palco (15/36), parede, quique da parede, atraso de ring-out, limite de tempo, gravidade e altura do pulo (a altura vem de v²/2g), controle no ar, recarga do pulo/Dash/esquiva, distância da esquiva (velocidade/12,6) e força do giratório (velocidade/9). `gameSpeed` fica 1 (o lab rodava em tempo real) e o `funnelPull` clássico fica 0 (o modo tem o seu puxão de cuba).
+- **Cuba equivalente:** o lab desenhava o funil do jogo (7 m de fundo sobre 36 m) numa arena pequena; num palco de 15 m a mesma inclinação à mesma distância do centro pede fundo `7·(15/36)^1,3 ≈ 2,25 m` (o perfil é h ∝ r^1,3). É esse o fundo do modo.
+- **Piloto automático** (`AssistedController`, `RealAutopilot.ts`): envolve quem conduz o lado (teclado/controle ou IA). Ele continua decidindo os botões (Attack, Pulo, Esquiva — e o que a IA faz com eles); a direção é `automático·(1−w) + seta·w` com `w = influência × força da seta`. O lado da IA não tem seta: só o automático. Teclas de direção clássicas são limpas (não existe Drift nem giro de tanque); o resultado é um `moveIntent` comum, então a esquiva, o gravador e o replay não precisam saber de nada.
+- **Movimento** (`RealMotion.ts`, ramo em `MovementController.applyPreStep`): a velocidade é o estado. Forças por tick: puxão da cuba (inclinação do chão sob o Bey), direção limitada pela aderência (cai com giro baixo; Quebrado = 30%), atrito de ponta (cresce com giro baixo) e arrasto, balanço de giro baixo/instável, precessão (o giro entorta o caminho; sentidos opostos nos dois Beys). Colisões continuam sendo do Rapier (a próxima tick parte da velocidade que o mundo deixou). Dash, Esquiva e rail seguem sobrepondo o movimento como sempre. Sem janela de "controle perdido".
+- **Giro (Stamina):** substituído pelo consumo do modo (`StaminaSystem.realDrain`): fração do giro por segundo parado + por metro + por esforço de direção.
+- **Câmeras** (`src/camera/real/`): *Original* = os diretores do jogo; *Bey Real* = alta, mostra a arena e os dois Beys, segue o meio da luta devagar, **abaixo da treliça de lâmpadas** das arenas (1,1 raio de altura, 1,15 atrás); *Livre* = arrastar gira, roda aproxima, duplo clique volta. **Câmera nunca move o Bey:** o referencial das setas continua o da arena (`camera-gameplay-separation.md`), qualquer que seja a câmera.
+- Os sliders clássicos que o modo assume ficam **travados** com o modo ligado (tamanho do palco, fundo da cuba, parede, ring-out, tempo, gravidade, pulo, controle no ar, recargas, aceleração/velocidade/curva/retenção, momentum, perda de controle no contato…): um lugar para mudar cada valor e nenhum slider que não faz nada.
+
+### 14.3 O que o modo herda do jogo normal (resposta ao item 4)
+**Igual:** o mesmo mundo de física (Rapier), a arena e os palcos (com os rails opcionais), Clash, Estabilidade/Quebra/KO, ring-out, spin-out e tempo, Dash/Giratório/Esquiva/Pulo/Recuperação no Ar (controladores e recargas), dano por velocidade e dano de colisão, a IA de ataque/defesa (decide os botões), HUD, efeitos (incluindo os Flow FX), replays, o Pregame (Bey, oponente, rounds, seed, presets e regras de combate/knockback). **Muda:** o Bey é conduzido por piloto automático com a sua influência, a física é de pião (cuba, atrito, precessão, balanço), o giro é consumido pelo modelo do modo, sem Drift e (por padrão) sem controle no ar, e os sliders de movimento normais ficam travados.
+
+### 14.4 Verificação
+`tests/unit/beyRealGame.test.ts` (base = os números do dono, faixas, notas únicas por slider, presets, setup/lembrança, regras derivadas, travas, autopiloto, modelo de movimento, consumo de giro, controlador, câmeras), `tests/deterministic/beyRealMode.test.ts` (partida real: os dois Beys se movem sozinhos e ficam no palco, a influência segue a seta, determinismo, replay gravado→decodificado→reproduzido **verificado**, todos os presets, o jogo clássico intacto) e `tests/smoke/beyRealPregame.spec.ts` (o bloco no navegador e uma partida de verdade).
+
+### 14.5 O que ainda NÃO está ligado (os sliders não aparecem no Pregame até estarem)
+O Pregame só mostra o que o motor já usa (sem slider morto). Ainda do lab, a ligar nas próximas mudanças: **colisão** (quique baixo/alto, atrito de borda, troca de giro, giro/estabilidade por impacto, giro na parede), **Dash** (velocidades mínima/máxima, carga, duração, snap/mira, massa efetiva, dano, custo de giro, recuperação), **Giratório** (alcance, duração, recuperação, lançamento vertical, velocidade mantida, dano), **Esquiva** (duração do impulso, invulnerabilidade, janela perfeita, custo de giro), **física** (massa do 2º Bey, sentido do giro) e **regras/IA** (recuperação de Estabilidade, tempo Quebrado, agressividade e reação da IA). Hoje essas ações usam os números do próprio jogo.
+
+### 14.6 Em aberto (decisão do owner)
+Os rails ficam ligados por padrão (opção do Pregame, como no jogo normal) — no modo podem poluir a visão; o número final de cada slider; a poeira; o BLOCK; o nome do modo; drift/momentum (hoje: sem drift, momentum sem efeito na velocidade).

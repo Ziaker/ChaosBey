@@ -406,6 +406,7 @@ export function tickMatch(
     dodgeOverride: firstDodge.dodgeOverride,
     floorNormal: floorNormalUnder(first, firstGrounded),
     railOverride: firstRail.override,
+    real: realInputOf(first, firstAttack.state),
   });
   second.movement.applyPreStep(second.body, {
     actions: secondActions,
@@ -420,6 +421,7 @@ export function tickMatch(
     dodgeOverride: secondDodge.dodgeOverride,
     floorNormal: floorNormalUnder(second, secondGrounded),
     railOverride: secondRail.override,
+    real: realInputOf(second, secondAttack.state),
   });
 
   first.spin.tick(first.body, fixedDeltaSeconds, firstCondition, firstGrounded, firstDrift.driftState === DriftState.Drifting ? first.movement.getHeadingRad() : null, axisCondition(first));
@@ -495,8 +497,8 @@ export function tickMatch(
   // Owner, 2026-10-04: the dodge costs no Stamina either — no movement drain while it runs.
   const firstFree = dashing(firstAttack.state) || first.dodge.getState() === DodgeState.Dodging;
   const secondFree = dashing(secondAttack.state) || second.dodge.getState() === DodgeState.Dodging;
-  first.stamina.tick(firstFree ? 0 : firstMovement.speedMps, fixedDeltaSeconds);
-  second.stamina.tick(secondFree ? 0 : secondMovement.speedMps, fixedDeltaSeconds);
+  first.stamina.tick(firstFree ? 0 : firstMovement.speedMps, fixedDeltaSeconds, first.movement.getRealSteerEffortMps2());
+  second.stamina.tick(secondFree ? 0 : secondMovement.speedMps, fixedDeltaSeconds, second.movement.getRealSteerEffortMps2());
   // Momentum (owner, 2026-10-02): builds with sustained fast, straight movement; a wall impact costs part of it.
   tickMomentum(first, firstMovement, firstGrounded, fixedDeltaSeconds, firstDrift.driftState === DriftState.Drifting);
   tickMomentum(second, secondMovement, secondGrounded, fixedDeltaSeconds, secondDrift.driftState === DriftState.Drifting);
@@ -892,6 +894,17 @@ export function tickMatch(
  * off the floor when rolling downhill.
  */
 /** The lower of a Bey's Stamina and Stability fractions: what the render-only axis wobble/precession ramp reads (Lote 6). */
+/** Bey Real: what the motion model reads from the Bey's other systems this tick (null in the classic game). */
+function realInputOf(bey: Bey, attackState: AttackState): { spin: number; broken: boolean; stability: number; charging: boolean } | null {
+  if (!bey.rules.real) return null;
+  return {
+    spin: bey.stamina.resource.fraction,
+    broken: bey.stability.isBroken,
+    stability: bey.stability.resource.fraction * 100,
+    charging: attackState === AttackState.ChargingDash,
+  };
+}
+
 function axisCondition(bey: Bey): number {
   return Math.min(bey.stamina.resource.fraction, bey.stability.resource.fraction);
 }

@@ -34,6 +34,7 @@ import { DODGE_COOLDOWN_S } from '../../dodge/DodgeTuning';
 import { CIRCULAR_LAUNCH_FORCE_DEFAULT } from '../../combat/attacks/AttackTuning';
 import { SPEED_DAMAGE_GAIN_DEFAULT } from '../../combat/attacks/SpeedDamage';
 import { JUMP_HOLD_FOR_FULL_DEFAULT_S } from '../../drift/DriftTuning';
+import type { RealModeConfig } from '../../bey/real/RealTuning';
 
 export interface MatchConfig {
   /** Multiplies the real knockback/Stability consequence a Clash resolution applies (both the FirstWins/SecondWins loser's knockback and a Tie's symmetric repulsion) — GDD section 152's "configurable impact multiplier". */
@@ -193,10 +194,17 @@ export interface MatchConfig {
    * (RAIL_SPEED_RANGE). 1 = the rail's own speeds. Pregame slider (Advanced › Arena). PROVISIONAL.
    */
   railSpeed: number;
+  /**
+   * Bey Real (owner, 2026-10-09; docs/design-decisions/bey-real-physics-approval.md): present = the alternative mode, where the
+   * Bey moves by itself like a real top (autopilot + the player's share of the steering, bowl pull, tip friction, precession,
+   * wobble) and the four actions are the only buttons. Absent / null = the classic game, bit for bit. Gameplay: recorded in
+   * every replay. Everything else the mode changes (arena size, gravity, jump, cooldowns…) is carried by the ordinary rules above.
+   */
+  real?: RealModeConfig | null;
 }
 
 /** The per-Bey gameplay rules of a match: what createBey() needs from MatchConfig. */
-export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed' | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS' | 'funnelPull' | 'railsEnabled' | 'railSpeed'>;
+export type BeyMatchRules = Pick<MatchConfig, 'dashCooldownS' | 'momentumGain' | 'momentumFillS' | 'momentumDecayS' | 'bodyCollisionDamage' | 'momentumLossOnCollision' | 'jumpFullHeightM' | 'jumpShortHopHeightM' | 'movementStaminaDrain' | 'dodgeCooldownS' | 'circularLaunchForce' | 'accelerationScale' | 'gravityScale' | 'contactRepelMps' | 'attackRecoilMps' | 'dodgeStaminaCost' | 'dodgeDistanceScale' | 'contactLiftMps' | 'knockbackScale' | 'spinStaminaDrain' | 'circularLockAfterHitS' | 'bodyContactControlLossScale' | 'turnRateScale' | 'turnSpeedRetention' | 'highSpeedControl' | 'topSpeedScale' | 'airControl' | 'jumpStaminaCost' | 'jumpCooldownS' | 'jumpHoldForFullS' | 'defensiveCircular' | 'speedDamageGain' | 'dashCarriesSpeed' | 'circularAttack' | 'beySizeScale' | 'airRecoveryMinDelayS' | 'funnelPull' | 'railsEnabled' | 'railSpeed' | 'real'>;
 
 export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
   return {
@@ -239,6 +247,7 @@ export function beyMatchRulesOf(config: MatchConfig): BeyMatchRules {
     funnelPull: config.funnelPull ?? 0,
     railsEnabled: config.railsEnabled ?? false,
     railSpeed: config.railSpeed ?? RAIL_SPEED_DEFAULT,
+    real: config.real ?? null,
   };
 }
 
@@ -372,7 +381,8 @@ export const KNOCKBACK_SCALE_RANGE = { min: 0, max: 4, step: 0.05 } as const;
 export const SPIN_STAMINA_DRAIN_RANGE = { min: 0, max: 20, step: 0.5 } as const;
 export const CIRCULAR_LOCK_RANGE = { min: 0, max: 2, step: 0.05 } as const;
 export const BODY_CONTACT_CONTROL_LOSS_RANGE = { min: 0, max: 2, step: 0.05 } as const;
-export const ARENA_SIZE_SCALE_RANGE = { min: 0.5, max: 2.5, step: 0.05 } as const;
+// Owner, 2026-10-09: Bey Real plays on a 15 m radius stage (×0.42), so the range reaches down to 7 m.
+export const ARENA_SIZE_SCALE_RANGE = { min: 0.2, max: 2.5, step: 0.05 } as const;
 export const GAME_SPEED_RANGE = { min: 0.5, max: 2, step: 0.05 } as const;
 export const CLASH_LAUNCH_RANGE = { min: 0, max: 60, step: 1 } as const;
 /** Owner, 2026-10-04: "curvas não deviam reduzir tanto a velocidade" — share of the speed a turn would scrub off that is kept. PROVISIONAL 0.85. */

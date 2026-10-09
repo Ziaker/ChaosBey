@@ -193,6 +193,7 @@ export class PlayFlow {
         arenaTheme: arenaPreset(this.setup.arena.presetId).theme,
         presentation: { ...presentationFor(this.settings), vfx: this.setup.visual },
         controlScheme: this.settings.controlScheme,
+        realCamera: this.setup.real?.enabled ? this.setup.real.camera : undefined,
       },
       {
         onRoundOver: (outcome) => {

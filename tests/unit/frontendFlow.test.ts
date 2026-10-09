@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { BEY_ROSTER, findRosterEntry, formatTrait, rosterTraits } from '../../src/app/frontend/beyRoster';
 import { navigationIntent, wrapIndex } from '../../src/app/frontend/listNavigation';
 import { outcomeText } from '../../src/app/frontend/matchOutcome';
-import { createDefaultMatchSetup, defaultOpponentFor, matchBeysFor } from '../../src/app/frontend/matchSetup';
+import { createDefaultMatchSetup, defaultOpponentFor, defaultRealSetup, matchBeysFor } from '../../src/app/frontend/matchSetup';
 import { DEFAULT_MATCH_BEYS } from '../../src/app/bootstrap/createMatchScene';
 import { ALL_BEY_ARCHETYPES, ATTACK_ARCHETYPE, DEFENSE_ARCHETYPE, STAMINA_ARCHETYPE } from '../../src/bey/archetype/BeyArchetypes';
 import { DEFAULT_BEY_DEFINITION } from '../../src/bey/archetype/BeyDefinition';
@@ -67,6 +67,8 @@ describe('match setup', () => {
         circularAttack: true, beySizeScale: 1, airRecoveryMinDelayS: 0.2, funnelPull: 1, railsEnabled: true, railSpeed: 1,
       },
       visual: { intensity: 1, groundWaves: 1, dust: 1, effectSize: 1 },
+      // Bey Real (0.59.0): off by default; its values are the owner's base (tests/unit/beyRealMode.test.ts).
+      real: defaultRealSetup(),
       seedText: null,
     });
     // The default setup is the Debug Lab / quick-play pairing.

@@ -36,6 +36,8 @@ import { DEFAULT_FRAME_LIMIT, type FrameLimitSetting } from '../../config/settin
 import type { TelemetryRecorder } from '../../telemetry/recording/TelemetryRecorder';
 import type { ImpactFeedbackOptions } from '../../vfx/ImpactFeedback';
 import type { FlowFxSettings } from '../../vfx/flow/flowFxTuning';
+import { FreeOrbitCamera, RealModeCamera, type ExternalCamera } from '../../camera/real/RealCameras';
+import type { RealCameraMode } from '../../camera/real/RealCameraModes';
 
 export interface MatchRunnerDeps {
   readonly appRenderer: AppRenderer;
@@ -58,6 +60,8 @@ export interface MatchRunnerStart {
   readonly presentation?: MatchPresentation;
   /** How the player's arrows / stick drive the Bey. */
   readonly controlScheme?: ControlScheme;
+  /** Bey Real: which camera the match is watched with. Omit (or `original`) for the game's combat directors. */
+  readonly realCamera?: RealCameraMode;
 }
 
 /** Player settings that change how the match is drawn, never what it computes. */
@@ -110,6 +114,8 @@ export class MatchRunner {
   private lastDrawMs: number | null = null;
   private stopped = false;
   private running = false;
+  /** Bey Real: the camera this match is watched with instead of the combat directors; null = the originals. */
+  private externalCamera: ExternalCamera | null = null;
 
   private constructor(
     readonly session: MatchSession,
@@ -157,7 +163,7 @@ export class MatchRunner {
           }
         }
         this.lastDrawMs = nowMs;
-        session.renderFrame(frameDeltaSeconds, appRenderer.camera, { cameraView: 'game', cameraEffects: this.presentation.cameraEffects });
+        session.renderFrame(frameDeltaSeconds, appRenderer.camera, { cameraView: 'game', cameraEffects: this.presentation.cameraEffects, externalCamera: this.externalCamera ?? undefined });
         appRenderer.render();
         this.events.onFrame?.(session, frameDeltaSeconds);
         if (this.overlayFields) {
@@ -235,6 +241,8 @@ export class MatchRunner {
       deps.appRenderer.scene.background = new THREE.Color(start.arenaTheme.backgroundHex);
     }
     if (start.presentation) runner.setPresentation(start.presentation);
+    if (start.realCamera === 'real') runner.externalCamera = new RealModeCamera();
+    else if (start.realCamera === 'free') runner.externalCamera = new FreeOrbitCamera();
     return runner;
   }
 
@@ -284,7 +292,7 @@ export class MatchRunner {
 
   /** Draws one frame without ticking (behind a pause menu, after a settings change). */
   redraw(): void {
-    this.session.renderFrame(0, this.deps.appRenderer.camera, { cameraView: 'game', cameraEffects: this.presentation.cameraEffects });
+    this.session.renderFrame(0, this.deps.appRenderer.camera, { cameraView: 'game', cameraEffects: this.presentation.cameraEffects, externalCamera: this.externalCamera ?? undefined });
     this.deps.appRenderer.render();
   }
 
@@ -297,6 +305,8 @@ export class MatchRunner {
     if (this.stopped) return;
     this.stopped = true;
     this.pause();
+    this.externalCamera?.dispose();
+    this.externalCamera = null;
     this.session.dispose();
     if (this.savedBackground !== undefined) this.deps.appRenderer.scene.background = this.savedBackground;
   }

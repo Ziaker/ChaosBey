@@ -31,6 +31,7 @@ import { DEFAULT_BEY_DEFINITION, scaledBeyDefinition, type BeyDefinition } from 
 import { resolveBeyStats } from '../archetype/BeyStatsResolution';
 import type { BeyStats } from '../archetype/BeyStats';
 import { motionParams, type MotionParams } from '../motion/MotionPresets';
+import { realSpinDrainOf } from '../real/RealTuning';
 import { beyMatchRulesOf, createDefaultMatchConfig, type BeyMatchRules } from '../../config/match/MatchConfig';
 
 export interface Bey {
@@ -74,6 +75,8 @@ export function createBey(
   matchRules?: BeyMatchRules,
   /** The rails of the stage (already resolved onto its floor); none = no rail grinding. */
   rails: readonly RailDefinition[] = [],
+  /** Bey Real: the way this Bey's spin turns (+1 first, -1 second): the way its path curves and the way it orbits. */
+  realSpinDir: 1 | -1 = 1,
 ): Bey {
   const rules: BeyMatchRules = matchRules ?? { ...beyMatchRulesOf(createDefaultMatchConfig()), jumpFullHeightM: LEGACY_JUMP_FULL_HEIGHT_M, defensiveCircular: false, speedDamageGain: 0, dashCarriesSpeed: false,
     // Owner, 2026-10-04 speed pass: match-only. Bare constructions (the Camera Lab: camera frozen) keep the old handling.
@@ -85,7 +88,7 @@ export function createBey(
   const grownM = Math.max(0, definition.physical.colliderHalfHeightM - baseDefinition.physical.colliderHalfHeightM);
   const { body, collider } = createBeyRigidBody(physics, { ...spawnPosition, y: spawnPosition.y + grownM }, definition.physical, motion);
   const stats = resolveBeyStats(definition.ratings);
-  const movement = new MovementController(definition.handling, motion, { acceleration: rules.accelerationScale ?? 1, topSpeed: rules.topSpeedScale ?? 1, airControl: rules.airControl ?? 1, turnRate: rules.turnRateScale ?? 1, turnSpeedRetention: rules.turnSpeedRetention ?? 0, highSpeedControl: rules.highSpeedControl ?? 0, thrustCalibration: thrustCalibrationFor(matchRules), funnelPull: rules.funnelPull ?? 0, gravityScale: rules.gravityScale ?? 1 });
+  const movement = new MovementController(definition.handling, motion, { acceleration: rules.accelerationScale ?? 1, topSpeed: rules.topSpeedScale ?? 1, airControl: rules.airControl ?? 1, turnRate: rules.turnRateScale ?? 1, turnSpeedRetention: rules.turnSpeedRetention ?? 0, highSpeedControl: rules.highSpeedControl ?? 0, thrustCalibration: thrustCalibrationFor(matchRules), funnelPull: rules.funnelPull ?? 0, gravityScale: rules.gravityScale ?? 1, real: rules.real ?? undefined, realSpinDir });
   return {
     definition,
     stats,
@@ -96,7 +99,7 @@ export function createBey(
     // Bare constructions (no match rules: the Camera Lab, physics-only tests) keep the old immediate full-jump launch.
     drift: new DriftController(movement.getLateralGripPerS(), matchRules),
     dodge: new DodgeController(rules.dodgeCooldownS, rules.dodgeStaminaCost ?? DODGE_STAMINA_COST, rules.dodgeDistanceScale ?? 1, matchRules !== undefined, matchRules !== undefined ? (rules.airRecoveryMinDelayS ?? 0) : null),
-    stamina: new StaminaSystem(stats.stamina, rules.movementStaminaDrain, rules.spinStaminaDrain ?? 1),
+    stamina: new StaminaSystem(stats.stamina, rules.movementStaminaDrain, rules.spinStaminaDrain ?? 1, rules.real ? realSpinDrainOf(rules.real) : null),
     stability: new StabilitySystem(),
     attack: new AttackController(definition.attack, rules.dashCooldownS, rules.dashCarriesSpeed ?? false, rules.topSpeedScale ?? 1, rules.circularAttack ?? true),
     momentum: new MomentumSystem(rules),

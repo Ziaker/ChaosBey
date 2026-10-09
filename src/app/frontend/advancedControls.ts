@@ -47,6 +47,7 @@ import {
   TURN_SPEED_RETENTION_RANGE,
 } from '../../config/match/MatchConfig';
 import { DEFAULT_VFX_OPTIONS, VFX_DUST_RANGE, VFX_EFFECT_SIZE_RANGE, VFX_GROUND_WAVES_RANGE, VFX_INTENSITY_RANGE, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
+import { REAL_OWNED_RULE_KEYS } from '../../bey/real/realMatchRules';
 import { CLASH_IMPACT_RANGE, MATCH_RULE_KEYS, RING_OUT_OFF_TIME_LIMIT_S, defaultMatchRules, sanitizeMatchRules, type MatchRules, type MatchSetup } from './matchSetup';
 
 export const ADVANCED_CATEGORIES = ['movement', 'jump', 'combat', 'arena', 'round', 'visual'] as const;
@@ -103,8 +104,7 @@ const sec = (v: number): string => `${v.toFixed(2)} s`;
 const meters = (v: number): string => `${v.toFixed(2)} m`;
 const noCircular = (setup: MatchSetup): boolean => !setup.rules.circularAttack;
 
-/** Every Advanced control, grouped by category and in the order the Pregame shows them. */
-export const ADVANCED_CONTROLS: readonly AdvancedControl[] = [
+const CLASSIC_CONTROLS: readonly AdvancedControl[] = [
   // ---- movement ----
   { kind: 'slider', category: 'movement', id: 'acceleration', label: 'Acceleration', range: ACCELERATION_SCALE_RANGE, key: 'accelerationScale', format: times, note: 'How fast every Bey gets up to speed. Provisional.' },
   { kind: 'slider', category: 'movement', id: 'top-speed', label: 'Top speed', range: TOP_SPEED_SCALE_RANGE, key: 'topSpeedScale', format: times, note: 'Every Bey\'s top speed before momentum. Provisional.' },
@@ -166,6 +166,24 @@ export const ADVANCED_CONTROLS: readonly AdvancedControl[] = [
   { kind: 'slider', category: 'visual', id: 'vfx-ground-waves', label: 'Ground waves', range: VFX_GROUND_WAVES_RANGE, key: 'vfx.groundWaves', format: pct, note: 'Size of the shockwave rings on the floor. 0 = none.' },
   { kind: 'slider', category: 'visual', id: 'vfx-dust', label: 'Dust', range: VFX_DUST_RANGE, key: 'vfx.dust', format: pct, note: 'How much dust Dashes, dodges and landings raise. 0 = none. Camera options stay out of this screen (camera frozen).' },
 ];
+
+/**
+ * Bey Real (0.59.0): the mode's own block sets these (its sliders reach them through realMatchRules.ts) or the mode does not use
+ * them at all (the classic handling model, momentum's top speed, the control-loss window). While the mode is on their classic
+ * sliders are locked — one place to change each value, and no slider that does nothing.
+ */
+const REAL_LOCKED_KEYS: ReadonlySet<AdvancedKey> = new Set<AdvancedKey>([...REAL_OWNED_RULE_KEYS, 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyContactControlLossScale', 'wallHeightM', 'wallRestitution']);
+const realModeOn = (setup: MatchSetup): boolean => setup.real?.enabled === true;
+
+/** Every Advanced control, grouped by category and in the order the Pregame shows them. */
+export const ADVANCED_CONTROLS: readonly AdvancedControl[] = CLASSIC_CONTROLS.map((control) =>
+  control.kind === 'slider' && REAL_LOCKED_KEYS.has(control.key) ? { ...control, disabledWhen: (setup: MatchSetup) => realModeOn(setup) || (control.disabledWhen?.(setup) ?? false) } : control,
+);
+
+/** True when this control is locked by the Bey Real block (so the Pregame can say why). */
+export function isLockedByRealMode(control: AdvancedControl, setup: MatchSetup): boolean {
+  return control.kind === 'slider' && REAL_LOCKED_KEYS.has(control.key) && realModeOn(setup);
+}
 
 export function isToggle(control: AdvancedControl): control is ToggleControl {
   return control.kind === 'toggle';
