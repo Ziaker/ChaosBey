@@ -51,7 +51,7 @@ export interface SideControllerDeps {
   readonly aiRng: SeededRng;
   readonly telemetry: TelemetryRecorder | null;
   readonly keyboard: CombatController;
-  /** Bey Real match: the autopilot's settings and which side this is. Absent = the classic game. */
+  /** Bey Real match: the mode's settings and which side this is. Absent = the classic game. */
   readonly real?: { readonly config: RealModeConfig; readonly side: 0 | 1 } | null;
 }
 
@@ -72,9 +72,9 @@ export function resolveAiPersonality(choice: AiPersonalityChoice, ownBey: Bey): 
 
 export function createSideController(spec: SideControllerSpec, deps: SideControllerDeps): CombatController {
   const base = createBaseSideController(spec, deps);
-  // Bey Real: a person's side and the AI's side steer by autopilot (the person's stick takes a share of it).
+  // Bey Real: nobody steers — the stage's physics moves both Beys; a person's stick only leans the top (× influence).
   if (deps.real && (spec.kind === 'keyboard' || spec.kind === 'ai')) {
-    return new AssistedController(base, deps.real.config, deps.ownBey, deps.opponentBey, deps.real.side, spec.kind === 'keyboard');
+    return new AssistedController(base, deps.real.config, spec.kind === 'keyboard');
   }
   return base;
 }

@@ -41,7 +41,7 @@ interface ControlView {
 /** What stays the same as the classic game, and what changes — shown once, at the top of the block. */
 const INHERITS_TEXT =
   'Continua igual: a mesma arena e física (Rapier), Clash, Estabilidade/Quebra/KO, ring-out, spin-out e tempo, a mesma IA de ataque e defesa, HUD, efeitos, replays e as regras do Pregame. ' +
-  'Muda: o Bey é conduzido por um piloto automático (você influencia), a física é de pião real (cuba, atrito, giro), sem Drift e sem controle no ar, e os sliders de movimento do Advanced ficam travados (os de arena, estabilidade e visual continuam valendo).';
+  'Muda: ninguém conduz o Bey — só a física do stage o move (a cuba o leva ao centro e de volta rampa acima, o giro da ponta repõe o embalo), cinco vezes mais rápido; a sua seta só inclina o pião, sem Drift e sem controle no ar, e os sliders de movimento do Advanced ficam travados (os de arena, estabilidade e visual continuam valendo).';
 
 export class RealModePanel {
   readonly element = el('section', 'cb-pregame__advanced cb-real', 'pregame-real');

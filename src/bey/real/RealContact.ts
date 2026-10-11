@@ -13,8 +13,8 @@
 import type { Vec2 } from '../../physics/Vec2';
 import type { RealModeConfig } from './RealTuning';
 
-/** The speed of a rim at full spin (m/s): what the friction drags against. */
-export const RIM_SPEED_MPS = 10;
+/** The speed of a rim at full spin (m/s): what the friction drags against. ×5 with the Beys' speed (0.64.0): it was 10. */
+export const RIM_SPEED_MPS = 50;
 
 export interface ContactBody {
   /** The horizontal velocity it carried into the step. */

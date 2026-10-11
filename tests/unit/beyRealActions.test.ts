@@ -59,10 +59,10 @@ describe('Bey Real attack numbers', () => {
 
   it('the mode\'s values fill them: durations, recoveries, lock-on, damage, knockback scale', () => {
     const t = attackTuningOf(config);
-    expect(t).toMatchObject({ dashMaxChargeS: 1.6, dashActiveDurationS: 0.8, dashWhiffRecoveryS: 1.6, dashSnapRadPerS: 40, dashSnapWindowS: 0.08, dashLockOnRadPerS: 5, dashMinStabilityDamage: 10, dashMaxStabilityDamage: 25, circularActiveDurationS: 0.35, circularRecoveryS: 0.95, circularStabilityDamage: 12 });
+    expect(t).toMatchObject({ dashMaxChargeS: 1.6, dashActiveDurationS: 0.3, dashWhiffRecoveryS: 1.6, dashSnapRadPerS: 40, dashSnapWindowS: 0.08, dashLockOnRadPerS: 25, dashMinStabilityDamage: 10, dashMaxStabilityDamage: 25, circularActiveDurationS: 0.35, circularRecoveryS: 0.95, circularStabilityDamage: 12 });
     expect(t.dashKnockbackScale).toBeCloseTo(1, 9); // the owner's 1.8 is the game's own throw
     const p = attackProfileOf(DEFAULT_BEY_DEFINITION.attack, config);
-    expect(p).toMatchObject({ dashMinSpeedMps: 10, dashMaxSpeedMps: 30, circularHitboxRadiusM: 1.55 });
+    expect(p).toMatchObject({ dashMinSpeedMps: 50, dashMaxSpeedMps: 130, circularHitboxRadiusM: 1.55 });
   });
 
   it('a longer Dash lasts longer, and a longer whiff recovery keeps the Bey vulnerable longer', () => {
@@ -217,7 +217,7 @@ describe('Bey Real contact', () => {
     // the friction is bounded by the slider times the impulse
     const capped = resolveRealContact({ ...config, rimFriction: 0.1 }, body(5, 0, 1, 1), body(-5, 0, 1, 1), head)!;
     expect(Math.abs(capped.velocityA.z)).toBeLessThanOrEqual(0.1 * capped.impulse + 1e-9);
-    expect(RIM_SPEED_MPS).toBe(10);
+    expect(RIM_SPEED_MPS, 'a rim at full spin, ×5 with the Beys (0.64.0)').toBe(50);
   });
 
   it('impacts and rubbing wear the spin; the exchange moves it between the Beys', () => {

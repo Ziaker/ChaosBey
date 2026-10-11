@@ -215,7 +215,7 @@ export interface MatchConfig {
   launchSequence: boolean;
   /**
    * Bey Real (owner, 2026-10-09; docs/design-decisions/bey-real-physics-approval.md): present = the alternative mode, where the
-   * Bey moves by itself like a real top (autopilot + the player's share of the steering, bowl pull, tip friction, precession,
+   * Bey moves by itself like a real top (physics only since 0.64.0: bowl pull, the tip's drive and bite, the player's lean, precession,
    * wobble) and the four actions are the only buttons. Absent / null = the classic game, bit for bit. Gameplay: recorded in
    * every replay. Everything else the mode changes (arena size, gravity, jump, cooldowns…) is carried by the ordinary rules above.
    */

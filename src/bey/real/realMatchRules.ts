@@ -6,25 +6,16 @@
 // into the engine, one place the replay records.
 // ============================================================
 
-import { MATCH_BOWL_DEPTH_DEFAULT_M } from '../../arena/floor/ArenaFloorProfile';
 import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
 import { CIRCULAR_LAUNCH_HORIZONTAL_MPS } from '../../combat/attacks/AttackTuning';
 import type { MatchConfig } from '../../config/match/MatchConfig';
 import { DODGE_BURST_SPEED_MPS } from '../../dodge/DodgeTuning';
 import { GRAVITY_MPS2 } from '../../physics/world/PhysicsWorld';
 import { STAMINA_MAX } from '../stamina/StaminaTuning';
+import { labEquivalentBowlDepthM } from './realBowl';
 import { realModeConfigOf, type RealParams } from './RealTuning';
 
-/** The lab drew the game's funnel (7 m deep over a 36 m floor) and played on a small stage: the slope the owner tuned against. */
-const LAB_BOWL_DEPTH_M = MATCH_BOWL_DEPTH_DEFAULT_M;
-/** The funnel profile is a power of the radius (h ∝ r^1.3): the exponent keeps the slope the same on a smaller stage. */
-const FUNNEL_EXPONENT = 1.3;
-
-/** The bowl depth that gives a stage of this radius the slope the lab's stage had at the same distance from the centre. */
-export function labEquivalentBowlDepthM(stageRadiusM: number): number {
-  const scale = stageRadiusM / ARENA_FLOOR_RADIUS;
-  return LAB_BOWL_DEPTH_M * scale ** FUNNEL_EXPONENT;
-}
+export { labEquivalentBowlDepthM };
 
 /** The match rules a Bey Real setup sets (on top of the ordinary rules): everything the mode's sliders reach. */
 export function realMatchOverrides(params: RealParams): Partial<MatchConfig> {

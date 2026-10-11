@@ -12,6 +12,12 @@ import type { RealModeConfig } from './RealTuning';
 
 /** The Dash's mass boost the game's own knockback already has (the owner's base is 1.8): at that value the Dash throws as it always did. */
 export const DASH_MASS_BOOST_BASELINE = 1.8;
+/**
+ * Bey Real's numerical ceiling on a Bey's speed (m/s): the classic game's 60 m/s driven clamp and 100 m/s launch ceiling are
+ * below the mode's ×5 speeds (rolling at 90, a full Dash at 130). Not a gameplay limit — the walls and the Beys' bodies use
+ * continuous collision detection, and at this speed a Bey moves 3.3 m per tick.
+ */
+export const REAL_SPEED_CEILING_MPS = 200;
 /** Bey Real's wait before Stability starts to climb back (s): the lab's. */
 const STABILITY_REGEN_DELAY_S = 1.5;
 

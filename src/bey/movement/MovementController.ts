@@ -44,6 +44,7 @@ import { labImpactSpeed, motionParams, motionRatio, type MotionParams } from '..
 import { vec2, type CanonicalRecord } from '../../replay/state/CanonicalValue';
 import { headingErrorRad, intentMagnitude } from './directionalIntent';
 import { RealMotion } from '../real/RealMotion';
+import { REAL_SPEED_CEILING_MPS } from '../real/realTunings';
 import type { RealModeConfig } from '../real/RealTuning';
 
 import { GRAVITY_MPS2 } from '../../physics/world/PhysicsWorld';
@@ -105,7 +106,7 @@ export interface MovementPreStepInput {
    * Bey Real (MatchConfig.real): the live state its motion model needs. Present only in a Bey Real match; there the Bey is not
    * driven like a kart but moved by RealMotion's forces (a Dash, a Dodge and a rail still override it as always).
    */
-  real?: { spin: number; broken: boolean; stability: number } | null;
+  real?: { spin: number; broken: boolean; stability: number; floorHeightM: number } | null;
 }
 
 export interface MovementSnapshot {
@@ -133,8 +134,8 @@ export interface MovementSnapshot {
   impactDirection: Vec2;
 }
 
-/** Bey Real: how fast the heading swings round to face the way of travel (rad/s). */
-const REAL_HEADING_TURN_RATE_RAD_S = 10;
+/** Bey Real: how fast the heading swings round to face the way of travel (rad/s). Fast: so are the Beys (0.64.0, ×5). */
+const REAL_HEADING_TURN_RATE_RAD_S = 50;
 /** Bey Real: under this speed (m/s) the heading is left alone. */
 const REAL_HEADING_MIN_SPEED_MPS = 0.5;
 
@@ -635,7 +636,7 @@ export class MovementController {
     // Numerical safety clamp (motion-approval.md §3), not a gameplay limit.
     const newSpeed = length(newVelHoriz);
     // Owner, 2026-10-04: the +45% speed and the bigger momentum need room above the Lab's 26 m/s (numerical safety only).
-    const safetyMps = Math.max(this.motion.maxLinearSpeed, NUMERICAL_SPEED_CLAMP_MPS);
+    const safetyMps = this.realMotion ? REAL_SPEED_CEILING_MPS : Math.max(this.motion.maxLinearSpeed, NUMERICAL_SPEED_CLAMP_MPS);
     if (newSpeed > safetyMps) newVelHoriz = scale(newVelHoriz, safetyMps / newSpeed);
 
     this.lastHeadingForward = headingForward;
@@ -688,6 +689,7 @@ export class MovementController {
       velocity: { x: current.x, z: current.z },
       intent: input.actions.moveIntent ?? { x: 0, z: 0 },
       floorNormal: grounded ? floorNormal ?? null : null,
+      floorHeightM: real.floorHeightM,
       grounded,
       dt,
       spin: real.spin,
@@ -697,7 +699,7 @@ export class MovementController {
     });
     let velocity = result.velocity;
     const speed = length(velocity);
-    if (speed > NUMERICAL_SPEED_CLAMP_MPS) velocity = scale(velocity, NUMERICAL_SPEED_CLAMP_MPS / speed);
+    if (speed > REAL_SPEED_CEILING_MPS) velocity = scale(velocity, REAL_SPEED_CEILING_MPS / speed);
     this.realSteerEffortMps2 = result.steerEffortMps2;
 
     // The heading follows the way of travel (the visual and a Dash's start read it).

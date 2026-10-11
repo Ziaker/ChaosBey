@@ -1,13 +1,14 @@
 // Bey Real in the game (0.59.0, owner 2026-10-09): the tuning list and its base preset, the setup, what the sliders turn into in
-// the match's rules, the autopilot and the motion model (pure), the assisted controller and the cameras.
+// the match's rules, the motion model (pure physics since 0.64.0: no autopilot), the player's lean, the assisted controller and the
+// cameras.
 
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { ADVANCED_CONTROLS, isLockedByRealMode, isModified, readAdvanced, writeAdvanced } from '../../src/app/frontend/advancedControls';
 import { createDefaultMatchSetup, defaultRealSetup, isRealMode, loadLastSetup, matchConfigFor, sanitizeRealSetup, saveLastSetup, activeRuleLines } from '../../src/app/frontend/matchSetup';
-import { AssistedController } from '../../src/bey/real/AssistedController';
-import { autopilotIntent, blendSteering } from '../../src/bey/real/RealAutopilot';
-import { RealMotion } from '../../src/bey/real/RealMotion';
+import { AssistedController, leanOf } from '../../src/bey/real/AssistedController';
+import { RealMotion, rollingSpeedMps } from '../../src/bey/real/RealMotion';
+import { naturalBowlGravity } from '../../src/bey/real/realBowl';
 import {
   REAL_BASE_PARAMS,
   REAL_GROUP_ORDER,
@@ -26,8 +27,8 @@ import { FreeOrbitCamera, RealModeCamera } from '../../src/camera/real/RealCamer
 import { REAL_CAMERA_MODES } from '../../src/camera/real/RealCameraModes';
 import { Action, type CombatController, type ControllerActions } from '../../src/input/actions/Action';
 
-/** The owner's tuned numbers, as pasted on 2026-10-09 ("esse preset atual … é pra ser o base"), with the same day's request for more movement (faster cruise and steering, a livelier orbit, no slowing down with low spin). */
-const OWNER_JSON: RealParams = {
+/** The owner's tuned numbers, as pasted on 2026-10-09 ("esse preset atual … é pra ser o base"), with the same day's request for more movement. */
+const OWNER_JSON_0_63 = {
   influence: 0.75, steerAccelMps2: 40, cruiseSpeedMps: 18, pursuit: 1, orbitRadiusFrac: 0.8, orbitBreath: 0.35, orbitBreathRadPerS: 0.7, cruiseMinShare: 0.75, bowlPull: 20, dragPerS: 0.1, tipFrictionMps2: 0.7, precessionRadPerS: 0.9,
   spinDecayPerS: 0.007, spinMoveLossPerM: 0.00035, spinSteerLoss: 0.00025, wobbleSpin: 0.35, wobbleAccelMps2: 10, massSecond: 1, sameSpin: 0, restitutionLow: 0.7,
   restitutionHigh: 0.92, rimFriction: 0.4, spinExchange: 0.012, hitSpinLoss: 0.004, rubSpinLoss: 0.0016, hitStability: 0.6, wallRestitution: 0.9, wallSpinLoss: 0.0016,
@@ -38,24 +39,62 @@ const OWNER_JSON: RealParams = {
   stageRadiusM: 15, bowlDepthScale: 1, wallHeightM: 1.6, ringOutDelayS: 0.6, timeLimitS: 150, gameSpeed: 1, stabilityRegenPerS: 5, brokenS: 2.4, aiAggression: 1, aiSkill: 0.85,
 };
 
+/**
+ * 0.64.0 (owner, 2026-10-10: "os beys estão só sendo controlados por uma IA … MUITO lentos … 5 VEZES MAIS RÁPIDOS"; then "a ideia
+ * é eles irem pro centro e depois voltarem, subindo e descendo e indo para os lados também, seguindo uma física coesa"): the
+ * autopilot's values are gone (pursuit, the orbit's breathing), the motion is physics only, and everything that moves is five
+ * times faster in the same stage — speeds and rates ×5, accelerations ×25, what a hit costs per m/s ÷25. Timers stay.
+ */
+const BASE_0_64: RealParams = {
+  ...(Object.fromEntries(Object.entries(OWNER_JSON_0_63).filter(([k]) => !['pursuit', 'orbitBreath', 'orbitBreathRadPerS'].includes(k))) as unknown as RealParams),
+  cruiseSpeedMps: 90, steerAccelMps2: 1000, orbitRadiusFrac: 0.8, bowlPull: 1, dragPerS: 0.2, tipFrictionMps2: 17.5, crossGripPerS: 1.5, precessionRadPerS: 1.5,
+  spinMoveLossPerM: 0.00007, spinSteerLoss: 0.00001, wobbleAccelMps2: 250,
+  spinExchange: 0.00048, hitSpinLoss: 0.00016, rubSpinLoss: 0.000064, hitStability: 0.024, wallSpinLoss: 0.000064,
+  dashMinSpeedMps: 50, dashMaxSpeedMps: 130, dashDurationS: 0.3, dashLockRadPerS: 25, circularLaunchMps: 45, dodgeSpeedMps: 60,
+};
+
 describe('Bey Real tuning', () => {
-  it('the base preset is exactly the owner\'s tuned numbers', () => {
-    expect({ ...REAL_BASE_PARAMS }).toEqual(OWNER_JSON);
-    expect(realPresetValues('base')).toEqual(OWNER_JSON);
-    expect(matchingRealPreset(OWNER_JSON)).toBe('base');
+  it('the base preset is the owner\'s numbers, physics only and five times faster', () => {
+    expect({ ...REAL_BASE_PARAMS }).toEqual(BASE_0_64);
+    expect(realPresetValues('base')).toEqual(BASE_0_64);
+    expect(matchingRealPreset(BASE_0_64)).toBe('base');
+    const o = OWNER_JSON_0_63;
+    const b = REAL_BASE_PARAMS;
+    // speeds and rates ×5, accelerations ×25, per-metre and per-hit costs down so a fight costs what it cost
+    expect(b.cruiseSpeedMps).toBe(o.cruiseSpeedMps * 5);
+    expect(b.steerAccelMps2).toBe(o.steerAccelMps2 * 25);
+    expect(b.tipFrictionMps2).toBeCloseTo(o.tipFrictionMps2 * 25, 9);
+    expect(b.wobbleAccelMps2).toBe(o.wobbleAccelMps2 * 25);
+    expect(b.dashMinSpeedMps).toBe(o.dashMinSpeedMps * 5);
+    expect(b.dashLockRadPerS).toBe(o.dashLockRadPerS * 5);
+    expect(b.circularLaunchMps).toBe(o.circularLaunchMps * 5);
+    expect(b.spinMoveLossPerM).toBeCloseTo(o.spinMoveLossPerM / 5, 12);
+    expect(b.spinSteerLoss).toBeCloseTo(o.spinSteerLoss / 25, 12);
+    for (const key of ['hitSpinLoss', 'rubSpinLoss', 'spinExchange', 'hitStability', 'wallSpinLoss'] as const) expect(b[key], key).toBeCloseTo(o[key] / 25, 12);
+    // the timers the player plays against are the owner's
+    for (const key of ['dashChargeMaxS', 'dashCooldownS', 'dashWhiffRecoveryS', 'dodgeCooldownS', 'dodgePerfectS', 'circularDurationS', 'timeLimitS', 'spinDecayPerS'] as const) expect(b[key], key).toBe(o[key]);
+    // the autopilot's values are gone
+    for (const key of ['pursuit', 'orbitBreath', 'orbitBreathRadPerS']) expect(key in b, key).toBe(false);
+  });
+
+  it('the "Velocidade antiga" preset is the same physics at the old pace', () => {
+    const slow = realPresetValues('slow');
+    expect(slow.cruiseSpeedMps).toBe(18);
+    expect(slow.dashMaxSpeedMps).toBe(30);
+    expect(slow.hitStability).toBe(0.6);
   });
 
   it('every value has one spec, inside its own range, with a note of its own and a group', () => {
-    const keys = Object.keys(OWNER_JSON).sort();
-    expect(keys, 'the owner\'s JSON has 68 values').toHaveLength(68);
+    const keys = Object.keys(BASE_0_64).sort();
+    expect(keys, '66 values: the owner\'s 68, less the autopilot\'s three, plus the tip\'s bite across the slope').toHaveLength(66);
     expect(REAL_PARAM_SPEC.map((s) => s.key).sort()).toEqual(keys);
     for (const spec of REAL_PARAM_SPEC) {
       expect(spec.min, spec.key).toBeLessThan(spec.max);
-      expect(OWNER_JSON[spec.key], spec.key).toBeGreaterThanOrEqual(spec.min);
-      expect(OWNER_JSON[spec.key], spec.key).toBeLessThanOrEqual(spec.max);
+      expect(BASE_0_64[spec.key], spec.key).toBeGreaterThanOrEqual(spec.min);
+      expect(BASE_0_64[spec.key], spec.key).toBeLessThanOrEqual(spec.max);
       expect(spec.note.length, `${spec.key} has an explanation`).toBeGreaterThan(20);
       expect(REAL_GROUP_ORDER).toContain(spec.group);
-      expect(spec.format(OWNER_JSON[spec.key])).not.toContain('NaN');
+      expect(spec.format(BASE_0_64[spec.key])).not.toContain('NaN');
     }
     const notes = REAL_PARAM_SPEC.map((s) => s.note);
     expect(new Set(notes).size, 'no two sliders share an explanation').toBe(notes.length);
@@ -70,15 +109,16 @@ describe('Bey Real tuning', () => {
       }
       expect(matchingRealPreset(values), preset.id).toBe(preset.id);
     }
-    expect(matchingRealPreset({ ...REAL_BASE_PARAMS, cruiseSpeedMps: 9.5 })).toBeNull();
+    expect(matchingRealPreset({ ...REAL_BASE_PARAMS, cruiseSpeedMps: 77 })).toBeNull();
   });
 
   it('sanitizing clamps, ignores junk and falls back to the base', () => {
-    const p = sanitizeRealParams({ influence: 5, cruiseSpeedMps: -2, bowlPull: 'x', pursuit: Number.NaN });
+    const p = sanitizeRealParams({ influence: 5, cruiseSpeedMps: -2, bowlPull: 'x', crossGripPerS: Number.NaN, pursuit: 1 } as never);
     expect(p.influence).toBe(1);
-    expect(p.cruiseSpeedMps).toBe(3);
+    expect(p.cruiseSpeedMps).toBe(10);
     expect(p.bowlPull).toBe(REAL_BASE_PARAMS.bowlPull);
-    expect(p.pursuit).toBe(REAL_BASE_PARAMS.pursuit);
+    expect(p.crossGripPerS).toBe(REAL_BASE_PARAMS.crossGripPerS);
+    expect('pursuit' in p, 'an old save\'s autopilot value is dropped').toBe(false);
     expect(sanitizeRealParams(null)).toEqual({ ...REAL_BASE_PARAMS });
   });
 
@@ -87,7 +127,7 @@ describe('Bey Real tuning', () => {
     expect(live.length).toBeGreaterThan(25);
     const config = realModeConfigOf(REAL_BASE_PARAMS);
     for (const key of Object.keys(config) as (keyof typeof config)[]) expect(typeof config[key]).toBe('number');
-    for (const key of ['influence', 'steerAccelMps2', 'cruiseSpeedMps', 'pursuit', 'orbitRadiusFrac', 'bowlPull', 'dragPerS', 'tipFrictionMps2', 'precessionRadPerS', 'wobbleSpin', 'wobbleAccelMps2', 'spinDecayPerS', 'spinMoveLossPerM', 'spinSteerLoss'] as const) {
+    for (const key of ['influence', 'steerAccelMps2', 'cruiseSpeedMps', 'crossGripPerS', 'orbitRadiusFrac', 'bowlPull', 'dragPerS', 'tipFrictionMps2', 'precessionRadPerS', 'wobbleSpin', 'wobbleAccelMps2', 'spinDecayPerS', 'spinMoveLossPerM', 'spinSteerLoss'] as const) {
       expect(live.some((s) => s.key === key), key).toBe(true);
     }
   });
@@ -123,8 +163,8 @@ describe('Bey Real setup', () => {
     expect(config.jumpCooldownS).toBe(0.4);
     expect(config.dashCooldownS).toBe(1.5);
     expect(config.dodgeCooldownS).toBe(3);
-    expect(config.dodgeDistanceScale).toBeCloseTo(22 / 12.6, 6);
-    expect(config.circularLaunchForce).toBeCloseTo(1, 6);
+    expect(config.dodgeDistanceScale).toBeCloseTo(60 / 12.6, 6);
+    expect(config.circularLaunchForce).toBeCloseTo(5, 6);
     expect(config.gameSpeed).toBe(1);
     expect(config.funnelPull).toBe(0);
   });
@@ -139,7 +179,7 @@ describe('Bey Real setup', () => {
   it('is remembered with the setup and an old save without it reads as off', () => {
     const store = new Map<string, string>();
     const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) };
-    const setup = { ...createDefaultMatchSetup(), real: { enabled: true, camera: 'free' as const, presetId: 'custom', params: { ...REAL_BASE_PARAMS, influence: 0.4, bowlPull: 33 } } };
+    const setup = { ...createDefaultMatchSetup(), real: { enabled: true, camera: 'free' as const, presetId: 'custom', params: { ...REAL_BASE_PARAMS, influence: 0.4, bowlPull: 2.5 } } };
     saveLastSetup(setup, storage);
     expect(loadLastSetup(storage)!.real).toEqual(setup.real);
     const raw = JSON.parse(store.get([...store.keys()][0]!)!);
@@ -201,93 +241,112 @@ describe('Bey Real setup', () => {
   });
 });
 
-describe('Bey Real autopilot', () => {
+describe('Bey Real: nobody steers', () => {
   const config = realModeConfigOf(REAL_BASE_PARAMS);
-  const far = { x: 100, z: 100 };
-  const at = (x: number, z: number, spinDir: 1 | -1 = 1) => autopilotIntent({ ...config, pursuit: 0 }, { position: { x, z }, opponentPosition: far, opponentSpin: 1, spinDir, side: 0, timeS: 0 });
 
-  it('orbits the way the spin turns it: opposite spins orbit opposite ways', () => {
-    const a = at(config.stageRadiusM * config.orbitRadiusFrac, 0, 1);
-    const b = at(config.stageRadiusM * config.orbitRadiusFrac, 0, -1);
-    expect(a.z).toBeGreaterThan(0.5);
-    expect(b.z).toBeLessThan(-0.5);
+  it('the player\'s lean is the stick × influence; no stick or influence 0 is no lean', () => {
+    expect(leanOf(undefined, 1)).toEqual({ x: 0, z: 0 });
+    expect(leanOf({ x: 0, z: 0 }, 1)).toEqual({ x: 0, z: 0 });
+    expect(leanOf({ x: 1, z: 0 }, 0)).toEqual({ x: 0, z: 0 });
+    expect(leanOf({ x: 1, z: 0 }, 0.75).x).toBeCloseTo(0.75, 9);
+    expect(leanOf({ x: 0.5, z: 0 }, 1).x, 'a half-pushed stick leans half as much').toBeCloseTo(0.5, 9);
+    expect(Math.hypot(leanOf({ x: 3, z: 4 }, 1).x, leanOf({ x: 3, z: 4 }, 1).z)).toBeCloseTo(1, 9);
   });
 
-  it('keeps off the wall: near the edge it points back toward the centre', () => {
-    const intent = at(config.stageRadiusM * 0.97, 0);
-    expect(intent.x).toBeLessThan(-0.3);
-  });
-
-  it('comes back from the middle toward its orbit', () => {
-    const intent = at(1, 0);
-    expect(intent.x).toBeGreaterThan(0.3);
-  });
-
-  it('never asks for more than a full push', () => {
-    for (const [x, z] of [[0.1, 0], [14, 0], [-9, 9], [3, -12]] as const) {
-      const v = autopilotIntent({ ...config, pursuit: 1 }, { position: { x, z }, opponentPosition: { x: -x, z: -z }, opponentSpin: 0, spinDir: 1, side: 1, timeS: 7 });
-      expect(Math.hypot(v.x, v.z)).toBeLessThanOrEqual(1 + 1e-9);
-    }
-  });
-
-  it('pursuit pulls toward a tired opponent, and fades when the Beys touch', () => {
-    const base = { position: { x: 0, z: 0 }, spinDir: 1 as const, side: 0 as const, timeS: 0, opponentSpin: 0 };
-    const chasing = autopilotIntent({ ...config, pursuit: 1, orbitRadiusFrac: 0.2 }, { ...base, opponentPosition: { x: 8, z: 0 } });
-    const none = autopilotIntent({ ...config, pursuit: 0, orbitRadiusFrac: 0.2 }, { ...base, opponentPosition: { x: 8, z: 0 } });
-    expect(chasing.x).toBeGreaterThan(none.x);
-    const close = autopilotIntent({ ...config, pursuit: 1, orbitRadiusFrac: 0.2 }, { ...base, opponentPosition: { x: 1.2, z: 0 } });
-    const closeNone = autopilotIntent({ ...config, pursuit: 0, orbitRadiusFrac: 0.2 }, { ...base, opponentPosition: { x: 1.2, z: 0 } });
-    expect(close.x).toBeCloseTo(closeNone.x, 6);
-  });
-
-  it('the player\'s share: no stick = the autopilot; influence 1 + full stick = the stick; in between mixes', () => {
-    const auto = { x: 0, z: 1 };
-    expect(blendSteering(auto, { x: 0, z: 0 }, 1)).toEqual(auto);
-    expect(blendSteering(auto, { x: 1, z: 0 }, 0)).toEqual(auto);
-    const full = blendSteering(auto, { x: 1, z: 0 }, 1);
-    expect(full.x).toBeCloseTo(1, 9);
-    expect(full.z).toBeCloseTo(0, 9);
-    const half = blendSteering(auto, { x: 1, z: 0 }, 0.5);
-    expect(half.x).toBeCloseTo(0.5, 9);
-    expect(half.z).toBeCloseTo(0.5, 9);
-    // a half-pushed stick counts for half as much
-    const light = blendSteering(auto, { x: 0.5, z: 0 }, 1);
-    expect(light.x).toBeCloseTo(0.5, 9);
+  it('the bowl is as strong as a Bey at the rolling speed needs to climb to "Até onde sobe a rampa" and turn round', () => {
+    const g = naturalBowlGravity(config);
+    // ½v² = g·h at the climb's height (h = D·f^1.3 on the mode's own funnel)
+    const depth = 7 * (15 / 36) ** 1.3;
+    expect(0.5 * config.cruiseSpeedMps ** 2).toBeCloseTo(g * depth * config.orbitRadiusFrac ** 1.3, 6);
+    // five times the speed needs 25 times the bowl to turn round in the same place
+    expect(naturalBowlGravity({ ...config, cruiseSpeedMps: 18 }) * 25).toBeCloseTo(g, 6);
+    // a shorter climb needs a stronger bowl
+    expect(naturalBowlGravity({ ...config, orbitRadiusFrac: 0.4 })).toBeGreaterThan(g);
   });
 });
 
 describe('Bey Real motion model', () => {
   const config = realModeConfigOf(REAL_BASE_PARAMS);
-  const idle = { intent: { x: 0, z: 0 }, grounded: true, dt: 1 / 60, spin: 1, broken: false, stability: 100, charging: false, airControl: 0 };
+  const idle = { intent: { x: 0, z: 0 }, grounded: true, dt: 1 / 60, spin: 1, broken: false, stability: 100, airControl: 0, floorHeightM: 0 };
   // a floor tilted like the funnel at x > 0: the normal leans toward the centre (-x)
   const slope = { x: -0.2, y: Math.sqrt(1 - 0.04), z: 0 };
+  const quiet = { dragPerS: 0, tipFrictionMps2: 0, precessionRadPerS: 0, wobbleAccelMps2: 0, crossGripPerS: 0 };
 
   it('the bowl pulls toward the low point, harder on a steeper slope; flat ground pulls nothing', () => {
-    const run = (n: { x: number; y: number; z: number } | null) => {
-      const motion = new RealMotion({ ...config, dragPerS: 0, tipFrictionMps2: 0, precessionRadPerS: 0, wobbleAccelMps2: 0 }, 1);
-      return motion.step({ ...idle, velocity: { x: 0, z: 0 }, floorNormal: n }).velocity;
-    };
+    const run = (n: { x: number; y: number; z: number } | null) => new RealMotion({ ...config, ...quiet }, 1).step({ ...idle, velocity: { x: 0, z: 0 }, floorNormal: n }).velocity;
     expect(run(slope).x).toBeLessThan(0);
     expect(run({ x: -0.4, y: Math.sqrt(1 - 0.16), z: 0 }).x).toBeLessThan(run(slope).x);
     expect(run(null)).toEqual({ x: 0, z: 0 });
   });
 
-  it('steering reaches the cruise speed in the asked direction, no faster than the steering force allows', () => {
-    const motion = new RealMotion({ ...config, dragPerS: 0, tipFrictionMps2: 0, precessionRadPerS: 0, wobbleAccelMps2: 0, bowlPull: 0 }, 1);
-    let v = { x: 0, z: 0 };
-    const first = motion.step({ ...idle, velocity: v, intent: { x: 1, z: 0 }, floorNormal: null });
-    expect(first.velocity.x).toBeLessThanOrEqual(config.steerAccelMps2 / 60 + 1e-9);
-    expect(first.steerEffortMps2).toBeCloseTo(config.steerAccelMps2, 6);
-    v = first.velocity;
-    for (let i = 0; i < 240; i++) v = motion.step({ ...idle, velocity: v, intent: { x: 1, z: 0 }, floorNormal: null }).velocity;
-    expect(v.x).toBeCloseTo(config.cruiseSpeedMps, 1);
-    expect(Math.abs(v.z)).toBeLessThan(1e-6);
+  it('a Bey at rest gets no push from anyone: nothing picks a direction for it', () => {
+    const out = new RealMotion(config, 1).step({ ...idle, velocity: { x: 0, z: 0 }, floorNormal: null });
+    expect(out.velocity).toEqual({ x: 0, z: 0 });
   });
 
-  it('a spent spin cannot steer (no grip) and a Broken Bey barely can', () => {
-    const accel = (extra: object) => new RealMotion({ ...config, dragPerS: 0, tipFrictionMps2: 0, precessionRadPerS: 0, wobbleAccelMps2: 0, bowlPull: 0 }, 1).step({ ...idle, velocity: { x: 0, z: 0 }, intent: { x: 1, z: 0 }, floorNormal: null, ...extra }).velocity.x;
-    expect(accel({ spin: 0 })).toBeCloseTo(0, 9);
-    expect(accel({ broken: true })).toBeCloseTo(accel({}) * 0.3, 6);
+  it('the tip only pushes along the way of travel, toward the energy the spin sustains — never turns the Bey', () => {
+    const motion = new RealMotion({ ...config, ...quiet }, 1);
+    // slow at the low point: it speeds up along its own line
+    const slow = motion.step({ ...idle, velocity: { x: 10, z: 0 }, floorNormal: null }).velocity;
+    expect(slow.x).toBeGreaterThan(10);
+    expect(slow.z).toBeCloseTo(0, 9);
+    // faster than it can sustain: the tip brakes it, still along its line
+    const fast = new RealMotion({ ...config, ...quiet }, 1).step({ ...idle, velocity: { x: 0, z: -150 }, floorNormal: null }).velocity;
+    expect(fast.z).toBeGreaterThan(-150);
+    expect(fast.x).toBeCloseTo(0, 9);
+    // high up the slope at the rolling speed it already has more energy than the spin sustains: no push, a brake
+    const high = new RealMotion({ ...config, ...quiet }, 1).step({ ...idle, velocity: { x: 0, z: config.cruiseSpeedMps }, floorNormal: null, floorHeightM: 1 }).velocity;
+    expect(high.z).toBeLessThan(config.cruiseSpeedMps);
+  });
+
+  it('dropped from the rim it swings through the centre and back up the other side, again and again (no circle)', () => {
+    // a 1-D funnel cut through the centre: h = D·(|x|/R)^1.3, the same the arena has
+    const depth = 7 * (15 / 36) ** 1.3;
+    const R = config.stageRadiusM;
+    const motion = new RealMotion(config, 1);
+    let x = 11;
+    let z = 0;
+    let v = { x: 0, z: 0 };
+    let crossings = 0;
+    let maxOut = 0;
+    let minR = Infinity;
+    for (let i = 0; i < 60 * 6; i++) {
+      const r = Math.hypot(x, z);
+      const s = 1.3 * (depth / R) * (r / R) ** 0.3;
+      const n = r > 1e-6 ? { x: (-s * x) / r / Math.hypot(s, 1), y: 1 / Math.hypot(s, 1), z: (-s * z) / r / Math.hypot(s, 1) } : null;
+      const before = x;
+      v = motion.step({ ...idle, velocity: v, floorNormal: n, floorHeightM: depth * (r / R) ** 1.3 }).velocity;
+      x += v.x / 60;
+      z += v.z / 60;
+      if (Math.sign(before) !== Math.sign(x)) crossings++;
+      maxOut = Math.max(maxOut, Math.hypot(x, z));
+      if (i > 60) minR = Math.min(minR, Math.hypot(x, z));
+    }
+    expect(crossings, 'through the centre many times').toBeGreaterThan(6);
+    expect(maxOut, 'never out of the stage').toBeLessThan(R);
+    expect(minR, 'it passes right by the low point').toBeLessThan(3);
+  });
+
+  it('the tip bites across the slope: sliding round the arena is braked, sliding up and down is not', () => {
+    const across = new RealMotion({ ...quiet, ...config, dragPerS: 0, tipFrictionMps2: 0, precessionRadPerS: 0, wobbleAccelMps2: 0, bowlPull: 0, steerAccelMps2: 0 }, 1)
+      .step({ ...idle, velocity: { x: 0, z: 20 }, floorNormal: slope }).velocity;
+    const upDown = new RealMotion({ ...quiet, ...config, dragPerS: 0, tipFrictionMps2: 0, precessionRadPerS: 0, wobbleAccelMps2: 0, bowlPull: 0, steerAccelMps2: 0 }, 1)
+      .step({ ...idle, velocity: { x: 20, z: 0 }, floorNormal: slope }).velocity;
+    expect(across.z).toBeLessThan(20);
+    expect(upDown.x).toBeCloseTo(20, 9);
+  });
+
+  it('the lean is a force capped by the grip: it bends the path, it does not replace the velocity', () => {
+    const motion = new RealMotion({ ...config, ...quiet }, 1);
+    const out = motion.step({ ...idle, velocity: { x: 0, z: 50 }, intent: { x: 1, z: 0 }, floorNormal: null });
+    expect(out.velocity.x).toBeCloseTo(config.steerAccelMps2 / 60, 6);
+    expect(out.velocity.z, 'the momentum is still there').toBeGreaterThan(45);
+  });
+
+  it('a spent spin has no grip (no drive, no lean) and a Broken Bey barely has', () => {
+    const lean = (extra: object) => new RealMotion({ ...config, ...quiet }, 1).step({ ...idle, velocity: { x: 0, z: 0 }, intent: { x: 1, z: 0 }, floorNormal: null, ...extra }).velocity.x;
+    expect(lean({ spin: 0 })).toBeCloseTo(0, 9);
+    expect(lean({ broken: true })).toBeCloseTo(lean({}) * 0.3, 6);
   });
 
   it('precession bends the path the way the spin turns, and the other way for the other spin', () => {
@@ -297,11 +356,8 @@ describe('Bey Real motion model', () => {
     expect(Math.hypot(turn(1).x, turn(1).z)).toBeCloseTo(10, 6);
   });
 
-  it('tip friction and drag slow a Bey that nobody drives, more with a tired spin; it comes to rest', () => {
-    const slowed = (spin: number) => {
-      const motion = new RealMotion({ ...config, bowlPull: 0, precessionRadPerS: 0, wobbleAccelMps2: 0, steerAccelMps2: 0 }, 1);
-      return motion.step({ ...idle, spin, velocity: { x: 10, z: 0 }, floorNormal: null }).velocity.x;
-    };
+  it('tip friction and drag slow a Bey the tip does not drive, more with a tired spin; it comes to rest', () => {
+    const slowed = (spin: number) => new RealMotion({ ...config, bowlPull: 0, precessionRadPerS: 0, wobbleAccelMps2: 0, steerAccelMps2: 0 }, 1).step({ ...idle, spin, velocity: { x: 10, z: 0 }, floorNormal: null }).velocity.x;
     expect(slowed(1)).toBeLessThan(10);
     expect(slowed(0.1)).toBeLessThan(slowed(1));
     const motion = new RealMotion({ ...config, bowlPull: 0, precessionRadPerS: 0, wobbleAccelMps2: 0, steerAccelMps2: 0 }, 1);
@@ -331,24 +387,19 @@ describe('Bey Real motion model', () => {
     expect(air(1).z).toBeGreaterThan(0);
   });
 
-  it('keeps its pace as the spin runs low as much as "Velocidade que sobra com giro baixo" says', () => {
-    const tired = { ...idle, spin: 0.2, velocity: { x: 0, z: 0 }, intent: { x: 1, z: 0 }, floorNormal: null };
-    const still = { ...config, bowlPull: 0, precessionRadPerS: 0, wobbleAccelMps2: 0, steerAccelMps2: 80 };
-    const withShare = (cruiseMinShare: number): number => new RealMotion({ ...still, cruiseMinShare }, 1).step(tired).velocity.x;
-    expect(withShare(1)).toBeGreaterThan(withShare(0.5));
-    expect(withShare(0.5)).toBeGreaterThan(withShare(0));
-  });
-
-  it('winding up a Dash neither brakes nor slows the Bey (the step has no notion of charging)', () => {
-    const step = new RealMotion({ ...config, bowlPull: 0, precessionRadPerS: 0, wobbleAccelMps2: 0 }, 1).step({ ...idle, velocity: { x: 10, z: 0 }, intent: { x: 1, z: 0 }, floorNormal: null }).velocity.x;
-    expect(step).toBeGreaterThan(9.5);
+  it('a low spin still rolls as fast as "Rolagem que sobra com giro baixo" says', () => {
+    expect(rollingSpeedMps(config, 1)).toBe(config.cruiseSpeedMps);
+    const tired = (cruiseMinShare: number) => rollingSpeedMps({ ...config, cruiseMinShare }, 0.2);
+    expect(tired(1)).toBe(config.cruiseSpeedMps);
+    expect(tired(1)).toBeGreaterThan(tired(0.5));
+    expect(tired(0.5)).toBeGreaterThan(tired(0));
   });
 
   it('is deterministic: the same inputs give the same numbers, and the wobble phase is its only memory', () => {
     const run = () => {
       const m = new RealMotion(config, -1);
       let v = { x: 6, z: 2 };
-      for (let i = 0; i < 100; i++) v = m.step({ ...idle, spin: 0.2, velocity: v, intent: { x: 0.3, z: -0.7 }, floorNormal: slope }).velocity;
+      for (let i = 0; i < 100; i++) v = m.step({ ...idle, spin: 0.2, velocity: v, intent: { x: 0.3, z: -0.7 }, floorNormal: slope, floorHeightM: 1 }).velocity;
       return [v.x, v.z, m.getPhase()];
     };
     expect(run()).toEqual(run());
@@ -377,34 +428,24 @@ describe('Bey Real spin drain', () => {
 
 describe('Bey Real assisted controller', () => {
   const noKeys: ControllerActions = { held: new Set([Action.MoveForward, Action.SteerLeft, Action.SteerRight, Action.Attack]), pressedThisFrame: new Set(), attackHoldDurationSeconds: 0.2, jumpDriftHoldDurationSeconds: 0 };
-  const bey = (x: number, z: number, fraction = 1) => ({ body: { translation: () => ({ x, y: 0, z }) }, stamina: { resource: { fraction } } }) as never;
   const inner = (actions: ControllerActions): CombatController => ({ sampleActions: () => actions });
   const ctx = { fixedDeltaSeconds: 1 / 60 };
   const config = realModeConfigOf(REAL_BASE_PARAMS);
 
-  it('keeps the buttons, drops the steering keys, and writes a steering vector', () => {
-    const c = new AssistedController(inner(noKeys), config, bey(10, 0), bey(-10, 0), 0, true);
-    const out = c.sampleActions(ctx);
+  it('keeps the buttons and drops the steering keys; with no stick nobody steers', () => {
+    const out = new AssistedController(inner(noKeys), config, true).sampleActions(ctx);
     expect(out.held.has(Action.Attack)).toBe(true);
     for (const key of [Action.MoveForward, Action.SteerLeft, Action.SteerRight, Action.MoveBackward]) expect(out.held.has(key), key).toBe(false);
     expect(out.attackHoldDurationSeconds).toBe(0.2);
-    expect(out.moveIntent).toBeDefined();
-    expect(Math.hypot(out.moveIntent!.x, out.moveIntent!.z)).toBeGreaterThan(0.3);
+    expect(out.moveIntent).toEqual({ x: 0, z: 0 });
   });
 
-  it('the player\'s stick takes its share; the AI side ignores whatever the wrapped controller asks for', () => {
+  it('the player\'s stick leans the top by its influence; the AI side never steers, whatever the wrapped AI asks for', () => {
     const stick: ControllerActions = { ...noKeys, moveIntent: { x: -1, z: 0 } };
-    const person = new AssistedController(inner(stick), { ...config, influence: 1 }, bey(10, 0), bey(-10, 0), 0, true).sampleActions(ctx).moveIntent!;
-    expect(person.x).toBeCloseTo(-1, 9);
-    const ai = new AssistedController(inner(stick), { ...config, influence: 1 }, bey(10, 0), bey(-10, 0), 1, false).sampleActions(ctx).moveIntent!;
-    expect(ai.x).toBeGreaterThan(-0.9);
-  });
-
-  it('a frozen tick (hitstop) does not advance the autopilot\'s clock', () => {
-    const a = new AssistedController(inner(noKeys), config, bey(5, 0), bey(-5, 0), 0, false);
-    const b = new AssistedController(inner(noKeys), config, bey(5, 0), bey(-5, 0), 0, false);
-    for (let i = 0; i < 600; i++) a.sampleActions({ fixedDeltaSeconds: 1 / 60, simulationFrozen: true });
-    expect(a.sampleActions(ctx).moveIntent).toEqual(b.sampleActions(ctx).moveIntent);
+    const person = new AssistedController(inner(stick), { ...config, influence: 0.6 }, true).sampleActions(ctx).moveIntent!;
+    expect(person.x).toBeCloseTo(-0.6, 9);
+    const ai = new AssistedController(inner(stick), { ...config, influence: 1 }, false).sampleActions(ctx).moveIntent!;
+    expect(ai).toEqual({ x: 0, z: 0 });
   });
 });
 

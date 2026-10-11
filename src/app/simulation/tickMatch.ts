@@ -52,6 +52,7 @@ import { RoundState } from '../../combat/round-rules/RoundState';
 import { Action, type ControllerActions } from '../../input/actions/Action';
 import { WALL_IMPACT_STABILITY_DAMAGE_PER_MPS } from '../../bey/stability/StabilityTuning';
 import { resolveRealContact } from '../../bey/real/RealContact';
+import { REAL_SPEED_CEILING_MPS } from '../../bey/real/realTunings';
 import type { RealModeConfig } from '../../bey/real/RealTuning';
 import { realSecondSpinDir } from '../../bey/real/realTunings';
 import type { MovementSnapshot } from '../../bey/movement/MovementController';
@@ -661,7 +662,12 @@ export function tickMatch(
     const force = first.rules.circularLaunchForce * knockbackScale;
     const dir = normalize(subtract(targetIsFirst ? firstPos : secondPos, targetIsFirst ? secondPos : firstPos));
     const vel = target.body.linvel();
-    target.body.setLinvel({ x: dir.x * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force, y: Math.max(0, vel.y) + circularLaunchUpMps * force, z: dir.z * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force }, true);
+    // Bey Real: the lift is its own slider (the horizontal launch is ×5 with the mode's speed; the gravity is not, so a lift that
+    // followed it would throw the Bey 35 m/s up and over the wall), and it does not add the climb a Bey running up the bowl at
+    // ~100 m/s has (~18 m/s): that is the floor's, not a launch.
+    const lift = circularLaunchUpMps * (first.rules.real ? knockbackScale : force);
+    const carriedUp = first.rules.real ? 0 : Math.max(0, vel.y);
+    target.body.setLinvel({ x: dir.x * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force, y: carriedUp + lift, z: dir.z * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force }, true);
     target.movement.registerKnockback();
     target.momentum.loseOnCollision();
     // A genuine launch: arm Air Recovery at once if already airborne, else the short pending window.
@@ -687,7 +693,7 @@ export function tickMatch(
       // upward and stops most of its run (GDD section 23/107).
       const vel = defender.body.linvel();
       const keep = first.rules.real?.circularKeepFraction ?? CIRCULAR_CATCHES_DASH_HORIZONTAL_KEEP;
-      defender.body.setLinvel({ x: vel.x * keep, y: vel.y + circularLaunchUpMps, z: vel.z * keep }, true);
+      defender.body.setLinvel({ x: vel.x * keep, y: (first.rules.real ? 0 : vel.y) + circularLaunchUpMps, z: vel.z * keep }, true);
       defender.movement.registerKnockback();
       defender.dodge.registerLaunch(!isGrounded(physics, defender.collider));
       applyStabilityDamageAndTrackKo(defenderIsFirst, defender, attackHitDamage(hit, attacker, defender));
@@ -945,12 +951,15 @@ export function tickMatch(
  */
 /** The lower of a Bey's Stamina and Stability fractions: what the render-only axis wobble/precession ramp reads (Lote 6). */
 /** Bey Real: what the motion model reads from the Bey's other systems this tick (null in the classic game). */
-function realInputOf(bey: Bey): { spin: number; broken: boolean; stability: number } | null {
+function realInputOf(bey: Bey): { spin: number; broken: boolean; stability: number; floorHeightM: number } | null {
   if (!bey.rules.real) return null;
+  const p = bey.body.translation();
   return {
     spin: bey.stamina.resource.fraction,
     broken: bey.stability.isBroken,
     stability: bey.stability.resource.fraction * 100,
+    // the floor under the Bey above the low point: the bowl's potential energy (RealMotion's drive keeps the total)
+    floorHeightM: floorHeightAt(bey.arenaFloor, p.x, p.z),
   };
 }
 
@@ -972,8 +981,10 @@ function horizontalVelocity(body: Bey['body']): Vec2 {
 function capLaunchSpeed(bey: Bey): void {
   const v = bey.body.linvel();
   const speed = Math.hypot(v.x, v.y, v.z);
-  if (speed <= LAUNCH_SPEED_CEILING_MPS) return;
-  const k = LAUNCH_SPEED_CEILING_MPS / speed;
+  // Bey Real runs five times faster: its own (numerical) ceiling.
+  const ceiling = bey.rules.real ? REAL_SPEED_CEILING_MPS : LAUNCH_SPEED_CEILING_MPS;
+  if (speed <= ceiling) return;
+  const k = ceiling / speed;
   bey.body.setLinvel({ x: v.x * k, y: v.y * k, z: v.z * k }, true);
 }
 
