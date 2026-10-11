@@ -357,7 +357,10 @@ export function tickMatch(
   const airRecover = (bey: Bey): void => {
     bey.spin.applyAirRecovery(bey.body);
     const v = bey.body.linvel();
-    bey.body.setLinvel({ x: v.x * AIR_RECOVERY_KEEP_HORIZONTAL, y: Math.min(v.y, 0) - AIR_RECOVERY_DROP_MPS, z: v.z * AIR_RECOVERY_KEEP_HORIZONTAL }, true);
+    // Bey Real (owner, 2026-10-11: "o bey zerando o momentum e mudando de direção no meio do ar"): the recovery only brings the
+    // Bey down; the flight keeps its horizontal momentum, as a real top's would.
+    const keep = bey.rules.real ? 1 : AIR_RECOVERY_KEEP_HORIZONTAL;
+    bey.body.setLinvel({ x: v.x * keep, y: Math.min(v.y, 0) - AIR_RECOVERY_DROP_MPS, z: v.z * keep }, true);
     bey.movement.endKnockback();
     bey.movement.endClashStun();
   };
@@ -667,7 +670,10 @@ export function tickMatch(
     // ~100 m/s has (~18 m/s): that is the floor's, not a launch.
     const lift = circularLaunchUpMps * (first.rules.real ? knockbackScale : force);
     const carriedUp = first.rules.real ? 0 : Math.max(0, vel.y);
-    target.body.setLinvel({ x: dir.x * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force, y: carriedUp + lift, z: dir.z * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force }, true);
+    // Bey Real (owner, 2026-10-11: "zerando o momentum e mudando de direção … depois de contato"): the launch is a push added to
+    // the velocity the contact left, not a new velocity — what the toucher carried is kept.
+    const carried = first.rules.real ? { x: vel.x, z: vel.z } : { x: 0, z: 0 };
+    target.body.setLinvel({ x: carried.x + dir.x * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force, y: carriedUp + lift, z: carried.z + dir.z * CIRCULAR_LAUNCH_HORIZONTAL_MPS * force }, true);
     target.movement.registerKnockback();
     target.momentum.loseOnCollision();
     // A genuine launch: arm Air Recovery at once if already airborne, else the short pending window.

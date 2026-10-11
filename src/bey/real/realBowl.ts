@@ -1,8 +1,9 @@
 // ============================================================
 // BEY REAL — THE BOWL'S GEOMETRY AND ITS PULL
 // Pure numbers about the mode's funnel: how deep a stage of a given radius is (the slope the owner tuned against in the lab),
-// and how hard gravity along that slope has to pull for a Bey rolling at the mode's speed to turn round on the way up. The motion model (RealMotion) and the match rules (realMatchRules) both read it, so the floor the Bey stands on and
-// the pull it feels are one calculation.
+// and how hard gravity along that slope has to pull for a Bey rolling at the mode's speed to turn round on the way up. The motion
+// model (RealMotion) and the match rules (realMatchRules) both read it, so the floor the Bey stands on and the pull it feels are
+// one calculation.
 // ============================================================
 
 import { MATCH_BOWL_DEPTH_DEFAULT_M } from '../../arena/floor/ArenaFloorProfile';

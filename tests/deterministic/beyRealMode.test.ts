@@ -136,7 +136,7 @@ describe('Bey Real match', () => {
   }, 120_000);
 
   it('every preset plays: no NaN, the Beys stay finite and on the stage', async () => {
-    for (const id of ['base', 'slow', 'automatic', 'buttons', 'heavy', 'wild']) {
+    for (const id of ['base', 'slow', 'automatic', 'buttons', 'turbo', 'wild']) {
       const params = realPresetValues(id);
       const s = await session(realConfig(params), new ScriptedController([]));
       for (let i = 0; i < 60 * 6 && !s.roundState.isOver; i++) {
@@ -195,6 +195,33 @@ describe('Bey Real contacts and actions in a real match', () => {
     const after = s.getBey('first').stamina.resource.fraction;
     expect(beforeSpin - after).toBeGreaterThan(dashSpinCost * 0.9);
     s.dispose();
+  }, 60_000);
+});
+
+describe('Bey Real keeps momentum (owner, 2026-10-11: "o bey zerando o momentum e mudando de direção no meio do ar")', () => {
+  it('an Air Recovery brings the Bey down but keeps its horizontal flight (the classic game keeps 20%)', async () => {
+    const flightKept = async (config: MatchConfig): Promise<{ before: number; after: number } | null> => {
+      const s = await session(config, new ScriptedController([{ fromTick: 50, held: [Action.Dodge] }, { fromTick: 52, held: [] }, { fromTick: 56, held: [Action.Dodge] }, { fromTick: 58, held: [] }, { fromTick: 62, held: [Action.Dodge] }, { fromTick: 64, held: [] }]), 'idle');
+      for (let i = 0; i < 20; i++) s.tick();
+      const bey = s.getBey('first');
+      bey.body.setLinvel({ x: 20, y: 14, z: 0 }, true);
+      bey.dodge.registerLaunch(false); // still on the floor: the launch arms the recovery as it leaves it
+      let before = speedOf(s, 'first');
+      for (let i = 20; i < 80; i++) {
+        const out = s.tick();
+        if (out.result.combatEvents.some((e) => e.kind === 'airRecovery' && e.targetIsFirst)) {
+          const after = speedOf(s, 'first');
+          s.dispose();
+          return { before, after };
+        }
+        before = speedOf(s, 'first');
+      }
+      s.dispose();
+      return null;
+    };
+    const real = await flightKept(realConfig({ influence: 0 }));
+    expect(real, 'the recovery happened').not.toBeNull();
+    expect(real!.after / real!.before).toBeGreaterThan(0.85);
   }, 60_000);
 });
 

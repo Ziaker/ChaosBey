@@ -5,11 +5,13 @@
 // presses four buttons. This file is data and pure helpers (no DOM, no Three.js, no Rapier): the Pregame's "Bey Real" block,
 // its presets, the lab prototype (prototypes/bey-real-physics-concepts) and the tests all read the same list.
 //
-// BASE = the owner's own tuned numbers (2026-10-09, "esse preset atual … é pra ser o base"), not Claude's proposal — moved onto
-// the physics-only motion and made five times faster in 0.64.0 (owner, 2026-10-10: "os beys estão só sendo controlados por uma IA
-// … além de estarem MUITO lentos … 5 VEZES MAIS RÁPIDOS"). Five times the speed in the same stage is five times every speed
-// and rate and 25 times every acceleration (the same paths, run five times as fast); what a hit costs per m/s is a fifth, so a
-// fight costs what it cost. Timers the player plays against (charge, cooldowns, windows, round time) are unchanged.
+// BASE = the owner's own tuned numbers (2026-10-09, "esse preset atual … é pra ser o base") moved onto the physics-only motion in
+// 0.64.0 (owner, 2026-10-10: "os beys estão só sendo controlados por uma IA … MUITO lentos"), then, after the owner played it
+// (0.65.0, 2026-10-11: "os beys agora estão mil vezes mais rapidos do que deviam … o modo pesado e inercial está mais próximo do
+// que eu almejo, só precisa ser no mínimo 15% mais rapido"), the "Pesado e inercial" feel with its rolling speed 45 → 52 m/s.
+// A speed k times the owner's 18 m/s in the same stage is k times every speed and rate and k² every acceleration; what a hit
+// costs per m/s is 1/k², so a fight costs what it cost (k = 52/18 ≈ 2.9 for the attacks and the costs). Timers the player plays
+// against (charge, cooldowns, windows, round time) are the owner's.
 // Units: the label names the unit; the note says what a higher value does.
 //
 // `live` marks a value the match already uses. The Pregame only shows live values, so no slider is dead; the rest are the
@@ -136,39 +138,39 @@ const x2 = (v: number): string => `×${v.toFixed(2)}`;
 /** The owner's tuned numbers: the base preset (and the defaults of a "Bey Real" match). */
 export const REAL_BASE_PARAMS: Readonly<RealParams> = Object.freeze({
   influence: 0.75,
-  steerAccelMps2: 1000,
-  cruiseSpeedMps: 90,
+  steerAccelMps2: 300,
+  cruiseSpeedMps: 52,
   orbitRadiusFrac: 0.8,
   cruiseMinShare: 0.75,
-  bowlPull: 1,
+  bowlPull: 1.3,
   dragPerS: 0.2,
   tipFrictionMps2: 17.5,
-  crossGripPerS: 1.5,
+  crossGripPerS: 0.5,
   precessionRadPerS: 1.5,
-  spinDecayPerS: 0.007,
-  spinMoveLossPerM: 0.00007,
-  spinSteerLoss: 0.00001,
+  spinDecayPerS: 0.0035,
+  spinMoveLossPerM: 0.00012,
+  spinSteerLoss: 0.00003,
   wobbleSpin: 0.35,
-  wobbleAccelMps2: 250,
+  wobbleAccelMps2: 125,
   massSecond: 1,
   sameSpin: 0,
   restitutionLow: 0.7,
   restitutionHigh: 0.92,
   rimFriction: 0.4,
-  spinExchange: 0.00048,
-  hitSpinLoss: 0.00016,
-  rubSpinLoss: 0.000064,
-  hitStability: 0.024,
+  spinExchange: 0.00144,
+  hitSpinLoss: 0.00048,
+  rubSpinLoss: 0.000192,
+  hitStability: 0.072,
   wallRestitution: 0.9,
-  wallSpinLoss: 0.000064,
-  dashMinSpeedMps: 50,
-  dashMaxSpeedMps: 130,
+  wallSpinLoss: 0.000192,
+  dashMinSpeedMps: 29,
+  dashMaxSpeedMps: 87,
   dashChargeMaxS: 1.6,
   dashDurationS: 0.3,
   dashCooldownS: 1.5,
   dashSnapRadPerS: 40,
   dashSnapWindowS: 0.08,
-  dashLockRadPerS: 25,
+  dashLockRadPerS: 14,
   dashMassBoost: 1.8,
   dashStabilityMin: 10,
   dashStabilityMax: 25,
@@ -177,7 +179,7 @@ export const REAL_BASE_PARAMS: Readonly<RealParams> = Object.freeze({
   circularRadiusM: 1.55,
   circularDurationS: 0.35,
   circularRecoveryS: 0.95,
-  circularLaunchMps: 45,
+  circularLaunchMps: 26,
   circularLaunchUpMps: 7,
   circularKeepFraction: 0.65,
   circularStability: 12,
@@ -378,15 +380,18 @@ export interface RealPreset {
 
 /** The base preset is the owner's own tuning; the others are variations of it. */
 export const REAL_PRESETS: readonly RealPreset[] = [
-  { id: 'base', label: 'Base (do dono)', description: 'Os seus números, na física pura e cinco vezes mais rápidos: a cuba e a ponta movem o Bey, a sua seta inclina 75% e você aperta os botões.', values: {} },
-  { id: 'slow', label: 'Velocidade antiga (×1)', description: 'A mesma física pura na velocidade de antes (cinco vezes mais lenta): para comparar.', values: {
-    cruiseSpeedMps: 18, steerAccelMps2: 40, dragPerS: 0.1, tipFrictionMps2: 0.7, precessionRadPerS: 0.9, spinMoveLossPerM: 0.00035, spinSteerLoss: 0.00025, wobbleAccelMps2: 10,
+  { id: 'base', label: 'Base: pesado e inercial (+15%)', description: 'O "Pesado e inercial" que você escolheu, 15% mais rápido (rolagem 45 → 52 m/s): ponta que pega devagar, muito embalo, giro que dura; a ponta morde menos de lado, então as idas e vindas pelo centro são curvas, não retas. Ataques e custos das batidas na mesma escala de velocidade.', values: {} },
+  { id: 'slow', label: 'Velocidade antiga (×1)', description: 'A mesma física pura no ritmo antigo (18 m/s): para comparar.', values: {
+    cruiseSpeedMps: 18, steerAccelMps2: 40, bowlPull: 1, dragPerS: 0.1, tipFrictionMps2: 0.7, precessionRadPerS: 0.9, spinDecayPerS: 0.007, spinMoveLossPerM: 0.00035, spinSteerLoss: 0.00025, wobbleAccelMps2: 10,
     spinExchange: 0.012, hitSpinLoss: 0.004, rubSpinLoss: 0.0016, hitStability: 0.6, wallSpinLoss: 0.0016,
     dashMinSpeedMps: 10, dashMaxSpeedMps: 30, dashDurationS: 0.8, dashLockRadPerS: 5, circularLaunchMps: 9, dodgeSpeedMps: 22 } },
   { id: 'automatic', label: 'Mais automático', description: 'Influência de 30%: a física faz quase tudo e a sua seta só dá um toque.', values: { influence: 0.3 } },
   { id: 'buttons', label: 'Só botões', description: 'Influência 0: você só aperta Dash, Giratório, Pulo e Esquiva. O Bey vai aonde a cuba e a ponta o levam.', values: { influence: 0 } },
-  { id: 'heavy', label: 'Pesado e inercial', description: 'Metade da velocidade, ponta que pega devagar e giro que dura mais: batalhas pesadas, com muito embalo.', values: { cruiseSpeedMps: 45, steerAccelMps2: 300, bowlPull: 1.3, spinDecayPerS: 0.0035, wobbleAccelMps2: 125 } },
-  { id: 'wild', label: 'Selvagem', description: 'Mais rápido ainda, precessão forte, balanço alto e giro que acaba rápido: partidas curtas e caóticas.', values: { cruiseSpeedMps: 120, precessionRadPerS: 6.5, wobbleAccelMps2: 400, spinDecayPerS: 0.012 } },
+  { id: 'turbo', label: 'Turbo (×5)', description: 'A versão 0.64.0: cinco vezes a velocidade antiga (rolagem 90 m/s, Dash até 130 m/s), ponta que pega rápido. Explosivo.', values: {
+    cruiseSpeedMps: 90, steerAccelMps2: 1000, bowlPull: 1, crossGripPerS: 1.5, spinDecayPerS: 0.007, spinMoveLossPerM: 0.00007, spinSteerLoss: 0.00001, wobbleAccelMps2: 250,
+    spinExchange: 0.00048, hitSpinLoss: 0.00016, rubSpinLoss: 0.000064, hitStability: 0.024, wallSpinLoss: 0.000064,
+    dashMinSpeedMps: 50, dashMaxSpeedMps: 130, dashLockRadPerS: 25, circularLaunchMps: 45 } },
+  { id: 'wild', label: 'Selvagem', description: 'Mais rápido, precessão forte, balanço alto e giro que acaba rápido: partidas curtas e caóticas.', values: { cruiseSpeedMps: 70, steerAccelMps2: 500, precessionRadPerS: 4, wobbleAccelMps2: 300, spinDecayPerS: 0.012 } },
 ];
 
 export function realPresetValues(id: string): RealParams {

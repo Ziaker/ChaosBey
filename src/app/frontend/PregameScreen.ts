@@ -514,7 +514,7 @@ export class PregameScreen {
         const disabled = control.disabledWhen?.(setup) ?? false;
         view.input.disabled = disabled;
         view.wrapper.classList.toggle('is-disabled', disabled);
-        view.wrapper.title = isLockedByRealMode(control, setup) ? 'Bloqueado: o modo Bey Real (bloco abaixo) controla este valor.' : isSharedWithRealMode(control, setup) ? 'Em Bey Real este controle é o mesmo do bloco Bey Real (arena e regras).' : '';
+        view.wrapper.title = isLockedByRealMode(control, setup) ? 'Bloqueado em Bey Real: o modo não tem esse mecanismo (sem momentum, sem perda de controle no contato, sem o manejo de kart).' : isSharedWithRealMode(control, setup) ? 'Em Bey Real este controle edita o valor do próprio modo (o mesmo do bloco Bey Real); os multiplicadores contam a partir da base do modo (×1).' : '';
       }
       view.modified.hidden = !isMod;
       view.wrapper.classList.toggle('is-modified', isMod);

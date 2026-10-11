@@ -52,7 +52,9 @@ import {
 } from '../../config/match/MatchConfig';
 import { DEFAULT_VFX_OPTIONS, VFX_DUST_RANGE, VFX_EFFECT_SIZE_RANGE, VFX_GROUND_WAVES_RANGE, VFX_INTENSITY_RANGE, type VfxOptions } from '../../vfx/hybrid/intensityTiers';
 import { ARENA_FLOOR_RADIUS } from '../../arena/colliders/ArenaTuning';
-import { REAL_OWNED_RULE_KEYS, labEquivalentBowlDepthM } from '../../bey/real/realMatchRules';
+import { labEquivalentBowlDepthM } from '../../bey/real/realMatchRules';
+import { STAMINA_MAX } from '../../bey/stamina/StaminaTuning';
+import { GRAVITY_MPS2 } from '../../physics/world/PhysicsWorld';
 import { REAL_BASE_PARAMS, realSpecOf, type RealParamKey, type RealParams } from '../../bey/real/RealTuning';
 import { CLASH_IMPACT_RANGE, MATCH_RULE_KEYS, RING_OUT_OFF_TIME_LIMIT_S, defaultMatchRules, sanitizeMatchRules, type MatchRules, type MatchSetup } from './matchSetup';
 
@@ -178,11 +180,17 @@ const CLASSIC_CONTROLS: readonly AdvancedControl[] = [
 ];
 
 /**
- * Bey Real: the arena controls (stage size, funnel, wall height and bounce, game speed) stay available while the mode is on — they
- * read and write the mode's own values (RealParams), so there is still one place for each number: the slider here and the one in
- * the Bey Real block are the same setting.
+ * Bey Real: the classic Advanced controls stay available while the mode is on (owner, 2026-10-11: "por que não posso mexer nos
+ * sliders normais nesse modo? a maioria deles é importante pra reduzir problemas e a explosividade do combate"). Each one reads
+ * and writes the mode's own value (RealParams) — so there is still one place for each number: the slider here and the one in the
+ * Bey Real block are the same setting. Three kinds:
+ *   - the same quantity (stage size, funnel, wall, game speed, round rules, gravity, jump, cooldowns, air control, Funnel pull);
+ *   - a multiplier of the mode's base (×1 = the mode's base): acceleration → the tip's grip, top speed → the rolling speed, turn
+ *     rate → the precession, the Stamina drains → the spin losses, body collision damage → the Stability a contact costs, dodge
+ *     distance → the dodge's speed, Circular launch force → the Circular's launch;
+ *   - momentum loss on collision → how much of the closing speed a contact keeps (1 − the bounce with a full spin).
  */
-interface RealArenaRoute {
+interface RealRoute {
   readonly read: (params: RealParams) => number;
   /** The new params after the slider was moved to `value` (clamped into the mode's own range). */
   readonly write: (params: RealParams, value: number) => RealParams;
@@ -192,9 +200,16 @@ const clampReal = (key: RealParamKey, value: number): number => {
   const spec = realSpecOf(key);
   return Math.min(spec.max, Math.max(spec.min, value));
 };
-const directRoute = (key: RealParamKey): RealArenaRoute => ({ read: (p) => p[key], write: (p, v) => ({ ...p, [key]: clampReal(key, v) }) });
+const directRoute = (key: RealParamKey): RealRoute => ({ read: (p) => p[key], write: (p, v) => ({ ...p, [key]: clampReal(key, v) }) });
+/** ×1 = the mode's base value; the slider multiplies it. */
+const ratioRoute = (key: RealParamKey): RealRoute => ({
+  read: (p) => p[key] / REAL_BASE_PARAMS[key],
+  write: (p, v) => ({ ...p, [key]: clampReal(key, REAL_BASE_PARAMS[key] * v) }),
+});
+const jumpApexM = (p: RealParams): number => (p.jumpSpeedMps * p.jumpSpeedMps) / (2 * p.gravityMps2);
 
-const REAL_ARENA_ROUTES: Partial<Record<AdvancedKey, RealArenaRoute>> = {
+const REAL_ROUTES: Partial<Record<AdvancedKey, RealRoute>> = {
+  // arena
   arenaSizeScale: { read: (p) => p.stageRadiusM / ARENA_FLOOR_RADIUS, write: (p, v) => ({ ...p, stageRadiusM: clampReal('stageRadiusM', v * ARENA_FLOOR_RADIUS) }) },
   arenaBowlDepthM: {
     read: (p) => labEquivalentBowlDepthM(p.stageRadiusM) * p.bowlDepthScale,
@@ -203,20 +218,58 @@ const REAL_ARENA_ROUTES: Partial<Record<AdvancedKey, RealArenaRoute>> = {
   wallHeightM: directRoute('wallHeightM'),
   wallRestitution: directRoute('wallRestitution'),
   gameSpeed: directRoute('gameSpeed'),
+  // round
+  ringOutDelayS: directRoute('ringOutDelayS'),
+  roundTimeLimitS: directRoute('timeLimitS'),
+  // movement
+  accelerationScale: ratioRoute('steerAccelMps2'),
+  topSpeedScale: ratioRoute('cruiseSpeedMps'),
+  turnRateScale: ratioRoute('precessionRadPerS'),
+  funnelPull: directRoute('bowlPull'),
+  airControl: directRoute('airControl'),
+  spinStaminaDrain: ratioRoute('spinDecayPerS'),
+  movementStaminaDrain: ratioRoute('spinMoveLossPerM'),
+  // gravity: as in the classic slider, jump heights stay the same (the launch speed follows)
+  gravityScale: {
+    read: (p) => p.gravityMps2 / GRAVITY_MPS2,
+    write: (p, v) => {
+      const gravityMps2 = clampReal('gravityMps2', v * GRAVITY_MPS2);
+      return { ...p, gravityMps2, jumpSpeedMps: clampReal('jumpSpeedMps', Math.sqrt(2 * gravityMps2 * jumpApexM(p))) };
+    },
+  },
+  // jump
+  jumpFullHeightM: { read: jumpApexM, write: (p, v) => ({ ...p, jumpSpeedMps: clampReal('jumpSpeedMps', Math.sqrt(2 * p.gravityMps2 * Math.max(0, v))) }) },
+  jumpCooldownS: directRoute('jumpCooldownS'),
+  // combat
+  dashCooldownS: directRoute('dashCooldownS'),
+  dodgeCooldownS: directRoute('dodgeCooldownS'),
+  dodgeDistanceScale: ratioRoute('dodgeSpeedMps'),
+  dodgeStaminaCost: { read: (p) => p.dodgeSpinCost * STAMINA_MAX, write: (p, v) => ({ ...p, dodgeSpinCost: clampReal('dodgeSpinCost', v / STAMINA_MAX) }) },
+  circularLaunchForce: ratioRoute('circularLaunchMps'),
+  bodyCollisionDamage: ratioRoute('hitStability'),
+  momentumLossOnCollision: {
+    read: (p) => 1 - p.restitutionHigh,
+    write: (p, v) => {
+      const restitutionHigh = clampReal('restitutionHigh', 1 - v);
+      return { ...p, restitutionHigh, restitutionLow: clampReal('restitutionLow', restitutionHigh - (REAL_BASE_PARAMS.restitutionHigh - REAL_BASE_PARAMS.restitutionLow)) };
+    },
+  },
 };
 
-const realRouteOf = (setup: MatchSetup, key: AdvancedKey): RealArenaRoute | null => (setup.real?.enabled ? REAL_ARENA_ROUTES[key] ?? null : null);
+const realRouteOf = (setup: MatchSetup, key: AdvancedKey): RealRoute | null => (setup.real?.enabled ? REAL_ROUTES[key] ?? null : null);
 
 /**
- * Bey Real (0.59.0): the mode's own block sets these (its sliders reach them through realMatchRules.ts) or the mode does not use
- * them at all (the classic handling model, momentum's top speed, the control-loss window). While the mode is on their classic
- * sliders are locked — one place to change each value, and no slider that does nothing.
+ * Bey Real: the few classic controls the mode has nothing for — the kart handling's turn retention and control at speed, momentum's
+ * top speed (the mode has no momentum) and the control-loss window of a touch (the mode never takes control away). Locked while the
+ * mode is on, so no slider does nothing.
  */
 const REAL_LOCKED_KEYS: ReadonlySet<AdvancedKey> = new Set<AdvancedKey>([
-  ...REAL_OWNED_RULE_KEYS.filter((key) => !(key in REAL_ARENA_ROUTES)),
-  'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyContactControlLossScale',
+  'turnSpeedRetention', 'highSpeedControl', 'momentumGain', 'momentumFillS', 'momentumDecayS', 'bodyContactControlLossScale',
 ]);
 const realModeOn = (setup: MatchSetup): boolean => setup.real?.enabled === true;
+
+/** The mode's keys every route reaches (a test keeps every rule the mode owns either routed or locked). */
+export const REAL_ROUTED_KEYS: readonly AdvancedKey[] = Object.keys(REAL_ROUTES) as AdvancedKey[];
 
 /** Every Advanced control, grouped by category and in the order the Pregame shows them. */
 export const ADVANCED_CONTROLS: readonly AdvancedControl[] = CLASSIC_CONTROLS.map((control) =>
@@ -287,8 +340,8 @@ export function writeAdvanced(setup: MatchSetup, key: AdvancedKey, value: Advanc
  * never a second copy), and for the wall height and bounce the default of the arena the player picked.
  */
 export function normalOriginalValue(setup: MatchSetup, key: AdvancedKey): AdvancedValue {
-  // In Bey Real the "original" of these is the mode's own base (its small stage, its funnel, its clock).
-  if (realRouteOf(setup, key)) return REAL_ARENA_ROUTES[key]!.read(REAL_BASE_PARAMS);
+  // In Bey Real the "original" of these is the mode's own base (its small stage, its funnel, its clock; ×1 for the multipliers).
+  if (realRouteOf(setup, key)) return REAL_ROUTES[key]!.read(REAL_BASE_PARAMS);
   if (key === 'clashImpact') return CLASH_IMPACT_MULTIPLIER_DEFAULT;
   if (key === 'wallHeightM') return arenaPreset(setup.arena.presetId).geometry.wallHeightM;
   if (key === 'wallRestitution') return arenaPreset(setup.arena.presetId).geometry.wallRestitution;

@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { ADVANCED_CONTROLS, isLockedByRealMode, isModified, readAdvanced, writeAdvanced } from '../../src/app/frontend/advancedControls';
+import { ADVANCED_CONTROLS, isLockedByRealMode, isModified, isSharedWithRealMode, readAdvanced, writeAdvanced } from '../../src/app/frontend/advancedControls';
 import { createDefaultMatchSetup, defaultRealSetup, isRealMode, loadLastSetup, matchConfigFor, sanitizeRealSetup, saveLastSetup, activeRuleLines } from '../../src/app/frontend/matchSetup';
 import { AssistedController, leanOf } from '../../src/bey/real/AssistedController';
 import { RealMotion, rollingSpeedMps } from '../../src/bey/real/RealMotion';
@@ -21,7 +21,7 @@ import {
   sanitizeRealParams,
   type RealParams,
 } from '../../src/bey/real/RealTuning';
-import { labEquivalentBowlDepthM, realMatchOverrides } from '../../src/bey/real/realMatchRules';
+import { REAL_OWNED_RULE_KEYS, labEquivalentBowlDepthM, realMatchOverrides } from '../../src/bey/real/realMatchRules';
 import { StaminaSystem } from '../../src/bey/stamina/StaminaSystem';
 import { FreeOrbitCamera, RealModeCamera } from '../../src/camera/real/RealCameras';
 import { REAL_CAMERA_MODES } from '../../src/camera/real/RealCameraModes';
@@ -41,11 +41,10 @@ const OWNER_JSON_0_63 = {
 
 /**
  * 0.64.0 (owner, 2026-10-10: "os beys estão só sendo controlados por uma IA … MUITO lentos … 5 VEZES MAIS RÁPIDOS"; then "a ideia
- * é eles irem pro centro e depois voltarem, subindo e descendo e indo para os lados também, seguindo uma física coesa"): the
- * autopilot's values are gone (pursuit, the orbit's breathing), the motion is physics only, and everything that moves is five
- * times faster in the same stage — speeds and rates ×5, accelerations ×25, what a hit costs per m/s ÷25. Timers stay.
+ * é eles irem pro centro e depois voltarem … seguindo uma física coesa"): the autopilot's values are gone (pursuit, the orbit's
+ * breathing) and the motion is physics only. Kept as the Turbo (×5) preset.
  */
-const BASE_0_64: RealParams = {
+const TURBO_0_64: RealParams = {
   ...(Object.fromEntries(Object.entries(OWNER_JSON_0_63).filter(([k]) => !['pursuit', 'orbitBreath', 'orbitBreathRadPerS'].includes(k))) as unknown as RealParams),
   cruiseSpeedMps: 90, steerAccelMps2: 1000, orbitRadiusFrac: 0.8, bowlPull: 1, dragPerS: 0.2, tipFrictionMps2: 17.5, crossGripPerS: 1.5, precessionRadPerS: 1.5,
   spinMoveLossPerM: 0.00007, spinSteerLoss: 0.00001, wobbleAccelMps2: 250,
@@ -53,28 +52,42 @@ const BASE_0_64: RealParams = {
   dashMinSpeedMps: 50, dashMaxSpeedMps: 130, dashDurationS: 0.3, dashLockRadPerS: 25, circularLaunchMps: 45, dodgeSpeedMps: 60,
 };
 
+/**
+ * 0.65.0 (owner, 2026-10-11: "os beys agora estão mil vezes mais rapidos do que deviam … o modo pesado e inercial está mais próximo
+ * do que eu almejo, só precisa ser no mínimo 15% mais rapido nesse modo"): the 0.64.0 "Pesado e inercial" preset (rolling 45 m/s,
+ * grip 300, bowl ×1.3, spin decay 0.0035, wobble 125) with the rolling speed 15% up (52 m/s); the attacks and what a hit costs follow
+ * that speed (k = 52/18 over the owner's own numbers: speeds ×k, per-metre costs ÷k, per-hit costs and per-unit-of-effort ÷k²).
+ */
+const K = 52 / 18;
+const BASE_0_65: RealParams = {
+  ...TURBO_0_64,
+  cruiseSpeedMps: 52, steerAccelMps2: 300, bowlPull: 1.3, spinDecayPerS: 0.0035, wobbleAccelMps2: 125, crossGripPerS: 0.5,
+  spinMoveLossPerM: 0.00012, spinSteerLoss: 0.00003,
+  spinExchange: 0.00144, hitSpinLoss: 0.00048, rubSpinLoss: 0.000192, hitStability: 0.072, wallSpinLoss: 0.000192,
+  dashMinSpeedMps: 29, dashMaxSpeedMps: 87, dashLockRadPerS: 14, circularLaunchMps: 26,
+};
+
 describe('Bey Real tuning', () => {
-  it('the base preset is the owner\'s numbers, physics only and five times faster', () => {
-    expect({ ...REAL_BASE_PARAMS }).toEqual(BASE_0_64);
-    expect(realPresetValues('base')).toEqual(BASE_0_64);
-    expect(matchingRealPreset(BASE_0_64)).toBe('base');
-    const o = OWNER_JSON_0_63;
+  it('the base preset is the 0.64.0 "Pesado e inercial", 15% faster, with the attacks and the hit costs at that speed', () => {
+    expect({ ...REAL_BASE_PARAMS }).toEqual(BASE_0_65);
+    expect(realPresetValues('base')).toEqual(BASE_0_65);
+    expect(matchingRealPreset(BASE_0_65)).toBe('base');
     const b = REAL_BASE_PARAMS;
-    // speeds and rates ×5, accelerations ×25, per-metre and per-hit costs down so a fight costs what it cost
-    expect(b.cruiseSpeedMps).toBe(o.cruiseSpeedMps * 5);
-    expect(b.steerAccelMps2).toBe(o.steerAccelMps2 * 25);
-    expect(b.tipFrictionMps2).toBeCloseTo(o.tipFrictionMps2 * 25, 9);
-    expect(b.wobbleAccelMps2).toBe(o.wobbleAccelMps2 * 25);
-    expect(b.dashMinSpeedMps).toBe(o.dashMinSpeedMps * 5);
-    expect(b.dashLockRadPerS).toBe(o.dashLockRadPerS * 5);
-    expect(b.circularLaunchMps).toBe(o.circularLaunchMps * 5);
-    expect(b.spinMoveLossPerM).toBeCloseTo(o.spinMoveLossPerM / 5, 12);
-    expect(b.spinSteerLoss).toBeCloseTo(o.spinSteerLoss / 25, 12);
-    for (const key of ['hitSpinLoss', 'rubSpinLoss', 'spinExchange', 'hitStability', 'wallSpinLoss'] as const) expect(b[key], key).toBeCloseTo(o[key] / 25, 12);
+    expect(b.cruiseSpeedMps, 'at least 15% over the 45 m/s of "Pesado e inercial"').toBeGreaterThanOrEqual(45 * 1.15);
+    const o = OWNER_JSON_0_63;
+    expect(b.dashMinSpeedMps).toBeCloseTo(o.dashMinSpeedMps * K, 0);
+    expect(b.dashMaxSpeedMps).toBeCloseTo(o.dashMaxSpeedMps * K, 0);
+    expect(b.circularLaunchMps).toBeCloseTo(o.circularLaunchMps * K, 0);
+    expect(b.spinMoveLossPerM).toBeCloseTo(o.spinMoveLossPerM / K, 5);
+    for (const key of ['hitSpinLoss', 'rubSpinLoss', 'spinExchange', 'hitStability', 'wallSpinLoss', 'spinSteerLoss'] as const) expect(b[key] / (o[key] / K ** 2), key).toBeCloseTo(1, 1);
     // the timers the player plays against are the owner's
-    for (const key of ['dashChargeMaxS', 'dashCooldownS', 'dashWhiffRecoveryS', 'dodgeCooldownS', 'dodgePerfectS', 'circularDurationS', 'timeLimitS', 'spinDecayPerS'] as const) expect(b[key], key).toBe(o[key]);
+    for (const key of ['dashChargeMaxS', 'dashCooldownS', 'dashWhiffRecoveryS', 'dodgeCooldownS', 'dodgePerfectS', 'circularDurationS', 'timeLimitS'] as const) expect(b[key], key).toBe(o[key]);
     // the autopilot's values are gone
     for (const key of ['pursuit', 'orbitBreath', 'orbitBreathRadPerS']) expect(key in b, key).toBe(false);
+  });
+
+  it('the 0.64.0 base lives on as the Turbo (×5) preset', () => {
+    expect(realPresetValues('turbo')).toEqual(TURBO_0_64);
   });
 
   it('the "Velocidade antiga" preset is the same physics at the old pace', () => {
@@ -85,16 +98,16 @@ describe('Bey Real tuning', () => {
   });
 
   it('every value has one spec, inside its own range, with a note of its own and a group', () => {
-    const keys = Object.keys(BASE_0_64).sort();
+    const keys = Object.keys(BASE_0_65).sort();
     expect(keys, '66 values: the owner\'s 68, less the autopilot\'s three, plus the tip\'s bite across the slope').toHaveLength(66);
     expect(REAL_PARAM_SPEC.map((s) => s.key).sort()).toEqual(keys);
     for (const spec of REAL_PARAM_SPEC) {
       expect(spec.min, spec.key).toBeLessThan(spec.max);
-      expect(BASE_0_64[spec.key], spec.key).toBeGreaterThanOrEqual(spec.min);
-      expect(BASE_0_64[spec.key], spec.key).toBeLessThanOrEqual(spec.max);
+      expect(BASE_0_65[spec.key], spec.key).toBeGreaterThanOrEqual(spec.min);
+      expect(BASE_0_65[spec.key], spec.key).toBeLessThanOrEqual(spec.max);
       expect(spec.note.length, `${spec.key} has an explanation`).toBeGreaterThan(20);
       expect(REAL_GROUP_ORDER).toContain(spec.group);
-      expect(spec.format(BASE_0_64[spec.key])).not.toContain('NaN');
+      expect(spec.format(BASE_0_65[spec.key])).not.toContain('NaN');
     }
     const notes = REAL_PARAM_SPEC.map((s) => s.note);
     expect(new Set(notes).size, 'no two sliders share an explanation').toBe(notes.length);
@@ -164,7 +177,7 @@ describe('Bey Real setup', () => {
     expect(config.dashCooldownS).toBe(1.5);
     expect(config.dodgeCooldownS).toBe(3);
     expect(config.dodgeDistanceScale).toBeCloseTo(60 / 12.6, 6);
-    expect(config.circularLaunchForce).toBeCloseTo(5, 6);
+    expect(config.circularLaunchForce).toBeCloseTo(26 / 9, 6);
     expect(config.gameSpeed).toBe(1);
     expect(config.funnelPull).toBe(0);
   });
@@ -221,13 +234,11 @@ describe('Bey Real setup', () => {
     expect(activeRuleLines(createDefaultMatchSetup()).some((l) => l.startsWith('Bey Real'))).toBe(false);
   });
 
-  it('while the mode is on, the classic sliders it takes over are locked (and only then)', () => {
+  it('while the mode is on, the classic sliders edit the mode\'s own values; only the ones it has no mechanism for are locked', () => {
     const off = createDefaultMatchSetup();
     const on = { ...off, real: { ...defaultRealSetup(), enabled: true } };
-    const locked = ADVANCED_CONTROLS.filter((c) => isLockedByRealMode(c, on)).map((c) => c.key);
-    for (const key of ['gravityScale', 'jumpFullHeightM', 'airControl', 'ringOutDelayS', 'roundTimeLimitS', 'accelerationScale', 'topSpeedScale', 'dashCooldownS', 'dodgeCooldownS']) {
-      expect(locked, key).toContain(key);
-    }
+    const locked = ADVANCED_CONTROLS.filter((c) => isLockedByRealMode(c, on)).map((c) => c.key).sort();
+    expect(locked).toEqual(['bodyContactControlLossScale', 'highSpeedControl', 'momentumDecayS', 'momentumFillS', 'momentumGain', 'turnSpeedRetention']);
     for (const control of ADVANCED_CONTROLS) {
       expect(isLockedByRealMode(control, off), control.key).toBe(false);
       if (control.kind === 'slider' && locked.includes(control.key)) {
@@ -235,8 +246,37 @@ describe('Bey Real setup', () => {
         expect(control.disabledWhen?.(off) ?? false, control.key).toBe(false);
       }
     }
-    // the unlocked ones stay editable
-    expect(ADVANCED_CONTROLS.find((c) => c.key === 'knockbackScale')!.kind === 'slider' && (ADVANCED_CONTROLS.find((c) => c.key === 'knockbackScale') as { disabledWhen?: unknown }).disabledWhen).toBeFalsy();
+    // every rule the mode owns is either a shared control or locked: no classic slider silently does nothing
+    for (const key of REAL_OWNED_RULE_KEYS) {
+      const control = ADVANCED_CONTROLS.find((c) => c.key === key);
+      if (!control) continue;
+      expect(isSharedWithRealMode(control, on) || isLockedByRealMode(control, on), key).toBe(true);
+    }
+    // the multipliers count from the mode's base: ×1 = base, and they reach the match
+    expect(readAdvanced(on, 'topSpeedScale')).toBeCloseTo(1, 9);
+    expect(isModified(on, 'topSpeedScale')).toBe(false);
+    const faster = writeAdvanced(on, 'topSpeedScale', 1.5);
+    expect(faster.real!.params.cruiseSpeedMps).toBeCloseTo(REAL_BASE_PARAMS.cruiseSpeedMps * 1.5, 9);
+    expect(matchConfigFor(faster).real!.cruiseSpeedMps).toBeCloseTo(REAL_BASE_PARAMS.cruiseSpeedMps * 1.5, 9);
+    expect(isModified(faster, 'topSpeedScale')).toBe(true);
+    expect(faster.rules.topSpeedScale, 'the classic value is untouched').toBe(off.rules.topSpeedScale);
+    expect(writeAdvanced(on, 'accelerationScale', 0.5).real!.params.steerAccelMps2).toBeCloseTo(REAL_BASE_PARAMS.steerAccelMps2 * 0.5, 9);
+    expect(writeAdvanced(on, 'bodyCollisionDamage', 0.5).real!.params.hitStability).toBeCloseTo(REAL_BASE_PARAMS.hitStability * 0.5, 9);
+    expect(writeAdvanced(on, 'circularLaunchForce', 0.5).real!.params.circularLaunchMps).toBeCloseTo(REAL_BASE_PARAMS.circularLaunchMps * 0.5, 9);
+    // momentum loss on collision = 1 − the bounce: more loss, less explosive contacts
+    const soft = writeAdvanced(on, 'momentumLossOnCollision', 0.5);
+    expect(soft.real!.params.restitutionHigh).toBeCloseTo(0.5, 9);
+    expect(soft.real!.params.restitutionLow).toBeLessThan(0.5);
+    // the same quantity: gravity keeps the jump height (as in the classic slider), the jump height sets the launch speed
+    const apex = (p: RealParams) => (p.jumpSpeedMps ** 2) / (2 * p.gravityMps2);
+    const heavy = writeAdvanced(on, 'gravityScale', 3.5);
+    expect(heavy.real!.params.gravityMps2).toBeCloseTo(3.5 * 10.5, 9);
+    expect(apex(heavy.real!.params)).toBeCloseTo(apex(REAL_BASE_PARAMS), 6);
+    expect(apex(writeAdvanced(on, 'jumpFullHeightM', 2).real!.params)).toBeCloseTo(2, 6);
+    expect(writeAdvanced(on, 'dashCooldownS', 2.5).real!.params.dashCooldownS).toBe(2.5);
+    expect(writeAdvanced(on, 'funnelPull', 2).real!.params.bowlPull).toBe(2);
+    expect(writeAdvanced(on, 'roundTimeLimitS', 90).real!.params.timeLimitS).toBe(90);
+    // the classic ones stay editable as always
     expect(writeAdvanced(on, 'knockbackScale', 2).rules.knockbackScale).toBe(2);
   });
 });
@@ -258,8 +298,8 @@ describe('Bey Real: nobody steers', () => {
     // ½v² = g·h at the climb's height (h = D·f^1.3 on the mode's own funnel)
     const depth = 7 * (15 / 36) ** 1.3;
     expect(0.5 * config.cruiseSpeedMps ** 2).toBeCloseTo(g * depth * config.orbitRadiusFrac ** 1.3, 6);
-    // five times the speed needs 25 times the bowl to turn round in the same place
-    expect(naturalBowlGravity({ ...config, cruiseSpeedMps: 18 }) * 25).toBeCloseTo(g, 6);
+    // twice the speed needs four times the bowl to turn round in the same place
+    expect(naturalBowlGravity({ ...config, cruiseSpeedMps: config.cruiseSpeedMps / 2 }) * 4).toBeCloseTo(g, 6);
     // a shorter climb needs a stronger bowl
     expect(naturalBowlGravity({ ...config, orbitRadiusFrac: 0.4 })).toBeGreaterThan(g);
   });
@@ -419,10 +459,10 @@ describe('Bey Real spin drain', () => {
     expect(classic.resource.fraction).toBeCloseTo(1 - 0.004, 9);
   });
 
-  it('a Bey that stays at the base numbers lasts about 2 minutes just spinning (1 / 0.007 s)', () => {
+  it('a Bey that stays at the base numbers lasts about 5 minutes just spinning (1 / 0.0035 s)', () => {
     const stamina = new StaminaSystem(1, 1, 1, { decayPerS: REAL_BASE_PARAMS.spinDecayPerS, perMeter: 0, perSteer: 0 });
     for (let i = 0; i < 60 * 100; i++) stamina.tick(0, 1 / 60);
-    expect(stamina.resource.fraction).toBeCloseTo(1 - 100 * 0.007, 4);
+    expect(stamina.resource.fraction).toBeCloseTo(1 - 100 * 0.0035, 4);
   });
 });
 
