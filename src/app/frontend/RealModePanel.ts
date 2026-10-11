@@ -6,7 +6,8 @@
 // MatchSetup (`setup.real`, RealTuning.ts); this panel only draws them and writes them back through `onChange`.
 //
 // Only the sliders a match already uses are shown (RealTuning's `live`), so none is dead; the rest come as the engine learns them.
-// The classic Advanced sliders the mode takes over are locked while it is on (advancedControls.ts `isLockedByRealMode`).
+// The classic Advanced sliders edit the mode's own values while it is on (advancedControls.ts REAL_ROUTES); only the few the mode has
+// no mechanism for are locked (`isLockedByRealMode`).
 // ============================================================
 
 import {
@@ -41,7 +42,7 @@ interface ControlView {
 /** What stays the same as the classic game, and what changes — shown once, at the top of the block. */
 const INHERITS_TEXT =
   'Continua igual: a mesma arena e física (Rapier), Clash, Estabilidade/Quebra/KO, ring-out, spin-out e tempo, a mesma IA de ataque e defesa, HUD, efeitos, replays e as regras do Pregame. ' +
-  'Muda: ninguém conduz o Bey — só a física do stage o move (a cuba o leva ao centro e de volta rampa acima, o giro da ponta repõe o embalo), cinco vezes mais rápido; a sua seta só inclina o pião, sem Drift e sem controle no ar, e os sliders de movimento do Advanced ficam travados (os de arena, estabilidade e visual continuam valendo).';
+  'Muda: ninguém conduz o Bey — só a física do stage o move (a cuba o leva ao centro e de volta rampa acima, o giro da ponta repõe o embalo), bem mais rápido que o jogo clássico; a sua seta só inclina o pião, sem Drift e sem controle no ar. Os sliders do Advanced continuam valendo: nesse modo eles editam os valores do próprio modo (aceleração = aderência da ponta, velocidade máxima = rolagem, knockback, quique, dano de colisão…); só ficam travados os de momentum, perda de controle no contato e o manejo de kart, que o modo não tem.';
 
 export class RealModePanel {
   readonly element = el('section', 'cb-pregame__advanced cb-real', 'pregame-real');

@@ -33,12 +33,18 @@ const REAL_FOV_DEG = 55;
  */
 const REAL_BACK_RADII = 1.15;
 const REAL_UP_RADII = 1.1;
-/** How much of the fight's midpoint the frame follows (0 = fixed on the centre). */
-const REAL_FOLLOW = 0.35;
-/** 1/s: how fast the frame catches up. */
-const REAL_FOLLOW_RATE_PER_S = 2.5;
+/**
+ * How much of the fight's midpoint the frame follows (0 = fixed on the centre). 0.65.0 (owner, 2026-10-11: "pq piorou a camera de
+ * cima?"): the camera code had not changed, but with the Beys swinging through the centre the midpoint of the two jumps from side
+ * to side several times a second, and a 0.35 share followed at 2.5/s turned that into a constant sway. Now a smaller share,
+ * smoothed twice and slowly, so the frame drifts with where the fight is, not with every swing.
+ */
+const REAL_FOLLOW = 0.2;
+/** 1/s: how fast each of the two smoothing stages catches up. */
+const REAL_FOLLOW_RATE_PER_S = 0.9;
 
 export class RealModeCamera implements ExternalCamera {
+  private readonly target = new THREE.Vector3();
   private readonly focus = new THREE.Vector3();
   private ready = false;
 
@@ -49,8 +55,11 @@ export class RealModeCamera implements ExternalCamera {
     const wantZ = midZ * REAL_FOLLOW;
     const k = this.ready ? 1 - Math.exp(-REAL_FOLLOW_RATE_PER_S * Math.max(0, frame.dt)) : 1;
     this.ready = true;
-    this.focus.x += (wantX - this.focus.x) * k;
-    this.focus.z += (wantZ - this.focus.z) * k;
+    // two smoothing stages: the target eases toward the midpoint, the focus eases toward the target (no corners, no sway)
+    this.target.x += (wantX - this.target.x) * k;
+    this.target.z += (wantZ - this.target.z) * k;
+    this.focus.x += (this.target.x - this.focus.x) * k;
+    this.focus.z += (this.target.z - this.focus.z) * k;
     const r = frame.arenaRadiusM;
     camera.position.set(this.focus.x, REAL_UP_RADII * r, this.focus.z + REAL_BACK_RADII * r);
     camera.lookAt(this.focus.x, 0, this.focus.z);

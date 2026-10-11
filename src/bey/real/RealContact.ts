@@ -13,8 +13,13 @@
 import type { Vec2 } from '../../physics/Vec2';
 import type { RealModeConfig } from './RealTuning';
 
-/** The speed of a rim at full spin (m/s): what the friction drags against. ×5 with the Beys' speed (0.64.0): it was 10. */
-export const RIM_SPEED_MPS = 50;
+/** The speed of a rim at full spin, as a share of the rolling speed: what the friction drags against (10 m/s at the owner's 18). */
+export const RIM_SPEED_SHARE = 10 / 18;
+
+/** The speed of a rim at full spin (m/s): it follows the mode's speed, so a faster mode rubs as hard as a slow one, relatively. */
+export function rimSpeedMps(config: Pick<RealModeConfig, 'cruiseSpeedMps'>): number {
+  return config.cruiseSpeedMps * RIM_SPEED_SHARE;
+}
 
 export interface ContactBody {
   /** The horizontal velocity it carried into the step. */
@@ -61,8 +66,9 @@ export function resolveRealContact(config: RealModeConfig, a: ContactBody, b: Co
   // Rim friction: the rims slide against each other; the spins decide how much.
   const tx = -normal.z;
   const tz = normal.x;
-  const rimA = a.dir * a.spin * RIM_SPEED_MPS;
-  const rimB = b.dir * b.spin * RIM_SPEED_MPS;
+  const rim = rimSpeedMps(config);
+  const rimA = a.dir * a.spin * rim;
+  const rimB = b.dir * b.spin * rim;
   const vtRel = vax * tx + vaz * tz + rimA - (vbx * tx + vbz * tz - rimB);
   const jtMax = config.rimFriction * jn;
   const jt = clamp(-vtRel / invSum, -jtMax, jtMax);

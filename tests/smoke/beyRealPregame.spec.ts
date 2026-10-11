@@ -41,7 +41,7 @@ test('Pregame › Bey Real: switch, camera, advanced block, presets, and a real 
   await page.getByTestId('pregame-real-group-control').locator('summary').first().click();
   await page.getByTestId('pregame-real-group-auto').locator('summary').first().click();
   await expect(page.getByTestId('pregame-real-influence-value')).toHaveText('75%');
-  await expect(page.getByTestId('pregame-real-cruiseSpeedMps-value')).toHaveText('90 m/s');
+  await expect(page.getByTestId('pregame-real-cruiseSpeedMps-value')).toHaveText('52 m/s');
   await page.getByTestId('pregame-real-group-rules').locator('summary').first().click();
   await expect(page.getByTestId('pregame-real-stageRadiusM-value')).toHaveText('15.0 m');
   const notes = await page.locator('.cb-real__note').allTextContents();
@@ -55,10 +55,16 @@ test('Pregame › Bey Real: switch, camera, advanced block, presets, and a real 
   await page.getByTestId('pregame-real-filter').fill('');
   await expect(page.getByTestId('pregame-real-ctl-influence')).toBeVisible();
 
-  // The classic movement sliders are locked, the arena ones are not: they are the same setting as the block's.
+  // The classic sliders stay available (0.65.0): Top speed is ×1 of the mode's rolling speed and moves the block's slider; only
+  // the ones the mode has no mechanism for (momentum…) are locked. The arena ones are the same setting as the block's.
   await page.getByTestId('pregame-advanced').locator('summary').first().click();
   await page.getByTestId('pregame-tab-movement').click();
-  await expect(page.getByTestId('pregame-top-speed')).toBeDisabled();
+  await expect(page.getByTestId('pregame-top-speed')).toBeEnabled();
+  await expect(page.getByTestId('pregame-momentum-gain')).toBeDisabled();
+  await page.getByTestId('pregame-top-speed').fill('1.5');
+  await expect(page.getByTestId('pregame-real-cruiseSpeedMps-value')).toHaveText('78 m/s');
+  await page.getByTestId('pregame-top-speed').fill('1');
+  await expect(page.getByTestId('pregame-real-cruiseSpeedMps-value')).toHaveText('52 m/s');
   await page.getByTestId('pregame-tab-arena').click();
   await expect(page.getByTestId('pregame-stage-size')).toBeEnabled();
   await expect(page.getByTestId('pregame-bowl-depth')).toBeEnabled();
@@ -74,7 +80,7 @@ test('Pregame › Bey Real: switch, camera, advanced block, presets, and a real 
   await expect(page.getByTestId('pregame-real-influence-modified')).toBeVisible();
   await expect(page.getByTestId('pregame-real-preset-automatic')).toHaveAttribute('aria-checked', 'true'); // 30% is the "mais automático" preset
   await page.getByTestId('pregame-real-preset-wild').click();
-  await expect(page.getByTestId('pregame-real-precessionRadPerS-value')).toHaveText('6.5 rad/s');
+  await expect(page.getByTestId('pregame-real-precessionRadPerS-value')).toHaveText('4.0 rad/s');
   await page.getByTestId('pregame-real-preset-base').click();
   await expect(page.getByTestId('pregame-real-influence-value')).toHaveText('75%');
   await page.getByTestId('pregame-real-camera-free').click();
@@ -83,7 +89,7 @@ test('Pregame › Bey Real: switch, camera, advanced block, presets, and a real 
   await page.getByTestId('pregame-start').click();
   await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay?.getScreen()), { timeout: 20_000 }).toBe('match');
   const config = await page.evaluate(() => window.__chaosBeyPlay!.getSession()!.matchConfig);
-  expect(config.real).toMatchObject({ influence: 0.75, cruiseSpeedMps: 90, stageRadiusM: 15 });
+  expect(config.real).toMatchObject({ influence: 0.75, cruiseSpeedMps: 52, stageRadiusM: 15 });
   expect(config.arenaSizeScale).toBeCloseTo(15 / 36, 5);
   // The round starts with the launch (0.61.0): measure after both Beys have arrived and the fight has run a while.
   await expect.poll(() => page.evaluate(() => window.__chaosBeyPlay!.getSession()!.getTickIndex()), { timeout: 30_000 }).toBeGreaterThan(30);
