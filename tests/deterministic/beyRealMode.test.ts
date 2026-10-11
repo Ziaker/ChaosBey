@@ -8,6 +8,7 @@ import { MatchSession } from '../../src/app/session/MatchSession';
 import { createDefaultMatchSetup, defaultRealSetup, matchConfigFor } from '../../src/app/frontend/matchSetup';
 import { ScriptedController } from '../../src/automation/scripted-scenarios/ScriptedController';
 import { REAL_BASE_PARAMS, realPresetValues } from '../../src/bey/real/RealTuning';
+import { REAL_SPEED_CEILING_MPS } from '../../src/bey/real/realTunings';
 import { createDefaultAttackProfileSettings } from '../../src/config/attack-profile/AttackProfileSettings';
 import type { MatchConfig } from '../../src/config/match/MatchConfig';
 import { Action } from '../../src/input/actions/Action';
@@ -90,7 +91,7 @@ describe('Bey Real match', () => {
 
   it('the player\'s stick takes its share of the steering: more influence follows the stick more, 0 ignores it', async () => {
     const ahead = async (influence: number): Promise<number> => {
-      const s = await session(realConfig({ influence, pursuit: 0 }), new HeldStick(1, 0), 'idle');
+      const s = await session(realConfig({ influence }), new HeldStick(1, 0), 'idle');
       const start = s.getBey('first').body.translation();
       for (let i = 0; i < 90; i++) s.tick();
       const end = s.getBey('first').body.translation();
@@ -135,7 +136,7 @@ describe('Bey Real match', () => {
   }, 120_000);
 
   it('every preset plays: no NaN, the Beys stay finite and on the stage', async () => {
-    for (const id of ['base', 'proposal', 'automatic', 'buttons', 'heavy', 'wild']) {
+    for (const id of ['base', 'slow', 'automatic', 'buttons', 'heavy', 'wild']) {
       const params = realPresetValues(id);
       const s = await session(realConfig(params), new ScriptedController([]));
       for (let i = 0; i < 60 * 6 && !s.roundState.isOver; i++) {
@@ -152,8 +153,8 @@ describe('Bey Real match', () => {
 
 describe('Bey Real contacts and actions in a real match', () => {
   it('two Beys that meet are judged by the real contact model: the spin and the Stability drop, nothing goes wild', async () => {
-    // The stick drives the first Bey at the opponent (full influence), so they meet within a few seconds.
-    const config = realConfig({ influence: 1, pursuit: 1, aiAggression: 0 });
+    // The stick leans the first Bey toward the opponent's side (full influence), so they meet within a few seconds.
+    const config = realConfig({ influence: 1, aiAggression: 0 });
     const s = await session(config, new HeldStick(0, 1), 'idle');
     let bodyCollisions = 0;
     let maxSpeed = 0;
@@ -167,7 +168,7 @@ describe('Bey Real contacts and actions in a real match', () => {
       }
     }
     expect(bodyCollisions, 'the Beys touched at least once').toBeGreaterThan(0);
-    expect(maxSpeed).toBeLessThan(60);
+    expect(maxSpeed, 'under the mode\'s numerical ceiling').toBeLessThan(REAL_SPEED_CEILING_MPS);
     const spin = s.getBey('second').stamina.resource.fraction;
     expect(spin).toBeLessThan(0.99);
     s.dispose();
@@ -176,7 +177,7 @@ describe('Bey Real contacts and actions in a real match', () => {
   it('a Dash costs its share of the spin and runs the slider\'s speed; the Dash cooldown is the slider\'s', async () => {
     const hold = new ScriptedController([{ fromTick: 5, held: [Action.Attack] }, { fromTick: 5 + 60, held: [] }]);
     const dashSpinCost = 0.05;
-    const s = await session(realConfig({ dashSpinCost, dashMinSpeedMps: 20, dashMaxSpeedMps: 26, influence: 0, aiAggression: 0 }), hold, 'idle');
+    const s = await session(realConfig({ dashSpinCost, dashMinSpeedMps: 140, dashMaxSpeedMps: 150, influence: 0, aiAggression: 0 }), hold, 'idle');
     let beforeSpin = 0;
     let peak = 0;
     for (let i = 0; i < 60 * 4; i++) {
@@ -187,8 +188,8 @@ describe('Bey Real contacts and actions in a real match', () => {
         peak = Math.max(peak, Math.hypot(v.x, v.z));
       }
     }
-    expect(peak, 'the Dash runs at the mode\'s speeds, not the game\'s ×2.8 top-speed scale').toBeGreaterThan(18);
-    expect(peak).toBeLessThan(40);
+    expect(peak, 'the Dash runs at the mode\'s speeds, past the classic 60 m/s clamp').toBeGreaterThan(130);
+    expect(peak, 'and not the game\'s ×2.8 top-speed scale on top').toBeLessThan(160);
     expect(beforeSpin).toBeGreaterThan(0.9);
     // 60 ticks of charge (1 s) and the release: spin share 0.05 was spent on release on top of the drain
     const after = s.getBey('first').stamina.resource.fraction;
